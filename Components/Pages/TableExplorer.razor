@@ -1,0 +1,103 @@
+@page "/explorer"
+@using DbExplore.Services
+@inject SchemaService SchemaService
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2 class="fw-bold mb-0">
+                <span style="font-size: 2rem;">🔍</span> Table Explorer
+            </h2>
+            <p class="text-secondary small">Browse and search all database tables</p>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <input type="text" 
+                   class="form-control bg-dark text-white border-secondary" 
+                   placeholder="🔎 Search tables..." 
+                   @bind="SearchTerm" 
+                   @bind:event="oninput" />
+        </div>
+        <div class="col-md-6 text-end">
+            <span class="text-muted">
+                Showing @FilteredTables.Count() of @SchemaService.Tables.Count tables
+            </span>
+        </div>
+    </div>
+
+    <div class="row">
+        @if (SchemaService.Tables.Count == 0)
+        {
+            <div class="col-12">
+                <div class="alert alert-warning">
+                    <strong>⚠️ No tables found.</strong> Make sure you're connected to a database.
+                </div>
+            </div>
+        }
+        else if (!FilteredTables.Any())
+        {
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <strong>🔍 No matches.</strong> Try a different search term.
+                </div>
+            </div>
+        }
+        else
+        {
+            @foreach (var table in FilteredTables)
+            {
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <a href="table/@Uri.EscapeDataString(table.FullName)" class="text-decoration-none">
+                        <div class="card glass-card text-white node-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <span style="font-size: 1.5rem;">📊</span> @table.Name
+                                </h5>
+                                <p class="card-text">
+                                    <small class="text-muted">Schema: @table.Schema</small><br />
+                                    <small class="text-info">@table.Columns.Count columns</small>
+                                </p>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <span class="badge bg-secondary">
+                                        ↑ @table.OutgoingKeys.Count Parents
+                                    </span>
+                                    <span class="badge bg-warning text-dark">
+                                        ↓ @table.IncomingKeys.Count Children
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private string SearchTerm = "";
+
+    private IEnumerable<TableInfo> FilteredTables => string.IsNullOrWhiteSpace(SearchTerm) 
+        ? SchemaService.Tables 
+        : SchemaService.Tables.Where(t => t.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) || 
+                                           t.Schema.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override void OnInitialized()
+    {
+        SchemaService.OnSchemaLoaded += Refresh;
+    }
+
+    private void Refresh()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        SchemaService.OnSchemaLoaded -= Refresh;
+    }
+}

@@ -11,7 +11,9 @@
     {
         <div class="row mb-4">
             <div class="col">
-                <h2 class="text-white"><i class="bi bi-table me-2 text-primary"></i>@Table.Name</h2>
+                <h2 class="text-white">
+                    <span style="font-size: 2rem;">📊</span> @Table.Name
+                </h2>
                 <span class="badge bg-secondary">@Table.Schema</span>
             </div>
         </div>
@@ -40,7 +42,7 @@
                     <div class="col-12">
                         <div class="card glass-card text-white">
                             <div class="card-header border-secondary text-info fw-bold">
-                                <i class="bi bi-arrow-up-circle me-2"></i>Parents (Upstream)
+                                <span style="font-size: 1.2rem;">⬆️</span> Parents (Upstream)
                                 <small class="d-block text-muted fw-normal">Tables this table relies on (Foreign Keys)</small>
                             </div>
                             <div class="card-body">
@@ -68,7 +70,7 @@
                     <div class="col-12">
                         <div class="card glass-card text-white">
                             <div class="card-header border-secondary text-warning fw-bold">
-                                <i class="bi bi-arrow-down-circle me-2"></i>Children (Downstream)
+                                <span style="font-size: 1.2rem;">⬇️</span> Children (Downstream)
                                 <small class="d-block text-muted fw-normal">Tables that rely on this table</small>
                             </div>
                             <div class="card-body">
