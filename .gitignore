@@ -181,8 +181,15 @@ BundleArtifacts/
 *.bat
 !build.bat
 !publish.bat
+!build_installer.bat
+!trust_certificate.bat
 
 # Local settings
 settings.json
 status.txt
 *_log.txt
+
+# Certificates
+*.pfx
+*.cer
+*.p12
