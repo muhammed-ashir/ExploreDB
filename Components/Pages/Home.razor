@@ -1,0 +1,166 @@
+@page "/"
+@using DbExplore.Services
+@inject SchemaService SchemaService
+@inject PathfinderService PathfinderService
+@implements IDisposable
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2 class="fw-bold mb-0">Pathfinder <span class="text-primary">Auto-Join</span></h2>
+            <p class="text-secondary small">Select columns from different tables, and I'll discover the JOIN path for you.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Column Picker -->
+        <div class="col-md-4">
+            <div class="card bg-dark border-secondary shadow-sm h-100">
+                <div class="card-header border-secondary">
+                    <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" 
+                           placeholder="Search columns..." @bind="SearchCol" @bind:event="oninput" />
+                </div>
+                <div class="card-body p-0 overflow-auto" style="max-height: 600px;">
+                    @if (SchemaService.Tables.Count == 0)
+                    {
+                        <div class="p-3 text-center text-muted">Connect to a database to start.</div>
+                    }
+                    else
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var table in FilteredTables)
+                            {
+                                <div class="list-group-item bg-transparent text-light border-secondary">
+                                    <small class="text-muted fw-bold text-uppercase">@table.Name</small>
+                                    @foreach(var col in table.Columns.Where(c => SearchMatch(table.Name, c.Name)))
+                                    {
+                                        var key = $"{table.FullName}.{col.Name}";
+                                        var isSelected = SelectedColumns.Contains(key);
+                                        <div class="form-check mt-1">
+                                            <input class="form-check-input" type="checkbox" id="@key" 
+                                                   checked="@isSelected" 
+                                                   @onchange="(e) => ToggleColumn(key, table.FullName, (bool)e.Value)" />
+                                            <label class="form-check-label small text-break cursor-pointer" for="@key">
+                                                @col.Name
+                                            </label>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Result Area -->
+        <div class="col-md-8">
+             <div class="card bg-dark border-secondary shadow-sm h-100">
+                 <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+                     <span class="fw-bold">Generated SQL</span>
+                     <button class="btn btn-sm btn-outline-primary" @onclick="Generate">
+                         <i class="bi bi-lightning-fill me-1"></i> Regenerate
+                     </button>
+                 </div>
+                 <div class="card-body p-0 bg-black">
+                     <textarea class="form-control bg-black text-success border-0 font-monospace h-100 p-3" 
+                               style="resize: none; min-height: 400px;" readonly>@GeneratedSql</textarea>
+                 </div>
+             </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string SearchCol = "";
+    private HashSet<string> SelectedColumns = new();
+    private List<string> SelectedTables = new();
+    private string GeneratedSql = "-- Select columns on the left to generate a query.";
+
+    private IEnumerable<TableInfo> FilteredTables => SchemaService.Tables; // We filter columns inside
+
+    protected override void OnInitialized()
+    {
+        SchemaService.OnSchemaLoaded += Refresh;
+    }
+
+    private void Refresh()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private bool SearchMatch(string tableName, string colName)
+    {
+        if (string.IsNullOrWhiteSpace(SearchCol)) return true;
+        return tableName.Contains(SearchCol, StringComparison.OrdinalIgnoreCase) || 
+               colName.Contains(SearchCol, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ToggleColumn(string key, string tableName, bool isChecked)
+    {
+        if (isChecked)
+        {
+            SelectedColumns.Add(key);
+            SelectedTables.Add(tableName);
+        }
+        else
+        {
+            SelectedColumns.Remove(key);
+            // Re-eval selected tables
+            // Just simply remove one instance? No, we need to rebuild the list or track counts.
+            // Easier: Rebuild SelectedTables from SelectedColumns
+            SelectedTables.Clear();
+            foreach(var s in SelectedColumns)
+            {
+                // Format is [Schema].[Table].Column
+                // This is a bit tricky to parse back reliably if . exists in names, but we constructed it as FullName.ColName
+                // Actually I passed tableName directly.
+                // Let's optimize: Maintain a Dictionary<string, int> for table counts?
+                // Or just don't try to be too clever.
+                // "Generate" will handle the unique table names.
+                // But I need to pass 'selected tables' to Generate.
+                // I will just parse it from SelectedColumns keys.
+            }
+        }
+        
+        Generate();
+    }
+
+    private void Generate()
+    {
+        // Extract table names from SelectedColumns keys
+        // format: [Schema].[Table].Column
+        // We can just rely on string manipulation or store it better.
+        // Let's store a list of (Table, Column) tuples instead of strings?
+        // No, strings are easier for UI binding.
+        
+        var tables = new List<string>();
+        var cols = new List<string>();
+        
+        foreach(var key in SelectedColumns)
+        {
+            // key is like "[dbo].[Users].Email"
+            var lastDot = key.LastIndexOf('.');
+            if (lastDot > 0)
+            {
+                var table = key.Substring(0, lastDot);
+                var col = key; // Use full name for select list
+                tables.Add(table);
+                cols.Add(col);
+            }
+        }
+
+        if (tables.Count == 0)
+        {
+            GeneratedSql = "-- Select columns on the left to generate query.";
+            return;
+        }
+
+        GeneratedSql = PathfinderService.GenerateQuery(tables, cols);
+    }
+
+    public void Dispose()
+    {
+        SchemaService.OnSchemaLoaded -= Refresh;
+    }
+}

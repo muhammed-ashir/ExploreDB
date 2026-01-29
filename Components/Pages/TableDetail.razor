@@ -1,0 +1,118 @@
+@page "/table/{FullName}"
+@using DbExplore.Services
+@inject SchemaService SchemaService
+
+<div class="container-fluid">
+    @if (Table == null)
+    {
+        <div class="alert alert-warning">Table not found: @FullName</div>
+    }
+    else
+    {
+        <div class="row mb-4">
+            <div class="col">
+                <h2 class="text-white"><i class="bi bi-table me-2 text-primary"></i>@Table.Name</h2>
+                <span class="badge bg-secondary">@Table.Schema</span>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Columns -->
+            <div class="col-md-4">
+                <div class="card glass-card h-100 text-white">
+                    <div class="card-header border-secondary fw-bold">Columns</div>
+                    <ul class="list-group list-group-flush">
+                        @foreach (var col in Table.Columns)
+                        {
+                            <li class="list-group-item bg-transparent text-white border-secondary d-flex justify-content-between">
+                                <span>@col.Name</span>
+                                <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Relationships -->
+            <div class="col-md-8">
+                <div class="row g-4">
+                    <!-- Parents (Upstream) -->
+                    <div class="col-12">
+                        <div class="card glass-card text-white">
+                            <div class="card-header border-secondary text-info fw-bold">
+                                <i class="bi bi-arrow-up-circle me-2"></i>Parents (Upstream)
+                                <small class="d-block text-muted fw-normal">Tables this table relies on (Foreign Keys)</small>
+                            </div>
+                            <div class="card-body">
+                                @if (Table.OutgoingKeys.Count == 0)
+                                {
+                                    <span class="text-muted">No parent tables.</span>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var rel in Table.OutgoingKeys)
+                                        {
+                                            <a href="table/@Uri.EscapeDataString(rel.ToTable)" class="btn btn-outline-info btn-sm text-start" style="min-width: 200px;">
+                                                <div class="fw-bold">@GetShortName(rel.ToTable)</div>
+                                                <small class="text-muted" style="font-size: 0.7em;">FK: @rel.FromColumn ➔ @rel.ToColumn</small>
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Children (Downstream) -->
+                    <div class="col-12">
+                        <div class="card glass-card text-white">
+                            <div class="card-header border-secondary text-warning fw-bold">
+                                <i class="bi bi-arrow-down-circle me-2"></i>Children (Downstream)
+                                <small class="d-block text-muted fw-normal">Tables that rely on this table</small>
+                            </div>
+                            <div class="card-body">
+                                @if (Table.IncomingKeys.Count == 0)
+                                {
+                                    <span class="text-muted">No child tables.</span>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var rel in Table.IncomingKeys)
+                                        {
+                                            <a href="table/@Uri.EscapeDataString(rel.FromTable)" class="btn btn-outline-warning btn-sm text-start" style="min-width: 200px;">
+                                                <div class="fw-bold">@GetShortName(rel.FromTable)</div>
+                                                <small class="text-muted" style="font-size: 0.7em;">FK: @rel.FromColumn ➔ @rel.ToColumn</small>
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string FullName { get; set; } = string.Empty;
+
+    private TableInfo? Table;
+
+    protected override void OnParametersSet()
+    {
+        var decoded = Uri.UnescapeDataString(FullName);
+        // Find table
+        Table = SchemaService.Tables.FirstOrDefault(t => t.FullName == decoded);
+    }
+
+    private string GetShortName(string fullName)
+    {
+        // simplistic parser, removes brackets
+        return fullName.Replace("[", "").Replace("]", "");
+    }
+}

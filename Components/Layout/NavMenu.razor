@@ -1,0 +1,72 @@
+@using DbExplore.Services
+@inject SchemaService SchemaService
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="d-flex flex-column h-100">
+    <div class="p-3 border-bottom border-secondary">
+        <h5 class="text-white mb-3">DbExhibit</h5>
+        <button class="btn btn-premium w-100 mb-2" @onclick="GoToPathfinder">
+            <i class="bi bi-diagram-3-fill me-2"></i>Pathfinder
+        </button>
+        <input type="text" class="form-control bg-dark text-white border-secondary form-control-sm" 
+               placeholder="Search tables..." @bind="SearchTerm" @bind:event="oninput" />
+    </div>
+
+    <div class="flex-grow-1 overflow-auto">
+        @if (SchemaService.Tables.Count == 0)
+        {
+            <div class="text-muted p-3 small">No tables loaded.</div>
+        }
+        else
+        {
+            <div class="list-group list-group-flush">
+                @foreach (var table in FilteredTables)
+                {
+                    <a href="table/@Uri.EscapeDataString(table.FullName)" 
+                       class="list-group-item list-group-item-action bg-transparent text-light border-0 py-2 small sidebar-item @(CurrentUrl.Contains(Uri.EscapeDataString(table.FullName)) ? "active" : "")">
+                        <i class="bi bi-table me-2 text-secondary"></i>@table.Name
+                    </a>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string SearchTerm = "";
+    private string CurrentUrl = "";
+
+    private IEnumerable<TableInfo> FilteredTables => string.IsNullOrWhiteSpace(SearchTerm) 
+        ? SchemaService.Tables 
+        : SchemaService.Tables.Where(t => t.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override void OnInitialized()
+    {
+        SchemaService.OnSchemaLoaded += Refresh;
+        Nav.LocationChanged += OnLocationChanged;
+        CurrentUrl = Nav.Uri;
+    }
+
+    private void Refresh()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        CurrentUrl = e.Location;
+        StateHasChanged();
+    }
+
+    private void GoToPathfinder()
+    {
+        Nav.NavigateTo("");
+    }
+
+    public void Dispose()
+    {
+        SchemaService.OnSchemaLoaded -= Refresh;
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

@@ -1,0 +1,91 @@
+@inherits LayoutComponentBase
+@inject ConnectionService ConnectionService
+@inject SchemaService SchemaService
+@inject NavigationManager Nav
+
+<div class="page text-white h-100">
+    @if (!IsConnected)
+    {
+        <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content glass-card border-0 text-white" style="background-color: #2b3035;">
+                    <div class="modal-header border-bottom border-light">
+                        <h5 class="modal-title fw-bold">Connect to Database</h5>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Connection String</label>
+                            <input type="text" class="form-control bg-dark text-white border-secondary" @bind="ConnString" placeholder="Server=myServer;Database=myDB;..." />
+                            <div class="form-text text-muted">Supports SQL Server connection strings.</div>
+                        </div>
+                        @if (!string.IsNullOrEmpty(ErrorMsg))
+                        {
+                            <div class="alert alert-danger py-2">@ErrorMsg</div>
+                        }
+                    </div>
+                    <div class="modal-footer border-top border-light">
+                        <button class="btn btn-premium w-100 fw-bold py-2" @onclick="Connect" disabled="@IsBusy">
+                            @if(IsBusy) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                            @(IsBusy ? "Connecting..." : "Connect")
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+         <div class="sidebar" style="width: 280px; position: fixed; top: 0; bottom: 0; overflow-y: auto;">
+            <NavMenu />
+        </div>
+
+        <main style="margin-left: 280px; min-height: 100vh;">
+            <div style="padding: 20px;">
+                @Body
+            </div>
+        </main>
+    }
+</div>
+
+<style>
+    /* Styling overrides for this layout */
+    .page { display: flex; flex-direction: column; }
+</style>
+
+@code {
+    private bool IsConnected = false;
+    private bool IsBusy = false;
+    private string ConnString = "";
+    private string ErrorMsg = "";
+
+    protected override void OnInitialized()
+    {
+        ConnString = ConnectionService.ConnectionString;
+        // Require explicit connect action as per feature spec
+    }
+
+    private async Task Connect()
+    {
+        if (string.IsNullOrWhiteSpace(ConnString)) return;
+
+        IsBusy = true;
+        ErrorMsg = "";
+        StateHasChanged();
+        
+        await Task.Delay(100); // UI update
+
+        var success = await ConnectionService.TestConnectionAsync(ConnString);
+        if (success)
+        {
+            ConnectionService.SaveConnection(ConnString);
+            await SchemaService.LoadSchemaAsync();
+            IsConnected = true;
+        }
+        else
+        {
+            ErrorMsg = "Connection failed. Please check the string.";
+        }
+        
+        IsBusy = false;
+    }
+}
