@@ -57,7 +57,7 @@ public class PathfinderService
             var sourceAlias = GetAlias(join.SourceTable);
             var targetAlias = GetAlias(join.TargetTable);
             
-            joinSb.AppendLine($"JOIN {join.TargetTable} AS {targetAlias} ON {sourceAlias}.{join.SourceCol} = {targetAlias}.{join.TargetCol}");
+            joinSb.AppendLine($"{join.JoinType} {join.TargetTable} AS {targetAlias} ON {sourceAlias}.{join.SourceCol} = {targetAlias}.{join.TargetCol}");
         }
 
         // Generate SELECT list
@@ -142,12 +142,17 @@ public class PathfinderService
                 if (!connectedSet.Contains(step.Target))
                 {
                     connectedSet.Add(step.Target);
+                    
+                    // Determine JOIN type intelligently
+                    var joinType = DetermineJoinType(step, root);
+                    
                     joins.Add(new JoinDef 
                     { 
                         SourceTable = step.Source,
                         TargetTable = step.Target, 
                         SourceCol = step.SourceCol,
-                        TargetCol = step.TargetCol
+                        TargetCol = step.TargetCol,
+                        JoinType = joinType
                     });
                      
                     if (remainingTargets.Contains(step.Target))
@@ -160,6 +165,39 @@ public class PathfinderService
         
         return new ConnectedResult { Root = root, Joins = joins };
 
+    }
+
+    private string DetermineJoinType(PathStep step, string rootTable)
+    {
+        // Find the actual relationship from the schema
+        var sourceTable = _schemaService.Tables.FirstOrDefault(t => t.FullName == step.Source);
+        if (sourceTable == null) return "INNER JOIN";
+        
+        // Check if source has FK to target (source -> target)
+        var outgoingRel = sourceTable.OutgoingKeys.FirstOrDefault(r => 
+            r.ToTable == step.Target && r.FromColumn == step.SourceCol);
+        
+        if (outgoingRel != null)
+        {
+            // Source has FK pointing to Target (Child -> Parent relationship)
+            // If FK is nullable, use LEFT JOIN to preserve child records even if parent doesn't exist
+            return outgoingRel.IsNullable ? "LEFT JOIN" : "INNER JOIN";
+        }
+        
+        // Check if target has FK to source (target -> source, reversed)
+        var targetTable = _schemaService.Tables.FirstOrDefault(t => t.FullName == step.Target);
+        var incomingRel = targetTable?.OutgoingKeys.FirstOrDefault(r => 
+            r.ToTable == step.Source && r.ToColumn == step.SourceCol);
+        
+        if (incomingRel != null)
+        {
+            // Target has FK pointing to Source (we're going from parent to child)
+            // Use LEFT JOIN to preserve all parent records even if no child exists
+            return "LEFT JOIN";
+        }
+        
+        // Default to INNER JOIN if no relationship found
+        return "INNER JOIN";
     }
 
     private List<PathStep>? FindShortestPath(HashSet<string> sources, HashSet<string> targets, Dictionary<string, List<Edge>> adj)
@@ -241,5 +279,6 @@ public class PathfinderService
         public string TargetTable { get; set; } = string.Empty;
         public string SourceCol { get; set; } = string.Empty;
         public string TargetCol { get; set; } = string.Empty;
+        public string JoinType { get; set; } = "INNER JOIN";
     }
 }

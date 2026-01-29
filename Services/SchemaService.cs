@@ -29,6 +29,7 @@ public class Relationship
     public string FromColumn { get; set; } = string.Empty;
     public string ToTable { get; set; } = string.Empty; // The table being referenced
     public string ToColumn { get; set; } = string.Empty;
+    public bool IsNullable { get; set; } = false; // Whether the FK column allows NULL
 }
 
 public class SchemaService
@@ -73,11 +74,10 @@ public class SchemaService
                 }
             }
 
-            Console.WriteLine("Fetching Keys...");
-            // 3. Get Foreign Keys
+            // 3. Get Foreign Keys with nullability
             var fkSql = @"
                 SELECT 
-                    tp.name AS ParentTable, cp.name AS ParentColumn,
+                    tp.name AS ParentTable, cp.name AS ParentColumn, cp.is_nullable AS IsNullable,
                     tr.name AS RefTable, cr.name AS RefColumn,
                     sp.name AS ParentSchema, sr.name AS RefSchema
                 FROM sys.foreign_keys fk
@@ -101,7 +101,8 @@ public class SchemaService
                     var rel = new Relationship 
                     { 
                         FromTable = parentFull, FromColumn = fk.ParentColumn,
-                        ToTable = refFull, ToColumn = fk.RefColumn 
+                        ToTable = refFull, ToColumn = fk.RefColumn,
+                        IsNullable = fk.IsNullable
                     };
                     
                     // Parent table has the foreign key pointing to Reference table
