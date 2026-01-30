@@ -22,6 +22,11 @@
                    @bind="SearchTerm" 
                    @bind:event="oninput" />
             <div class="d-flex gap-2">
+                <button class="btn btn-sm @(ExactMatch ? "btn-primary" : "btn-outline-secondary")" 
+                        @onclick="() => ExactMatch = !ExactMatch"
+                        title="Exact match">
+                    🎯 Exact Match
+                </button>
                 <button class="btn btn-sm @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary")" 
                         @onclick="() => MatchWholeWord = !MatchWholeWord"
                         title="Match whole word">
@@ -92,6 +97,7 @@
 
 @code {
     private string SearchTerm = "";
+    private bool ExactMatch = false;
     private bool MatchWholeWord = false;
     private bool CaseSensitive = false;
 
@@ -109,7 +115,12 @@
                 var tableName = CaseSensitive ? t.Name : t.Name.ToLower();
                 var schemaName = CaseSensitive ? t.Schema : t.Schema.ToLower();
 
-                if (MatchWholeWord)
+                if (ExactMatch)
+                {
+                    // Exact match: entire name must match search term
+                    return tableName == searchTerm || schemaName == searchTerm;
+                }
+                else if (MatchWholeWord)
                 {
                     return tableName.Split(' ', '.', '_').Contains(searchTerm) ||
                            schemaName.Split(' ', '.', '_').Contains(searchTerm);

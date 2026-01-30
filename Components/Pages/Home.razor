@@ -32,6 +32,13 @@
                             </select>
                         </div>
                         <div class="col-auto">
+                            <button class="btn btn-sm @(ExactMatch ? "btn-primary" : "btn-outline-secondary")" 
+                                    @onclick="()=> ExactMatch = !ExactMatch"
+                                    title="Exact match">
+                                🎯
+                            </button>
+                        </div>
+                        <div class="col-auto">
                             <button class="btn btn-sm @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary")" 
                                     @onclick="()=> MatchWholeWord = !MatchWholeWord"
                                     title="Match whole word">
@@ -107,6 +114,7 @@
 @code {
     private string SearchCol = "";
     private string SearchFilter = "All";
+    private bool ExactMatch = false;
     private bool MatchWholeWord = false;
     private bool CaseSensitive = false;
     
@@ -137,7 +145,13 @@
         bool tableMatches = false;
         bool colMatches = false;
 
-        if (MatchWholeWord)
+        if (ExactMatch)
+        {
+            // Exact match: entire name must match search term
+            tableMatches = tableToSearch == searchTerm;
+            colMatches = colToSearch == searchTerm;
+        }
+        else if (MatchWholeWord)
         {
             tableMatches = tableToSearch.Split(' ', '.', '_').Contains(searchTerm);
             colMatches = colToSearch.Split(' ', '.', '_').Contains(searchTerm);
