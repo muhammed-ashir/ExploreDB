@@ -1,0 +1,53 @@
+@page "/view/{FullName}"
+@using DbExplore.Services
+@inject SchemaService SchemaService
+
+<div class="container-fluid">
+    @if (View == null)
+    {
+        <div class="alert alert-warning">View not found: @FullName</div>
+    }
+    else
+    {
+        <div class="row mb-4">
+            <div class="col">
+                <h2 class="text-white">
+                    <span style="font-size: 2rem;">📄</span> @View.Name
+                </h2>
+                <span class="badge bg-secondary">@View.Schema</span>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Columns -->
+            <div class="col-md-12">
+                <div class="card glass-card h-100 text-white">
+                    <div class="card-header border-secondary fw-bold">Columns</div>
+                    <ul class="list-group list-group-flush">
+                        @foreach (var col in View.Columns)
+                        {
+                            <li class="list-group-item bg-transparent text-white border-secondary d-flex justify-content-between">
+                                <span>@col.Name</span>
+                                <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string FullName { get; set; } = string.Empty;
+
+    private ViewInfo? View;
+
+    protected override void OnParametersSet()
+    {
+        var decoded = Uri.UnescapeDataString(FullName);
+        // Find view
+        View = SchemaService.Views.FirstOrDefault(t => t.FullName == decoded);
+    }
+}

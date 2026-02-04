@@ -1,0 +1,436 @@
+@page "/tricks"
+@using DbExplore.Services
+@inject SchemaService SchemaService
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2 class="fw-bold mb-0">
+                <span style="font-size: 2rem;">💡</span> Database Tricks & Best Practices
+            </h2>
+            <p class="text-secondary small">Expert tips for query optimization, debugging, and database navigation</p>
+        </div>
+    </div>
+
+    <!-- Query Construction Tips -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark border-primary border-2 shadow-sm">
+                <div class="card-header bg-primary text-white border-bottom border-primary">
+                    <h5 class="mb-0"><span style="font-size: 1.3rem;">🔗</span> JOIN Query Best Practices</h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-primary fw-bold">Which Table to Start With?</h6>
+                    <p class="text-light">In large, highly connected databases, choosing the right starting table is crucial:</p>
+                    
+                    <div class="alert alert-info bg-transparent border-info">
+                        <strong>✅ Rule of Thumb:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li><strong>Start with the most selective table</strong> (table with the fewest matching rows after WHERE clause)</li>
+                            <li><strong>For reporting:</strong> Start with the fact table (transactions, orders, events)</li>
+                            <li><strong>For lookups:</strong> Start with the dimension table that has the most filtering criteria</li>
+                            <li><strong>For large databases:</strong> Start with the table that has the best index coverage for your WHERE clause</li>
+                        </ul>
+                    </div>
+
+                    <h6 class="text-warning fw-bold mt-4">Example: E-Commerce Database</h6>
+                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- ❌ BAD: Starting with large Products table
+SELECT o.OrderID, p.ProductName, c.CustomerName
+FROM Products p
+INNER JOIN OrderDetails od ON p.ProductID = od.ProductID
+INNER JOIN Orders o ON od.OrderID = o.OrderID
+INNER JOIN Customers c ON o.CustomerID = c.CustomerID
+WHERE o.OrderDate = '2024-01-15';
+
+-- ✅ GOOD: Starting with filtered Orders (most selective)
+SELECT o.OrderID, p.ProductName, c.CustomerName
+FROM Orders o
+INNER JOIN OrderDetails od ON o.OrderID = od.OrderID
+INNER JOIN Products p ON od.ProductID = p.ProductID
+INNER JOIN Customers c ON o.CustomerID = c.CustomerID
+WHERE o.OrderDate = '2024-01-15';</code></pre>
+
+                    <h6 class="text-success fw-bold mt-4">Complex Database Navigation</h6>
+                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- Example: HR Database with many relationships
+-- Goal: Get employee details with their current project and department
+
+-- Step 1: Identify the path
+-- Employees → EmployeeDepartments → Departments
+-- Employees → ProjectAssignments → Projects
+
+-- Step 2: Start with the most filtered table
+SELECT 
+    e.EmployeeID,
+    e.FirstName,
+    e.LastName,
+    d.DepartmentName,
+    p.ProjectName,
+    pa.Role
+FROM Employees e
+    -- Always join dimension tables AFTER applying filters
+    LEFT JOIN EmployeeDepartments ed ON e.EmployeeID = ed.EmployeeID 
+        AND ed.EndDate IS NULL  -- Current department only
+    LEFT JOIN Departments d ON ed.DepartmentID = d.DepartmentID
+    
+    LEFT JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID 
+        AND pa.IsActive = 1  -- Active projects only
+    LEFT JOIN Projects p ON pa.ProjectID = p.ProjectID
+WHERE 
+    e.IsActive = 1  -- Filter as early as possible
+    AND e.HireDate >= '2023-01-01';</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stored Procedure Debugging -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark border-danger border-2 shadow-sm">
+                <div class="card-header bg-danger text-white border-bottom border-danger">
+                    <h5 class="mb-0"><span style="font-size: 1.3rem;">🐛</span> Debugging Stored Procedures</h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-danger fw-bold">Essential Debugging Techniques</h6>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="card bg-black border-warning">
+                                <div class="card-header border-warning">
+                                    <strong>1️⃣ PRINT Statements</strong>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="text-success mb-0"><code>CREATE PROCEDURE usp_ProcessOrder
+    @@OrderID INT
+AS
+BEGIN
+    PRINT 'Starting usp_ProcessOrder';
+    PRINT 'OrderID: ' + CAST(@@OrderID AS VARCHAR);
+    
+    DECLARE @@CustomerID INT;
+    SELECT @@CustomerID = CustomerID 
+    FROM Orders 
+    WHERE OrderID = @@OrderID;
+    
+    PRINT 'CustomerID: ' + CAST(@@CustomerID AS VARCHAR);
+    
+    -- More logic...
+END;</code></pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <div class="card bg-black border-warning">
+                                <div class="card-header border-warning">
+                                    <strong>2️⃣ Test with Transactions</strong>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="text-success mb-0"><code>BEGIN TRANSACTION;
+
+EXEC usp_ProcessOrder @@OrderID = 12345;
+
+-- Check the results
+SELECT * FROM Orders WHERE OrderID = 12345;
+SELECT * FROM OrderDetails WHERE OrderID = 12345;
+
+-- If OK, commit; otherwise rollback
+ROLLBACK TRANSACTION;
+-- COMMIT TRANSACTION;</code></pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <div class="card bg-black border-warning">
+                                <div class="card-header border-warning">
+                                    <strong>3️⃣ Return Error Details</strong>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="text-success mb-0"><code>CREATE PROCEDURE usp_SafeInsert
+AS
+BEGIN
+    BEGIN TRY
+        -- Your logic here
+        INSERT INTO Table1 VALUES (...)
+    END TRY
+    BEGIN CATCH
+        SELECT 
+            ERROR_NUMBER() AS ErrorNumber,
+            ERROR_MESSAGE() AS ErrorMessage,
+            ERROR_LINE() AS ErrorLine,
+            ERROR_PROCEDURE() AS ErrorProcedure;
+    END CATCH
+END;</code></pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <div class="card bg-black border-warning">
+                                <div class="card-header border-warning">
+                                    <strong>4️⃣ Use RAISERROR for Custom Messages</strong>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="text-success mb-0"><code>IF @@OrderID IS NULL
+BEGIN
+    RAISERROR('OrderID cannot be NULL', 16, 1);
+    RETURN;
+END;
+
+IF NOT EXISTS (SELECT 1 FROM Orders 
+               WHERE OrderID = @@OrderID)
+BEGIN
+    RAISERROR('Order %d not found', 16, 1, @@OrderID);
+    RETURN;
+END;</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning bg-transparent border-warning mt-3">
+                        <strong>🔧 Pro Tips:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>Always use <code>SET NOCOUNT ON;</code> to prevent row count messages interfering with results</li>
+                            <li>Create a debug table to log execution steps: <code>INSERT INTO DebugLog VALUES (GETDATE(), 'Step 1 complete')</code></li>
+                            <li>Use <code>EXEC sp_executesql</code> instead of dynamic SQL for better debugging</li>
+                            <li>Enable SQL Server Profiler or Extended Events to trace procedure execution</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Tips -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark border-success border-2 shadow-sm">
+                <div class="card-header bg-success text-white border-bottom border-success">
+                    <h5 class="mb-0"><span style="font-size: 1.3rem;">⚡</span> Performance Optimization Tricks</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <h6 class="text-success fw-bold">Use EXISTS Instead of COUNT</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- ❌ Slow: Counts all rows
+IF (SELECT COUNT(*) FROM LargeTable 
+    WHERE Condition = 1) > 0
+BEGIN
+    -- Do something
+END;
+
+-- ✅ Fast: Stops at first match
+IF EXISTS (SELECT 1 FROM LargeTable 
+           WHERE Condition = 1)
+BEGIN
+    -- Do something
+END;</code></pre>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <h6 class="text-success fw-bold">Avoid Functions on Indexed Columns</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- ❌ Bad: Can't use index
+SELECT * FROM Orders
+WHERE YEAR(OrderDate) = 2024;
+
+-- ✅ Good: Uses index
+SELECT * FROM Orders
+WHERE OrderDate >= '2024-01-01' 
+  AND OrderDate &lt; '2025-01-01';</code></pre>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <h6 class="text-success fw-bold">Use WITH (NOLOCK) Wisely</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- For reporting on large tables
+-- (accepts dirty reads)
+SELECT * 
+FROM LargeTable WITH (NOLOCK)
+WHERE Status = 'Active';
+
+-- ⚠️ Warning: Only use for non-critical
+-- reporting where occasional inconsistency
+-- is acceptable</code></pre>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <h6 class="text-success fw-bold">Batch Large Updates</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- Instead of updating millions at once
+WHILE 1 = 1
+BEGIN
+    UPDATE TOP (10000) MyTable
+    SET Status = 'Processed'
+    WHERE Status = 'Pending';
+    
+    IF @@ROWCOUNT &lt; 10000 BREAK;
+    WAITFOR DELAY '00:00:01'; -- Breathe
+END;</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Index Strategy -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark border-warning border-2 shadow-sm">
+                <div class="card-header bg-warning text-dark border-bottom border-warning">
+                    <h5 class="mb-0"><span style="font-size: 1.3rem;">📑</span> Index Strategy</h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-warning fw-bold">When to Create Indexes</h6>
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped table-hover">
+                            <thead class="table-warning text-dark">
+                                <tr>
+                                    <th>Scenario</th>
+                                    <th>Index Type</th>
+                                    <th>Example</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Frequent WHERE/JOIN columns</td>
+                                    <td>Non-Clustered Index</td>
+                                    <td><code>CREATE INDEX IX_Orders_CustomerID ON Orders(CustomerID)</code></td>
+                                </tr>
+                                <tr>
+                                    <td>Range queries (dates, numbers)</td>
+                                    <td>Clustered Index</td>
+                                    <td><code>CREATE CLUSTERED INDEX IX_Orders_Date ON Orders(OrderDate)</code></td>
+                                </tr>
+                                <tr>
+                                    <td>Covering queries (SELECT specific cols)</td>
+                                    <td>Covering Index</td>
+                                    <td><code>CREATE INDEX IX_Orders_Cover ON Orders(CustomerID) INCLUDE (OrderDate, Total)</code></td>
+                                </tr>
+                                <tr>
+                                    <td>Unique constraints</td>
+                                    <td>Unique Index</td>
+                                    <td><code>CREATE UNIQUE INDEX IX_Users_Email ON Users(Email)</code></td>
+                                </tr>
+                                <tr>
+                                    <td>Full-text search</td>
+                                    <td>Full-Text Index</td>
+                                    <td><code>CREATE FULLTEXT INDEX ON Products(Description)</code></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="alert alert-info bg-transparent border-info mt-3">
+                        <strong>💡 Index Analysis Query:</strong>
+                        <pre class="bg-black text-success p-3 rounded mt-2 mb-0"><code>-- Find missing indexes
+SELECT 
+    migs.avg_user_impact * (migs.user_seeks + migs.user_scans) AS Impact,
+    mid.statement AS TableName,
+    mid.equality_columns,
+    mid.inequality_columns,
+    mid.included_columns
+FROM sys.dm_db_missing_index_groups mig
+INNER JOIN sys.dm_db_missing_index_group_stats migs 
+    ON migs.group_handle = mig.index_group_handle
+INNER JOIN sys.dm_db_missing_index_details mid 
+    ON mig.index_handle = mid.index_handle
+ORDER BY Impact DESC;</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Query Analysis -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark border-info border-2 shadow-sm">
+                <div class="card-header bg-info text-dark border-bottom border-info">
+                    <h5 class="mb-0"><span style="font-size: 1.3rem;">📊</span> Query Analysis Tools</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="card bg-black border-secondary">
+                                <div class="card-header border-secondary">
+                                    <strong>Execution Plan Analysis</strong>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="text-success mb-2"><code>-- Show actual execution plan
+SET STATISTICS TIME ON;
+SET STATISTICS IO ON;
+
+SELECT ... FROM ... WHERE ...;
+
+SET STATISTICS TIME OFF;
+SET STATISTICS IO OFF;</code></pre>
+                                    <small class="text-muted">Look for: Table Scans, Missing Indexes, High Cost Operations</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <div class="card bg-black border-secondary">
+                                <div class="card-header border-secondary">
+                                    <strong>Find Slow Queries</strong>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="text-success mb-2"><code>-- Top 10 slowest queries
+SELECT TOP 10
+    qs.total_elapsed_time / qs.execution_count 
+        AS avg_time,
+    qs.execution_count,
+    SUBSTRING(qt.text, 1, 100) AS query
+FROM sys.dm_exec_query_stats qs
+CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) qt
+ORDER BY avg_time DESC;</code></pre>
+                                    <small class="text-muted">Helps identify performance bottlenecks</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Common Pitfalls -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark border-danger border-2 shadow-sm">
+                <div class="card-header bg-gradient text-white border-bottom border-danger" style="background: linear-gradient(135deg, #dc3545, #fd7e14);">
+                    <h5 class="mb-0"><span style="font-size: 1.3rem;">⚠️</span> Common Pitfalls to Avoid</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item bg-transparent text-light border-bottom border-secondary">
+                            <h6 class="text-danger">❌ SELECT * in Production</h6>
+                            <p class="mb-1">Always specify column names. Reduces network traffic and prevents breaking changes when table schema changes.</p>
+                        </div>
+                        <div class="list-group-item bg-transparent text-light border-bottom border-secondary">
+                            <h6 class="text-danger">❌ NOT IN with NULLs</h6>
+                            <p class="mb-1">Use <code>NOT EXISTS</code> or <code>LEFT JOIN ... WHERE ... IS NULL</code> instead. <code>NOT IN</code> fails with NULL values.</p>
+                        </div>
+                        <div class="list-group-item bg-transparent text-light border-bottom border-secondary">
+                            <h6 class="text-danger">❌ Implicit Conversions</h6>
+                            <p class="mb-1">Match data types in WHERE clauses. <code>WHERE IntColumn = '123'</code> prevents index usage.</p>
+                        </div>
+                        <div class="list-group-item bg-transparent text-light border-bottom border-secondary">
+                            <h6 class="text-danger">❌ Cursors for Row-by-Row Processing</h6>
+                            <p class="mb-1">Use set-based operations instead. Cursors are 100x-1000x slower.</p>
+                        </div>
+                        <div class="list-group-item bg-transparent text-light">
+                            <h6 class="text-danger">❌ Missing Transaction Handling</h6>
+                            <p class="mb-1">Always wrap multi-statement operations in transactions with proper error handling.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // No additional logic needed for this static content page
+}

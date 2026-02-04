@@ -22,6 +22,18 @@
                 <span style="font-size: 1.2rem;">🔍</span>
                 <span class="ms-2">Table Explorer</span>
             </a>
+
+            <a href="views" 
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsViewExplorerActive ? "active" : "")">
+                <span style="font-size: 1.2rem;">👁️</span>
+                <span class="ms-2">View Explorer</span>
+            </a>
+            
+            <a href="tricks" 
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsTricksActive ? "active" : "")">
+                <span style="font-size: 1.2rem;">💡</span>
+                <span class="ms-2">DB Tricks & Tips</span>
+            </a>
         </div>
     </div>
 </div>
@@ -31,6 +43,8 @@
 
     private bool IsPathfinderActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
     private bool IsExplorerActive => CurrentUrl.Contains("/explorer");
+    private bool IsViewExplorerActive => CurrentUrl.Contains("/views");
+    private bool IsTricksActive => CurrentUrl.Contains("/tricks");
 
     protected override void OnInitialized()
     {

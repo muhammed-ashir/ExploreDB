@@ -1,0 +1,142 @@
+@page "/views"
+@using DbExplore.Services
+@inject SchemaService SchemaService
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2 class="fw-bold mb-0">
+                <span style="font-size: 2rem;">👁️</span> View Explorer
+            </h2>
+            <p class="text-secondary small">Browse and search all database views</p>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <input type="text" 
+                   class="form-control bg-dark text-white border-secondary mb-2" 
+                   placeholder="🔎 Search views..." 
+                   @bind="SearchTerm" 
+                   @bind:event="oninput" />
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm @(ExactMatch ? "btn-primary" : "btn-outline-secondary")" 
+                        @onclick="() => ExactMatch = !ExactMatch"
+                        title="Exact match">
+                    🎯 Exact Match
+                </button>
+                <button class="btn btn-sm @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary")" 
+                        @onclick="() => MatchWholeWord = !MatchWholeWord"
+                        title="Match whole word">
+                    📝 Whole Word
+                </button>
+                <button class="btn btn-sm @(CaseSensitive ? "btn-primary" : "btn-outline-secondary")" 
+                        @onclick="() => CaseSensitive = !CaseSensitive"
+                        title="Case sensitive">
+                    🔤 Case Sensitive
+                </button>
+            </div>
+        </div>
+        <div class="col-md-6 text-end align-self-center">
+            <span class="text-muted">
+                Showing @FilteredViews.Count() of @SchemaService.Views.Count views
+            </span>
+        </div>
+    </div>
+
+    <div class="row">
+        @if (SchemaService.Views.Count == 0)
+        {
+            <div class="col-12">
+                <div class="alert alert-warning">
+                    <strong>⚠️ No views found.</strong> Make sure you're connected to a database or the database has no views.
+                </div>
+            </div>
+        }
+        else if (!FilteredViews.Any())
+        {
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <strong>🔍 No matches.</strong> Try a different search term.
+                </div>
+            </div>
+        }
+        else
+        {
+            @foreach (var view in FilteredViews)
+            {
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <a href="view/@Uri.EscapeDataString(view.FullName)" class="text-decoration-none">
+                        <div class="card glass-card text-white node-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <span style="font-size: 1.5rem;">📄</span> @view.Name
+                                </h5>
+                                <p class="card-text">
+                                    <small class="text-muted">Schema: @view.Schema</small><br />
+                                    <small class="text-info">@view.Columns.Count columns</small>
+                                </p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private string SearchTerm = "";
+    private bool ExactMatch = false;
+    private bool MatchWholeWord = false;
+    private bool CaseSensitive = false;
+
+    private IEnumerable<ViewInfo> FilteredViews
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchTerm))
+                return SchemaService.Views;
+
+            var searchTerm = CaseSensitive ? SearchTerm : SearchTerm.ToLower();
+
+            return SchemaService.Views.Where(t =>
+            {
+                var viewName = CaseSensitive ? t.Name : t.Name.ToLower();
+                var schemaName = CaseSensitive ? t.Schema : t.Schema.ToLower();
+
+                if (ExactMatch)
+                {
+                    // Exact match: entire name must match search term
+                    return viewName == searchTerm || schemaName == searchTerm;
+                }
+                else if (MatchWholeWord)
+                {
+                    return viewName.Split(' ', '.', '_').Contains(searchTerm) ||
+                           schemaName.Split(' ', '.', '_').Contains(searchTerm);
+                }
+                else
+                {
+                    return viewName.Contains(searchTerm) || schemaName.Contains(searchTerm);
+                }
+            });
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        SchemaService.OnSchemaLoaded += Refresh;
+    }
+
+    private void Refresh()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        SchemaService.OnSchemaLoaded -= Refresh;
+    }
+}

@@ -32,10 +32,22 @@ public class Relationship
     public bool IsNullable { get; set; } = false; // Whether the FK column allows NULL
 }
 
+
+public class ViewInfo
+{
+    public string Schema { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string FullName => $"[{Schema}].[{Name}]";
+    public List<ColumnInfo> Columns { get; set; } = new();
+    
+    public override string ToString() => FullName;
+}
+
 public class SchemaService
 {
     private readonly ConnectionService _connectionService;
     public List<TableInfo> Tables { get; private set; } = new();
+    public List<ViewInfo> Views { get; private set; } = new();
     public event Action? OnSchemaLoaded;
 
     public SchemaService(ConnectionService connectionService)
@@ -60,8 +72,16 @@ public class SchemaService
             Tables = rawTables.Select(t => new TableInfo { Schema = t.Schema, Name = t.Name }).OrderBy(t => t.FullName).ToList();
             var tableDict = Tables.ToDictionary(t => t.FullName);
 
+            Console.WriteLine("Fetching Views...");
+            // 2. Get Views
+            var viewSql = "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='VIEW'";
+            var rawViews = await conn.QueryAsync<(string Schema, string Name)>(viewSql);
+            
+            Views = rawViews.Select(v => new ViewInfo { Schema = v.Schema, Name = v.Name }).OrderBy(v => v.FullName).ToList();
+            var viewDict = Views.ToDictionary(v => v.FullName);
+
             Console.WriteLine("Fetching Columns...");
-            // 2. Get Columns
+            // 3. Get Columns
             var colSql = "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS";
             var rawCols = await conn.QueryAsync<(string Schema, string Table, string Column, string Type)>(colSql);
 
@@ -72,9 +92,13 @@ public class SchemaService
                 {
                     table.Columns.Add(new ColumnInfo { Name = col.Column, DataType = col.Type });
                 }
+                else if (viewDict.TryGetValue(key, out var view))
+                {
+                    view.Columns.Add(new ColumnInfo { Name = col.Column, DataType = col.Type });
+                }
             }
 
-            // 3. Get Foreign Keys with nullability
+            // 4. Get Foreign Keys with nullability
             var fkSql = @"
                 SELECT 
                     tp.name AS ParentTable, cp.name AS ParentColumn, cp.is_nullable AS IsNullable,
