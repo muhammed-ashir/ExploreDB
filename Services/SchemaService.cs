@@ -24,6 +24,11 @@ public class ColumnInfo
 {
     public string Name { get; set; } = string.Empty;
     public string DataType { get; set; } = string.Empty;
+    
+    // Lineage info (for views)
+    public string? SourceSchema { get; set; }
+    public string? SourceTable { get; set; }
+    public string? SourceColumn { get; set; }
 }
 
 public class Relationship
@@ -196,6 +201,51 @@ public class SchemaService
                         sourceView.Parents.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "View" });
                         targetView.Children.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "View" });
                     }
+                }
+            }
+
+            // 6. Get Column Lineage for Views (Best Effort)
+            // This can be slow for many views, so we'll do it sequentially or parrallel? 
+            // Let's do it simply for now.
+            Console.WriteLine("Fetching View Column Lineage...");
+            foreach (var view in Views)
+            {
+                try 
+                {
+                    var lineageSql = $@"
+                        SELECT 
+                            c.name AS ViewColumn,
+                            d.referenced_schema_name AS SourceSchema,
+                            d.referenced_entity_name AS SourceTable,
+                            d.referenced_minor_name AS SourceColumn
+                        FROM sys.dm_sql_referenced_entities('{view.FullName}', 'OBJECT') d
+                        JOIN sys.columns c ON c.object_id = d.referencing_id AND c.column_id = d.referencing_minor_id
+                        WHERE d.referenced_minor_name IS NOT NULL";
+
+                    var lineage = await conn.QueryAsync<dynamic>(lineageSql);
+                    
+                    var colDict = view.Columns.ToDictionary(c => c.Name);
+                    
+                    foreach(var item in lineage)
+                    {
+                        var colName = (string)item.ViewColumn;
+                        if (colDict.TryGetValue(colName, out var col))
+                        {
+                            // If multiple sources map to one column (e.g. concatenation), this might overwrite or we could append.
+                            // For now, let's just take the first one or formatted string.
+                            if (string.IsNullOrEmpty(col.SourceTable))
+                            {
+                                col.SourceSchema = item.SourceSchema;
+                                col.SourceTable = item.SourceTable;
+                                col.SourceColumn = item.SourceColumn;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // View might be invalid or permissions issue
+                    Console.WriteLine($"Error fetching lineage for {view.FullName}: {ex.Message}");
                 }
             }
 

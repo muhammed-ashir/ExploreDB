@@ -27,9 +27,28 @@
                     <ul class="list-group list-group-flush">
                         @foreach (var col in View.Columns)
                         {
-                            <li class="list-group-item bg-transparent text-white border-secondary d-flex justify-content-between">
-                                <span>@col.Name</span>
-                                <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
+                            <li class="list-group-item bg-transparent text-white border-secondary">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold">@col.Name</span>
+                                    <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(col.SourceTable))
+                                {
+                                    <div class="small mt-1" style="font-size: 0.85em;">
+                                        <span class="text-secondary">↳</span> 
+                                        <span class="text-muted">Source:</span>
+                                        @{
+                                            var sourceFullName = $"[{col.SourceSchema}].[{col.SourceTable}]";
+                                            var isView = IsView(sourceFullName);
+                                            var urlPrefix = isView ? "view" : "table";
+                                            var textClass = isView ? "text-info" : "text-primary";
+                                        }
+                                        <a href="@urlPrefix/@Uri.EscapeDataString(sourceFullName)" class="text-decoration-none @textClass">
+                                            @col.SourceTable
+                                        </a>
+                                        <span class="text-secondary">.</span><span class="text-light">@col.SourceColumn</span>
+                                    </div>
+                                }
                             </li>
                         }
                     </ul>
@@ -128,5 +147,10 @@
     private string GetShortName(string name)
     {
         return name.Replace("[", "").Replace("]", "");
+    }
+
+    private bool IsView(string fullName)
+    {
+        return SchemaService.Views.Any(v => v.FullName == fullName);
     }
 }
