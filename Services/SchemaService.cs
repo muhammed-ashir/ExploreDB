@@ -13,6 +13,9 @@ public class TableInfo
     public List<Relationship> OutgoingKeys { get; set; } = new();
     // Relations where this table is referenced by another (is parent of child)
     public List<Relationship> IncomingKeys { get; set; } = new();
+    
+    // Views that reference this table
+    public List<Dependency> ReferencedByViews { get; set; } = new();
 
     public override string ToString() => FullName;
 }
@@ -33,12 +36,26 @@ public class Relationship
 }
 
 
+
+public class Dependency
+{
+    public string Schema { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string FullName => $"[{Schema}].[{Name}]";
+    public string Type { get; set; } = "Unknown"; // 'Table', 'View'
+    
+    public override string ToString() => FullName;
+}
+
 public class ViewInfo
 {
     public string Schema { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string FullName => $"[{Schema}].[{Name}]";
     public List<ColumnInfo> Columns { get; set; } = new();
+    
+    public List<Dependency> Parents { get; set; } = new(); // What I select from
+    public List<Dependency> Children { get; set; } = new(); // What selects from me
     
     public override string ToString() => FullName;
 }
@@ -134,6 +151,51 @@ public class SchemaService
                     
                     // Reference table is pointed to by Parent table
                     reference.IncomingKeys.Add(rel);
+                }
+            }
+
+            // 5. Get View Dependencies
+            var depSql = @"
+                SELECT 
+                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
+                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(o.schema_id)) AS TargetSchema,
+                    d.referenced_entity_name AS TargetName
+                FROM sys.sql_expression_dependencies d
+                JOIN sys.objects o ON d.referencing_id = o.object_id
+                WHERE o.type = 'V'";
+
+            var deps = await conn.QueryAsync<dynamic>(depSql);
+            
+            foreach(var dep in deps)
+            {
+                var sourceSchema = (string)dep.SourceSchema;
+                var sourceName = (string)dep.SourceName;
+                var targetSchema = (string)dep.TargetSchema; // Can be null if cross-db, but we use ISNULL above for basic cases
+                var targetName = (string)dep.TargetName;
+
+                if (string.IsNullOrEmpty(targetSchema)) continue; 
+
+                var sourceFull = $"[{sourceSchema}].[{sourceName}]";
+                var targetFull = $"[{targetSchema}].[{targetName}]";
+
+                // Resolve Source (View)
+                if (viewDict.TryGetValue(sourceFull, out var sourceView))
+                {
+                    // Target could be Table or View
+                    if (tableDict.TryGetValue(targetFull, out var targetTable))
+                    {
+                        // View depends on Table
+                        sourceView.Parents.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Table" });
+                        // Table referenced by View
+                        targetTable.ReferencedByViews.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "View" }); 
+                    }
+                    else if (viewDict.TryGetValue(targetFull, out var targetView))
+                    {
+                        // View depends on View
+                        sourceView.Parents.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "View" });
+                        targetView.Children.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "View" });
+                    }
                 }
             }
 

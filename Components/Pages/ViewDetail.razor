@@ -20,7 +20,8 @@
 
         <div class="row g-4">
             <!-- Columns -->
-            <div class="col-md-12">
+            <!-- Columns -->
+            <div class="col-md-4">
                 <div class="card glass-card h-100 text-white">
                     <div class="card-header border-secondary fw-bold">Columns</div>
                     <ul class="list-group list-group-flush">
@@ -32,6 +33,79 @@
                             </li>
                         }
                     </ul>
+                </div>
+            </div>
+
+            <!-- Dependencies -->
+            <div class="col-md-8">
+                <div class="row g-4">
+                    <!-- Parents (Upstream) -->
+                    <div class="col-12">
+                        <div class="card glass-card text-white">
+                            <div class="card-header border-secondary text-info fw-bold">
+                                <span style="font-size: 1.2rem;">⬆️</span> Parents (Upstream)
+                                <small class="d-block text-muted fw-normal">Tables or Views this view selects from</small>
+                            </div>
+                            <div class="card-body">
+                                @if (View.Parents.Count == 0)
+                                {
+                                    <span class="text-muted">No dependencies found.</span>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var dep in View.Parents)
+                                        {
+                                            var url = dep.Type == "Table" ? $"table/{Uri.EscapeDataString(dep.FullName)}" : $"view/{Uri.EscapeDataString(dep.FullName)}";
+                                            var badgeClass = dep.Type == "Table" ? "bg-primary" : "bg-info text-dark";
+                                            
+                                            <a href="@url" class="btn btn-outline-info btn-sm text-start" style="min-width: 200px;">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <span class="fw-bold">@GetShortName(dep.Name)</span>
+                                                    <span class="badge @badgeClass" style="font-size: 0.7em;">@dep.Type</span>
+                                                </div>
+                                                <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Children (Downstream) -->
+                    <div class="col-12">
+                        <div class="card glass-card text-white">
+                            <div class="card-header border-secondary text-warning fw-bold">
+                                <span style="font-size: 1.2rem;">⬇️</span> Children (Downstream)
+                                <small class="d-block text-muted fw-normal">Views that select from this view</small>
+                            </div>
+                            <div class="card-body">
+                                @if (View.Children.Count == 0)
+                                {
+                                    <span class="text-muted">No dependent views.</span>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var dep in View.Children)
+                                        {
+                                            var url = dep.Type == "Table" ? $"table/{Uri.EscapeDataString(dep.FullName)}" : $"view/{Uri.EscapeDataString(dep.FullName)}";
+                                            var badgeClass = dep.Type == "Table" ? "bg-primary" : "bg-info text-dark";
+
+                                            <a href="@url" class="btn btn-outline-warning btn-sm text-start" style="min-width: 200px;">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <span class="fw-bold">@GetShortName(dep.Name)</span>
+                                                    <span class="badge @badgeClass" style="font-size: 0.7em;">@dep.Type</span>
+                                                </div>
+                                                <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -49,5 +123,10 @@
         var decoded = Uri.UnescapeDataString(FullName);
         // Find view
         View = SchemaService.Views.FirstOrDefault(t => t.FullName == decoded);
+    }
+    
+    private string GetShortName(string name)
+    {
+        return name.Replace("[", "").Replace("]", "");
     }
 }
