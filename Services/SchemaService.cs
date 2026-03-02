@@ -16,6 +16,8 @@ public class TableInfo
     
     // Views that reference this table
     public List<Dependency> ReferencedByViews { get; set; } = new();
+    // Stored Procedures that reference this table
+    public List<Dependency> ReferencedBySPs { get; set; } = new();
 
     public override string ToString() => FullName;
 }
@@ -61,7 +63,48 @@ public class ViewInfo
     
     public List<Dependency> Parents { get; set; } = new(); // What I select from
     public List<Dependency> Children { get; set; } = new(); // What selects from me
+    // Stored Procedures that reference this view
+    public List<Dependency> ReferencedBySPs { get; set; } = new();
     
+    public override string ToString() => FullName;
+}
+
+public class SpParameter
+{
+    public string Name { get; set; } = string.Empty;
+    public string DataType { get; set; } = string.Empty;
+    public bool IsOutput { get; set; } = false;
+    public bool HasDefault { get; set; } = false;
+    public string? DefaultValue { get; set; }
+    public int MaxLength { get; set; } = -1;
+    public int Precision { get; set; } = 0;
+    public int Scale { get; set; } = 0;
+
+    public string DisplayType
+    {
+        get
+        {
+            var type = DataType.ToUpper();
+            if (type is "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR")
+                return MaxLength == -1 ? $"{DataType}(MAX)" : $"{DataType}({MaxLength})";
+            if (type is "DECIMAL" or "NUMERIC")
+                return $"{DataType}({Precision},{Scale})";
+            return DataType;
+        }
+    }
+}
+
+public class SpInfo
+{
+    public string Schema { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string FullName => $"[{Schema}].[{Name}]";
+    public DateTime? CreatedDate { get; set; }
+    public DateTime? ModifiedDate { get; set; }
+    public List<SpParameter> Parameters { get; set; } = new();
+    // Tables and Views this SP references
+    public List<Dependency> Dependencies { get; set; } = new();
+
     public override string ToString() => FullName;
 }
 
@@ -70,6 +113,7 @@ public class SchemaService
     private readonly ConnectionService _connectionService;
     public List<TableInfo> Tables { get; private set; } = new();
     public List<ViewInfo> Views { get; private set; } = new();
+    public List<SpInfo> StoredProcedures { get; private set; } = new();
     public event Action? OnSchemaLoaded;
 
     public SchemaService(ConnectionService connectionService)
@@ -246,6 +290,117 @@ public class SchemaService
                 {
                     // View might be invalid or permissions issue
                     Console.WriteLine($"Error fetching lineage for {view.FullName}: {ex.Message}");
+                }
+            }
+
+            // 7. Get Stored Procedures
+            Console.WriteLine("Fetching Stored Procedures...");
+            var spSql = @"
+                SELECT 
+                    s.name AS SchemaName,
+                    p.name AS ProcName,
+                    p.create_date AS CreatedDate,
+                    p.modify_date AS ModifiedDate
+                FROM sys.procedures p
+                JOIN sys.schemas s ON p.schema_id = s.schema_id
+                ORDER BY s.name, p.name";
+
+            var rawSps = await conn.QueryAsync<dynamic>(spSql);
+            StoredProcedures = rawSps.Select(r => new SpInfo
+            {
+                Schema = (string)r.SchemaName,
+                Name = (string)r.ProcName,
+                CreatedDate = (DateTime?)r.CreatedDate,
+                ModifiedDate = (DateTime?)r.ModifiedDate
+            }).ToList();
+            var spDict = StoredProcedures.ToDictionary(sp => sp.FullName);
+
+            // 8. Get SP Parameters
+            Console.WriteLine("Fetching SP Parameters...");
+            var paramSql = @"
+                SELECT 
+                    s.name AS SchemaName,
+                    p.name AS ProcName,
+                    pm.name AS ParamName,
+                    t.name AS DataType,
+                    pm.is_output AS IsOutput,
+                    pm.has_default_value AS HasDefault,
+                    CAST(pm.default_value AS NVARCHAR(256)) AS DefaultValue,
+                    pm.max_length AS MaxLength,
+                    pm.precision AS Precision,
+                    pm.scale AS Scale
+                FROM sys.procedures p
+                JOIN sys.schemas s ON p.schema_id = s.schema_id
+                JOIN sys.parameters pm ON pm.object_id = p.object_id
+                JOIN sys.types t ON pm.user_type_id = t.user_type_id
+                ORDER BY s.name, p.name, pm.parameter_id";
+
+            var rawParams = await conn.QueryAsync<dynamic>(paramSql);
+            foreach (var param in rawParams)
+            {
+                var spFull = $"[{(string)param.SchemaName}].[{(string)param.ProcName}]";
+                if (spDict.TryGetValue(spFull, out var sp))
+                {
+                    // NVARCHAR max_length is stored in bytes (2 bytes/char), divide by 2
+                    var rawLen = (short)param.MaxLength;
+                    var dataType = ((string)param.DataType).ToUpper();
+                    int displayLen = rawLen;
+                    if (dataType is "NVARCHAR" or "NCHAR")
+                        displayLen = rawLen == -1 ? -1 : rawLen / 2;
+
+                    sp.Parameters.Add(new SpParameter
+                    {
+                        Name = (string)param.ParamName,
+                        DataType = (string)param.DataType,
+                        IsOutput = (bool)param.IsOutput,
+                        HasDefault = (bool)param.HasDefault,
+                        DefaultValue = param.DefaultValue as string,
+                        MaxLength = displayLen,
+                        Precision = (byte)param.Precision,
+                        Scale = (byte)param.Scale
+                    });
+                }
+            }
+
+            // 9. Get SP Dependencies
+            Console.WriteLine("Fetching SP Dependencies...");
+            var spDepSql = @"
+                SELECT 
+                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
+                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(o.schema_id)) AS TargetSchema,
+                    d.referenced_entity_name AS TargetName
+                FROM sys.sql_expression_dependencies d
+                JOIN sys.objects o ON d.referencing_id = o.object_id
+                WHERE o.type = 'P'";
+
+            var spDeps = await conn.QueryAsync<dynamic>(spDepSql);
+            foreach (var dep in spDeps)
+            {
+                var sourceSchema = (string)dep.SourceSchema;
+                var sourceName = (string)dep.SourceName;
+                var targetSchema = dep.TargetSchema as string;
+                var targetName = (string)dep.TargetName;
+
+                if (string.IsNullOrEmpty(targetSchema)) continue;
+
+                var sourceFull = $"[{sourceSchema}].[{sourceName}]";
+                var targetFull = $"[{targetSchema}].[{targetName}]";
+
+                if (!spDict.TryGetValue(sourceFull, out var sourceSp)) continue;
+
+                // Avoid duplicate dependencies
+                if (sourceSp.Dependencies.Any(d => d.FullName == targetFull)) continue;
+
+                if (tableDict.TryGetValue(targetFull, out var depTable))
+                {
+                    sourceSp.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Table" });
+                    depTable.ReferencedBySPs.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "SP" });
+                }
+                else if (viewDict.TryGetValue(targetFull, out var depView))
+                {
+                    sourceSp.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "View" });
+                    depView.ReferencedBySPs.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "SP" });
                 }
             }
 

@@ -2,6 +2,7 @@
 @using DbExplore.Services
 @inject SchemaService SchemaService
 @inject PathfinderService PathfinderService
+@inject IJSRuntime JS
 @implements IDisposable
 
 <div class="container-fluid">
@@ -77,7 +78,7 @@
                                                 <div class="form-check mt-1">
                                                     <input class="form-check-input" type="checkbox" id="@key" 
                                                            checked="@isSelected" 
-                                                           @onchange="(e) => ToggleColumn(key, table.FullName, (bool)e.Value)" />
+                                                           @onchange="(e) => ToggleColumn(key, table.FullName, e.Value is true)" />
                                                     <label class="form-check-label small text-break cursor-pointer" for="@key">
                                                         @col.Name
                                                     </label>
@@ -98,9 +99,14 @@
              <div class="card bg-dark border-secondary shadow-sm h-100">
                  <div class="card-header border-secondary d-flex justify-content-between align-items-center">
                      <span class="fw-bold">Generated SQL</span>
-                     <button class="btn btn-sm btn-outline-warning" @onclick="ClearAll">
-                         <span style="font-size: 1rem;">🗑️</span> Clear All
-                     </button>
+                     <div class="d-flex gap-2">
+                         <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
+                             @CopyLabel
+                         </button>
+                         <button class="btn btn-sm btn-outline-warning" @onclick="ClearAll">
+                             <span style="font-size: 1rem;">🗑️</span> Clear All
+                         </button>
+                     </div>
                  </div>
                  <div class="card-body p-0 bg-black">
                      <textarea class="form-control bg-black text-success border-0 font-monospace h-100 p-3" 
@@ -118,8 +124,8 @@
     private bool MatchWholeWord = false;
     private bool CaseSensitive = false;
     
-    private HashSet<string> SelectedColumns = new();
-    private List<string> SelectedTables = new();
+    // List (not HashSet) preserves insertion order — first selected table becomes the JOIN root
+    private List<string> SelectedColumns = new();
     private string GeneratedSql = "-- Select columns on the left to generate a query.";
 
     private IEnumerable<TableInfo> FilteredTables => SchemaService.Tables; // We filter columns inside
@@ -174,69 +180,51 @@
     {
         if (isChecked)
         {
-            SelectedColumns.Add(key);
-            SelectedTables.Add(tableName);
+            if (!SelectedColumns.Contains(key))
+                SelectedColumns.Add(key);
         }
         else
         {
             SelectedColumns.Remove(key);
-            // Re-eval selected tables
-            // Just simply remove one instance? No, we need to rebuild the list or track counts.
-            // Easier: Rebuild SelectedTables from SelectedColumns
-            SelectedTables.Clear();
-            foreach(var s in SelectedColumns)
-            {
-                // Format is [Schema].[Table].Column
-                // This is a bit tricky to parse back reliably if . exists in names, but we constructed it as FullName.ColName
-                // Actually I passed tableName directly.
-                // Let's optimize: Maintain a Dictionary<string, int> for table counts?
-                // Or just don't try to be too clever.
-                // "Generate" will handle the unique table names.
-                // But I need to pass 'selected tables' to Generate.
-                // I will just parse it from SelectedColumns keys.
-            }
         }
-        
+
         Generate();
     }
 
     private void Generate()
     {
-        // Extract table names from SelectedColumns keys
-        // format: [Schema].[Table].Column
-        // We can just rely on string manipulation or store it better.
-        // Let's store a list of (Table, Column) tuples instead of strings?
-        // No, strings are easier for UI binding.
-        
-        var tables = new List<string>();
-        var cols = new List<string>();
-        
-        foreach(var key in SelectedColumns)
+        if (SelectedColumns.Count == 0)
         {
-            // key is like "[dbo].[Users].Email"
-            var lastDot = key.LastIndexOf('.');
-            if (lastDot > 0)
-            {
-                var table = key.Substring(0, lastDot);
-                var col = key; // Use full name for select list
-                tables.Add(table);
-                cols.Add(col);
-            }
-        }
-
-        if (tables.Count == 0)
-        {
-            GeneratedSql = "-- Select columns on the left to generate query.";
+            GeneratedSql = "-- Select columns on the left to generate a query.";
             return;
         }
 
-        GeneratedSql = PathfinderService.GenerateQuery(tables, cols);
+        // Extract table names in selection order (preserves root choice)
+        // key format: "[schema].[Table].ColumnName"
+        var tables = SelectedColumns
+            .Select(k => k.Substring(0, k.LastIndexOf('.')))
+            .Distinct() // preserve first-occurrence order (List maintains insertion order)
+            .ToList();
+
+        GeneratedSql = PathfinderService.GenerateQuery(tables, SelectedColumns.ToList());
     }
 
     private void ClearAll()
     {
         SelectedColumns.Clear();
         GeneratedSql = "-- Select columns on the left to generate a query.";
+        StateHasChanged();
+    }
+
+    private string CopyLabel = "📋 Copy";
+
+    private async Task CopySql()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", GeneratedSql);
+        CopyLabel = "Copied! ✓";
+        StateHasChanged();
+        await Task.Delay(1500);
+        CopyLabel = "📋 Copy";
         StateHasChanged();
     }
 

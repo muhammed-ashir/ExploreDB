@@ -12,57 +12,112 @@ public class PathfinderService
     public string GenerateQuery(List<string> selectedTableNames, List<string> selectedColumns)
     {
         if (selectedTableNames.Count == 0) return "-- No tables selected";
-        // Deduplicate
+
+        // Deduplicate while preserving insertion order (first table = root)
         selectedTableNames = selectedTableNames.Distinct().ToList();
 
-        // Build Adjacency Graph (Undirected)
+        // Build Adjacency Graph with directional edge weights:
+        //   Forward FK (Child -> Parent) = cost 1  (preferred, non-expanding)
+        //   Reverse    (Parent -> Child) = cost 2  (may multiply rows)
         var adj = new Dictionary<string, List<Edge>>();
         foreach (var t in _schemaService.Tables)
         {
             if (!adj.ContainsKey(t.FullName)) adj[t.FullName] = new List<Edge>();
-            
-            // Outgoing: T1 -> T2 (T1 has FK)
+
             foreach (var r in t.OutgoingKeys)
             {
-                adj[t.FullName].Add(new Edge { To = r.ToTable, FromCol = r.FromColumn, ToCol = r.ToColumn });
-                
-                // Add Reverse: T2 -> T1
+                // Forward: source has FK pointing to target (Child -> Parent)
+                adj[t.FullName].Add(new Edge
+                {
+                    To = r.ToTable, FromCol = r.FromColumn, ToCol = r.ToColumn,
+                    IsForwardFK = true
+                });
+
+                // Reverse: traversing back from Parent to Child
                 if (!adj.ContainsKey(r.ToTable)) adj[r.ToTable] = new List<Edge>();
-                adj[r.ToTable].Add(new Edge { To = r.FromTable, FromCol = r.ToColumn, ToCol = r.FromColumn });
+                adj[r.ToTable].Add(new Edge
+                {
+                    To = r.FromTable, FromCol = r.ToColumn, ToCol = r.FromColumn,
+                    IsForwardFK = false
+                });
             }
         }
 
-        // Algo: Prim-like or iterative BFS to connect all selected nodes
         var connectedInfo = ConnectTables(selectedTableNames, adj);
         if (connectedInfo == null) return "-- Could not find a path connecting these tables.";
 
-        // Assign Aliases
+        // ── Alias Assignment: meaningful abbreviations (e.g. OrderDetails → od) ──
         var aliasMap = new Dictionary<string, string>();
-        int aliasCounter = 1;
-        
+
+        string MakeBaseAlias(string fullTableName)
+        {
+            // Extract table name from [schema].[Table]
+            var parts = fullTableName.Split(new[] { '[', ']', '.' }, StringSplitOptions.RemoveEmptyEntries);
+            var tableName = parts.LastOrDefault() ?? fullTableName;
+
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < tableName.Length; i++)
+            {
+                char c = tableName[i];
+                if (i == 0 && char.IsLetter(c))
+                {
+                    sb.Append(char.ToLower(c));
+                }
+                else if (char.IsUpper(c) && i > 0)
+                {
+                    // PascalCase boundary
+                    sb.Append(char.ToLower(c));
+                }
+                else if ((c == '_' || c == ' ') && i + 1 < tableName.Length && char.IsLetter(tableName[i + 1]))
+                {
+                    // underscore_case: take the next letter
+                    sb.Append(char.ToLower(tableName[i + 1]));
+                }
+            }
+
+            var alias = sb.ToString();
+            return string.IsNullOrEmpty(alias) ? "t" : alias;
+        }
+
         string GetAlias(string table)
         {
             if (!aliasMap.ContainsKey(table))
-                aliasMap[table] = $"T{aliasCounter++}";
+            {
+                var baseAlias = MakeBaseAlias(table);
+                var alias = baseAlias;
+                int counter = 2;
+                while (aliasMap.Values.Contains(alias))
+                    alias = baseAlias + counter++;
+                aliasMap[table] = alias;
+            }
             return aliasMap[table];
         }
 
-        // Assign alias to root
+        // Assign root alias first so it gets the "clean" abbreviation
         GetAlias(connectedInfo.Root);
-        
-        // Build Join Clauses and assign aliases to joined tables
+
+        // ── Detect one-to-many joins ──
+        bool hasOneToMany = connectedInfo.Joins.Any(j => j.IsOneToMany);
+
+        // ── Build JOIN clauses ──
         var joinSb = new System.Text.StringBuilder();
         foreach (var join in connectedInfo.Joins)
         {
-            var sourceAlias = GetAlias(join.SourceTable);
-            var targetAlias = GetAlias(join.TargetTable);
-            
-            joinSb.AppendLine($"{join.JoinType} {join.TargetTable} AS {targetAlias} ON {sourceAlias}.{join.SourceCol} = {targetAlias}.{join.TargetCol}");
+            var srcAlias = GetAlias(join.SourceTable);
+            var tgtAlias = GetAlias(join.TargetTable);
+            var otmNote = join.IsOneToMany ? " -- ⚠️ One-to-Many: rows may multiply" : "";
+            joinSb.AppendLine($"    {join.JoinType} {join.TargetTable} AS {tgtAlias}" +
+                              $" ON {srcAlias}.{join.SourceCol} = {tgtAlias}.{join.TargetCol}{otmNote}");
         }
 
-        // Generate SELECT list
+        // ── Build SELECT ──
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("SELECT");
+
+        if (hasOneToMany)
+            sb.AppendLine("-- ⚠️ Warning: One-to-Many join detected. DISTINCT applied to suppress duplicate rows.");
+
+        sb.AppendLine(hasOneToMany ? "SELECT DISTINCT" : "SELECT");
+
         if (selectedColumns == null || selectedColumns.Count == 0)
         {
             sb.AppendLine("    *");
@@ -70,201 +125,204 @@ public class PathfinderService
         else
         {
             var cols = new List<string>();
-            foreach(var col in selectedColumns)
+            foreach (var col in selectedColumns)
             {
-                // col format: [Schema].[Table].Column
-                // We need to match the table part to the alias
-                // Simple parsing: iterate aliases to find prefix match?
-                // Or just use the known table part if we passed structured data.
-                // We receive full string "[s].[t].Col".
-                // Let's find longest matching table name from aliasMap keys.
-                
-                string bestMatchTable = "";
-                foreach(var t in aliasMap.Keys)
+                // Find longest matching table key (handles schema.table prefix)
+                string bestMatch = "";
+                foreach (var t in aliasMap.Keys)
                 {
-                    if (col.StartsWith(t) && t.Length > bestMatchTable.Length)
+                    if (col.StartsWith(t) && t.Length > bestMatch.Length)
                     {
-                        // ensure it's followed by a dot
                         if (col.Length > t.Length && col[t.Length] == '.')
-                        {
-                            bestMatchTable = t;
-                        }
+                            bestMatch = t;
                     }
                 }
-                
-                if (!string.IsNullOrEmpty(bestMatchTable))
+
+                if (!string.IsNullOrEmpty(bestMatch))
                 {
-                    var alias = aliasMap[bestMatchTable];
-                    var colName = col.Substring(bestMatchTable.Length + 1); // remove table + dot
+                    var alias = aliasMap[bestMatch];
+                    var colName = col.Substring(bestMatch.Length + 1);
                     cols.Add($"    {alias}.{colName}");
                 }
                 else
                 {
-                    // Fallback
                     cols.Add($"    {col}");
                 }
             }
             sb.AppendLine(string.Join(",\n", cols));
         }
-        
+
         sb.AppendLine($"FROM {connectedInfo.Root} AS {aliasMap[connectedInfo.Root]}");
-        sb.Append(joinSb.ToString());
+        sb.Append(joinSb);
+        sb.AppendLine("-- WHERE");
+        sb.Append("-- ORDER BY");
 
         return sb.ToString();
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Connect all selected tables using Dijkstra-weighted paths
+    // ─────────────────────────────────────────────────────────────────────────
     private ConnectedResult? ConnectTables(List<string> tables, Dictionary<string, List<Edge>> adj)
     {
-        // Start from first table
         var root = tables[0];
-        
-        var connectedSet = new HashSet<string>();
-        connectedSet.Add(root);
-        
+        var connectedSet = new HashSet<string> { root };
         var joins = new List<JoinDef>();
-        
-        // Tables we still need to reach
-        var remainingTargets = new HashSet<string>(tables.Skip(1));
+        var remaining = new HashSet<string>(tables.Skip(1));
 
-        while (remainingTargets.Count > 0)
+        while (remaining.Count > 0)
         {
-            // Find shortest path from ANY node in connectedSet to ANY node in remainingTargets
-            var path = FindShortestPath(connectedSet, remainingTargets, adj);
-            
-            if (path == null) 
-            {
-                return null;
-            }
-            
-            // Add path to connectedSet and joins
+            var path = FindShortestPath(connectedSet, remaining, adj);
+            if (path == null) return null;
+
             foreach (var step in path)
             {
                 if (!connectedSet.Contains(step.Target))
                 {
                     connectedSet.Add(step.Target);
-                    
-                    // Determine JOIN type intelligently
-                    var joinType = DetermineJoinType(step, root);
-                    
-                    joins.Add(new JoinDef 
-                    { 
+
+                    var (joinType, isOneToMany) = DetermineJoinType(step);
+                    joins.Add(new JoinDef
+                    {
                         SourceTable = step.Source,
-                        TargetTable = step.Target, 
+                        TargetTable = step.Target,
                         SourceCol = step.SourceCol,
                         TargetCol = step.TargetCol,
-                        JoinType = joinType
+                        JoinType = joinType,
+                        IsOneToMany = isOneToMany
                     });
-                     
-                    if (remainingTargets.Contains(step.Target))
-                    {
-                        remainingTargets.Remove(step.Target);
-                    }
+
+                    remaining.Remove(step.Target);
                 }
             }
         }
-        
+
         return new ConnectedResult { Root = root, Joins = joins };
-
     }
 
-    private string DetermineJoinType(PathStep step, string rootTable)
+    // ─────────────────────────────────────────────────────────────────────────
+    // Dijkstra: forward FK edges cost 1 (Child→Parent), reverse cost 2 (Parent→Child)
+    // This steers the pathfinder toward non-expanding, FK-natural join paths.
+    // ─────────────────────────────────────────────────────────────────────────
+    private List<PathStep>? FindShortestPath(
+        HashSet<string> sources, HashSet<string> targets, Dictionary<string, List<Edge>> adj)
     {
-        // Find the actual relationship from the schema
-        var sourceTable = _schemaService.Tables.FirstOrDefault(t => t.FullName == step.Source);
-        if (sourceTable == null) return "INNER JOIN";
-        
-        // Check if source has FK to target (source -> target)
-        var outgoingRel = sourceTable.OutgoingKeys.FirstOrDefault(r => 
-            r.ToTable == step.Target && r.FromColumn == step.SourceCol);
-        
-        if (outgoingRel != null)
-        {
-            // Source has FK pointing to Target (Child -> Parent relationship)
-            // If FK is nullable, use LEFT JOIN to preserve child records even if parent doesn't exist
-            return outgoingRel.IsNullable ? "LEFT JOIN" : "INNER JOIN";
-        }
-        
-        // Check if target has FK to source (target -> source, reversed)
-        var targetTable = _schemaService.Tables.FirstOrDefault(t => t.FullName == step.Target);
-        var incomingRel = targetTable?.OutgoingKeys.FirstOrDefault(r => 
-            r.ToTable == step.Source && r.ToColumn == step.SourceCol);
-        
-        if (incomingRel != null)
-        {
-            // Target has FK pointing to Source (we're going from parent to child)
-            // Use LEFT JOIN to preserve all parent records even if no child exists
-            return "LEFT JOIN";
-        }
-        
-        // Default to INNER JOIN if no relationship found
-        return "INNER JOIN";
-    }
+        var dist = new Dictionary<string, int>();
+        var parent = new Dictionary<string, PathStep>();
 
-    private List<PathStep>? FindShortestPath(HashSet<string> sources, HashSet<string> targets, Dictionary<string, List<Edge>> adj)
-    {
-        // BFS
-        var queue = new Queue<string>();
-        var parent = new Dictionary<string, PathStep>(); // ToNode -> Step
-        
-        foreach (var s in sources) queue.Enqueue(s);
-        
+        // SortedSet as a priority queue: (cost, node)
+        var pq = new SortedSet<(int Cost, string Node)>(
+            Comparer<(int Cost, string Node)>.Create((a, b) =>
+            {
+                int c = a.Cost.CompareTo(b.Cost);
+                return c != 0 ? c : string.Compare(a.Node, b.Node, StringComparison.Ordinal);
+            }));
+
+        foreach (var s in sources)
+        {
+            dist[s] = 0;
+            pq.Add((0, s));
+        }
+
         string? foundTarget = null;
-        var visitedLocal = new HashSet<string>(sources); 
 
-        while(queue.Count > 0)
+        while (pq.Count > 0)
         {
-            var u = queue.Dequeue();
-            
-            if (targets.Contains(u) && !sources.Contains(u)) 
+            var (cost, u) = pq.Min;
+            pq.Remove(pq.Min);
+
+            if (targets.Contains(u) && !sources.Contains(u))
             {
                 foundTarget = u;
                 break;
             }
 
-            if (adj.TryGetValue(u, out var edges))
+            // Stale entry — skip
+            if (dist.TryGetValue(u, out var bestSoFar) && cost > bestSoFar) continue;
+
+            if (!adj.TryGetValue(u, out var edges)) continue;
+
+            foreach (var e in edges)
             {
-                foreach(var e in edges)
+                var edgeCost = e.IsForwardFK ? 1 : 2;
+                var newCost = cost + edgeCost;
+
+                if (!dist.ContainsKey(e.To) || newCost < dist[e.To])
                 {
-                    if (!visitedLocal.Contains(e.To))
+                    dist[e.To] = newCost;
+                    parent[e.To] = new PathStep
                     {
-                        visitedLocal.Add(e.To);
-                        parent[e.To] = new PathStep { Source = u, Target = e.To, SourceCol = e.FromCol, TargetCol = e.ToCol };
-                        queue.Enqueue(e.To);
-                    }
+                        Source = u, Target = e.To,
+                        SourceCol = e.FromCol, TargetCol = e.ToCol,
+                        IsForwardFK = e.IsForwardFK
+                    };
+                    pq.Add((newCost, e.To));
                 }
             }
         }
 
         if (foundTarget == null) return null;
 
-        // Backtrack
+        // Backtrack path
         var path = new List<PathStep>();
         var curr = foundTarget;
-        
-        while(!sources.Contains(curr))
+        while (!sources.Contains(curr))
         {
-             if (!parent.ContainsKey(curr)) break; 
-             var step = parent[curr];
-             path.Add(step);
-             curr = step.Source;
+            if (!parent.ContainsKey(curr)) break;
+            var step = parent[curr];
+            path.Add(step);
+            curr = step.Source;
         }
         path.Reverse();
         return path;
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Determine JOIN type and whether the join is one-to-many
+    // ─────────────────────────────────────────────────────────────────────────
+    private (string JoinType, bool IsOneToMany) DetermineJoinType(PathStep step)
+    {
+        var sourceTable = _schemaService.Tables.FirstOrDefault(t => t.FullName == step.Source);
+        if (sourceTable == null) return ("INNER JOIN", false);
+
+        // Source has FK pointing to Target → Child→Parent (Many-to-One)
+        var outgoing = sourceTable.OutgoingKeys.FirstOrDefault(r =>
+            r.ToTable == step.Target && r.FromColumn == step.SourceCol);
+
+        if (outgoing != null)
+        {
+            var joinType = outgoing.IsNullable ? "LEFT JOIN" : "INNER JOIN";
+            return (joinType, false); // Many-to-One: no row multiplication
+        }
+
+        // Target has FK pointing to Source → Parent→Child (One-to-Many: rows may multiply!)
+        var targetTable = _schemaService.Tables.FirstOrDefault(t => t.FullName == step.Target);
+        var incoming = targetTable?.OutgoingKeys.FirstOrDefault(r =>
+            r.ToTable == step.Source && r.ToColumn == step.SourceCol);
+
+        if (incoming != null)
+            return ("LEFT JOIN", true); // One-to-Many: flag it
+
+        return ("INNER JOIN", false);
+    }
+
+    // ── Internal model classes ────────────────────────────────────────────────
 
     private class Edge
     {
         public string To { get; set; } = string.Empty;
         public string FromCol { get; set; } = string.Empty;
         public string ToCol { get; set; } = string.Empty;
+        public bool IsForwardFK { get; set; } = false; // true = Child→Parent (preferred)
     }
-    
+
     private class PathStep
     {
         public string Source { get; set; } = string.Empty;
         public string Target { get; set; } = string.Empty;
         public string SourceCol { get; set; } = string.Empty;
         public string TargetCol { get; set; } = string.Empty;
+        public bool IsForwardFK { get; set; } = false;
     }
 
     private class ConnectedResult
@@ -280,5 +338,6 @@ public class PathfinderService
         public string SourceCol { get; set; } = string.Empty;
         public string TargetCol { get; set; } = string.Empty;
         public string JoinType { get; set; } = "INNER JOIN";
+        public bool IsOneToMany { get; set; } = false;
     }
 }

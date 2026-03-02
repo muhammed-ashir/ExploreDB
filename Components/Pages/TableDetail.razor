@@ -93,6 +93,35 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Referenced by SPs -->
+                    <div class="col-12">
+                        <div class="card glass-card text-white">
+                            <div class="card-header border-secondary fw-bold" style="color: #b388ff;">
+                                <span style="font-size: 1.2rem;">🔧</span> Referenced by Stored Procedures
+                                <small class="d-block text-muted fw-normal">SPs that read from or write to this table</small>
+                            </div>
+                            <div class="card-body">
+                                @if (Table.ReferencedBySPs.Count == 0)
+                                {
+                                    <span class="text-muted">No stored procedures reference this table.</span>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var dep in Table.ReferencedBySPs)
+                                        {
+                                            var spFull = $"[{dep.Schema}].[{dep.Name}]";
+                                            <a href="proc/@Uri.EscapeDataString(spFull)" class="btn btn-sm text-start" style="min-width: 180px; border-color: #b388ff; color: #b388ff;">
+                                                <div class="fw-bold">@dep.Name</div>
+                                                <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

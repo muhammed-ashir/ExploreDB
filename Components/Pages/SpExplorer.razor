@@ -1,0 +1,144 @@
+@page "/procs"
+@using DbExplore.Services
+@inject SchemaService SchemaService
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2 class="fw-bold mb-0">
+                <span style="font-size: 2rem;">🔧</span> SP Explorer
+            </h2>
+            <p class="text-secondary small">Browse and search all stored procedures</p>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <input type="text"
+                   class="form-control bg-dark text-white border-secondary mb-2"
+                   placeholder="🔎 Search procedures..."
+                   @bind="SearchTerm"
+                   @bind:event="oninput" />
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm @(ExactMatch ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="() => ExactMatch = !ExactMatch"
+                        title="Exact match">
+                    🎯 Exact Match
+                </button>
+                <button class="btn btn-sm @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="() => MatchWholeWord = !MatchWholeWord"
+                        title="Match whole word">
+                    📝 Whole Word
+                </button>
+                <button class="btn btn-sm @(CaseSensitive ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="() => CaseSensitive = !CaseSensitive"
+                        title="Case sensitive">
+                    🔤 Case Sensitive
+                </button>
+            </div>
+        </div>
+        <div class="col-md-6 text-end align-self-center">
+            <span class="text-muted">
+                Showing @FilteredProcs.Count() of @SchemaService.StoredProcedures.Count procedures
+            </span>
+        </div>
+    </div>
+
+    <div class="row">
+        @if (SchemaService.StoredProcedures.Count == 0)
+        {
+            <div class="col-12">
+                <div class="alert alert-warning">
+                    <strong>⚠️ No stored procedures found.</strong> Make sure you're connected to a database or the database has no procedures.
+                </div>
+            </div>
+        }
+        else if (!FilteredProcs.Any())
+        {
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <strong>🔍 No matches.</strong> Try a different search term.
+                </div>
+            </div>
+        }
+        else
+        {
+            @foreach (var sp in FilteredProcs)
+            {
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <a href="proc/@Uri.EscapeDataString(sp.FullName)" class="text-decoration-none">
+                        <div class="card glass-card text-white node-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <span style="font-size: 1.5rem;">🔧</span> @sp.Name
+                                </h5>
+                                <p class="card-text">
+                                    <small class="text-muted">Schema: @sp.Schema</small><br />
+                                    <small class="text-warning">@sp.Parameters.Count param@(sp.Parameters.Count == 1 ? "" : "s")</small>
+                                    <span class="text-secondary mx-1">·</span>
+                                    <small class="text-info">@sp.Dependencies.Count dependenc@(sp.Dependencies.Count == 1 ? "y" : "ies")</small>
+                                </p>
+                                @if (sp.ModifiedDate.HasValue)
+                                {
+                                    <small class="text-secondary" style="font-size: 0.75em;">
+                                        Modified @sp.ModifiedDate.Value.ToString("dd MMM yyyy")
+                                    </small>
+                                }
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private string SearchTerm = "";
+    private bool ExactMatch = false;
+    private bool MatchWholeWord = false;
+    private bool CaseSensitive = false;
+
+    private IEnumerable<SpInfo> FilteredProcs
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchTerm))
+                return SchemaService.StoredProcedures;
+
+            var searchTerm = CaseSensitive ? SearchTerm : SearchTerm.ToLower();
+
+            return SchemaService.StoredProcedures.Where(sp =>
+            {
+                var spName   = CaseSensitive ? sp.Name   : sp.Name.ToLower();
+                var schema   = CaseSensitive ? sp.Schema : sp.Schema.ToLower();
+
+                if (ExactMatch)
+                    return spName == searchTerm || schema == searchTerm;
+
+                if (MatchWholeWord)
+                    return spName.Split(' ', '.', '_').Contains(searchTerm) ||
+                           schema.Split(' ', '.', '_').Contains(searchTerm);
+
+                return spName.Contains(searchTerm) || schema.Contains(searchTerm);
+            });
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        SchemaService.OnSchemaLoaded += Refresh;
+    }
+
+    private void Refresh()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        SchemaService.OnSchemaLoaded -= Refresh;
+    }
+}
