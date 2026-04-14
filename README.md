@@ -56,18 +56,16 @@
 5. Done! Launch from Start Menu
 
 ### **Option 2: Portable Executable**
-
-1. **Build** the application:
+1. Close the App if running
+2. **Build** the application:
    ```bash
    dotnet publish -f net8.0-windows10.0.19041.0 -c Release
    ```
-
-2. **Find** the executable at:
+3. **Find** the executable at:
    ```
    bin\Release\net8.0-windows10.0.19041.0\win10-x64\publish\DbExplore.exe
    ```
-
-3. **Run** directly or copy the entire `publish` folder to share
+4. **Run** directly or copy the entire `publish` folder to share
 
 ---
 

@@ -2,6 +2,7 @@
 @using DbExplore.Services
 @inject SchemaService SchemaService
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <div class="container-fluid">
     @if (Sp == null)
@@ -10,12 +11,12 @@
     }
     else
     {
-        <!-- Header -->
-        <div class="row mb-4">
+        <div class="row mb-4 align-items-center">
+            <div class="col-auto">
+                <button class="btn btn-outline-light btn-sm" @onclick="NavigateBack">Back</button>
+            </div>
             <div class="col">
-                <h2 class="text-white mb-1">
-                    <span style="font-size: 2rem;">🔧</span> @Sp.Name
-                </h2>
+                <h2 class="text-white mb-1">@Sp.Name</h2>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <span class="badge bg-secondary">@Sp.Schema</span>
                     <span class="badge bg-dark border border-secondary text-muted">@Sp.Parameters.Count param@(Sp.Parameters.Count == 1 ? "" : "s")</span>
@@ -25,26 +26,23 @@
                     }
                     @if (Sp.ModifiedDate.HasValue)
                     {
-                        <small class="text-muted" style="font-size: 0.8em;">· Modified @Sp.ModifiedDate.Value.ToString("dd MMM yyyy")</small>
+                        <small class="text-muted" style="font-size: 0.8em;">Modified @Sp.ModifiedDate.Value.ToString("dd MMM yyyy")</small>
                     }
                 </div>
             </div>
         </div>
 
         <div class="row g-4">
-            <!-- Left Column: Parameters + EXEC Statement -->
             <div class="col-md-5">
-
-                <!-- Parameters Card -->
                 <div class="card glass-card text-white mb-4">
                     <div class="card-header border-secondary fw-bold">
-                        <span style="font-size: 1.1rem;">📥</span> Parameters
+                        Parameters
                         <small class="d-block text-muted fw-normal">Input and output parameters</small>
                     </div>
                     @if (Sp.Parameters.Count == 0)
                     {
                         <div class="card-body">
-                            <span class="text-muted fst-italic">No parameters — call with no arguments.</span>
+                            <span class="text-muted fst-italic">No parameters. Call with no arguments.</span>
                         </div>
                     }
                     else
@@ -82,41 +80,36 @@
                     }
                 </div>
 
-                <!-- EXECUTE Statement Card -->
                 <div class="card glass-card text-white">
                     <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center">
                         <div>
-                            <span style="font-size: 1.1rem;">▶️</span> EXECUTE Statement
-                            <small class="d-block text-muted fw-normal">Ready-to-run — paste into SSMS or Azure Data Studio</small>
+                            EXECUTE Statement
+                            <small class="d-block text-muted fw-normal">Ready to run in SSMS or Azure Data Studio</small>
                         </div>
                         <button class="btn btn-sm @(Copied ? "btn-success" : "btn-outline-light")"
                                 @onclick="CopyExecStatement"
                                 title="Copy to clipboard">
-                            @(Copied ? "✅ Copied!" : "📋 Copy")
+                            @(Copied ? "Copied" : "Copy")
                         </button>
                     </div>
                     <div class="card-body p-0">
                         <pre class="m-0 p-3 text-success" style="font-size: 0.82em; white-space: pre-wrap; word-break: break-all; background: transparent; border: none;">@ExecStatement</pre>
                     </div>
                 </div>
-
             </div>
 
-            <!-- Right Column: Dependencies -->
             <div class="col-md-7">
-
-                <!-- Tables / Views Referenced (Dependencies) -->
                 <div class="card glass-card text-white mb-4">
                     <div class="card-header border-secondary text-info fw-bold">
-                        <span style="font-size: 1.2rem;">🔗</span> References (Dependencies)
-                        <small class="d-block text-muted fw-normal">Tables and Views this SP reads from or writes to</small>
+                        References (Dependencies)
+                        <small class="d-block text-muted fw-normal">Tables and views this SP reads from or writes to</small>
                     </div>
                     <div class="card-body">
                         @if (Sp.Dependencies.Count == 0)
                         {
                             <span class="text-muted fst-italic">No resolvable dependencies found.</span>
                             <div class="mt-2">
-                                <small class="text-secondary">This may happen for cross-database references, dynamically-built SQL, or system procedures.</small>
+                                <small class="text-secondary">This can happen with cross-database references, dynamic SQL, or system procedures.</small>
                             </div>
                         }
                         else
@@ -125,12 +118,12 @@
                             {
                                 <div class="mb-3">
                                     <div class="text-uppercase text-muted small mb-2" style="letter-spacing: 0.08em; font-size: 0.7em;">
-                                        📊 Tables (@DepTables.Count)
+                                        Tables (@DepTables.Count)
                                     </div>
                                     <div class="d-flex flex-wrap gap-2">
                                         @foreach (var dep in DepTables)
                                         {
-                                            <a href="table/@Uri.EscapeDataString(dep.FullName)"
+                                            <a href="@BuildDependencyLink(dep)"
                                                class="btn btn-outline-primary btn-sm text-start"
                                                style="min-width: 180px;">
                                                 <div class="fw-bold">@dep.Name</div>
@@ -145,12 +138,12 @@
                             {
                                 <div>
                                     <div class="text-uppercase text-muted small mb-2" style="letter-spacing: 0.08em; font-size: 0.7em;">
-                                        👁️ Views (@DepViews.Count)
+                                        Views (@DepViews.Count)
                                     </div>
                                     <div class="d-flex flex-wrap gap-2">
                                         @foreach (var dep in DepViews)
                                         {
-                                            <a href="view/@Uri.EscapeDataString(dep.FullName)"
+                                            <a href="@BuildDependencyLink(dep)"
                                                class="btn btn-outline-info btn-sm text-start"
                                                style="min-width: 180px;">
                                                 <div class="fw-bold">@dep.Name</div>
@@ -163,7 +156,6 @@
                         }
                     </div>
                 </div>
-
             </div>
         </div>
     }
@@ -173,17 +165,45 @@
     [Parameter]
     public string FullName { get; set; } = string.Empty;
 
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
     private SpInfo? Sp;
     private bool Copied = false;
 
     private List<Dependency> DepTables => Sp?.Dependencies.Where(d => d.Type == "Table").OrderBy(d => d.Name).ToList() ?? new();
-    private List<Dependency> DepViews  => Sp?.Dependencies.Where(d => d.Type == "View").OrderBy(d => d.Name).ToList() ?? new();
+    private List<Dependency> DepViews => Sp?.Dependencies.Where(d => d.Type == "View").OrderBy(d => d.Name).ToList() ?? new();
 
     protected override void OnParametersSet()
     {
         var decoded = Uri.UnescapeDataString(FullName);
         Sp = SchemaService.StoredProcedures.FirstOrDefault(s => s.FullName == decoded);
         Copied = false;
+    }
+
+    private void NavigateBack()
+    {
+        if (!string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            Navigation.NavigateTo(ReturnUrl);
+            return;
+        }
+
+        Navigation.NavigateTo("/procs");
+    }
+
+    private string BuildDependencyLink(Dependency dependency)
+    {
+        var prefix = dependency.Type == "View" ? "/view" : "/table";
+        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var baseLink = $"{prefix}/{Uri.EscapeDataString(dependency.FullName)}";
+
+        if (string.IsNullOrWhiteSpace(currentRoute))
+        {
+            return baseLink;
+        }
+
+        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
     }
 
     private string ExecStatement
@@ -198,15 +218,17 @@
             var lines = new System.Text.StringBuilder();
             lines.AppendLine($"EXEC {Sp.FullName}");
 
-            var inputParams  = Sp.Parameters.Where(p => !p.IsOutput).ToList();
-            var outputParams = Sp.Parameters.Where(p =>  p.IsOutput).ToList();
+            var outputParams = Sp.Parameters.Where(p => p.IsOutput).ToList();
 
-            // Declare OUTPUT variables first
             foreach (var p in outputParams)
             {
                 lines.AppendLine($"    -- DECLARE {p.Name} {p.DisplayType};");
             }
-            if (outputParams.Any()) lines.AppendLine();
+
+            if (outputParams.Any())
+            {
+                lines.AppendLine();
+            }
 
             var allParams = Sp.Parameters.ToList();
             for (int i = 0; i < allParams.Count; i++)

@@ -5,39 +5,54 @@
 <div class="d-flex flex-column h-100 bg-dark">
     <div class="p-3 border-bottom border-secondary">
         <h5 class="text-white mb-3">
-            <span style="font-size: 1.5rem;">🗄️</span> DbExplore
+            <span style="font-size: 1.5rem;">&#128451;</span>
+            <span class="ms-2">DbExplore</span>
         </h5>
     </div>
 
     <div class="flex-grow-1">
         <div class="list-group list-group-flush">
-            <a href="" 
+            <div class="px-3 pt-3 pb-2 text-uppercase small fw-bold" style="color: #6c757d; letter-spacing: 0.08em;">
+                Workspace
+            </div>
+
+            <a href=""
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsPathfinderActive ? "active" : "")">
-                <span style="font-size: 1.2rem;">⚡</span>
+                <span style="font-size: 1.2rem;">&#9889;</span>
                 <span class="ms-2">Pathfinder</span>
             </a>
-            
-            <a href="explorer" 
+
+            <a href="explorer"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsExplorerActive ? "active" : "")">
-                <span style="font-size: 1.2rem;">🔍</span>
+                <span style="font-size: 1.2rem;">&#128269;</span>
                 <span class="ms-2">Table Explorer</span>
             </a>
 
-            <a href="views" 
+            <a href="views"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsViewExplorerActive ? "active" : "")">
-                <span style="font-size: 1.2rem;">👁️</span>
+                <span style="font-size: 1.2rem;">&#128065;</span>
                 <span class="ms-2">View Explorer</span>
             </a>
 
             <a href="procs"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsSpExplorerActive ? "active" : "")">
-                <span style="font-size: 1.2rem;">🔧</span>
+                <span style="font-size: 1.2rem;">&#128295;</span>
                 <span class="ms-2">SP Explorer</span>
             </a>
-            
-            <a href="tricks" 
+
+            <div class="px-3 pt-4 pb-2 text-uppercase small fw-bold" style="color: #6c757d; letter-spacing: 0.08em;">
+                Learning
+            </div>
+
+            <a href="joins"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsJoinGuideActive ? "active" : "")">
+                <span style="font-size: 1.2rem;">&#128279;</span>
+                <span class="ms-2">Join Guide</span>
+            </a>
+
+            <a href="tricks"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsTricksActive ? "active" : "")">
-                <span style="font-size: 1.2rem;">💡</span>
+                <span style="font-size: 1.2rem;">&#128161;</span>
                 <span class="ms-2">DB Tricks & Tips</span>
             </a>
         </div>
@@ -48,6 +63,7 @@
     private string CurrentUrl = "";
 
     private bool IsPathfinderActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
+    private bool IsJoinGuideActive => CurrentUrl.Contains("/joins");
     private bool IsExplorerActive => CurrentUrl.Contains("/explorer");
     private bool IsViewExplorerActive => CurrentUrl.Contains("/views") && !CurrentUrl.Contains("/view/");
     private bool IsSpExplorerActive => CurrentUrl.Contains("/procs") || CurrentUrl.Contains("/proc/");

@@ -9,9 +9,9 @@ public class PathfinderService
         _schemaService = schemaService;
     }
 
-    public string GenerateQuery(List<string> selectedTableNames, List<string> selectedColumns)
+    public PathfinderResult GenerateQuery(List<string> selectedTableNames, List<string> selectedColumns)
     {
-        if (selectedTableNames.Count == 0) return "-- No tables selected";
+        if (selectedTableNames.Count == 0) return new PathfinderResult { Sql = "-- No tables selected", HasOneToMany = false };
 
         // Deduplicate while preserving insertion order (first table = root)
         selectedTableNames = selectedTableNames.Distinct().ToList();
@@ -44,7 +44,7 @@ public class PathfinderService
         }
 
         var connectedInfo = ConnectTables(selectedTableNames, adj);
-        if (connectedInfo == null) return "-- Could not find a path connecting these tables.";
+        if (connectedInfo == null) return new PathfinderResult { Sql = "-- Could not find a path connecting these tables.", HasOneToMany = false };
 
         // ── Alias Assignment: meaningful abbreviations (e.g. OrderDetails → od) ──
         var aliasMap = new Dictionary<string, string>();
@@ -56,27 +56,28 @@ public class PathfinderService
             var tableName = parts.LastOrDefault() ?? fullTableName;
 
             var sb = new System.Text.StringBuilder();
+            bool nextIsUpper = true;
             for (int i = 0; i < tableName.Length; i++)
             {
                 char c = tableName[i];
-                if (i == 0 && char.IsLetter(c))
+                if (c == '_' || c == ' ')
                 {
-                    sb.Append(char.ToLower(c));
+                    nextIsUpper = true;
                 }
-                else if (char.IsUpper(c) && i > 0)
+                else if (char.IsUpper(c))
                 {
-                    // PascalCase boundary
-                    sb.Append(char.ToLower(c));
+                    sb.Append(c);
+                    nextIsUpper = false;
                 }
-                else if ((c == '_' || c == ' ') && i + 1 < tableName.Length && char.IsLetter(tableName[i + 1]))
+                else if (nextIsUpper && char.IsLetter(c))
                 {
-                    // underscore_case: take the next letter
-                    sb.Append(char.ToLower(tableName[i + 1]));
+                    sb.Append(char.ToUpper(c));
+                    nextIsUpper = false;
                 }
             }
 
             var alias = sb.ToString();
-            return string.IsNullOrEmpty(alias) ? "t" : alias;
+            return string.IsNullOrEmpty(alias) ? "T" : alias;
         }
 
         string GetAlias(string table)
@@ -112,9 +113,6 @@ public class PathfinderService
 
         // ── Build SELECT ──
         var sb = new System.Text.StringBuilder();
-
-        if (hasOneToMany)
-            sb.AppendLine("-- ⚠️ Warning: One-to-Many join detected. DISTINCT applied to suppress duplicate rows.");
 
         sb.AppendLine(hasOneToMany ? "SELECT DISTINCT" : "SELECT");
 
@@ -157,7 +155,7 @@ public class PathfinderService
         sb.AppendLine("-- WHERE");
         sb.Append("-- ORDER BY");
 
-        return sb.ToString();
+        return new PathfinderResult { Sql = sb.ToString(), HasOneToMany = hasOneToMany };
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -307,6 +305,12 @@ public class PathfinderService
     }
 
     // ── Internal model classes ────────────────────────────────────────────────
+    
+    public class PathfinderResult
+    {
+        public string Sql { get; set; } = string.Empty;
+        public bool HasOneToMany { get; set; } = false;
+    }
 
     private class Edge
     {

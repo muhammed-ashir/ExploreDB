@@ -1,0 +1,879 @@
+@page "/joins"
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2 class="fw-bold mb-0">Complete Join Guide</h2>
+            <p class="text-secondary small">A practical SQL Server join reference for choosing the right join, preventing duplicates, and debugging multi-table queries.</p>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="card glass-card text-white h-100">
+                <div class="card-header border-secondary fw-bold text-info">
+                    Join Types At A Glance
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Join</th>
+                                    <th>Returns</th>
+                                    <th>Use When</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>INNER JOIN</code></td>
+                                    <td>Only matching rows from both sides</td>
+                                    <td>You want rows only when a valid relationship exists</td>
+                                </tr>
+                                <tr>
+                                    <td><code>LEFT JOIN</code></td>
+                                    <td>All left rows plus matching right rows</td>
+                                    <td>You must keep the left table even when no match exists</td>
+                                </tr>
+                                <tr>
+                                    <td><code>RIGHT JOIN</code></td>
+                                    <td>All right rows plus matching left rows</td>
+                                    <td>Usually rewrite as <code>LEFT JOIN</code> for readability</td>
+                                </tr>
+                                <tr>
+                                    <td><code>FULL OUTER JOIN</code></td>
+                                    <td>All rows from both sides, matched where possible</td>
+                                    <td>You need to compare two sets and keep unmatched rows from both</td>
+                                </tr>
+                                <tr>
+                                    <td><code>CROSS JOIN</code></td>
+                                    <td>Every left row paired with every right row</td>
+                                    <td>You intentionally want a cartesian product</td>
+                                </tr>
+                                <tr>
+                                    <td><code>SELF JOIN</code></td>
+                                    <td>A table joined to itself</td>
+                                    <td>Hierarchies such as employee-manager or category-parent</td>
+                                </tr>
+                                <tr>
+                                    <td><code>OUTER APPLY</code></td>
+                                    <td>All left rows plus correlated result per row</td>
+                                    <td>You want top 1, latest record, or row-wise lookup logic</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card glass-card text-white h-100">
+                <div class="card-header border-secondary fw-bold text-warning">
+                    Fast Rules
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item bg-transparent text-light border-secondary px-0">
+                            Start from the most selective table whenever possible.
+                        </div>
+                        <div class="list-group-item bg-transparent text-light border-secondary px-0">
+                            Join on keys, not on descriptions or formatted values.
+                        </div>
+                        <div class="list-group-item bg-transparent text-light border-secondary px-0">
+                            Put relationship logic in <code>ON</code>; put final row filters in <code>WHERE</code>.
+                        </div>
+                        <div class="list-group-item bg-transparent text-light border-secondary px-0">
+                            Expect row multiplication whenever one row can match many child rows.
+                        </div>
+                        <div class="list-group-item bg-transparent text-light border-secondary px-0">
+                            Prefer <code>EXISTS</code> when you only need to know a match exists.
+                        </div>
+                        <div class="list-group-item bg-transparent text-light border-secondary px-0 pb-0">
+                            Match data types on both sides of the join.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card glass-card text-white h-100">
+                <div class="card-header border-secondary fw-bold text-primary">
+                    Picking The Right Base Table
+                </div>
+                <div class="card-body">
+                    <p class="text-light">The first table in the query shapes readability and often performance.</p>
+                    <ul class="text-light mb-0">
+                        <li>For reporting, start from the fact table that holds the business event.</li>
+                        <li>For lookups, start from the table with the strongest filter.</li>
+                        <li>For many-to-many paths, expect a bridge table in the middle.</li>
+                        <li>For optional relationships, keep the required side as the left side of a <code>LEFT JOIN</code>.</li>
+                    </ul>
+
+                    <pre class="bg-black text-success p-3 rounded border border-secondary mt-3 mb-0"><code>-- Better: start from the filtered business event
+SELECT
+    o.OrderID,
+    c.CustomerName,
+    p.ProductName
+FROM Orders o
+INNER JOIN Customers c
+    ON c.CustomerID = o.CustomerID
+INNER JOIN OrderDetails od
+    ON od.OrderID = o.OrderID
+INNER JOIN Products p
+    ON p.ProductID = od.ProductID
+WHERE o.OrderDate &gt;= '2026-01-01'
+  AND o.OrderDate &lt;  '2026-02-01';</code></pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card glass-card text-white h-100">
+                <div class="card-header border-secondary fw-bold text-info">
+                    ON Vs WHERE
+                </div>
+                <div class="card-body">
+                    <p class="text-light">This is one of the biggest sources of accidental bugs in join queries.</p>
+                    <div class="alert alert-info bg-transparent border-info">
+                        <strong>Rule:</strong> filtering the joined table inside <code>WHERE</code> can turn a <code>LEFT JOIN</code> into an effective <code>INNER JOIN</code>.
+                    </div>
+
+                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- Keeps all customers, even when no open invoice exists
+SELECT
+    c.CustomerID,
+    i.InvoiceID
+FROM Customers c
+LEFT JOIN Invoices i
+    ON i.CustomerID = c.CustomerID
+   AND i.Status = 'Open';</code></pre>
+
+                    <pre class="bg-black text-success p-3 rounded border border-secondary mb-0"><code>-- This removes customers with no matching invoice
+SELECT
+    c.CustomerID,
+    i.InvoiceID
+FROM Customers c
+LEFT JOIN Invoices i
+    ON i.CustomerID = c.CustomerID
+WHERE i.Status = 'Open';</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card glass-card text-white">
+                <div class="card-header border-secondary fw-bold text-warning">
+                    The Duplicate Row Problem
+                </div>
+                <div class="card-body">
+                    <p class="text-light">Most “wrong join” bugs are really cardinality bugs. If one parent row has many matching child rows, the parent row repeats once for each child match.</p>
+
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <h6 class="text-warning fw-bold">When it happens</h6>
+                            <ul class="text-light">
+                                <li>One customer has many orders</li>
+                                <li>One order has many order lines</li>
+                                <li>One employee has many history records</li>
+                                <li>A many-to-many bridge table is involved</li>
+                            </ul>
+                        </div>
+                        <div class="col-lg-6">
+                            <h6 class="text-success fw-bold">How to fix it</h6>
+                            <ul class="text-light">
+                                <li>Aggregate the child rows first</li>
+                                <li>Use <code>EXISTS</code> if you only need a yes/no match</li>
+                                <li>Use <code>ROW_NUMBER()</code> or <code>OUTER APPLY</code> to pick one child row</li>
+                                <li>Use <code>DISTINCT</code> only when duplicate suppression is truly acceptable</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- Pick the latest status row per order
+SELECT
+    o.OrderID,
+    s.StatusName,
+    s.StatusDate
+FROM Orders o
+OUTER APPLY
+(
+    SELECT TOP 1
+        osh.StatusName,
+        osh.StatusDate
+    FROM OrderStatusHistory osh
+    WHERE osh.OrderID = o.OrderID
+    ORDER BY osh.StatusDate DESC
+) s;</code></pre>
+
+                    <pre class="bg-black text-success p-3 rounded border border-secondary mb-0"><code>-- Use EXISTS when you only need to know the child exists
+SELECT
+    c.CustomerID,
+    c.CustomerName
+FROM Customers c
+WHERE EXISTS
+(
+    SELECT 1
+    FROM Orders o
+    WHERE o.CustomerID = c.CustomerID
+      AND o.Status = 'Open'
+);</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card glass-card text-white h-100">
+                <div class="card-header border-secondary fw-bold" style="color: #b388ff;">
+                    Common Join Patterns
+                </div>
+                <div class="card-body">
+                    <h6 class="fw-bold" style="color: #b388ff;">Many-to-many through a bridge</h6>
+                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>SELECT
+    s.StudentName,
+    c.CourseName
+FROM Students s
+INNER JOIN StudentCourses sc
+    ON sc.StudentID = s.StudentID
+INNER JOIN Courses c
+    ON c.CourseID = sc.CourseID;</code></pre>
+
+                    <h6 class="fw-bold text-info">Anti join: rows with no match</h6>
+                    <pre class="bg-black text-success p-3 rounded border border-secondary mb-0"><code>SELECT
+    c.CustomerID,
+    c.CustomerName
+FROM Customers c
+LEFT JOIN Orders o
+    ON o.CustomerID = c.CustomerID
+WHERE o.CustomerID IS NULL;</code></pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card glass-card text-white h-100">
+                <div class="card-header border-secondary fw-bold text-danger">
+                    Self Join And Hierarchies
+                </div>
+                <div class="card-body">
+                    <p class="text-light">Use aliases clearly when the same table appears twice.</p>
+                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>SELECT
+    e.EmployeeName,
+    m.EmployeeName AS ManagerName
+FROM Employees e
+LEFT JOIN Employees m
+    ON m.EmployeeID = e.ManagerID;</code></pre>
+
+                    <div class="alert alert-warning bg-transparent border-warning mb-0">
+                        <strong>Tip:</strong> for deeper hierarchies, a recursive CTE is usually clearer than chaining many self joins.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card glass-card text-white">
+                <div class="card-header border-secondary fw-bold text-success">
+                    Performance And Troubleshooting
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <h6 class="text-success fw-bold">Checklist</h6>
+                            <ul class="text-light">
+                                <li>Indexes exist on join keys and major filter columns</li>
+                                <li>Data types match exactly on both sides of joins</li>
+                                <li>Functions are not wrapped around indexed join/filter columns</li>
+                                <li>Filters are applied as early as possible</li>
+                                <li>Bridge tables are expected and handled intentionally</li>
+                                <li>Estimated or actual execution plan has been reviewed</li>
+                            </ul>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <h6 class="text-danger fw-bold">Symptoms And Likely Causes</h6>
+                            <div class="table-responsive">
+                                <table class="table table-dark table-striped mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Symptom</th>
+                                            <th>Likely Cause</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Too many rows</td>
+                                            <td>One-to-many join or missing join predicate</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Too few rows</td>
+                                            <td><code>INNER JOIN</code> where <code>LEFT JOIN</code> was needed</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Unexpected nulls</td>
+                                            <td>Optional relationship or unmatched <code>LEFT JOIN</code></td>
+                                        </tr>
+                                        <tr>
+                                            <td>Slow query</td>
+                                            <td>Bad join order, scans, implicit conversions, or missing indexes</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <pre class="bg-black text-success p-3 rounded border border-secondary mt-4 mb-0"><code>SET STATISTICS TIME ON;
+SET STATISTICS IO ON;
+
+SELECT ...
+FROM ...
+INNER JOIN ...
+    ON ...
+WHERE ...;
+
+SET STATISTICS TIME OFF;
+SET STATISTICS IO OFF;</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card glass-card text-white">
+                <div class="card-header border-secondary fw-bold text-info">
+                    Reusable Join Templates
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <h6 class="text-info fw-bold">Base inner join</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary mb-0"><code>SELECT
+    a.Col1,
+    b.Col2
+FROM TableA a
+INNER JOIN TableB b
+    ON b.KeyCol = a.KeyCol;</code></pre>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <h6 class="text-warning fw-bold">Optional child row</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary mb-0"><code>SELECT
+    p.ParentName,
+    c.ChildName
+FROM ParentTable p
+LEFT JOIN ChildTable c
+    ON c.ParentID = p.ParentID;</code></pre>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <h6 class="fw-bold" style="color: #b388ff;">Anti join</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary mb-0"><code>SELECT
+    a.*
+FROM TableA a
+WHERE NOT EXISTS
+(
+    SELECT 1
+    FROM TableB b
+    WHERE b.KeyCol = a.KeyCol
+);</code></pre>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <h6 class="text-success fw-bold">Latest child per parent</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary mb-0"><code>SELECT
+    p.ParentID,
+    x.ChildValue
+FROM ParentTable p
+OUTER APPLY
+(
+    SELECT TOP 1 c.ChildValue
+    FROM ChildHistory c
+    WHERE c.ParentID = p.ParentID
+    ORDER BY c.CreatedAt DESC
+) x;</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card glass-card text-white">
+                <div class="card-header border-secondary fw-bold text-warning">
+                    Deep Worked Examples With Dummy Tables And Values
+                </div>
+                <div class="card-body">
+                    <p class="text-light mb-4">
+                        The examples below all use the same tiny sales database so you can see exactly why rows appear, disappear, or multiply.
+                        Read them in order because each example builds on the same tables and data.
+                    </p>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-lg-6">
+                            <h6 class="text-warning fw-bold">1. Dummy tables</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary mb-0"><code>CREATE TABLE Customers
+(
+    CustomerID   INT PRIMARY KEY,
+    CustomerName VARCHAR(50),
+    City         VARCHAR(50)
+);
+
+CREATE TABLE SalesReps
+(
+    SalesRepID INT PRIMARY KEY,
+    RepName    VARCHAR(50)
+);
+
+CREATE TABLE Orders
+(
+    OrderID     INT PRIMARY KEY,
+    CustomerID  INT,
+    SalesRepID  INT,
+    OrderDate   DATE,
+    Status      VARCHAR(20)
+);
+
+CREATE TABLE OrderItems
+(
+    OrderItemID INT PRIMARY KEY,
+    OrderID     INT,
+    ProductName VARCHAR(50),
+    Qty         INT,
+    LineAmount  DECIMAL(10,2)
+);
+
+CREATE TABLE Payments
+(
+    PaymentID     INT PRIMARY KEY,
+    OrderID       INT,
+    PaymentDate   DATE,
+    Amount        DECIMAL(10,2),
+    PaymentStatus VARCHAR(20)
+);</code></pre>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <h6 class="text-info fw-bold">2. Dummy values</h6>
+                            <pre class="bg-black text-success p-3 rounded border border-secondary mb-0"><code>INSERT INTO Customers VALUES
+(1, 'Alice', 'Delhi'),
+(2, 'Bob',   'Mumbai'),
+(3, 'Carol', 'Bengaluru');
+
+INSERT INTO SalesReps VALUES
+(10, 'Nina'),
+(11, 'Ravi');
+
+INSERT INTO Orders VALUES
+(1001, 1, 10, '2026-01-10', 'Open'),
+(1002, 1, 11, '2026-01-15', 'Closed'),
+(1003, 2, 10, '2026-01-20', 'Open');
+
+INSERT INTO OrderItems VALUES
+(1, 1001, 'Laptop',   1, 80000.00),
+(2, 1001, 'Mouse',    2,  1000.00),
+(3, 1002, 'Keyboard', 1,  2500.00),
+(4, 1003, 'Monitor',  2, 24000.00);
+
+INSERT INTO Payments VALUES
+(501, 1001, '2026-01-11', 40000.00, 'Captured'),
+(502, 1001, '2026-01-12', 40000.00, 'Captured'),
+(503, 1002, '2026-01-16',  2500.00, 'Captured');</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info bg-transparent border-info mb-4">
+                        <strong>Keep this data picture in mind:</strong>
+                        Alice has two orders, Bob has one order, Carol has no order.
+                        Order <code>1001</code> has two items and two payments.
+                        Order <code>1003</code> has one item but no payment.
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header border-secondary fw-bold text-primary">
+                                    Example 1: INNER JOIN keeps only matching rows
+                                </div>
+                                <div class="card-body">
+                                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>SELECT
+    c.CustomerName,
+    o.OrderID,
+    o.Status
+FROM Customers c
+INNER JOIN Orders o
+    ON o.CustomerID = c.CustomerID
+ORDER BY c.CustomerName, o.OrderID;</code></pre>
+
+                                    <div class="table-responsive mb-3">
+                                        <table class="table table-dark table-striped mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>CustomerName</th>
+                                                    <th>OrderID</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>Alice</td><td>1001</td><td>Open</td></tr>
+                                                <tr><td>Alice</td><td>1002</td><td>Closed</td></tr>
+                                                <tr><td>Bob</td><td>1003</td><td>Open</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <p class="text-light mb-2"><strong>What happened:</strong> Carol does not appear because <code>INNER JOIN</code> returns only rows that match on both sides.</p>
+                                    <ul class="text-light mb-0">
+                                        <li>Alice appears twice because she has two matching orders.</li>
+                                        <li>Bob appears once because he has one matching order.</li>
+                                        <li>Carol disappears because there is no order row with <code>CustomerID = 3</code>.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header border-secondary fw-bold text-info">
+                                    Example 2: LEFT JOIN keeps the left side even when no match exists
+                                </div>
+                                <div class="card-body">
+                                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>SELECT
+    c.CustomerName,
+    o.OrderID,
+    o.Status
+FROM Customers c
+LEFT JOIN Orders o
+    ON o.CustomerID = c.CustomerID
+ORDER BY c.CustomerName, o.OrderID;</code></pre>
+
+                                    <div class="table-responsive mb-3">
+                                        <table class="table table-dark table-striped mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>CustomerName</th>
+                                                    <th>OrderID</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>Alice</td><td>1001</td><td>Open</td></tr>
+                                                <tr><td>Alice</td><td>1002</td><td>Closed</td></tr>
+                                                <tr><td>Bob</td><td>1003</td><td>Open</td></tr>
+                                                <tr><td>Carol</td><td>NULL</td><td>NULL</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <p class="text-light mb-2"><strong>What changed:</strong> Carol now stays in the result because the left table is <code>Customers</code>.</p>
+                                    <ul class="text-light mb-0">
+                                        <li>The left table decides which rows are guaranteed to remain.</li>
+                                        <li>Missing columns from the right side become <code>NULL</code>.</li>
+                                        <li>This pattern is ideal for "show all master rows, even if no activity exists".</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header border-secondary fw-bold text-danger">
+                                    Example 3: One-to-many joins multiply rows
+                                </div>
+                                <div class="card-body">
+                                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>SELECT
+    o.OrderID,
+    oi.ProductName,
+    oi.Qty,
+    oi.LineAmount
+FROM Orders o
+INNER JOIN OrderItems oi
+    ON oi.OrderID = o.OrderID
+ORDER BY o.OrderID, oi.OrderItemID;</code></pre>
+
+                                    <div class="table-responsive mb-3">
+                                        <table class="table table-dark table-striped mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>OrderID</th>
+                                                    <th>ProductName</th>
+                                                    <th>Qty</th>
+                                                    <th>LineAmount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>1001</td><td>Laptop</td><td>1</td><td>80000.00</td></tr>
+                                                <tr><td>1001</td><td>Mouse</td><td>2</td><td>1000.00</td></tr>
+                                                <tr><td>1002</td><td>Keyboard</td><td>1</td><td>2500.00</td></tr>
+                                                <tr><td>1003</td><td>Monitor</td><td>2</td><td>24000.00</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <p class="text-light mb-2"><strong>Why order 1001 appears twice:</strong> one order matches two order-item rows.</p>
+                                    <ul class="text-light mb-0">
+                                        <li>The query is not wrong. It is faithfully returning each matching pair.</li>
+                                        <li>If you expected one row per order, this result is too granular.</li>
+                                        <li>Whenever the child table stores detail rows, the parent repeats once per child row.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header border-secondary fw-bold text-success">
+                                    Example 4: Aggregate the child table first to get one row per parent
+                                </div>
+                                <div class="card-body">
+                                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>SELECT
+    o.OrderID,
+    x.ItemCount,
+    x.OrderTotal
+FROM Orders o
+LEFT JOIN
+(
+    SELECT
+        oi.OrderID,
+        COUNT(*) AS ItemCount,
+        SUM(oi.LineAmount) AS OrderTotal
+    FROM OrderItems oi
+    GROUP BY oi.OrderID
+) x
+    ON x.OrderID = o.OrderID
+ORDER BY o.OrderID;</code></pre>
+
+                                    <div class="table-responsive mb-3">
+                                        <table class="table table-dark table-striped mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>OrderID</th>
+                                                    <th>ItemCount</th>
+                                                    <th>OrderTotal</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>1001</td><td>2</td><td>81000.00</td></tr>
+                                                <tr><td>1002</td><td>1</td><td>2500.00</td></tr>
+                                                <tr><td>1003</td><td>1</td><td>24000.00</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <p class="text-light mb-2"><strong>Why this works:</strong> the subquery reduces <code>OrderItems</code> to one row per order before the join happens.</p>
+                                    <ul class="text-light mb-0">
+                                        <li>The outer query now joins order-to-order instead of order-to-order-item.</li>
+                                        <li>This is the cleanest fix when you need summary data from a detail table.</li>
+                                        <li>Think "shape the child rows first, then join".</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header border-secondary fw-bold" style="color: #b388ff;">
+                                    Example 5: EXISTS is often better than joining when you only need yes or no
+                                </div>
+                                <div class="card-body">
+                                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>SELECT
+    c.CustomerID,
+    c.CustomerName
+FROM Customers c
+WHERE EXISTS
+(
+    SELECT 1
+    FROM Orders o
+    WHERE o.CustomerID = c.CustomerID
+      AND o.Status = 'Open'
+)
+ORDER BY c.CustomerID;</code></pre>
+
+                                    <div class="table-responsive mb-3">
+                                        <table class="table table-dark table-striped mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>CustomerID</th>
+                                                    <th>CustomerName</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>1</td><td>Alice</td></tr>
+                                                <tr><td>2</td><td>Bob</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <p class="text-light mb-2"><strong>Why not just join Orders?</strong> because a join could repeat the customer if multiple open orders exist.</p>
+                                    <ul class="text-light mb-0">
+                                        <li><code>EXISTS</code> stops caring after the first qualifying match.</li>
+                                        <li>It expresses intent clearly: "show customers for whom at least one row exists".</li>
+                                        <li>This is a semi-join pattern and is often both cleaner and safer.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header border-secondary fw-bold text-primary">
+                                    Example 6: NOT EXISTS finds rows that do not have a match
+                                </div>
+                                <div class="card-body">
+                                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>SELECT
+    c.CustomerID,
+    c.CustomerName
+FROM Customers c
+WHERE NOT EXISTS
+(
+    SELECT 1
+    FROM Orders o
+    WHERE o.CustomerID = c.CustomerID
+)
+ORDER BY c.CustomerID;</code></pre>
+
+                                    <div class="table-responsive mb-3">
+                                        <table class="table table-dark table-striped mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>CustomerID</th>
+                                                    <th>CustomerName</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>3</td><td>Carol</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <p class="text-light mb-2"><strong>Use case:</strong> finding idle customers, products never sold, users with no login, or employees with no assignment.</p>
+                                    <ul class="text-light mb-0">
+                                        <li>This is usually safer than <code>NOT IN</code>, especially when nulls can appear.</li>
+                                        <li>It answers "which parent rows are completely unmatched?"</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header border-secondary fw-bold text-info">
+                                    Example 7: OUTER APPLY gets the latest related row per parent
+                                </div>
+                                <div class="card-body">
+                                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>SELECT
+    o.OrderID,
+    p.PaymentDate,
+    p.Amount
+FROM Orders o
+OUTER APPLY
+(
+    SELECT TOP 1
+        py.PaymentDate,
+        py.Amount
+    FROM Payments py
+    WHERE py.OrderID = o.OrderID
+    ORDER BY py.PaymentDate DESC
+) p
+ORDER BY o.OrderID;</code></pre>
+
+                                    <div class="table-responsive mb-3">
+                                        <table class="table table-dark table-striped mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>OrderID</th>
+                                                    <th>PaymentDate</th>
+                                                    <th>Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>1001</td><td>2026-01-12</td><td>40000.00</td></tr>
+                                                <tr><td>1002</td><td>2026-01-16</td><td>2500.00</td></tr>
+                                                <tr><td>1003</td><td>NULL</td><td>NULL</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <p class="text-light mb-2"><strong>Why this is useful:</strong> you want only one payment row per order, usually the latest, earliest, or highest one.</p>
+                                    <ul class="text-light mb-0">
+                                        <li>A normal join would return two payment rows for order <code>1001</code>.</li>
+                                        <li><code>OUTER APPLY</code> lets you run a small correlated subquery per parent row.</li>
+                                        <li>It is very handy for "top 1 child row" scenarios.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-12">
+                            <div class="card bg-dark border-secondary">
+                                <div class="card-header border-secondary fw-bold text-danger">
+                                    Example 8: The classic LEFT JOIN mistake with WHERE
+                                </div>
+                                <div class="card-body">
+                                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- Correct: keep all orders, only attach captured payments
+SELECT
+    o.OrderID,
+    p.PaymentStatus
+FROM Orders o
+LEFT JOIN Payments p
+    ON p.OrderID = o.OrderID
+   AND p.PaymentStatus = 'Captured';</code></pre>
+
+                                    <pre class="bg-black text-success p-3 rounded border border-secondary"><code>-- Wrong for this requirement: order 1003 disappears
+SELECT
+    o.OrderID,
+    p.PaymentStatus
+FROM Orders o
+LEFT JOIN Payments p
+    ON p.OrderID = o.OrderID
+WHERE p.PaymentStatus = 'Captured';</code></pre>
+
+                                    <p class="text-light mb-2"><strong>Why the second query is dangerous:</strong> <code>WHERE p.PaymentStatus = 'Captured'</code> rejects the rows where payment columns are null, so unpaid orders vanish.</p>
+                                    <ul class="text-light mb-0">
+                                        <li>If your business rule is "keep every order", the filter belongs in <code>ON</code>.</li>
+                                        <li>If your business rule is "show only orders that have captured payments", then the <code>WHERE</code> version may be correct.</li>
+                                        <li>The right answer depends on intent, not just syntax.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning bg-transparent border-warning mt-4 mb-0">
+                        <strong>Final mental model:</strong>
+                        every join takes one row from the left side and tries to pair it with zero, one, or many rows from the right side.
+                        Once you ask "how many matches can this row have?", most join bugs become much easier to reason about.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+}

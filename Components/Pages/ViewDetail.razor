@@ -1,6 +1,7 @@
 @page "/view/{FullName}"
 @using DbExplore.Services
 @inject SchemaService SchemaService
+@inject NavigationManager Navigation
 
 <div class="container-fluid">
     @if (View == null)
@@ -9,18 +10,17 @@
     }
     else
     {
-        <div class="row mb-4">
+        <div class="row mb-4 align-items-center">
+            <div class="col-auto">
+                <button class="btn btn-outline-light btn-sm" @onclick="NavigateBack">Back</button>
+            </div>
             <div class="col">
-                <h2 class="text-white">
-                    <span style="font-size: 2rem;">📄</span> @View.Name
-                </h2>
-                <span class="badge bg-secondary">@View.Schema</span>
+                <h2 class="text-white mb-0">@View.Name</h2>
+                <span class="badge bg-secondary mt-2">@View.Schema</span>
             </div>
         </div>
 
         <div class="row g-4">
-            <!-- Columns -->
-            <!-- Columns -->
             <div class="col-md-4">
                 <div class="card glass-card h-100 text-white">
                     <div class="card-header border-secondary fw-bold">Columns</div>
@@ -35,15 +35,12 @@
                                 @if (!string.IsNullOrEmpty(col.SourceTable))
                                 {
                                     <div class="small mt-1" style="font-size: 0.85em;">
-                                        <span class="text-secondary">↳</span> 
-                                        <span class="text-muted">Source:</span>
+                                        <span class="text-secondary">Source:</span>
                                         @{
                                             var sourceFullName = $"[{col.SourceSchema}].[{col.SourceTable}]";
-                                            var isView = IsView(sourceFullName);
-                                            var urlPrefix = isView ? "view" : "table";
-                                            var textClass = isView ? "text-info" : "text-primary";
+                                            var textClass = IsView(sourceFullName) ? "text-info" : "text-primary";
                                         }
-                                        <a href="@urlPrefix/@Uri.EscapeDataString(sourceFullName)" class="text-decoration-none @textClass">
+                                        <a href="@BuildObjectLink(sourceFullName)" class="text-decoration-none @textClass">
                                             @col.SourceTable
                                         </a>
                                         <span class="text-secondary">.</span><span class="text-light">@col.SourceColumn</span>
@@ -55,15 +52,13 @@
                 </div>
             </div>
 
-            <!-- Dependencies -->
             <div class="col-md-8">
                 <div class="row g-4">
-                    <!-- Parents (Upstream) -->
                     <div class="col-12">
                         <div class="card glass-card text-white">
                             <div class="card-header border-secondary text-info fw-bold">
-                                <span style="font-size: 1.2rem;">⬆️</span> Parents (Upstream)
-                                <small class="d-block text-muted fw-normal">Tables or Views this view selects from</small>
+                                Parents (Upstream)
+                                <small class="d-block text-muted fw-normal">Tables or views this view selects from.</small>
                             </div>
                             <div class="card-body">
                                 @if (View.Parents.Count == 0)
@@ -75,10 +70,9 @@
                                     <div class="d-flex flex-wrap gap-2">
                                         @foreach (var dep in View.Parents)
                                         {
-                                            var url = dep.Type == "Table" ? $"table/{Uri.EscapeDataString(dep.FullName)}" : $"view/{Uri.EscapeDataString(dep.FullName)}";
                                             var badgeClass = dep.Type == "Table" ? "bg-primary" : "bg-info text-dark";
-                                            
-                                            <a href="@url" class="btn btn-outline-info btn-sm text-start" style="min-width: 200px;">
+
+                                            <a href="@BuildObjectLink(dep.FullName)" class="btn btn-outline-info btn-sm text-start" style="min-width: 200px;">
                                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                                     <span class="fw-bold">@GetShortName(dep.Name)</span>
                                                     <span class="badge @badgeClass" style="font-size: 0.7em;">@dep.Type</span>
@@ -92,12 +86,11 @@
                         </div>
                     </div>
 
-                    <!-- Children (Downstream) -->
                     <div class="col-12">
                         <div class="card glass-card text-white">
                             <div class="card-header border-secondary text-warning fw-bold">
-                                <span style="font-size: 1.2rem;">⬇️</span> Children (Downstream)
-                                <small class="d-block text-muted fw-normal">Views that select from this view</small>
+                                Children (Downstream)
+                                <small class="d-block text-muted fw-normal">Views that select from this view.</small>
                             </div>
                             <div class="card-body">
                                 @if (View.Children.Count == 0)
@@ -109,10 +102,9 @@
                                     <div class="d-flex flex-wrap gap-2">
                                         @foreach (var dep in View.Children)
                                         {
-                                            var url = dep.Type == "Table" ? $"table/{Uri.EscapeDataString(dep.FullName)}" : $"view/{Uri.EscapeDataString(dep.FullName)}";
                                             var badgeClass = dep.Type == "Table" ? "bg-primary" : "bg-info text-dark";
 
-                                            <a href="@url" class="btn btn-outline-warning btn-sm text-start" style="min-width: 200px;">
+                                            <a href="@BuildObjectLink(dep.FullName)" class="btn btn-outline-warning btn-sm text-start" style="min-width: 200px;">
                                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                                     <span class="fw-bold">@GetShortName(dep.Name)</span>
                                                     <span class="badge @badgeClass" style="font-size: 0.7em;">@dep.Type</span>
@@ -126,12 +118,11 @@
                         </div>
                     </div>
 
-                    <!-- Referenced by SPs -->
                     <div class="col-12">
                         <div class="card glass-card text-white">
                             <div class="card-header border-secondary fw-bold" style="color: #b388ff;">
-                                <span style="font-size: 1.2rem;">🔧</span> Referenced by Stored Procedures
-                                <small class="d-block text-muted fw-normal">SPs that read from this view</small>
+                                Referenced by Stored Procedures
+                                <small class="d-block text-muted fw-normal">SPs that read from this view.</small>
                             </div>
                             <div class="card-body">
                                 @if (View.ReferencedBySPs.Count == 0)
@@ -144,7 +135,7 @@
                                         @foreach (var dep in View.ReferencedBySPs)
                                         {
                                             var spFull = $"[{dep.Schema}].[{dep.Name}]";
-                                            <a href="proc/@Uri.EscapeDataString(spFull)" class="btn btn-sm text-start" style="min-width: 180px; border-color: #b388ff; color: #b388ff;">
+                                            <a href="@BuildProcLink(spFull)" class="btn btn-sm text-start" style="min-width: 180px; border-color: #b388ff; color: #b388ff;">
                                                 <div class="fw-bold">@dep.Name</div>
                                                 <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
                                             </a>
@@ -164,15 +155,55 @@
     [Parameter]
     public string FullName { get; set; } = string.Empty;
 
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
     private ViewInfo? View;
 
     protected override void OnParametersSet()
     {
         var decoded = Uri.UnescapeDataString(FullName);
-        // Find view
         View = SchemaService.Views.FirstOrDefault(t => t.FullName == decoded);
     }
-    
+
+    private void NavigateBack()
+    {
+        if (!string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            Navigation.NavigateTo(ReturnUrl);
+            return;
+        }
+
+        Navigation.NavigateTo("/views");
+    }
+
+    private string BuildObjectLink(string fullName)
+    {
+        var prefix = IsView(fullName) ? "/view" : "/table";
+        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var baseLink = $"{prefix}/{Uri.EscapeDataString(fullName)}";
+
+        if (string.IsNullOrWhiteSpace(currentRoute))
+        {
+            return baseLink;
+        }
+
+        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
+    }
+
+    private string BuildProcLink(string procFullName)
+    {
+        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var baseLink = $"/proc/{Uri.EscapeDataString(procFullName)}";
+
+        if (string.IsNullOrWhiteSpace(currentRoute))
+        {
+            return baseLink;
+        }
+
+        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
+    }
+
     private string GetShortName(string name)
     {
         return name.Replace("[", "").Replace("]", "");

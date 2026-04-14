@@ -1,6 +1,7 @@
 @page "/table/{FullName}"
 @using DbExplore.Services
 @inject SchemaService SchemaService
+@inject NavigationManager Navigation
 
 <div class="container-fluid">
     @if (Table == null)
@@ -9,17 +10,17 @@
     }
     else
     {
-        <div class="row mb-4">
+        <div class="row mb-4 align-items-center">
+            <div class="col-auto">
+                <button class="btn btn-outline-light btn-sm" @onclick="NavigateBack">Back</button>
+            </div>
             <div class="col">
-                <h2 class="text-white">
-                    <span style="font-size: 2rem;">📊</span> @Table.Name
-                </h2>
-                <span class="badge bg-secondary">@Table.Schema</span>
+                <h2 class="text-white mb-0">@Table.Name</h2>
+                <span class="badge bg-secondary mt-2">@Table.Schema</span>
             </div>
         </div>
 
         <div class="row g-4">
-            <!-- Columns -->
             <div class="col-md-4">
                 <div class="card glass-card h-100 text-white">
                     <div class="card-header border-secondary fw-bold">Columns</div>
@@ -35,15 +36,13 @@
                 </div>
             </div>
 
-            <!-- Relationships -->
             <div class="col-md-8">
                 <div class="row g-4">
-                    <!-- Parents (Upstream) -->
                     <div class="col-12">
                         <div class="card glass-card text-white">
                             <div class="card-header border-secondary text-info fw-bold">
-                                <span style="font-size: 1.2rem;">⬆️</span> Parents (Upstream)
-                                <small class="d-block text-muted fw-normal">Tables this table relies on (Foreign Keys)</small>
+                                Parents (Upstream)
+                                <small class="d-block text-muted fw-normal">Tables this table relies on through foreign keys.</small>
                             </div>
                             <div class="card-body">
                                 @if (Table.OutgoingKeys.Count == 0)
@@ -55,9 +54,9 @@
                                     <div class="d-flex flex-wrap gap-2">
                                         @foreach (var rel in Table.OutgoingKeys)
                                         {
-                                            <a href="table/@Uri.EscapeDataString(rel.ToTable)" class="btn btn-outline-info btn-sm text-start" style="min-width: 200px;">
+                                            <a href="@BuildTableLink(rel.ToTable)" class="btn btn-outline-info btn-sm text-start" style="min-width: 200px;">
                                                 <div class="fw-bold">@GetShortName(rel.ToTable)</div>
-                                                <small class="text-muted" style="font-size: 0.7em;">FK: @rel.FromColumn ➔ @rel.ToColumn</small>
+                                                <small class="text-muted" style="font-size: 0.7em;">FK: @rel.FromColumn -> @rel.ToColumn</small>
                                             </a>
                                         }
                                     </div>
@@ -66,12 +65,11 @@
                         </div>
                     </div>
 
-                    <!-- Children (Downstream) -->
                     <div class="col-12">
                         <div class="card glass-card text-white">
                             <div class="card-header border-secondary text-warning fw-bold">
-                                <span style="font-size: 1.2rem;">⬇️</span> Children (Downstream)
-                                <small class="d-block text-muted fw-normal">Tables that rely on this table</small>
+                                Children (Downstream)
+                                <small class="d-block text-muted fw-normal">Tables that rely on this table.</small>
                             </div>
                             <div class="card-body">
                                 @if (Table.IncomingKeys.Count == 0)
@@ -83,9 +81,9 @@
                                     <div class="d-flex flex-wrap gap-2">
                                         @foreach (var rel in Table.IncomingKeys)
                                         {
-                                            <a href="table/@Uri.EscapeDataString(rel.FromTable)" class="btn btn-outline-warning btn-sm text-start" style="min-width: 200px;">
+                                            <a href="@BuildTableLink(rel.FromTable)" class="btn btn-outline-warning btn-sm text-start" style="min-width: 200px;">
                                                 <div class="fw-bold">@GetShortName(rel.FromTable)</div>
-                                                <small class="text-muted" style="font-size: 0.7em;">FK: @rel.FromColumn ➔ @rel.ToColumn</small>
+                                                <small class="text-muted" style="font-size: 0.7em;">FK: @rel.FromColumn -> @rel.ToColumn</small>
                                             </a>
                                         }
                                     </div>
@@ -94,12 +92,11 @@
                         </div>
                     </div>
 
-                    <!-- Referenced by SPs -->
                     <div class="col-12">
                         <div class="card glass-card text-white">
                             <div class="card-header border-secondary fw-bold" style="color: #b388ff;">
-                                <span style="font-size: 1.2rem;">🔧</span> Referenced by Stored Procedures
-                                <small class="d-block text-muted fw-normal">SPs that read from or write to this table</small>
+                                Referenced by Stored Procedures
+                                <small class="d-block text-muted fw-normal">SPs that read from or write to this table.</small>
                             </div>
                             <div class="card-body">
                                 @if (Table.ReferencedBySPs.Count == 0)
@@ -112,7 +109,7 @@
                                         @foreach (var dep in Table.ReferencedBySPs)
                                         {
                                             var spFull = $"[{dep.Schema}].[{dep.Name}]";
-                                            <a href="proc/@Uri.EscapeDataString(spFull)" class="btn btn-sm text-start" style="min-width: 180px; border-color: #b388ff; color: #b388ff;">
+                                            <a href="@BuildProcLink(spFull)" class="btn btn-sm text-start" style="min-width: 180px; border-color: #b388ff; color: #b388ff;">
                                                 <div class="fw-bold">@dep.Name</div>
                                                 <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
                                             </a>
@@ -125,6 +122,78 @@
                 </div>
             </div>
         </div>
+
+        <div class="row mt-4 mb-5">
+            <div class="col-12">
+                <div class="card glass-card text-white">
+                    <div class="card-header border-secondary fw-bold text-success">
+                        <span style="font-size: 1.2rem;">🌳</span> Complete Relationship Tree
+                        <small class="d-block text-muted fw-normal">Hierarchical view up to top parent and down to bottom child.</small>
+                    </div>
+                    <div class="card-body">
+                        <style>
+                            ul.sql-tree {
+                                padding-left: 20px;
+                                list-style: none;
+                                margin-bottom: 0;
+                            }
+                            ul.sql-tree li {
+                                position: relative;
+                                padding-top: 6px;
+                                padding-bottom: 6px;
+                                padding-left: 20px;
+                            }
+                            ul.sql-tree li::before {
+                                content: "";
+                                position: absolute;
+                                top: 0; left: 0;
+                                border-left: 1px dashed #6c757d;
+                                height: 100%;
+                            }
+                            ul.sql-tree li::after {
+                                content: "";
+                                position: absolute;
+                                top: 18px; left: 0;
+                                border-top: 1px dashed #6c757d;
+                                width: 15px;
+                            }
+                            ul.sql-tree li:last-child::before {
+                                height: 19px;
+                            }
+                            .tree-conn {
+                                color: #adb5bd;
+                                font-size: 0.85em;
+                            }
+                        </style>
+
+                        <div class="tree-root ms-2">
+                            <div class="mb-3">
+                                <span style="color: #fff; font-size: 1.1em; font-weight: bold; border: 1px solid #6c757d; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.2);">
+                                    @GetShortName(Table.Name)
+                                </span>
+                                <span class="badge bg-secondary ms-2">Current Context</span>
+                            </div>
+
+                            @if (Table.OutgoingKeys.Any())
+                            {
+                                <div class="fw-bold ms-2 mb-1" style="color: #0dcaf0;">⬆️ Upstream (Parents)</div>
+                                <div class="ms-2 mb-3">
+                                    @RenderUpstream(Table, new HashSet<string>())
+                                </div>
+                            }
+
+                            @if (Table.IncomingKeys.Any())
+                            {
+                                <div class="fw-bold ms-2 mb-1" style="color: #ffc107;">⬇️ Downstream (Children)</div>
+                                <div class="ms-2">
+                                    @RenderDownstream(Table, new HashSet<string>())
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     }
 </div>
 
@@ -132,18 +201,120 @@
     [Parameter]
     public string FullName { get; set; } = string.Empty;
 
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
     private TableInfo? Table;
 
     protected override void OnParametersSet()
     {
         var decoded = Uri.UnescapeDataString(FullName);
-        // Find table
         Table = SchemaService.Tables.FirstOrDefault(t => t.FullName == decoded);
+    }
+
+    private void NavigateBack()
+    {
+        if (!string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            Navigation.NavigateTo(ReturnUrl);
+            return;
+        }
+
+        Navigation.NavigateTo("/explorer");
+    }
+
+    private string BuildTableLink(string targetFullName)
+    {
+        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var baseLink = $"/table/{Uri.EscapeDataString(targetFullName)}";
+
+        if (string.IsNullOrWhiteSpace(currentRoute))
+        {
+            return baseLink;
+        }
+
+        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
+    }
+
+    private string BuildProcLink(string procFullName)
+    {
+        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var baseLink = $"/proc/{Uri.EscapeDataString(procFullName)}";
+
+        if (string.IsNullOrWhiteSpace(currentRoute))
+        {
+            return baseLink;
+        }
+
+        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
     }
 
     private string GetShortName(string fullName)
     {
-        // simplistic parser, removes brackets
         return fullName.Replace("[", "").Replace("]", "");
     }
+
+    private RenderFragment RenderUpstream(TableInfo currentTable, HashSet<string> path) => __builder =>
+    {
+        var nextPath = new HashSet<string>(path) { currentTable.FullName };
+        var parents = currentTable.OutgoingKeys;
+        if (!parents.Any()) return;
+
+        <ul class="sql-tree">
+            @foreach (var rel in parents)
+            {
+                var parentTable = SchemaService.Tables.FirstOrDefault(t => t.FullName == rel.ToTable);
+                if (parentTable == null) continue;
+                
+                bool isCycle = path.Contains(parentTable.FullName);
+
+                <li>
+                    <a href="@BuildTableLink(parentTable.FullName)" class="text-decoration-none">
+                        <span style="color: #00e676; font-weight: bold;">@GetShortName(parentTable.Name)</span>
+                    </a>
+                    <span class="tree-conn"> (ON @(GetShortName(currentTable.Name)).@(rel.FromColumn) = @(GetShortName(parentTable.Name)).@(rel.ToColumn))</span>
+                    @if (isCycle)
+                    {
+                        <span class="text-danger ms-2 small">[Cycle detected]</span>
+                    }
+                    else
+                    {
+                        @RenderUpstream(parentTable, nextPath)
+                    }
+                </li>
+            }
+        </ul>
+    };
+
+    private RenderFragment RenderDownstream(TableInfo currentTable, HashSet<string> path) => __builder =>
+    {
+        var nextPath = new HashSet<string>(path) { currentTable.FullName };
+        var children = currentTable.IncomingKeys;
+        if (!children.Any()) return;
+
+        <ul class="sql-tree">
+            @foreach (var rel in children)
+            {
+                var childTable = SchemaService.Tables.FirstOrDefault(t => t.FullName == rel.FromTable);
+                if (childTable == null) continue;
+                
+                bool isCycle = path.Contains(childTable.FullName);
+
+                <li>
+                    <a href="@BuildTableLink(childTable.FullName)" class="text-decoration-none">
+                        <span style="color: #ff9800; font-weight: bold;">@GetShortName(childTable.Name)</span>
+                    </a>
+                    <span class="tree-conn"> (ON @(GetShortName(currentTable.Name)).@(rel.ToColumn) = @(GetShortName(childTable.Name)).@(rel.FromColumn))</span>
+                    @if (isCycle)
+                    {
+                        <span class="text-danger ms-2 small">[Cycle detected]</span>
+                    }
+                    else
+                    {
+                        @RenderDownstream(childTable, nextPath)
+                    }
+                </li>
+            }
+        </ul>
+    };
 }
