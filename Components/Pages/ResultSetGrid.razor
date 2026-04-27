@@ -1,0 +1,200 @@
+@using System.Collections.Generic
+@using System.Linq
+
+@if (Columns.Count > 0)
+{
+    <div class="mb-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+            <label class="text-muted small mb-0">Show</label>
+            <select class="form-select form-select-sm bg-dark text-white border-secondary" style="width: 80px;" @bind="PageSize">
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="-1">All</option>
+            </select>
+            <label class="text-muted small mb-0">entries</label>
+        </div>
+        <div style="width: 250px;">
+            <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search in results..." @bind="SearchTerm" @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="table-responsive border border-secondary rounded">
+        <table class="table table-dark table-striped table-sm table-bordered border-secondary mb-0">
+            <thead>
+                <tr>
+                    @foreach (var col in Columns)
+                    {
+                        <th class="text-secondary bg-black">@col</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in PagedRows)
+                {
+                    <tr>
+                        @foreach (var col in Columns)
+                        {
+                            var val = GetColumnValue(row, col);
+                            <td style="white-space: nowrap; max-width: 300px; overflow: hidden; text-overflow: ellipsis;" title="@val">
+                                @if (val == null)
+                                {
+                                    <span class="text-muted fst-italic">NULL</span>
+                                }
+                                else
+                                {
+                                    @val
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+                @if (PagedRows.Count == 0)
+                {
+                    <tr>
+                        <td colspan="@Columns.Count" class="text-center text-muted py-4">
+                            No matching records found.
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div class="text-muted small">
+            @if (FilteredRows.Count == 0)
+            {
+                <span>Showing 0 entries</span>
+            }
+            else
+            {
+                <span>
+                    Showing @((CurrentPage - 1) * (PageSize == -1 ? FilteredRows.Count : PageSize) + 1) to @Math.Min(PageSize == -1 ? FilteredRows.Count : CurrentPage * PageSize, FilteredRows.Count) of @FilteredRows.Count entries
+                    @(FilteredRows.Count < Rows.Count ? $"(filtered from {Rows.Count} total entries)" : "")
+                </span>
+            }
+        </div>
+        @if (TotalPages > 1)
+        {
+            <nav>
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(CurrentPage == 1 ? "disabled" : "")">
+                        <button class="page-link bg-dark text-white border-secondary" @onclick="() => SetPage(CurrentPage - 1)">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= TotalPages; i++)
+                    {
+                        var pageNum = i;
+                        if (TotalPages > 7 && (pageNum > 2 && pageNum < TotalPages - 1 && Math.Abs(pageNum - CurrentPage) > 1))
+                        {
+                            if (pageNum == CurrentPage - 2 || pageNum == CurrentPage + 2)
+                            {
+                                <li class="page-item disabled"><span class="page-link bg-dark text-white border-secondary">...</span></li>
+                            }
+                            continue;
+                        }
+                        
+                        <li class="page-item @(pageNum == CurrentPage ? "active" : "")">
+                            <button class="page-link @(pageNum == CurrentPage ? "bg-primary border-primary" : "bg-dark text-white border-secondary")" @onclick="() => SetPage(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class="page-item @(CurrentPage == TotalPages ? "disabled" : "")">
+                        <button class="page-link bg-dark text-white border-secondary" @onclick="() => SetPage(CurrentPage + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    </div>
+}
+else
+{
+    <div class="alert alert-dark border-secondary text-muted">This result set is empty.</div>
+}
+
+@code {
+    [Parameter]
+    public IEnumerable<dynamic> Data { get; set; } = Array.Empty<dynamic>();
+
+    private List<IDictionary<string, object>> Rows = new();
+    private List<string> Columns = new();
+
+    private string _searchTerm = "";
+    private string SearchTerm
+    {
+        get => _searchTerm;
+        set
+        {
+            _searchTerm = value;
+            CurrentPage = 1;
+        }
+    }
+
+    private int _pageSize = 10;
+    private int PageSize
+    {
+        get => _pageSize;
+        set
+        {
+            _pageSize = value;
+            CurrentPage = 1;
+        }
+    }
+
+    private int CurrentPage = 1;
+
+    protected override void OnParametersSet()
+    {
+        Rows = Data.Select(d => (IDictionary<string, object>)d).ToList();
+        if (Rows.Any())
+        {
+            Columns = Rows.First().Keys.ToList();
+        }
+        else
+        {
+            Columns.Clear();
+        }
+    }
+
+    private string? GetColumnValue(IDictionary<string, object> row, string column)
+    {
+        if (row.TryGetValue(column, out var val))
+        {
+            return val?.ToString();
+        }
+        return null;
+    }
+
+    private List<IDictionary<string, object>> FilteredRows
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchTerm))
+                return Rows;
+
+            var lowerSearch = SearchTerm.ToLowerInvariant();
+            return Rows.Where(r => 
+                r.Values.Any(v => v != null && v.ToString()!.ToLowerInvariant().Contains(lowerSearch))
+            ).ToList();
+        }
+    }
+
+    private int TotalPages => PageSize == -1 ? 1 : (int)Math.Ceiling(FilteredRows.Count / (double)PageSize);
+
+    private List<IDictionary<string, object>> PagedRows
+    {
+        get
+        {
+            var filtered = FilteredRows;
+            if (PageSize == -1) return filtered;
+            
+            return filtered.Skip((CurrentPage - 1) * PageSize).Take(PageSize).ToList();
+        }
+    }
+
+    private void SetPage(int page)
+    {
+        if (page < 1 || page > TotalPages) return;
+        CurrentPage = page;
+    }
+}

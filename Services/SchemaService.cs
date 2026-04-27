@@ -121,6 +121,23 @@ public class SchemaService
         _connectionService = connectionService;
     }
 
+    public async Task<string?> GetStoredProcedureDefinitionAsync(string fullName)
+    {
+        if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return null;
+
+        try 
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            var sql = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName))";
+            return await conn.QuerySingleOrDefaultAsync<string>(sql, new { FullName = fullName });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching SP definition for {fullName}: {ex.Message}");
+            return null;
+        }
+    }
+
     public async Task LoadSchemaAsync()
     {
         if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
