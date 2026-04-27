@@ -3,7 +3,7 @@
 @inject SchemaService SchemaService
 @inject NavigationManager Nav
 
-<div class="page text-white h-100">
+<div class="page text-white">
     @if (!IsConnected)
     {
         <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);">
@@ -35,22 +35,19 @@
     }
     else
     {
-         <div class="sidebar" style="width: 280px; position: fixed; top: 0; bottom: 0; overflow-y: auto;">
-            <NavMenu />
-        </div>
+        <div class="app-shell">
+            <aside class="sidebar app-shell-sidebar">
+                <NavMenu />
+            </aside>
 
-        <main style="margin-left: 280px; min-height: 100vh;">
-            <div style="padding: 20px;">
-                @Body
-            </div>
-        </main>
+            <main class="app-shell-main">
+                <div class="app-shell-content">
+                    @Body
+                </div>
+            </main>
+        </div>
     }
 </div>
-
-<style>
-    /* Styling overrides for this layout */
-    .page { display: flex; flex-direction: column; }
-</style>
 
 @code {
     private bool IsConnected = false;
