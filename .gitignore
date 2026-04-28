@@ -194,4 +194,5 @@ status.txt
 *.cer
 *.p12
 
-App/
+App/*
+!App/.gitkeep

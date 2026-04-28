@@ -61,11 +61,11 @@
    ```bash
    dotnet publish -f net8.0-windows10.0.19041.0 -c Release
    ```
-3. **Find** the executable at:
+3. **Find** the portable zip at:
    ```
-   bin\Release\net8.0-windows10.0.19041.0\win10-x64\publish\DbExplore.exe
+   App\DbExplore-portable.zip
    ```
-4. **Run** directly or copy the entire `publish` folder to share
+4. **Extract** the zip and run `DbExplore.exe` directly, or share the zip file.
 
 ---
 
