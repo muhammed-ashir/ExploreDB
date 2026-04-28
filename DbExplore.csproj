@@ -34,10 +34,10 @@
 
     <Target Name="ZipPublishOutput" AfterTargets="Publish">
         <PropertyGroup>
-            <ZipDest>$(MSBuildProjectDirectory)\bin\$(Configuration)\DbExplore-portable.zip</ZipDest>
+            <ZipDest>$(MSBuildProjectDirectory)\App\DbExplore-portable.zip</ZipDest>
         </PropertyGroup>
         <Message Text="📦 Zipping publish output to $(ZipDest)..." Importance="high" />
-        <Exec Command="powershell -Command &quot;if (Test-Path '$(ZipDest)') { Remove-Item '$(ZipDest)' }; Compress-Archive -Path (Get-ChildItem -Path '$(PublishDir.TrimEnd('\'))').FullName -DestinationPath '$(ZipDest)' -Force&quot;" />
+        <Exec Command="powershell -Command &quot;if (!(Test-Path '$(MSBuildProjectDirectory)\App')) { New-Item -ItemType Directory -Force -Path '$(MSBuildProjectDirectory)\App' | Out-Null }; if (Test-Path '$(ZipDest)') { Remove-Item '$(ZipDest)' }; Compress-Archive -Path (Get-ChildItem -Path '$(PublishDir.TrimEnd('\'))').FullName -DestinationPath '$(ZipDest)' -Force&quot;" />
         <Message Text="✅ Zip created: $(ZipDest)" Importance="high" />
     </Target>
 

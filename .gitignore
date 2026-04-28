@@ -193,3 +193,5 @@ status.txt
 *.pfx
 *.cer
 *.p12
+
+App/
