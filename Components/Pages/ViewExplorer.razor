@@ -7,9 +7,7 @@
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col">
-            <h2 class="fw-bold mb-0">
-                <span style="font-size: 2rem;">👁️</span> View Explorer
-            </h2>
+            <h2 class="fw-bold mb-0">View Explorer</h2>
             <p class="text-secondary small">Browse and search all database views</p>
         </div>
     </div>
@@ -40,9 +38,19 @@
             </div>
         </div>
         <div class="col-md-6 text-end align-self-center">
-            <span class="text-muted">
-                Showing @FilteredViews.Count() of @SchemaService.Views.Count views
-            </span>
+            <div class="d-flex justify-content-end align-items-center gap-2 mb-1">
+                <label class="text-muted small mb-0">Show</label>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn @(_pageSize == 12 ? "btn-primary" : "btn-outline-secondary text-white")" @onclick="() => SetPageSize(12)">12</button>
+                    <button class="btn @(_pageSize == 24 ? "btn-primary" : "btn-outline-secondary text-white")" @onclick="() => SetPageSize(24)">24</button>
+                    <button class="btn @(_pageSize == 48 ? "btn-primary" : "btn-outline-secondary text-white")" @onclick="() => SetPageSize(48)">48</button>
+                    <button class="btn @(_pageSize == 96 ? "btn-primary" : "btn-outline-secondary text-white")" @onclick="() => SetPageSize(96)">96</button>
+                </div>
+                <label class="text-muted small mb-0">per page</label>
+            </div>
+            <div class="text-muted small">
+                Showing @PagedViews.Count() of @FilteredViews.Count() views
+            </div>
         </div>
     </div>
 
@@ -65,14 +73,14 @@
         }
         else
         {
-            @foreach (var view in FilteredViews)
+            @foreach (var view in PagedViews)
             {
-                <div class="col-md-6 col-lg-4 mb-3">
+                <div class="col-md-6 col-lg-4 col-xl-3 mb-3">
                     <a href="view/@Uri.EscapeDataString(view.FullName)" class="text-decoration-none">
                         <div class="card glass-card text-white node-card h-100">
                             <div class="card-body">
                                 <h5 class="card-title">
-                                    <span style="font-size: 1.5rem;">📄</span> @view.Name
+                                    @view.Name
                                 </h5>
                                 <p class="card-text">
                                     <small class="text-muted">Schema: @view.Schema</small><br />
@@ -83,15 +91,67 @@
                     </a>
                 </div>
             }
+
+            @if (TotalPages > 1)
+            {
+                <div class="col-12 mt-4 d-flex justify-content-center">
+                    <nav>
+                        <ul class="pagination pagination-sm">
+                            <li class="page-item @(CurrentPage == 1 ? "disabled" : "")">
+                                <button class="page-link bg-dark text-white border-secondary" @onclick="() => SetPage(CurrentPage - 1)">Previous</button>
+                            </li>
+                            @for (int i = 1; i <= TotalPages; i++)
+                            {
+                                var pageNum = i;
+                                if (TotalPages > 10 && (pageNum > 2 && pageNum < TotalPages - 1 && Math.Abs(pageNum - CurrentPage) > 2))
+                                {
+                                    if (pageNum == CurrentPage - 3 || pageNum == CurrentPage + 3)
+                                    {
+                                        <li class="page-item disabled"><span class="page-link bg-dark text-white border-secondary">...</span></li>
+                                    }
+                                    continue;
+                                }
+                                <li class="page-item @(pageNum == CurrentPage ? "active" : "")">
+                                    <button class="page-link @(pageNum == CurrentPage ? "bg-primary border-primary" : "bg-dark text-white border-secondary")" @onclick="() => SetPage(pageNum)">@pageNum</button>
+                                </li>
+                            }
+                            <li class="page-item @(CurrentPage == TotalPages ? "disabled" : "")">
+                                <button class="page-link bg-dark text-white border-secondary" @onclick="() => SetPage(CurrentPage + 1)">Next</button>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            }
         }
     </div>
 </div>
 
 @code {
-    private string SearchTerm = "";
+    private string _searchTerm = "";
+    private string SearchTerm
+    {
+        get => _searchTerm;
+        set
+        {
+            _searchTerm = value;
+            CurrentPage = 1;
+        }
+    }
     private bool ExactMatch = false;
     private bool MatchWholeWord = false;
     private bool CaseSensitive = false;
+
+    private int _pageSize = 24;
+    private int CurrentPage = 1;
+
+    private void SetPageSize(int size)
+    {
+        _pageSize = size;
+        CurrentPage = 1;
+    }
+
+    private int TotalPages => (int)Math.Ceiling(FilteredViews.Count() / (double)_pageSize);
+    private IEnumerable<ViewInfo> PagedViews => FilteredViews.Skip((CurrentPage - 1) * _pageSize).Take(_pageSize);
 
     private IEnumerable<ViewInfo> FilteredViews
     {
@@ -133,6 +193,14 @@
     private void Refresh()
     {
         InvokeAsync(StateHasChanged);
+    }
+
+    private void SetPage(int page)
+    {
+        if (page >= 1 && page <= TotalPages)
+        {
+            CurrentPage = page;
+        }
     }
 
     public void Dispose()

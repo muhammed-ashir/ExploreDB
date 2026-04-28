@@ -38,6 +38,44 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+        window.renderMermaid = async () => {
+            try {
+                // Clear any existing mermaid data-processed attributes so it re-renders
+                document.querySelectorAll('.mermaid').forEach(el => el.removeAttribute('data-processed'));
+                await mermaid.run({
+                    querySelector: '.mermaid'
+                });
+                
+                // Initialize pan and zoom on the resulting SVG
+                var svgs = document.querySelectorAll('.mermaid svg');
+                if (svgs.length > 0) {
+                    var svg = svgs[0];
+                    // Ensure the SVG takes up the full container height/width
+                    svg.style.width = '100%';
+                    svg.style.height = '100%';
+                    svg.style.maxWidth = 'none';
+                    
+                    if (window.mermaidPanZoom) {
+                        window.mermaidPanZoom.destroy();
+                    }
+                    window.mermaidPanZoom = svgPanZoom(svg, {
+                        zoomEnabled: true,
+                        controlIconsEnabled: false,
+                        fit: true,
+                        center: true,
+                        minZoom: 0.5,
+                        maxZoom: 10
+                    });
+                }
+            } catch (e) {
+                console.error('Mermaid render error:', e);
+            }
+        };
+    </script>
 </body>
 
 </html>

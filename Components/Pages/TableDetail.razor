@@ -146,11 +146,21 @@
         <div class="row mt-4">
             <div class="col-12">
                 <div class="card glass-card text-white">
-                    <div class="card-header border-secondary fw-bold text-success">
-                        Complete Relationship Tree
-                        <small class="d-block text-muted fw-normal">Hierarchical view up to top parent and down to bottom child.</small>
+                    <div class="card-header border-secondary p-0 d-flex justify-content-between align-items-center bg-dark">
+                        <ul class="nav nav-tabs border-0 flex-grow-1">
+                            <li class="nav-item">
+                                <a class="nav-link @(ActiveRelationshipTab == "ERD" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold text-success" : "text-muted")"
+                                   @onclick='() => SetActiveRelationshipTab("ERD")' style="cursor:pointer">Visual ERD</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link @(ActiveRelationshipTab == "Text" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold text-success" : "text-muted")"
+                                   @onclick='() => SetActiveRelationshipTab("Text")' style="cursor:pointer">Text Tree</a>
+                            </li>
+                        </ul>
                     </div>
                     <div class="card-body">
+                        @if (ActiveRelationshipTab == "Text")
+                        {
                         <style>
                             ul.sql-tree {
                                 padding-left: 20px;
@@ -217,6 +227,38 @@
                                 </div>
                             }
                         </div>
+                        }
+                        else if (ActiveRelationshipTab == "ERD")
+                        {
+                            @if (!string.IsNullOrEmpty(MermaidDefinition))
+                            {
+                                <div class="d-flex justify-content-end mb-2">
+                                    <div class="btn-group btn-group-sm shadow-sm">
+                                        <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.zoomIn()" title="Zoom In">
+                                            🔍 ➕
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.zoomOut()" title="Zoom Out">
+                                            🔍 ➖
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.resetZoom(); window.mermaidPanZoom && window.mermaidPanZoom.resetPan();" title="Reset View">
+                                            🔄 Reset
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                            <div class="d-flex justify-content-center bg-transparent rounded overflow-hidden position-relative" style="height: 600px; width: 100%; border: 1px solid #444;">
+                                @if (string.IsNullOrEmpty(MermaidDefinition))
+                                {
+                                    <div class="text-muted mt-5">No foreign key relationships to display.</div>
+                                }
+                                else
+                                {
+                                    <div class="mermaid w-100 h-100" style="background: transparent;">
+                                        @MermaidDefinition
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -449,6 +491,8 @@
     private bool UpdateCopied;
     private bool JoinedUpdateCopied;
     private bool JoinedDeleteCopied;
+    private string ActiveRelationshipTab = "ERD";
+    private string MermaidDefinition = string.Empty;
     private HashSet<string> SelectedJoinedUpdateColumns = new(StringComparer.OrdinalIgnoreCase);
     private PathfinderJoinPlan? JoinedUpdateJoinPlan;
 
@@ -477,6 +521,62 @@
         TableColumnSearchTerm = string.Empty;
         UpdateColumnSearchTerm = string.Empty;
         InitializeJoinedUpdateState();
+        GenerateMermaidERD();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && ActiveRelationshipTab == "ERD" && !string.IsNullOrEmpty(MermaidDefinition))
+        {
+            await Task.Delay(100);
+            try { await JS.InvokeVoidAsync("renderMermaid"); } catch { }
+        }
+    }
+
+    private async Task SetActiveRelationshipTab(string tab)
+    {
+        ActiveRelationshipTab = tab;
+        if (tab == "ERD" && !string.IsNullOrEmpty(MermaidDefinition))
+        {
+            StateHasChanged();
+            await Task.Delay(50);
+            try { await JS.InvokeVoidAsync("renderMermaid"); } catch { }
+        }
+    }
+
+    private void GenerateMermaidERD()
+    {
+        if (Table == null) return;
+        
+        if (Table.OutgoingKeys.Count == 0 && Table.IncomingKeys.Count == 0)
+        {
+            MermaidDefinition = string.Empty;
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("erDiagram");
+
+        foreach (var rel in Table.OutgoingKeys)
+        {
+            var from = SanitizeForMermaid(rel.FromTable);
+            var to = SanitizeForMermaid(rel.ToTable);
+            sb.AppendLine($"  {from} }}o--|| {to} : \"{rel.FromColumn}\"");
+        }
+
+        foreach (var rel in Table.IncomingKeys)
+        {
+            var from = SanitizeForMermaid(rel.FromTable);
+            var to = SanitizeForMermaid(rel.ToTable);
+            sb.AppendLine($"  {from} }}o--|| {to} : \"{rel.FromColumn}\"");
+        }
+
+        MermaidDefinition = sb.ToString();
+    }
+
+    private string SanitizeForMermaid(string name)
+    {
+        return name.Replace("[", "").Replace("]", "").Replace(".", "_").Replace(" ", "_");
     }
 
     private void NavigateBack()
