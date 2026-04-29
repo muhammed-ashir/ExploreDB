@@ -3,6 +3,8 @@
 @inject SchemaService SchemaService
 @inject PathfinderService PathfinderService
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject QueryStateService QueryStateService
 @implements IDisposable
 
 <div class="container-fluid">
@@ -15,8 +17,8 @@
 
     <div class="row">
         <!-- Column Picker -->
-        <div class="col-md-4">
-            <div class="card bg-dark border-secondary shadow-sm" style="height: 100%;">
+        <div class="col-md-4 d-flex flex-column gap-4">
+            <div class="card bg-dark border-secondary shadow-sm d-flex flex-column" style="flex: 1; min-height: 0;">
                 <div class="card-header border-secondary p-2" style="position: sticky; top: 0; z-index: 20; background: inherit;">
                     <div class="row g-2">
                         <div class="col-12 d-flex gap-2 position-relative">
@@ -106,6 +108,52 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Selected Columns Box -->
+            <div class="card bg-dark border-secondary shadow-sm d-flex flex-column" style="flex: 1; min-height: 0;">
+                <div class="card-header border-secondary d-flex justify-content-between align-items-center" style="position: sticky; top: 0; z-index: 20; background: inherit;">
+                    <span class="fw-bold">Selected Tables &amp; Columns</span>
+                    <button class="btn btn-sm btn-outline-warning" @onclick="ClearAll">
+                        Clear All
+                    </button>
+                </div>
+                <div class="card-body p-0 bg-black" style="overflow-y: auto; flex: 1;">
+                    @if (SelectedColumns.Count == 0)
+                    {
+                        <div class="p-4 text-center text-muted mt-3 mb-3">Select columns from the left to start building your query.</div>
+                    }
+                    else
+                    {
+                        <div class="p-3 d-flex flex-column gap-3">
+                            @foreach (var group in SelectedColumns.GroupBy(k => k.Substring(0, k.LastIndexOf('.'))))
+                            {
+                                var table = group.Key;
+                                <div class="border border-secondary rounded p-3" style="background-color: #1a1d20;">
+                                    <div class="text-info fw-bold mb-3 d-flex justify-content-between align-items-center pb-2 border-bottom border-secondary">
+                                        <span style="font-size: 1.1rem;">@table</span>
+                                        <button class="btn btn-sm btn-outline-danger py-0 px-2" 
+                                                title="Remove Table"
+                                                @onclick="() => RemoveTable(table)">
+                                            Remove
+                                        </button>
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var key in group)
+                                        {
+                                            var col = key.Substring(key.LastIndexOf('.') + 1);
+                                            <span class="badge bg-secondary d-flex align-items-center gap-2 p-2 border border-secondary" style="font-size: 0.9rem;">
+                                                @col
+                                                <button type="button" class="btn-close btn-close-white" style="font-size: 0.5rem;" aria-label="Remove"
+                                                        @onclick="() => ToggleColumn(key, table, false)"></button>
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
         </div>
 
         <!-- Result Area -->
@@ -114,9 +162,14 @@
              <div class="card bg-dark border-secondary shadow-sm" style="flex: 1;">
                  <div class="card-header border-secondary d-flex justify-content-between align-items-center">
                      <span class="fw-bold">Generated SQL</span>
-                     <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
-                         @CopyLabel
-                     </button>
+                     <div class="d-flex gap-2">
+                         <button class="btn btn-sm btn-primary" @onclick="RunInRunner" disabled="@(SelectedColumns.Count == 0)">
+                             ▶ Run in Query Runner
+                         </button>
+                         <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
+                             @CopyLabel
+                         </button>
+                     </div>
                  </div>
                  <div class="card-body p-0 bg-black">
                      <textarea class="form-control bg-black text-success border-0 font-monospace p-3" 
@@ -171,52 +224,6 @@
                      </div>
                  }
              </div>
-
-            <!-- Selected Columns Box -->
-            <div class="card bg-dark border-secondary shadow-sm">
-                <div class="card-header border-secondary d-flex justify-content-between align-items-center">
-                    <span class="fw-bold">Selected Tables &amp; Columns</span>
-                    <button class="btn btn-sm btn-outline-warning" @onclick="ClearAll">
-                        <span style="font-size: 1rem;">🗑️</span> Clear All
-                    </button>
-                </div>
-                <div class="card-body p-0 bg-black" style="overflow-y: auto; max-height: 400px;">
-                    @if (SelectedColumns.Count == 0)
-                    {
-                        <div class="p-4 text-center text-muted mt-3 mb-3">Select columns from the left to start building your query.</div>
-                    }
-                    else
-                    {
-                        <div class="p-3 d-flex flex-column gap-3">
-                            @foreach (var group in SelectedColumns.GroupBy(k => k.Substring(0, k.LastIndexOf('.'))))
-                            {
-                                var table = group.Key;
-                                <div class="border border-secondary rounded p-3" style="background-color: #1a1d20;">
-                                    <div class="text-info fw-bold mb-3 d-flex justify-content-between align-items-center pb-2 border-bottom border-secondary">
-                                        <span style="font-size: 1.1rem;">@table</span>
-                                        <button class="btn btn-sm btn-outline-danger py-0 px-2" 
-                                                title="Remove Table"
-                                                @onclick="() => RemoveTable(table)">
-                                            Remove Table
-                                        </button>
-                                    </div>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach (var key in group)
-                                        {
-                                            var col = key.Substring(key.LastIndexOf('.') + 1);
-                                            <span class="badge bg-secondary d-flex align-items-center gap-2 p-2 border border-secondary" style="font-size: 0.9rem;">
-                                                @col
-                                                <button type="button" class="btn-close btn-close-white" style="font-size: 0.5rem;" aria-label="Remove"
-                                                        @onclick="() => ToggleColumn(key, table, false)"></button>
-                                            </span>
-                                        }
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
         </div>
     </div>
 </div>
@@ -411,6 +418,12 @@
     }
 
     private string CopyLabel = "📋 Copy";
+
+    private void RunInRunner()
+    {
+        QueryStateService.CustomQuery = GeneratedSql;
+        Navigation.NavigateTo("/runner?type=custom");
+    }
 
     private async Task CopySql()
     {

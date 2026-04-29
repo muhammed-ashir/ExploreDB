@@ -20,6 +20,11 @@
                 <span>Pathfinder</span>
             </a>
 
+            <a href="runner"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsRunnerActive ? "active" : "")">
+                <span>Query Runner</span>
+            </a>
+
             <a href="explorer"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsExplorerActive ? "active" : "")">
                 <span>Table Explorer</span>
@@ -56,6 +61,7 @@
     private string CurrentUrl = "";
 
     private bool IsPathfinderActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
+    private bool IsRunnerActive => CurrentUrl.Contains("/runner");
     private bool IsJoinGuideActive => CurrentUrl.Contains("/joins");
     private bool IsExplorerActive => CurrentUrl.Contains("/explorer");
     private bool IsViewExplorerActive => CurrentUrl.Contains("/views") && !CurrentUrl.Contains("/view/");

@@ -17,8 +17,13 @@
                 <button type="button" class="btn btn-outline-light btn-sm" @onclick="NavigateBack">Back</button>
             </div>
             <div class="col">
-                <h2 class="text-white mb-0">@Table.Name</h2>
-                <span class="badge bg-secondary mt-2">@Table.Schema</span>
+                <div class="d-flex align-items-center gap-2">
+                    <h2 class="text-white mb-0">@Table.Name</h2>
+                    <span class="badge bg-secondary">@Table.Schema</span>
+                </div>
+            </div>
+            <div class="col-auto">
+                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm">▶ Run in Query Runner</a>
             </div>
         </div>
 

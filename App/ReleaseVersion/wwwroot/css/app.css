@@ -39,6 +39,14 @@ body {
     align-self: flex-start;
     height: 100vh;
     overflow-y: auto;
+    overflow-x: hidden;
+    transition: all 0.3s ease;
+}
+
+.app-shell-sidebar.collapsed {
+    width: 0;
+    min-width: 0;
+    max-width: 0;
 }
 
 .app-shell-main {
@@ -296,4 +304,8 @@ body {
 #blazor-error-ui .dismiss {
     cursor: pointer;
     float: right;
+}
+
+.cursor-pointer {
+    cursor: pointer;
 }

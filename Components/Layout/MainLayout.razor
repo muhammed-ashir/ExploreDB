@@ -7,27 +7,76 @@
     @if (!IsConnected)
     {
         <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);">
-            <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
                 <div class="modal-content glass-card border-0 text-white" style="background-color: #2b3035;">
-                    <div class="modal-header border-bottom border-light">
-                        <h5 class="modal-title fw-bold">Connect to Database</h5>
+                    <div class="modal-header border-bottom border-secondary">
+                        <h5 class="modal-title fw-bold">Connection Manager</h5>
                     </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">Connection String</label>
-                            <input type="text" class="form-control bg-dark text-white border-secondary" @bind="ConnString" placeholder="Server=myServer;Database=myDB;..." />
-                            <div class="form-text text-muted">Supports SQL Server connection strings.</div>
+                    <div class="modal-body p-0">
+                        <div class="row g-0">
+                            <!-- Left: Saved Connections -->
+                            <div class="col-md-5 border-end border-secondary d-flex flex-column" style="height: 400px;">
+                                <div class="p-3 border-bottom border-secondary">
+                                    <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
+                                </div>
+                                <div class="flex-grow-1 overflow-auto p-2">
+                                    @if (PagedConnections.Count == 0)
+                                    {
+                                        <div class="text-muted text-center mt-4 small">No saved connections.</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="list-group list-group-flush">
+                                            @foreach (var c in PagedConnections)
+                                            {
+                                                <div class="list-group-item bg-transparent border-secondary p-2 @(ActiveConnId == c.Id ? "bg-primary text-white" : "text-light")">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <div class="cursor-pointer flex-grow-1 pe-2 overflow-hidden" @onclick="() => LoadConnection(c)">
+                                                            <div class="fw-bold small text-truncate">@c.Name</div>
+                                                            <div class="text-opacity-75" style="font-size: 0.7em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">@c.ConnectionString</div>
+                                                        </div>
+                                                        <button class="btn btn-sm btn-outline-danger py-0 px-2 ms-2 border-0" title="Delete" @onclick="() => DeleteConnection(c.Id)">🗑️</button>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                <div class="p-2 border-top border-secondary d-flex justify-content-between align-items-center">
+                                    <button class="btn btn-sm btn-outline-secondary border-0 text-white" disabled="@(ConnPage <= 1)" @onclick="() => ConnPage--">◀</button>
+                                    <span class="small text-muted">Page @ConnPage of @ConnTotalPages</span>
+                                    <button class="btn btn-sm btn-outline-secondary border-0 text-white" disabled="@(ConnPage >= ConnTotalPages)" @onclick="() => ConnPage++">▶</button>
+                                </div>
+                            </div>
+
+                            <!-- Right: Connection Form -->
+                            <div class="col-md-7 p-4">
+                                <h6 class="fw-bold mb-3 text-info">Connection Details</h6>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Connection Name</label>
+                                    <input type="text" class="form-control bg-dark text-white border-secondary" @bind="ConnName" placeholder="e.g. Production DB" />
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Connection String</label>
+                                    <textarea class="form-control bg-dark text-white border-secondary" rows="4" @bind="ConnString" placeholder="Server=myServer;Database=myDB;..."></textarea>
+                                </div>
+
+                                @if (!string.IsNullOrEmpty(ErrorMsg))
+                                {
+                                    <div class="alert alert-danger py-2 small">@ErrorMsg</div>
+                                }
+
+                                <div class="d-flex gap-2 mt-4">
+                                    <button class="btn btn-outline-success flex-grow-1" @onclick="SaveCurrentConnection">Save Profile</button>
+                                    <button class="btn btn-premium flex-grow-1 fw-bold" @onclick="Connect" disabled="@IsBusy">
+                                        @if(IsBusy) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                                        @(IsBusy ? "Connecting..." : "Connect")
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        @if (!string.IsNullOrEmpty(ErrorMsg))
-                        {
-                            <div class="alert alert-danger py-2">@ErrorMsg</div>
-                        }
-                    </div>
-                    <div class="modal-footer border-top border-light">
-                        <button class="btn btn-premium w-100 fw-bold py-2" @onclick="Connect" disabled="@IsBusy">
-                            @if(IsBusy) { <span class="spinner-border spinner-border-sm me-2"></span> }
-                            @(IsBusy ? "Connecting..." : "Connect")
-                        </button>
                     </div>
                 </div>
             </div>
@@ -36,12 +85,18 @@
     else
     {
         <div class="app-shell">
-            <aside class="sidebar app-shell-sidebar">
+            <aside class="sidebar app-shell-sidebar @(SidebarCollapsed ? "collapsed" : "")">
                 <NavMenu />
             </aside>
 
-            <main class="app-shell-main">
-                <div class="app-shell-content">
+            <main class="app-shell-main d-flex flex-column" style="height: 100vh; overflow-y: auto;">
+                <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top" style="background-color: rgba(33, 37, 41, 0.95); backdrop-filter: blur(5px); z-index: 1020;">
+                    <button class="btn btn-sm btn-outline-secondary text-white border-0 me-3" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
+                        <span style="font-size: 1.2rem; line-height: 1;">☰</span>
+                    </button>
+                    <span class="fw-bold text-muted small">DbExplore Workspace</span>
+                </div>
+                <div class="app-shell-content flex-grow-1">
                     @Body
                 </div>
             </main>
@@ -53,12 +108,74 @@
     private bool IsConnected = false;
     private bool IsBusy = false;
     private string ConnString = "";
+    private string ConnName = "";
+    private string ActiveConnId = "";
     private string ErrorMsg = "";
+    private bool SidebarCollapsed = false;
+
+    private string _searchConn = "";
+    private string SearchConn
+    {
+        get => _searchConn;
+        set
+        {
+            _searchConn = value;
+            ConnPage = 1;
+        }
+    }
+
+    private int ConnPage = 1;
+    private int ConnPageSize = 5;
+
+    private IEnumerable<ConnectionService.SavedConnection> FilteredConnections => 
+        ConnectionService.SavedConnections
+            .Where(c => string.IsNullOrEmpty(SearchConn) || 
+                        c.Name.Contains(SearchConn, StringComparison.OrdinalIgnoreCase) || 
+                        c.ConnectionString.Contains(SearchConn, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(c => c.LastUsed);
+
+    private int ConnTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredConnections.Count() / (double)ConnPageSize));
+
+    private List<ConnectionService.SavedConnection> PagedConnections => 
+        FilteredConnections.Skip((ConnPage - 1) * ConnPageSize).Take(ConnPageSize).ToList();
 
     protected override void OnInitialized()
     {
         ConnString = ConnectionService.ConnectionString;
-        // Require explicit connect action as per feature spec
+        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnString);
+        if (active != null)
+        {
+            ConnName = active.Name;
+            ActiveConnId = active.Id;
+        }
+    }
+
+    private void LoadConnection(ConnectionService.SavedConnection c)
+    {
+        ActiveConnId = c.Id;
+        ConnName = c.Name;
+        ConnString = c.ConnectionString;
+    }
+
+    private void DeleteConnection(string id)
+    {
+        ConnectionService.DeleteConnection(id);
+        if (ActiveConnId == id)
+        {
+            ActiveConnId = "";
+            ConnName = "";
+            ConnString = "";
+        }
+        if (ConnPage > ConnTotalPages) ConnPage = ConnTotalPages;
+    }
+
+    private void SaveCurrentConnection()
+    {
+        if (string.IsNullOrWhiteSpace(ConnString)) return;
+        ConnectionService.UpsertConnection(ActiveConnId, ConnName, ConnString);
+        
+        var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnString && c.Name == (string.IsNullOrWhiteSpace(ConnName) ? "Unnamed Connection" : ConnName));
+        if (saved != null) ActiveConnId = saved.Id;
     }
 
     private async Task Connect()
@@ -74,7 +191,8 @@
         var success = await ConnectionService.TestConnectionAsync(ConnString);
         if (success)
         {
-            ConnectionService.SaveConnection(ConnString);
+            SaveCurrentConnection();
+            ConnectionService.SaveActiveConnection(ConnString);
             await SchemaService.LoadSchemaAsync();
             IsConnected = true;
         }

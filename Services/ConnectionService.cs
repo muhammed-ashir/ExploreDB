@@ -7,6 +7,7 @@ public class ConnectionService
 {
     private const string SettingsFile = "settings.json";
     public string ConnectionString { get; private set; } = string.Empty;
+    public List<SavedConnection> SavedConnections { get; private set; } = new();
 
     public event Action? OnConnectionChanged;
 
@@ -30,19 +31,56 @@ public class ConnectionService
         }
     }
 
-    public void SaveConnection(string connString)
+    public void SaveActiveConnection(string connString)
     {
         ConnectionString = connString;
-        var data = new { ConnectionString = connString };
-        var json = JsonSerializer.Serialize(data);
-        // Save to AppData so it persists
-        var path = Path.Combine(FileSystem.AppDataDirectory, SettingsFile);
-        
-        // Ensure directory exists
-        Directory.CreateDirectory(FileSystem.AppDataDirectory);
-        
-        File.WriteAllText(path, json);
+        SaveToDisk();
         OnConnectionChanged?.Invoke();
+    }
+
+    public void UpsertConnection(string id, string name, string connString)
+    {
+        var existing = SavedConnections.FirstOrDefault(c => c.Id == id);
+        if (existing != null)
+        {
+            existing.Name = name;
+            existing.ConnectionString = connString;
+            existing.LastUsed = DateTime.Now;
+        }
+        else
+        {
+            SavedConnections.Add(new SavedConnection
+            {
+                Id = string.IsNullOrEmpty(id) ? Guid.NewGuid().ToString() : id,
+                Name = string.IsNullOrWhiteSpace(name) ? "Unnamed Connection" : name,
+                ConnectionString = connString,
+                LastUsed = DateTime.Now
+            });
+        }
+        SaveToDisk();
+    }
+
+    public void DeleteConnection(string id)
+    {
+        var existing = SavedConnections.FirstOrDefault(c => c.Id == id);
+        if (existing != null)
+        {
+            SavedConnections.Remove(existing);
+            SaveToDisk();
+        }
+    }
+
+    private void SaveToDisk()
+    {
+        var data = new SettingsModel
+        {
+            ConnectionString = ConnectionString,
+            SavedConnections = SavedConnections
+        };
+        var json = JsonSerializer.Serialize(data);
+        var path = Path.Combine(FileSystem.AppDataDirectory, SettingsFile);
+        Directory.CreateDirectory(FileSystem.AppDataDirectory);
+        File.WriteAllText(path, json);
     }
 
     private void LoadSettings()
@@ -54,17 +92,41 @@ public class ConnectionService
             {
                 var json = File.ReadAllText(path);
                 var data = JsonSerializer.Deserialize<SettingsModel>(json);
-                if (!string.IsNullOrEmpty(data?.ConnectionString))
+                if (data != null)
                 {
-                    ConnectionString = data.ConnectionString;
+                    ConnectionString = data.ConnectionString ?? "";
+                    if (data.SavedConnections != null)
+                    {
+                        SavedConnections = data.SavedConnections;
+                    }
+                    else if (!string.IsNullOrEmpty(ConnectionString))
+                    {
+                        // Legacy migration
+                        SavedConnections.Add(new SavedConnection
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            Name = "Default Connection",
+                            ConnectionString = ConnectionString
+                        });
+                        SaveToDisk();
+                    }
                 }
             }
             catch { }
         }
     }
 
+    public class SavedConnection
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Name { get; set; } = string.Empty;
+        public string ConnectionString { get; set; } = string.Empty;
+        public DateTime LastUsed { get; set; } = DateTime.Now;
+    }
+
     private class SettingsModel
     {
         public string? ConnectionString { get; set; }
+        public List<SavedConnection> SavedConnections { get; set; } = new();
     }
 }

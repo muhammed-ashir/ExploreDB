@@ -15,8 +15,13 @@
                 <button class="btn btn-outline-light btn-sm" @onclick="NavigateBack">Back</button>
             </div>
             <div class="col">
-                <h2 class="text-white mb-0">@View.Name</h2>
-                <span class="badge bg-secondary mt-2">@View.Schema</span>
+                <div class="d-flex align-items-center gap-2">
+                    <h2 class="text-white mb-0">@View.Name</h2>
+                    <span class="badge bg-secondary">@View.Schema</span>
+                </div>
+            </div>
+            <div class="col-auto">
+                <a href="/runner?type=view&name=@Uri.EscapeDataString(View.FullName)" class="btn btn-primary btn-sm">▶ Run in Query Runner</a>
             </div>
         </div>
 

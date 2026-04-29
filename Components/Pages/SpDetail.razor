@@ -35,56 +35,13 @@
                     }
                 </div>
             </div>
+            <div class="col-auto">
+                <a href="/runner?type=sp&name=@Uri.EscapeDataString(Sp.FullName)" class="btn btn-primary btn-sm">▶ Run in Query Runner</a>
+            </div>
         </div>
 
         <div class="row g-4">
             <div class="col-md-4">
-                <div class="card glass-card text-white mb-4">
-                    <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center">
-                        <div>
-                            Execution Harness
-                            <small class="d-block text-muted fw-normal">Test this procedure</small>
-                        </div>
-                        <button class="btn btn-sm btn-primary" @onclick="ExecuteProcedureAsync" disabled="@IsExecuting">
-                            @if (IsExecuting) { <span class="spinner-border spinner-border-sm"></span> }
-                            else { <span>Execute</span> }
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        @if (Sp.Parameters.Count == 0)
-                        {
-                            <span class="text-muted fst-italic">No parameters. Call with no arguments.</span>
-                        }
-                        else
-                        {
-                            <div class="d-flex flex-column gap-3">
-                                @foreach (var p in Sp.Parameters)
-                                {
-                                    <div>
-                                        <label class="form-label small fw-bold mb-1 text-warning" style="font-family: monospace;">
-                                            @p.Name
-                                            @if (p.IsOutput) { <span class="badge bg-danger ms-1" style="font-size: 0.6em;">OUT</span> }
-                                            <span class="text-info ms-2" style="font-size: 0.8em;">@p.DisplayType</span>
-                                        </label>
-                                        @if (!p.IsOutput)
-                                        {
-                                            var val = GetParamValueString(p.Name);
-                                            <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
-                                                   value="@val" @oninput="(e) => SetParamValueString(p.Name, e.Value?.ToString())"
-                                                   placeholder="@(p.HasDefault ? $"Default: {p.DefaultValue ?? "NULL"}" : "Value...")" />
-                                        }
-                                        else
-                                        {
-                                            <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
-                                                   value="@GetOutputValueString(p.Name)" readonly placeholder="Output will appear here..." />
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                </div>
-
                 <div class="card glass-card text-white">
                     <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center">
                         <div>
@@ -108,17 +65,6 @@
                     <div class="card-header border-secondary p-0">
                         <ul class="nav nav-tabs border-secondary">
                             <li class="nav-item">
-                                <a class="nav-link @(ActiveTab == "Results" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
-                                   @onclick='() => SetActiveTab("Results")' style="cursor:pointer">Results</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link @(ActiveTab == "Messages" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
-                                   @onclick='() => SetActiveTab("Messages")' style="cursor:pointer">
-                                    Messages
-                                    @if (Messages.Count > 0) { <span class="badge bg-secondary ms-1">@Messages.Count</span> }
-                                </a>
-                            </li>
-                            <li class="nav-item">
                                 <a class="nav-link @(ActiveTab == "Scratchpad" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
                                    @onclick='() => SetActiveTab("Scratchpad")' style="cursor:pointer">Scratchpad</a>
                             </li>
@@ -129,39 +75,7 @@
                         </ul>
                     </div>
                     <div class="card-body overflow-auto flex-grow-1" style="max-height: 800px;">
-                        @if (ActiveTab == "Results")
-                        {
-                            if (IsExecuting)
-                            {
-                                <div class="text-center mt-5"><div class="spinner-border text-primary"></div><div class="mt-2 text-muted">Executing...</div></div>
-                            }
-                            else if (ResultSets.Count == 0 && !HasExecuted)
-                            {
-                                <div class="text-muted text-center mt-5">Enter parameters on the left and click Execute to see results.</div>
-                            }
-                            else if (ResultSets.Count == 0 && HasExecuted)
-                            {
-                                <div class="text-muted text-center mt-5">Command completed successfully. No data tables returned.</div>
-                            }
-                            else
-                            {
-                                int rsIndex = 1;
-                                foreach (var rs in ResultSets)
-                                {
-                                    <div class="fw-bold mb-2 mt-3 text-info">Result Set @rsIndex</div>
-                                    <ResultSetGrid Data="rs" />
-                                    rsIndex++;
-                                }
-                            }
-                        }
-                        else if (ActiveTab == "Messages")
-                        {
-                            <pre class="m-0 text-light" style="font-size: 0.85em; white-space: pre-wrap;">
-@if (Messages.Count == 0) { <span class="text-muted fst-italic">No messages.</span> }
-@foreach (var msg in Messages) { @msg<br/> }
-                            </pre>
-                        }
-                        else if (ActiveTab == "Scratchpad")
+                        @if (ActiveTab == "Scratchpad")
                         {
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <span class="text-muted small">Runnable script version of this procedure.</span>
@@ -244,45 +158,24 @@
 
     private SpInfo? Sp;
     private bool Copied = false;
-    private string ActiveTab = "Results";
-    private bool IsExecuting = false;
-    private bool HasExecuted = false;
-    private Dictionary<string, string?> InputValues = new();
-    private Dictionary<string, string?> OutputValues = new();
-    private List<IEnumerable<dynamic>> ResultSets = new();
-    private List<string> Messages = new();
+    private string ActiveTab = "Scratchpad";
     private string? ScratchpadText;
 
     private List<Dependency> DepTables => Sp?.Dependencies.Where(d => d.Type == "Table").OrderBy(d => d.Name).ToList() ?? new();
     private List<Dependency> DepViews => Sp?.Dependencies.Where(d => d.Type == "View").OrderBy(d => d.Name).ToList() ?? new();
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         var decoded = Uri.UnescapeDataString(FullName);
         Sp = SchemaService.StoredProcedures.FirstOrDefault(s => s.FullName == decoded);
         Copied = false;
         
-        InputValues.Clear();
-        OutputValues.Clear();
-        ResultSets.Clear();
-        Messages.Clear();
-        HasExecuted = false;
-        ActiveTab = "Results";
+        ActiveTab = "Scratchpad";
         ScratchpadText = null;
 
         if (Sp != null)
         {
-            foreach (var p in Sp.Parameters)
-            {
-                if (!p.IsOutput)
-                {
-                    InputValues[p.Name] = string.Empty;
-                }
-                else
-                {
-                    OutputValues[p.Name] = string.Empty;
-                }
-            }
+            await LoadScratchpadAsync();
         }
     }
 
@@ -295,75 +188,7 @@
         }
     }
 
-    private string GetParamValueString(string name) => InputValues.TryGetValue(name, out var val) ? (val ?? "") : "";
-    private void SetParamValueString(string name, string? val) => InputValues[name] = val;
-    private string GetOutputValueString(string name) => OutputValues.TryGetValue(name, out var val) ? (val ?? "") : "";
 
-    private async Task ExecuteProcedureAsync()
-    {
-        if (Sp == null || IsExecuting) return;
-
-        IsExecuting = true;
-        HasExecuted = true;
-        ResultSets.Clear();
-        Messages.Clear();
-        ActiveTab = "Results";
-        StateHasChanged();
-
-        try
-        {
-            using var conn = new SqlConnection(ConnectionService.ConnectionString);
-            conn.InfoMessage += (sender, args) =>
-            {
-                Messages.Add(args.Message);
-                InvokeAsync(StateHasChanged);
-            };
-            await conn.OpenAsync();
-
-            var dapperParams = new DynamicParameters();
-            foreach (var p in Sp.Parameters)
-            {
-                if (p.IsOutput)
-                {
-                    // Size matters for output strings, map to size -1 (max)
-                    dapperParams.Add(p.Name, dbType: null, direction: ParameterDirection.Output, size: p.MaxLength > 0 ? p.MaxLength : -1);
-                }
-                else
-                {
-                    var val = InputValues.TryGetValue(p.Name, out var str) && !string.IsNullOrWhiteSpace(str) ? str : null;
-                    dapperParams.Add(p.Name, val);
-                }
-            }
-
-            dapperParams.Add("@__ReturnValue", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
-
-            using var multi = await conn.QueryMultipleAsync(Sp.FullName, dapperParams, commandType: CommandType.StoredProcedure);
-            
-            while (!multi.IsConsumed)
-            {
-                var rs = await multi.ReadAsync<dynamic>();
-                ResultSets.Add(rs);
-            }
-
-            foreach (var p in Sp.Parameters.Where(p => p.IsOutput))
-            {
-                var outVal = dapperParams.Get<object>(p.Name);
-                OutputValues[p.Name] = outVal?.ToString() ?? "NULL";
-            }
-            
-            var retVal = dapperParams.Get<int>("@__ReturnValue");
-            Messages.Add($"Return Value: {retVal}");
-        }
-        catch (Exception ex)
-        {
-            Messages.Add($"ERROR: {ex.Message}");
-            ActiveTab = "Messages";
-        }
-        finally
-        {
-            IsExecuting = false;
-        }
-    }
 
     private async Task LoadScratchpadAsync()
     {
@@ -389,8 +214,7 @@
         lines.AppendLine($"-- Scratchpad for {Sp.FullName}");
         foreach (var p in Sp.Parameters)
         {
-            var val = InputValues.TryGetValue(p.Name, out var str) && !string.IsNullOrWhiteSpace(str) ? $"'{str}'" : "NULL";
-            lines.AppendLine($"DECLARE {p.Name} {p.DisplayType} = {val};");
+            lines.AppendLine($"DECLARE {p.Name} {p.DisplayType} = NULL;");
         }
         lines.AppendLine();
         lines.AppendLine("-- Procedure Body:");
