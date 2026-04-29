@@ -109,22 +109,18 @@
         </div>
 
         <!-- Result Area -->
-        <div class="col-md-8">
-             <div class="card bg-dark border-secondary shadow-sm h-100">
+        <div class="col-md-8 d-flex flex-column gap-4">
+             <!-- Generated SQL Box -->
+             <div class="card bg-dark border-secondary shadow-sm" style="flex: 1;">
                  <div class="card-header border-secondary d-flex justify-content-between align-items-center">
                      <span class="fw-bold">Generated SQL</span>
-                     <div class="d-flex gap-2">
-                         <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
-                             @CopyLabel
-                         </button>
-                         <button class="btn btn-sm btn-outline-warning" @onclick="ClearAll">
-                             <span style="font-size: 1rem;">🗑️</span> Clear All
-                         </button>
-                     </div>
+                     <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
+                         @CopyLabel
+                     </button>
                  </div>
                  <div class="card-body p-0 bg-black">
-                     <textarea class="form-control bg-black text-success border-0 font-monospace h-100 p-3" 
-                               style="resize: none; min-height: 400px;" readonly>@GeneratedSql</textarea>
+                     <textarea class="form-control bg-black text-success border-0 font-monospace p-3" 
+                               style="resize: vertical; min-height: 400px;" readonly>@GeneratedSql</textarea>
                  </div>
                  @if (HasOneToMany)
                  {
@@ -175,6 +171,52 @@
                      </div>
                  }
              </div>
+
+            <!-- Selected Columns Box -->
+            <div class="card bg-dark border-secondary shadow-sm">
+                <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">Selected Tables &amp; Columns</span>
+                    <button class="btn btn-sm btn-outline-warning" @onclick="ClearAll">
+                        <span style="font-size: 1rem;">🗑️</span> Clear All
+                    </button>
+                </div>
+                <div class="card-body p-0 bg-black" style="overflow-y: auto; max-height: 400px;">
+                    @if (SelectedColumns.Count == 0)
+                    {
+                        <div class="p-4 text-center text-muted mt-3 mb-3">Select columns from the left to start building your query.</div>
+                    }
+                    else
+                    {
+                        <div class="p-3 d-flex flex-column gap-3">
+                            @foreach (var group in SelectedColumns.GroupBy(k => k.Substring(0, k.LastIndexOf('.'))))
+                            {
+                                var table = group.Key;
+                                <div class="border border-secondary rounded p-3" style="background-color: #1a1d20;">
+                                    <div class="text-info fw-bold mb-3 d-flex justify-content-between align-items-center pb-2 border-bottom border-secondary">
+                                        <span style="font-size: 1.1rem;">@table</span>
+                                        <button class="btn btn-sm btn-outline-danger py-0 px-2" 
+                                                title="Remove Table"
+                                                @onclick="() => RemoveTable(table)">
+                                            Remove Table
+                                        </button>
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var key in group)
+                                        {
+                                            var col = key.Substring(key.LastIndexOf('.') + 1);
+                                            <span class="badge bg-secondary d-flex align-items-center gap-2 p-2 border border-secondary" style="font-size: 0.9rem;">
+                                                @col
+                                                <button type="button" class="btn-close btn-close-white" style="font-size: 0.5rem;" aria-label="Remove"
+                                                        @onclick="() => ToggleColumn(key, table, false)"></button>
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -351,6 +393,12 @@
         newSelectedColumns.AddRange(SelectedColumns.Where(c => !newSelectedColumns.Contains(c)));
 
         SelectedColumns = newSelectedColumns;
+        Generate();
+    }
+
+    private void RemoveTable(string tableName)
+    {
+        SelectedColumns.RemoveAll(c => c.StartsWith(tableName + "."));
         Generate();
     }
 
