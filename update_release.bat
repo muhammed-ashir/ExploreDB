@@ -4,12 +4,12 @@ echo Preparing Release Version...
 echo ==============================================
 
 echo 1. Stopping any running instances of DbExplore...
-taskkill /IM DbExplore.exe /F /FI "STATUS eq RUNNING" >nul 2>&1
-timeout /t 1 >nul
+taskkill /IM DbExplore.exe /F /T >nul 2>&1
+timeout /t 2 >nul
 
 echo 2. Cleaning old release files...
-if exist "App\ReleaseVersion" rmdir /s /q "App\ReleaseVersion"
-mkdir "App\ReleaseVersion"
+if exist "App\ReleaseVersion" rmdir /s /q "App\ReleaseVersion" >nul 2>&1
+mkdir "App\ReleaseVersion" >nul 2>&1
 
 echo 3. Copying new publish files...
 :: Note: Adjust the source path below if your bin folder is inside a DbExplore subfolder
