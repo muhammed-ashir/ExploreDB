@@ -61,6 +61,10 @@
    ```bash
    dotnet publish -f net8.0-windows10.0.19041.0 -c Release
    ```
+   For Release creation use the update_release.bat script.
+   ```bash
+   ./update_release.bat
+   ```
 3. **Find** the portable zip at:
    ```
    App\DbExplore-portable.zip
