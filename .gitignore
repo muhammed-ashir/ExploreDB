@@ -183,6 +183,7 @@ BundleArtifacts/
 !publish.bat
 !build_installer.bat
 !trust_certificate.bat
+!update_release.bat
 
 # Local settings
 settings.json
@@ -196,3 +197,4 @@ status.txt
 
 App/*
 !App/.gitkeep
+!App/ReleaseVersion/
