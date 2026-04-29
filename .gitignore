@@ -197,4 +197,3 @@ status.txt
 
 App/*
 !App/.gitkeep
-!App/ReleaseVersion/
