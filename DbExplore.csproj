@@ -32,6 +32,10 @@
       <MauiAsset Include="wwwroot\**" />
     </ItemGroup>
 
+    <ItemGroup>
+        <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
     <Target Name="ZipPublishOutput" AfterTargets="Publish">
         <PropertyGroup>
             <ZipDest>$(MSBuildProjectDirectory)\App\DbExplore-portable.zip</ZipDest>

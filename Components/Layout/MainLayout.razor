@@ -51,7 +51,10 @@
 
                             <!-- Right: Connection Form -->
                             <div class="col-md-7 p-4">
-                                <h6 class="fw-bold mb-3 text-info">Connection Details</h6>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="fw-bold mb-0 text-info">Connection Details</h6>
+                                    <button class="btn btn-sm btn-outline-info py-0 px-2" @onclick="NewConnection">➕ New</button>
+                                </div>
                                 
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Connection Name</label>
@@ -94,7 +97,7 @@
                     <button class="btn btn-sm btn-outline-secondary text-white border-0 me-3" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
                         <span style="font-size: 1.2rem; line-height: 1;">☰</span>
                     </button>
-                    <span class="fw-bold text-muted small">DbExplore Workspace</span>
+                    <span class="fw-bold text-muted small">@GetWorkspaceTitle()</span>
                 </div>
                 <div class="app-shell-content flex-grow-1">
                     @Body
@@ -112,6 +115,29 @@
     private string ActiveConnId = "";
     private string ErrorMsg = "";
     private bool SidebarCollapsed = false;
+
+    private string GetWorkspaceTitle()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(ConnectionService.ConnectionString))
+                return "DbExplore Workspace";
+
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+            var dbName = builder.InitialCatalog;
+            
+            if (!string.IsNullOrEmpty(dbName))
+            {
+                var serverName = builder.DataSource;
+                if (!string.IsNullOrEmpty(serverName))
+                    return $"{serverName} ➔ {dbName}";
+                return dbName;
+            }
+        }
+        catch { }
+
+        return string.IsNullOrWhiteSpace(ConnName) ? "DbExplore Workspace" : ConnName;
+    }
 
     private string _searchConn = "";
     private string SearchConn
@@ -167,6 +193,13 @@
             ConnString = "";
         }
         if (ConnPage > ConnTotalPages) ConnPage = ConnTotalPages;
+    }
+
+    private void NewConnection()
+    {
+        ActiveConnId = "";
+        ConnName = "";
+        ConnString = "";
     }
 
     private void SaveCurrentConnection()

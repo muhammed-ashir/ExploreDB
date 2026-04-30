@@ -214,7 +214,12 @@
         lines.AppendLine($"-- Scratchpad for {Sp.FullName}");
         foreach (var p in Sp.Parameters)
         {
-            lines.AppendLine($"DECLARE {p.Name} {p.DisplayType} = NULL;");
+            string defaultValue = "NULL";
+            if (p.HasDefault && p.DefaultValue != null)
+            {
+                defaultValue = p.DefaultValue;
+            }
+            lines.AppendLine($"DECLARE {p.Name} {p.DisplayType} = {defaultValue};");
         }
         lines.AppendLine();
         lines.AppendLine("-- Procedure Body:");

@@ -19,7 +19,7 @@
         <!-- Column Picker -->
         <div class="col-md-4 d-flex flex-column gap-4">
             <div class="card bg-dark border-secondary shadow-sm d-flex flex-column" style="flex: 1; min-height: 0;">
-                <div class="card-header border-secondary p-2" style="position: sticky; top: 0; z-index: 20; background: inherit;">
+                <div class="card-header border-secondary p-2" style="position: sticky; top: 0; z-index: 30; background: inherit;">
                     <div class="row g-2">
                         <div class="col-12 d-flex gap-2 position-relative">
                             <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" 
@@ -417,7 +417,7 @@
         StateHasChanged();
     }
 
-    private string CopyLabel = "📋 Copy";
+    private string CopyLabel = "Copy";
 
     private void RunInRunner()
     {
@@ -431,7 +431,7 @@
         CopyLabel = "Copied! ✓";
         StateHasChanged();
         await Task.Delay(1500);
-        CopyLabel = "📋 Copy";
+        CopyLabel = "Copy";
         StateHasChanged();
     }
 

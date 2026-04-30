@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using DbExplore.Services;
+using Microsoft.Extensions.Configuration;
+using System.IO;
 
 namespace DbExplore;
 
@@ -21,6 +23,12 @@ public static class MauiProgram
 		builder.Services.AddBlazorWebViewDeveloperTools();
 		builder.Logging.AddDebug();
 #endif
+
+        var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+        if (File.Exists(configPath))
+        {
+            builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: true);
+        }
 
         builder.Services.AddSingleton<ConnectionService>();
         builder.Services.AddSingleton<SchemaService>();

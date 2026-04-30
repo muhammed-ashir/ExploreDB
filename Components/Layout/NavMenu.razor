@@ -53,6 +53,11 @@
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsTricksActive ? "active" : "")">
                 <span>DB Tricks & Tips</span>
             </a>
+
+            <a href="advanced"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsAdvancedSqlActive ? "active" : "")">
+                <span>Advanced SQL Guide</span>
+            </a>
         </div>
     </div>
 </div>
@@ -67,6 +72,7 @@
     private bool IsViewExplorerActive => CurrentUrl.Contains("/views") && !CurrentUrl.Contains("/view/");
     private bool IsSpExplorerActive => CurrentUrl.Contains("/procs") || CurrentUrl.Contains("/proc/");
     private bool IsTricksActive => CurrentUrl.Contains("/tricks");
+    private bool IsAdvancedSqlActive => CurrentUrl.Contains("/advanced");
 
     protected override void OnInitialized()
     {

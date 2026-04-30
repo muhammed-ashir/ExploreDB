@@ -3,9 +3,11 @@
 @using Dapper
 @using Microsoft.Data.SqlClient
 @using System.Data
+@using Microsoft.Extensions.Configuration
 @inject SchemaService SchemaService
 @inject ConnectionService ConnectionService
 @inject QueryStateService QueryStateService
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject IJSRuntime JS
 
 <div class="container-fluid">
@@ -345,6 +347,30 @@
                     ResultTab = "Messages";
                     return;
                 }
+
+                var q = QueryStateService.CustomQuery.TrimStart();
+                bool isSelectOrWith = q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
+                                      q.StartsWith("with", StringComparison.OrdinalIgnoreCase);
+
+                if (!isSelectOrWith)
+                {
+                    bool allowNonSelect = Config.GetValue<bool>("AllowNonSelectQueries", false);
+                    if (!allowNonSelect)
+                    {
+                        Messages.Add("Error: Execution of non-SELECT statements is disabled.");
+                        ResultTab = "Messages";
+                        return;
+                    }
+
+                    bool confirm = await JS.InvokeAsync<bool>("confirm", "⚠️ WARNING: This query may modify data or schema.\n\nAre you sure you want to execute it?");
+                    if (!confirm)
+                    {
+                        Messages.Add("Execution cancelled by user.");
+                        ResultTab = "Messages";
+                        return;
+                    }
+                }
+
                 var rs = await conn.QueryAsync<dynamic>(QueryStateService.CustomQuery);
                 ResultSets.Add(rs);
                 Messages.Add("Executed custom query.");
