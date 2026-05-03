@@ -129,9 +129,11 @@
                             {
                                 var table = group.Key;
                                 <div class="border border-secondary rounded p-3" style="background-color: #1a1d20;">
-                                    <div class="text-info fw-bold mb-3 d-flex justify-content-between align-items-center pb-2 border-bottom border-secondary">
-                                        <span style="font-size: 1.1rem;">@table</span>
-                                        <button class="btn btn-sm btn-outline-danger py-0 px-2" 
+                                    <div class="text-info fw-bold mb-3 d-flex justify-content-between align-items-start pb-2 border-bottom border-secondary gap-2">
+                                        <div style="flex: 1; min-width: 0;">
+                                            <span class="text-break" style="font-size: 1.1rem; word-break: break-all;">@table</span>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-danger py-0 px-2 flex-shrink-0" 
                                                 title="Remove Table"
                                                 @onclick="() => RemoveTable(table)">
                                             Remove
@@ -141,9 +143,9 @@
                                         @foreach (var key in group)
                                         {
                                             var col = key.Substring(key.LastIndexOf('.') + 1);
-                                            <span class="badge bg-secondary d-flex align-items-center gap-2 p-2 border border-secondary" style="font-size: 0.9rem;">
-                                                @col
-                                                <button type="button" class="btn-close btn-close-white" style="font-size: 0.5rem;" aria-label="Remove"
+                                            <span class="badge bg-secondary d-flex align-items-center gap-2 p-2 border border-secondary text-wrap text-break text-start" style="font-size: 0.9rem; max-width: 100%;">
+                                                <span class="flex-grow-1">@col</span>
+                                                <button type="button" class="btn-close btn-close-white flex-shrink-0" style="font-size: 0.5rem;" aria-label="Remove"
                                                         @onclick="() => ToggleColumn(key, table, false)"></button>
                                             </span>
                                         }
