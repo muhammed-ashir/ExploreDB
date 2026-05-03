@@ -9,7 +9,7 @@ public sealed class PathfinderService
         _schemaService = schemaService;
     }
 
-    public PathfinderQueryResult GenerateQuery(List<string> selectedTableNames, List<string> selectedColumns)
+    public PathfinderQueryResult GenerateQuery(List<string> selectedTableNames, List<string> selectedColumns, IReadOnlySet<string>? ignoredRoutingTables = null)
     {
         if (selectedTableNames.Count == 0)
         {
@@ -19,12 +19,13 @@ public sealed class PathfinderService
             };
         }
 
-        var joinPlan = GenerateJoinPlan(selectedTableNames);
+        var joinPlan = GenerateJoinPlan(selectedTableNames, ignoredRoutingTables: ignoredRoutingTables);
         if (!string.IsNullOrWhiteSpace(joinPlan.ErrorMessage))
         {
             return new PathfinderQueryResult
             {
-                Sql = $"-- {joinPlan.ErrorMessage}"
+                Sql = $"-- {joinPlan.ErrorMessage}",
+                JoinPlan = joinPlan
             };
         }
 
@@ -32,7 +33,8 @@ public sealed class PathfinderService
         {
             return new PathfinderQueryResult
             {
-                Sql = $"-- Could not connect these tables automatically: {string.Join(", ", joinPlan.UnreachableTables.Select(FormatShortName))}."
+                Sql = $"-- Could not connect these tables automatically: {string.Join(", ", joinPlan.UnreachableTables.Select(FormatShortName))}.",
+                JoinPlan = joinPlan
             };
         }
 
@@ -46,7 +48,8 @@ public sealed class PathfinderService
         {
             return new PathfinderQueryResult
             {
-                Sql = "-- Select columns on the left to generate a query."
+                Sql = "-- Select columns on the left to generate a query.",
+                JoinPlan = joinPlan
             };
         }
 
@@ -60,7 +63,8 @@ public sealed class PathfinderService
         {
             return new PathfinderQueryResult
             {
-                Sql = $"-- Could not resolve aliases for these tables: {string.Join(", ", missingAliases.Select(FormatShortName))}."
+                Sql = $"-- Could not resolve aliases for these tables: {string.Join(", ", missingAliases.Select(FormatShortName))}.",
+                JoinPlan = joinPlan
             };
         }
 
@@ -92,7 +96,8 @@ public sealed class PathfinderService
         return new PathfinderQueryResult
         {
             Sql = sql,
-            HasOneToMany = joinPlan.HasOneToMany
+            HasOneToMany = joinPlan.HasOneToMany,
+            JoinPlan = joinPlan
         };
     }
 
@@ -102,7 +107,8 @@ public sealed class PathfinderService
         {
             return new PathfinderQueryResult
             {
-                Sql = $"-- {joinPlan.ErrorMessage}"
+                Sql = $"-- {joinPlan.ErrorMessage}",
+                JoinPlan = joinPlan
             };
         }
 
@@ -110,7 +116,8 @@ public sealed class PathfinderService
         {
             return new PathfinderQueryResult
             {
-                Sql = $"-- Could not connect these tables automatically: {string.Join(", ", joinPlan.UnreachableTables.Select(FormatShortName))}."
+                Sql = $"-- Could not connect these tables automatically: {string.Join(", ", joinPlan.UnreachableTables.Select(FormatShortName))}.",
+                JoinPlan = joinPlan
             };
         }
 
@@ -168,7 +175,8 @@ public sealed class PathfinderService
         return new PathfinderQueryResult
         {
             Sql = sql,
-            HasOneToMany = joinPlan.HasOneToMany
+            HasOneToMany = joinPlan.HasOneToMany,
+            JoinPlan = joinPlan
         };
     }
 
@@ -178,7 +186,8 @@ public sealed class PathfinderService
         {
             return new PathfinderQueryResult
             {
-                Sql = $"-- {joinPlan.ErrorMessage}"
+                Sql = $"-- {joinPlan.ErrorMessage}",
+                JoinPlan = joinPlan
             };
         }
 
@@ -186,7 +195,8 @@ public sealed class PathfinderService
         {
             return new PathfinderQueryResult
             {
-                Sql = $"-- Could not connect these tables automatically: {string.Join(", ", joinPlan.UnreachableTables.Select(FormatShortName))}."
+                Sql = $"-- Could not connect these tables automatically: {string.Join(", ", joinPlan.UnreachableTables.Select(FormatShortName))}.",
+                JoinPlan = joinPlan
             };
         }
 
@@ -210,7 +220,8 @@ public sealed class PathfinderService
         return new PathfinderQueryResult
         {
             Sql = sql,
-            HasOneToMany = joinPlan.HasOneToMany
+            HasOneToMany = joinPlan.HasOneToMany,
+            JoinPlan = joinPlan
         };
     }
 
@@ -218,7 +229,8 @@ public sealed class PathfinderService
         IReadOnlyList<string> selectedTableNames,
         string? rootTable = null,
         string rootAlias = "t0",
-        string joinedAliasPrefix = "j")
+        string joinedAliasPrefix = "j",
+        IReadOnlySet<string>? ignoredRoutingTables = null)
     {
         if (_schemaService.Tables.Count == 0)
         {
@@ -264,7 +276,7 @@ public sealed class PathfinderService
 
         foreach (var target in targets)
         {
-            var path = FindShortestPath(adjacency, resolvedRoot, target);
+            var path = FindShortestPath(adjacency, resolvedRoot, target, ignoredRoutingTables);
             if (path == null)
             {
                 unreachableTables.Add(target);
@@ -372,7 +384,8 @@ public sealed class PathfinderService
     private static List<GraphEdge>? FindShortestPath(
         IReadOnlyDictionary<string, List<GraphEdge>> adjacency,
         string rootTable,
-        string targetTable)
+        string targetTable,
+        IReadOnlySet<string>? ignoredRoutingTables)
     {
         if (string.Equals(rootTable, targetTable, StringComparison.OrdinalIgnoreCase))
         {
@@ -406,6 +419,13 @@ public sealed class PathfinderService
 
             foreach (var edge in edges)
             {
+                if (ignoredRoutingTables != null && 
+                    ignoredRoutingTables.Contains(edge.TargetTable) && 
+                    !string.Equals(edge.TargetTable, targetTable, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var nextDistance = currentDistance + edge.Weight;
                 if (distances.TryGetValue(edge.TargetTable, out var knownDistance) && nextDistance >= knownDistance)
                 {
@@ -513,6 +533,7 @@ public sealed class PathfinderQueryResult
 {
     public string Sql { get; init; } = string.Empty;
     public bool HasOneToMany { get; init; }
+    public PathfinderJoinPlan? JoinPlan { get; init; }
 }
 
 public sealed class PathfinderJoinPlan
