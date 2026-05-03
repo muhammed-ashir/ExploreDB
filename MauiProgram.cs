@@ -34,6 +34,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<SchemaService>();
         builder.Services.AddSingleton<PathfinderService>();
         builder.Services.AddSingleton<QueryStateService>();
+        builder.Services.AddSingleton<DataCompareService>();
 
 		return builder.Build();
 	}
