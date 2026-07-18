@@ -1,4 +1,4 @@
-namespace DbExplore;
+namespace ExploreDB;
 
 public partial class App : Application
 {

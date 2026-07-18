@@ -121,7 +121,7 @@
         try
         {
             if (string.IsNullOrWhiteSpace(ConnectionService.ConnectionString))
-                return "DbExplore Workspace";
+                return "ExploreDB Workspace";
 
             var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
             var dbName = builder.InitialCatalog;
@@ -136,7 +136,7 @@
         }
         catch { }
 
-        return string.IsNullOrWhiteSpace(ConnName) ? "DbExplore Workspace" : ConnName;
+        return string.IsNullOrWhiteSpace(ConnName) ? "ExploreDB Workspace" : ConnName;
     }
 
     private string _searchConn = "";

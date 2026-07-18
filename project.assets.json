@@ -7148,11 +7148,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\apps\\DbExplore\\DbExplore.csproj",
-      "projectName": "DbExplore",
-      "projectPath": "D:\\apps\\DbExplore\\DbExplore.csproj",
+      "projectUniqueName": "D:\\apps\\ExploreDB\\ExploreDB.csproj",
+      "projectName": "ExploreDB",
+      "projectPath": "D:\\apps\\ExploreDB\\ExploreDB.csproj",
       "packagesPath": "C:\\Users\\muham\\.nuget\\packages\\",
-      "outputPath": "D:\\apps\\DbExplore\\obj\\",
+      "outputPath": "D:\\apps\\ExploreDB\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

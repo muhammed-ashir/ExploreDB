@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 
-namespace DbExplore.Services;
+namespace ExploreDB.Services;
 
 public class ConnectionService
 {

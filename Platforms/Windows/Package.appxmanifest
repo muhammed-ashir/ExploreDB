@@ -6,13 +6,13 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="DbExplore.App"
-    Publisher="CN=DbExplore"
+    Name="ExploreDB.App"
+    Publisher="CN=ExploreDB"
     Version="1.0.0.0" />
 
   <Properties>
-    <DisplayName>DbExplore</DisplayName>
-    <PublisherDisplayName>DbExplore</PublisherDisplayName>
+    <DisplayName>ExploreDB</DisplayName>
+    <PublisherDisplayName>ExploreDB</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
   </Properties>
 
@@ -30,8 +30,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="DbExplore"
-        Description="DbExplore"
+        DisplayName="ExploreDB"
+        Description="ExploreDB"
         BackgroundColor="transparent"
         Square150x150Logo="Images\Square150x150Logo.png"
         Square44x44Logo="Images\Square44x44Logo.png">

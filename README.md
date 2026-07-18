@@ -1,6 +1,6 @@
-# DbExplore 🚀
+# ExploreDB 🚀
 
-DbExplore is a powerful, modern database exploration and querying tool built with .NET 8 MAUI Blazor Hybrid. It connects directly to SQL Server databases and provides an intuitive, glassmorphic UI to navigate, analyze, and query your data.
+ExploreDB is a powerful, modern database exploration and querying tool built with .NET 8 MAUI Blazor Hybrid. It connects directly to SQL Server databases and provides an intuitive, glassmorphic UI to navigate, analyze, and query your data.
 
 ---
 
@@ -35,12 +35,12 @@ DbExplore is a powerful, modern database exploration and querying tool built wit
 
 ## 📦 Installation Guide
 
-Since DbExplore is distributed as an **MSIX Package** signed with a custom development certificate, installing it on a new computer requires a quick one-time trust setup.
+Since ExploreDB is distributed as an **MSIX Package** signed with a custom development certificate, installing it on a new computer requires a quick one-time trust setup.
 
-When sharing DbExplore with a colleague or deploying it to another PC, you must provide them with a zip folder containing **three files**:
+When sharing ExploreDB with a colleague or deploying it to another PC, you must provide them with a zip folder containing **three files**:
 
-1. **`DbExplore_1.0.0.0_x64.msix`** (The application installer)
-2. **`DbExplore.pfx`** (The digital certificate)
+1. **`ExploreDB_1.0.0.0_x64.msix`** (The application installer)
+2. **`ExploreDB.pfx`** (The digital certificate)
 3. **`trust_certificate.bat`** (A helper script to install the certificate)
 
 ### **Installation Steps for End Users**
@@ -55,7 +55,7 @@ When sharing DbExplore with a colleague or deploying it to another PC, you must 
    - *Note: This tells Windows to trust our custom digital signature so the app can be installed safely.*
 
    **If the script fails, you can install the certificate manually:**
-   - Double-click the **`DbExplore.pfx`** file.
+   - Double-click the **`ExploreDB.pfx`** file.
    - On the very first screen, select **Local Machine** (instead of Current User) and click Next.
    - Click **"Yes"** on the Windows User Account Control (UAC) prompt that asks for permission.
    - Click Next on the file path screen.
@@ -64,13 +64,13 @@ When sharing DbExplore with a colleague or deploying it to another PC, you must 
    - Select **Trusted Root Certification Authorities** and click OK, then Next, then Finish.
 
 2. **Install the Application**:
-   - Double-click the **`DbExplore_1.0.0.0_x64.msix`** file.
+   - Double-click the **`ExploreDB_1.0.0.0_x64.msix`** file.
    - A Windows App Installer window will appear.
    - Click the **"Install"** button.
    - The app will install and automatically launch!
 
 3. **Launch**:
-   - For future uses, simply search for "DbExplore" in the Windows Start Menu.
+   - For future uses, simply search for "ExploreDB" in the Windows Start Menu.
 
 ---
 
@@ -87,8 +87,8 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/DbExplore.git
-   cd DbExplore
+   git clone https://github.com/YOUR_USERNAME/ExploreDB.git
+   cd ExploreDB
    ```
 
 2. **Run the Automated Build Script (Recommended)**:
@@ -97,7 +97,7 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
    This script will automatically:
    - Clean the project.
    - Build the MSIX package natively for `win-x64`.
-   - Digitally sign the installer using the local Windows SDK `signtool.exe` and `DbExplore.pfx`.
+   - Digitally sign the installer using the local Windows SDK `signtool.exe` and `ExploreDB.pfx`.
    - Print out the exact location of the freshly built and signed `.msix` file.
 
 ### **Manual Build & Sign (Fallback)**
@@ -106,13 +106,13 @@ If the automated script fails, you can perform the steps manually in a terminal:
 
 1. **Build and Publish**:
    ```bash
-   dotnet publish DbExplore.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64
+   dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64
    ```
 
 2. **Sign the Package**:
    Locate your Windows SDK `signtool.exe` (usually in `C:\Users\<User>\.nuget\packages\microsoft.windows.sdk.buildtools\...\signtool.exe` or `C:\Program Files (x86)\Windows Kits\10\bin\...\signtool.exe`) and run:
    ```cmd
-   signtool sign /fd SHA256 /a /f "DbExplore.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\DbExplore_1.0.0.0_x64_Test\DbExplore_1.0.0.0_x64.msix"
+   signtool sign /fd SHA256 /a /f "ExploreDB.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
    ```
 
 ---

@@ -204,7 +204,7 @@ temp_msix*/
 .agents/
 
 
-!DbExplore.pfx
+!ExploreDB.pfx
 
 
 # Ignore distribution folder

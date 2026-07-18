@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
-using DbExplore.Services;
+using ExploreDB.Services;
 using Microsoft.Extensions.Configuration;
 using System.IO;
 
-namespace DbExplore;
+namespace ExploreDB;
 
 public static class MauiProgram
 {
@@ -38,7 +38,7 @@ public static class MauiProgram
 
 			return builder.Build();
 		} catch (Exception ex) {
-			File.WriteAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "DbExploreCrash.txt"), ex.ToString());
+			File.WriteAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ExploreDBCrash.txt"), ex.ToString());
 			throw;
 		}
 	}

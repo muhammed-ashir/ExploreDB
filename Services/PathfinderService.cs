@@ -1,4 +1,4 @@
-namespace DbExplore.Services;
+namespace ExploreDB.Services;
 
 public sealed class PathfinderService
 {

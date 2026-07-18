@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 echo ========================================
-echo   DbExplore MSIX Installer Builder
+echo   ExploreDB MSIX Installer Builder
 echo ========================================
 echo.
 
@@ -12,7 +12,7 @@ dotnet clean -c Release
 REM Step 2: Build MSIX package
 echo.
 echo [2/3] Building MSIX package (win-x64)...
-dotnet publish DbExplore.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false
+dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false
 
 REM Step 3: Sign the generated MSIX
 echo.
@@ -21,13 +21,13 @@ set SIGNTOOL="C:\Users\muham\.nuget\packages\microsoft.windows.sdk.buildtools\10
 
 for /r "bin\x64\Release\" %%f in (*.msix) do (
     echo Signing: %%f
-    %SIGNTOOL% sign /fd SHA256 /a /f "DbExplore.pfx" /p "password" "%%f"
+    %SIGNTOOL% sign /fd SHA256 /a /f "ExploreDB.pfx" /p "password" "%%f"
     
     echo.
     echo [4/4] Packaging files into App folder...
     if not exist "App" mkdir "App"
     copy /Y "%%f" "App\"
-    copy /Y "DbExplore.pfx" "App\"
+    copy /Y "ExploreDB.pfx" "App\"
     copy /Y "trust_certificate.bat" "App\"
 
     echo.
