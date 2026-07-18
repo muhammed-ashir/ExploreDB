@@ -203,3 +203,6 @@ temp_msix*/
 *.zip
 .agents/
 
+
+!DbExplore.pfx
+
