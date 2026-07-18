@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 echo ========================================
 echo   DbExplore MSIX Installer Builder
 echo ========================================
@@ -11,7 +12,7 @@ dotnet clean -c Release
 REM Step 2: Build MSIX package
 echo.
 echo [2/3] Building MSIX package (win-x64)...
-dotnet publish DbExplore.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64
+dotnet publish DbExplore.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false
 
 REM Step 3: Sign the generated MSIX
 echo.
@@ -37,7 +38,7 @@ for /r "bin\x64\Release\" %%f in (*.msix) do (
     echo.
     echo To install on this or another computer:
     echo 1. Zip the "App" folder and share it.
-    echo 2. Run trust_certificate.bat as Administrator (first time only)
+    echo 2. Run trust_certificate.bat as Administrator - first time only
     echo 3. Double-click the .msix file to install
     echo.
     goto :end
