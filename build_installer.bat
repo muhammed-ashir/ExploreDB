@@ -29,6 +29,7 @@ for /r "bin\x64\Release\" %%f in (*.msix) do (
     copy /Y "%%f" "App\"
     copy /Y "ExploreDB.pfx" "App\"
     copy /Y "trust_certificate.bat" "App\"
+    copy /Y "ExploreDB.appinstaller" "App\"
 
     echo.
     echo ========================================

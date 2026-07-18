@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller
+    Uri="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller"
+    Version="1.0.0.0"
+    xmlns="http://schemas.microsoft.com/appx/appinstaller/2018">
+
+    <MainPackage
+        Name="ExploreDB"
+        Publisher="CN=ExploreDB"
+        Version="1.0.0.0"
+        ProcessorArchitecture="x64"
+        Uri="https://github.com/zerinapps/ExploreDB-Releases/releases/download/v1.0.0.0/ExploreDB_1.0.0.0_x64.msix" />
+
+    <UpdateSettings>
+        <OnLaunch HoursBetweenUpdateChecks="0" ShowPrompt="true" UpdateBlocksActivation="false" />
+    </UpdateSettings>
+</AppInstaller>
