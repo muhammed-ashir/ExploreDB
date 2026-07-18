@@ -197,3 +197,9 @@ status.txt
 
 App/*
 !App/.gitkeep
+# Custom additions to ignore unwanted files
+*.log
+temp_msix*/
+*.zip
+.agents/
+

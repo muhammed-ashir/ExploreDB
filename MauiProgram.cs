@@ -9,9 +9,10 @@ public static class MauiProgram
 {
 	public static MauiApp CreateMauiApp()
 	{
-		var builder = MauiApp.CreateBuilder();
-		builder
-			.UseMauiApp<App>()
+		try {
+			var builder = MauiApp.CreateBuilder();
+			builder
+				.UseMauiApp<App>()
 			.ConfigureFonts(fonts =>
 			{
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -34,8 +35,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<SchemaService>();
         builder.Services.AddSingleton<PathfinderService>();
         builder.Services.AddSingleton<QueryStateService>();
-        builder.Services.AddSingleton<DataCompareService>();
 
-		return builder.Build();
+			return builder.Build();
+		} catch (Exception ex) {
+			File.WriteAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "DbExploreCrash.txt"), ex.ToString());
+			throw;
+		}
 	}
 }

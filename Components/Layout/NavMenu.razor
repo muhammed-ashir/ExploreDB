@@ -41,15 +41,6 @@
             </a>
 
             <div class="px-3 pt-4 pb-2 text-uppercase small fw-bold" style="color: #6c757d; letter-spacing: 0.08em;">
-                Tools
-            </div>
-
-            <a href="compare"
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsDataCompareActive ? "active" : "")">
-                <span>Data Compare</span>
-            </a>
-
-            <div class="px-3 pt-4 pb-2 text-uppercase small fw-bold" style="color: #6c757d; letter-spacing: 0.08em;">
                 Learning
             </div>
 
@@ -80,7 +71,6 @@
     private bool IsExplorerActive => CurrentUrl.Contains("/explorer");
     private bool IsViewExplorerActive => CurrentUrl.Contains("/views") && !CurrentUrl.Contains("/view/");
     private bool IsSpExplorerActive => CurrentUrl.Contains("/procs") || CurrentUrl.Contains("/proc/");
-    private bool IsDataCompareActive => CurrentUrl.Contains("/compare");
     private bool IsTricksActive => CurrentUrl.Contains("/tricks");
     private bool IsAdvancedSqlActive => CurrentUrl.Contains("/advanced");
 

@@ -11,10 +11,16 @@
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
-        <!-- Properties for Unpackaged Exe -->
-        <WindowsPackageType>None</WindowsPackageType>
-        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-        <SelfContained>true</SelfContained>
+        <WindowsPackageType>MSIX</WindowsPackageType>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <Platforms>AnyCPU;x64</Platforms>
+        <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+        <GenerateTestAppPackage>true</GenerateTestAppPackage>
+        <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+        <ApplicationVersion>7</ApplicationVersion>
+        <ApplicationDisplayVersion>1.0.1</ApplicationDisplayVersion>
+        <Version>1.0.1</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
     </PropertyGroup>
@@ -23,6 +29,7 @@
         <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.7" />
         <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="8.0.7" />
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.7" />
+        <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.0.5.1" />
         <PackageReference Include="Dapper" Version="2.1.28" />
         <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.0" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.0" />
@@ -34,15 +41,12 @@
 
     <ItemGroup>
         <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Platforms\Windows\Images\**">
+            <Link>Images\%(RecursiveDir)%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
-    <Target Name="ZipPublishOutput" AfterTargets="Publish">
-        <PropertyGroup>
-            <ZipDest>$(MSBuildProjectDirectory)\App\DbExplore-portable.zip</ZipDest>
-        </PropertyGroup>
-        <Message Text="📦 Zipping publish output to $(ZipDest)..." Importance="high" />
-        <Exec Command="powershell -Command &quot;if (!(Test-Path '$(MSBuildProjectDirectory)\App')) { New-Item -ItemType Directory -Force -Path '$(MSBuildProjectDirectory)\App' | Out-Null }; if (Test-Path '$(ZipDest)') { Remove-Item '$(ZipDest)' }; Compress-Archive -Path (Get-ChildItem -Path '$(PublishDir.TrimEnd('\'))').FullName -DestinationPath '$(ZipDest)' -Force&quot;" />
-        <Message Text="✅ Zip created: $(ZipDest)" Importance="high" />
-    </Target>
+
 
 </Project>
