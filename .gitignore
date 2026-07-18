@@ -206,3 +206,6 @@ temp_msix*/
 
 !DbExplore.pfx
 
+
+# Ignore distribution folder
+App/
