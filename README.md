@@ -33,7 +33,7 @@ DbExplore is a powerful, modern database exploration and querying tool built wit
 
 ---
 
-## 📦 Installation Guide (For Other Computers)
+## 📦 Installation Guide
 
 Since DbExplore is distributed as an **MSIX Package** signed with a custom development certificate, installing it on a new computer requires a quick one-time trust setup.
 
@@ -44,6 +44,8 @@ When sharing DbExplore with a colleague or deploying it to another PC, you must 
 3. **`trust_certificate.bat`** (A helper script to install the certificate)
 
 ### **Installation Steps for End Users**
+
+**Prerequisites**: Because this app is heavily optimized for a small file size (under 20 MB), it requires the **[.NET 8.0 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)** to be installed on the computer first. If you don't have it, the app will not launch.
 
 1. **Trust the Certificate (One-Time Setup)**:
    - Extract the zip folder on the new computer.
