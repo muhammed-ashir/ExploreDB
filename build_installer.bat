@@ -23,13 +23,20 @@ for /r "bin\x64\Release\" %%f in (*.msix) do (
     %SIGNTOOL% sign /fd SHA256 /a /f "DbExplore.pfx" /p "password" "%%f"
     
     echo.
+    echo [4/4] Packaging files into App folder...
+    if not exist "App" mkdir "App"
+    copy /Y "%%f" "App\"
+    copy /Y "DbExplore.pfx" "App\"
+    copy /Y "trust_certificate.bat" "App\"
+
+    echo.
     echo ========================================
-    echo SUCCESS! Installer created and signed at:
-    echo %%f
+    echo SUCCESS! Distribution folder created at:
+    echo %CD%\App
     echo ========================================
     echo.
     echo To install on this or another computer:
-    echo 1. Give the user this .msix file, DbExplore.pfx, and trust_certificate.bat
+    echo 1. Zip the "App" folder and share it.
     echo 2. Run trust_certificate.bat as Administrator (first time only)
     echo 3. Double-click the .msix file to install
     echo.

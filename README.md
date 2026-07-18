@@ -52,6 +52,15 @@ When sharing DbExplore with a colleague or deploying it to another PC, you must 
    - Enter the password: `password` (and press Enter).
    - *Note: This tells Windows to trust our custom digital signature so the app can be installed safely.*
 
+   **If the script fails, you can install the certificate manually:**
+   - Double-click the **`DbExplore.pfx`** file.
+   - On the very first screen, select **Local Machine** (instead of Current User) and click Next.
+   - Click **"Yes"** on the Windows User Account Control (UAC) prompt that asks for permission.
+   - Click Next on the file path screen.
+   - Type `password` for the password and click Next.
+   - Choose **"Place all certificates in the following store"** and click **Browse**.
+   - Select **Trusted Root Certification Authorities** and click OK, then Next, then Finish.
+
 2. **Install the Application**:
    - Double-click the **`DbExplore_1.0.0.0_x64.msix`** file.
    - A Windows App Installer window will appear.
