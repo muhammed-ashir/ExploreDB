@@ -36,8 +36,9 @@ ExploreDB is a powerful, modern database exploration and querying tool built wit
 ## 📦 Installation Guide
 
 **🔗 Links to share with your team:** 
-- **Step 1 (Certificates)**: [https://github.com/zerinapps/ExploreDB-Releases/releases](https://github.com/zerinapps/ExploreDB-Releases/releases)
-- **Step 2 (App Installer)**: [https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller)
+*(Note: Your teammates only need to do Step 1 if this is their very first time installing it!)*
+- **Step 1 (Certificates)**: Download both [ExploreDB.pfx](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.pfx) and [trust_certificate.bat](https://zerinapps.github.io/ExploreDB-Releases/trust_certificate.bat)
+- **Step 2 (App Installer)**: [Download the App Installer](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller)
 
 ExploreDB is distributed via a web-based **App Installer** which automatically checks for and installs new updates silently in the background every time you open the app!
 
@@ -48,7 +49,7 @@ Because we use a custom development certificate, installing it on a brand new co
 **Prerequisites**: Because this app is heavily optimized for a small file size (under 20 MB), it requires the **[.NET 8.0 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)** to be installed on the computer first.
 
 1. **Trust the Certificate (First Time Only)**:
-   - Download the **`ExploreDB.pfx`** and **`trust_certificate.bat`** files from our [GitHub Releases page](https://github.com/zerinapps/ExploreDB-Releases/releases).
+   - Download the **`ExploreDB.pfx`** and **`trust_certificate.bat`** files from the links above.
    - Right-click on **`trust_certificate.bat`** and select **"Run as Administrator"**.
    - Press **Enter** on your keyboard, then click **Yes** on the prompt to allow the installation.
    - *Note: This tells Windows to trust our custom digital signature so the app can be installed safely.*
@@ -134,10 +135,7 @@ To publish an update to the team, you must upload the freshly built files from y
    - Go to the `ExploreDB-Releases` repository on GitHub.
    - Click **Releases** -> **Draft a new release**.
    - Create a tag that exactly matches your new version (e.g., `v1.0.0.1`).
-   - Drag and drop the following **3 files** from your `App` folder into the "Attach binaries" box:
-     - `ExploreDB_X.X.X.X_x64.msix`
-     - `ExploreDB.pfx`
-     - `trust_certificate.bat`
+   - Drag and drop your compiled **`ExploreDB_X.X.X.X_x64.msix`** file into the "Attach binaries" box.
    - Publish the release.
 
 2. **Trigger the Auto-Update (GitHub Pages)**:
@@ -159,8 +157,8 @@ If the `ExploreDB-Releases` repository ever gets accidentally deleted, the auto-
    - Select the `main` branch and click Save.
 
 3. **Re-upload the Files**:
-   - Go back to the **Code** tab and upload the `ExploreDB.appinstaller` file.
-   - Go to the **Releases** tab, draft a new release (e.g., `v1.0.0.0`), and upload your `.msix`, `.pfx`, and `.bat` files.
+   - Go back to the **Code** tab and upload `ExploreDB.appinstaller`, `ExploreDB.pfx`, and `trust_certificate.bat`.
+   - Go to the **Releases** tab, draft a new release (e.g., `v1.0.0.0`), and upload your `.msix` file.
    
 *(Note: As long as you use the exact same repository name, the URL inside the `.appinstaller` will automatically match and everything will start working again instantly!)*
 
