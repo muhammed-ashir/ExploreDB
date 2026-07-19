@@ -87,13 +87,14 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
    cd ExploreDB
    ```
 
-2. **Bump the Version Numbers**:
-   - `ExploreDB.csproj`: Update the `<Version>` and `<ApplicationVersion>` tags.
-   - `Platforms\Windows\Package.appxmanifest`: Update the `Version="..."` attribute in the `<Identity>` tag.
-   - `ExploreDB.appinstaller`: Update both `Version="..."` attributes AND the URL at the bottom to point to your new GitHub tag (e.g., `.../download/v1.0.0.1/...`).
-
+2. **Publish a Release (Automated)**:
+   If you are ready to publish a new version to GitHub, double-click **`scripts\publish_new_release.bat`**.
+   - It will prompt you for the new version number.
+   - It will automatically inject the new version into all XML files securely.
+   - It will compile and digitally sign the MSIX package automatically.
+   
 3. **Run the Automated Build Script (Recommended)**:
-   Double-click the **`build_installer.bat`** script in the project root.
+   Double-click the **`scripts\build_installer.bat`** script in the project root.
    
    This script will automatically:
    - Clean the project.
@@ -103,9 +104,14 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
 
 ### **Manual Build & Sign (Fallback)**
 
-If the automated script fails, you can perform the steps manually in a terminal:
+If the automated scripts fail, you can perform the steps manually:
 
-1. **Build and Publish**:
+0. **Bump the Version Numbers (Manual)**:
+   - `ExploreDB.csproj`: Update the `<Version>` and `<ApplicationDisplayVersion>` tags.
+   - `Platforms\Windows\Package.appxmanifest`: Update the `Version="..."` attribute in the `<Identity>` tag.
+   - `ExploreDB.appinstaller`: Update both `Version="..."` attributes AND the URL at the bottom to point to your new GitHub tag (e.g., `.../download/v1.0.0.1/...`).
+
+1. **Build and Publish (Terminal)**:
    ```bash
    dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64
    ```
@@ -113,7 +119,7 @@ If the automated script fails, you can perform the steps manually in a terminal:
 2. **Sign the Package**:
    Locate your Windows SDK `signtool.exe` (usually in `C:\Users\<User>\.nuget\packages\microsoft.windows.sdk.buildtools\...\signtool.exe` or `C:\Program Files (x86)\Windows Kits\10\bin\...\signtool.exe`) and run:
    ```cmd
-   signtool sign /fd SHA256 /a /f "ExploreDB.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
+   signtool sign /fd SHA256 /a /f "cert\ExploreDB.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
    ```
 
 ### **Publishing a Release (GitHub Releases & Pages)**
