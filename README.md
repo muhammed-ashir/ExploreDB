@@ -35,23 +35,18 @@ ExploreDB is a powerful, modern database exploration and querying tool built wit
 
 ## 📦 Installation Guide
 
-Since ExploreDB is distributed as an **MSIX Package** signed with a custom development certificate, installing it on a new computer requires a quick one-time trust setup.
+ExploreDB is distributed via a web-based **App Installer** which automatically checks for and installs new updates silently in the background every time you open the app!
 
-When sharing ExploreDB with a colleague or deploying it to another PC, you must provide them with a zip folder containing **three files**:
-
-1. **`ExploreDB_1.0.0.0_x64.msix`** (The application installer)
-2. **`ExploreDB.pfx`** (The digital certificate)
-3. **`trust_certificate.bat`** (A helper script to install the certificate)
+Because we use a custom development certificate, installing it on a brand new computer requires a quick one-time trust setup.
 
 ### **Installation Steps for End Users**
 
-**Prerequisites**: Because this app is heavily optimized for a small file size (under 20 MB), it requires the **[.NET 8.0 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)** to be installed on the computer first. If you don't have it, the app will not launch.
+**Prerequisites**: Because this app is heavily optimized for a small file size (under 20 MB), it requires the **[.NET 8.0 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)** to be installed on the computer first.
 
-1. **Trust the Certificate (One-Time Setup)**:
-   - Extract the zip folder on the new computer.
+1. **Trust the Certificate (First Time Only)**:
+   - Download the **`ExploreDB.pfx`** and **`trust_certificate.bat`** files from our [GitHub Releases page](https://github.com/zerinapps/ExploreDB-Releases/releases).
    - Right-click on **`trust_certificate.bat`** and select **"Run as Administrator"**.
-   - A command prompt will appear and prompt you for a password.
-   - Enter the password: `password` (and press Enter).
+   - Press **Enter** on your keyboard, then click **Yes** on the prompt to allow the installation.
    - *Note: This tells Windows to trust our custom digital signature so the app can be installed safely.*
 
    **If the script fails, you can install the certificate manually:**
@@ -64,13 +59,14 @@ When sharing ExploreDB with a colleague or deploying it to another PC, you must 
    - Select **Trusted Root Certification Authorities** and click OK, then Next, then Finish.
 
 2. **Install the Application**:
-   - Double-click the **`ExploreDB_1.0.0.0_x64.msix`** file.
-   - A Windows App Installer window will appear.
-   - Click the **"Install"** button.
-   - The app will install and automatically launch!
+   - Download the tiny **`ExploreDB.appinstaller`** file from our [GitHub Pages site](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller).
+   - Double-click the downloaded file.
+   - A Windows App Installer window will appear. Click **Install**.
+   - The app will securely download the heavy binaries from our GitHub Releases page and launch!
 
-3. **Launch**:
-   - For future uses, simply search for "ExploreDB" in the Windows Start Menu.
+3. **Launch & Auto-Updates**:
+   - For future uses, simply search for "ExploreDB" in your Windows Start Menu.
+   - The app will automatically keep itself up-to-date!
 
 ---
 
@@ -114,6 +110,48 @@ If the automated script fails, you can perform the steps manually in a terminal:
    ```cmd
    signtool sign /fd SHA256 /a /f "ExploreDB.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
    ```
+
+### **Publishing a Release (GitHub Releases & Pages)**
+
+To publish an update to the team, you need to upload the freshly built files from your `App` folder to the `ExploreDB-Releases` repository.
+
+1. **Publish the Heavy Binaries (GitHub Releases)**:
+   - Go to the `ExploreDB-Releases` repository on GitHub.
+   - Click **Releases** -> **Draft a new release**.
+   - Create a tag that exactly matches your new version (e.g., `v1.0.0.1`).
+   - Drag and drop your compiled **`ExploreDB_X.X.X.X_x64.msix`** file into the "Attach binaries" box.
+   - Publish the release.
+
+2. **Trigger the Auto-Update (GitHub Pages)**:
+   - Go to the **Code** tab of the `ExploreDB-Releases` repository.
+   - Click **Add file** -> **Upload files**.
+   - Drag and drop the updated 1 KB **`ExploreDB.appinstaller`** file to overwrite the old one in the root directory.
+   - Commit the changes. Once GitHub Actions finishes deploying the Pages site, teammates' computers will automatically detect the update on their next launch!
+
+### **Disaster Recovery: Rebuilding the Release Infrastructure**
+
+If the `ExploreDB-Releases` repository ever gets accidentally deleted, the auto-update links will break. Here is exactly how to rebuild the infrastructure from scratch:
+
+1. **Recreate the Repository**:
+   - Go to GitHub and create a new **Public** repository named `ExploreDB-Releases`. (It *must* be public so the Windows installer can access the files without logging in).
+   
+2. **Re-enable GitHub Pages**:
+   - In the new repo, go to **Settings** -> **Pages**.
+   - Under "Build and deployment", set the Source to **Deploy from a branch**.
+   - Select the `main` branch and click Save.
+
+3. **Re-upload the Files**:
+   - Go back to the **Code** tab and upload the `ExploreDB.appinstaller` file.
+   - Go to the **Releases** tab, draft a new release (e.g., `v1.0.0.0`), and upload your `.msix`, `.pfx`, and `.bat` files.
+   
+*(Note: As long as you use the exact same repository name, the URL inside the `.appinstaller` will automatically match and everything will start working again instantly!)*
+
+**What if I have to use a different repository name?**
+If you rebuild the infrastructure using a *different* repository name (e.g., `ExploreDB-Updates`), the hardcoded URLs will break. To fix it:
+1. Open your local `ExploreDB.appinstaller` file.
+2. Update the two `Uri` links inside it to point to your new repository name.
+3. Upload the modified `.appinstaller` to the new repo.
+4. **Crucial Step**: Because the old link is broken, automatic updates will fail. You must tell all your teammates to manually download and run the new `.appinstaller` file one time. This will permanently repoint their computers to your new repository!
 
 ---
 
