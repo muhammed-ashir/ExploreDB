@@ -35,6 +35,10 @@ ExploreDB is a powerful, modern database exploration and querying tool built wit
 
 ## 📦 Installation Guide
 
+**🔗 Links to share with your team:** 
+- **Step 1 (Certificates)**: [https://github.com/zerinapps/ExploreDB-Releases/releases](https://github.com/zerinapps/ExploreDB-Releases/releases)
+- **Step 2 (App Installer)**: [https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller)
+
 ExploreDB is distributed via a web-based **App Installer** which automatically checks for and installs new updates silently in the background every time you open the app!
 
 Because we use a custom development certificate, installing it on a brand new computer requires a quick one-time trust setup.
