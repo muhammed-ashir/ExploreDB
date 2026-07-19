@@ -134,7 +134,10 @@ To publish an update to the team, you must upload the freshly built files from y
    - Go to the `ExploreDB-Releases` repository on GitHub.
    - Click **Releases** -> **Draft a new release**.
    - Create a tag that exactly matches your new version (e.g., `v1.0.0.1`).
-   - Drag and drop your compiled **`ExploreDB_X.X.X.X_x64.msix`** file into the "Attach binaries" box.
+   - Drag and drop the following **3 files** from your `App` folder into the "Attach binaries" box:
+     - `ExploreDB_X.X.X.X_x64.msix`
+     - `ExploreDB.pfx`
+     - `trust_certificate.bat`
    - Publish the release.
 
 2. **Trigger the Auto-Update (GitHub Pages)**:
