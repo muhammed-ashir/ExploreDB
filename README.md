@@ -87,7 +87,12 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
    cd ExploreDB
    ```
 
-2. **Run the Automated Build Script (Recommended)**:
+2. **Bump the Version Numbers**:
+   - `ExploreDB.csproj`: Update the `<Version>` and `<ApplicationVersion>` tags.
+   - `Platforms\Windows\Package.appxmanifest`: Update the `Version="..."` attribute in the `<Identity>` tag.
+   - `ExploreDB.appinstaller`: Update both `Version="..."` attributes AND the URL at the bottom to point to your new GitHub tag (e.g., `.../download/v1.0.0.1/...`).
+
+3. **Run the Automated Build Script (Recommended)**:
    Double-click the **`build_installer.bat`** script in the project root.
    
    This script will automatically:
@@ -113,7 +118,7 @@ If the automated script fails, you can perform the steps manually in a terminal:
 
 ### **Publishing a Release (GitHub Releases & Pages)**
 
-To publish an update to the team, you need to upload the freshly built files from your `App` folder to the `ExploreDB-Releases` repository.
+To publish an update to the team, you must upload the freshly built files from your `App` folder to the `ExploreDB-Releases` repository.
 
 1. **Publish the Heavy Binaries (GitHub Releases)**:
    - Go to the `ExploreDB-Releases` repository on GitHub.
@@ -157,7 +162,7 @@ If you rebuild the infrastructure using a *different* repository name (e.g., `Ex
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel freSe to submit a Pull Request.
 
 ---
 
