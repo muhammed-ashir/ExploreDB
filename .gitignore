@@ -195,17 +195,16 @@ status.txt
 *.cer
 *.p12
 
-App/*
-!App/.gitkeep
+StoreRelease/*
+!StoreRelease/.gitkeep
+
+GitHubRelease/*
+!GitHubRelease/.gitkeep
+
 # Custom additions to ignore unwanted files
 *.log
 temp_msix*/
 *.zip
 .agents/
 
-
 !ExploreDB.pfx
-
-
-# Ignore distribution folder
-App/
