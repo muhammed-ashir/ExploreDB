@@ -35,16 +35,27 @@ ExploreDB is a powerful, modern database exploration and querying tool built wit
 
 ## 📦 Installation Guide
 
+### **Method 1: Microsoft Store (Recommended)**
+ExploreDB is officially available on the Microsoft Store for seamless installation and completely silent background updates!
+1. Open the **Microsoft Store** app on Windows.
+2. Search for **ExploreDB** and click **Install**.
+*(Updates will be handled automatically by Windows!)*
+
+---
+
+### **Method 2: Manual Installation (GitHub Beta / Internal)**
+*(Use this method if you need to install internal test builds)*
+
 **🔗 Links to share with your team:** 
 *(Note: Your teammates only need to do Step 1 if this is their very first time installing it!)*
-- **Step 1 (Certificates)**: Download both [ExploreDB_Certificate.pfx](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate.pfx) and [trust_certificate.bat](https://zerinapps.github.io/ExploreDB-Releases/trust_certificate.bat)
+- **Step 1 (Certificates)**: Download both [ExploreDB_Certificate.pfx](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate.pfx) and [ExploreDB_Certificate_Installer.bat](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate_Installer.bat)
 - **Step 2 (App Installer)**: [Download the App Installer](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller)
 
 ExploreDB is distributed via a web-based **App Installer** which automatically checks for and installs new updates silently in the background every time you open the app!
 
 Because we use a custom development certificate, installing it on a brand new computer requires a quick one-time trust setup.
 
-### **Installation Steps for End Users**
+#### **Installation Steps for End Users**
 
 **Prerequisites**: Because this app is heavily optimized for a small file size (under 20 MB), it requires the **[.NET 8.0 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)** to be installed on the computer first.
 
@@ -94,22 +105,22 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
 
 2. **Build and Package Scripts**
 
-   > [!NOTE]
-   > You **do not** need to run both of the scripts below. They serve different purposes depending on whether you are just testing locally or releasing an update to users.
+   > You **do not** need to run both of the scripts below. They serve different purposes depending on whether you are releasing to the Microsoft Store or GitHub.
 
-   **Option A: Run the Automated Build Script (For Local Testing)**
-   Double-click the **`scripts\build_installer.bat`** script in the project root. This is used when you just want to test your app or build an installer for the *current* version you are working on.
-   - It will clean the project.
-   - It will build the MSIX package natively for `win-x64`.
-   - It will digitally sign the installer using the local Windows SDK `signtool.exe` and `ExploreDB_Certificate.pfx`.
+   **Option A: Build for Microsoft Store (Public)**
+   Double-click the **`scripts\build_store_release.bat`** script. 
+   - It will automatically inject the Microsoft Store cryptographic identity.
+   - It will strip out the internal GitHub auto-updater UI to comply with Store policies.
+   - The final `.msix` file will be placed in the **`StoreRelease`** folder, ready to drag-and-drop into the Microsoft Partner Center Dashboard.
 
-   **Option B: Publish a Release (For Shipping Updates)**
-   If you are ready to officially launch a new version, double-click **`scripts\publish_new_release.bat`**. This script does *everything* the build script does, but it asks you for a new version number first.
-   - It will prompt you for the new version number (e.g., `1.0.1`).
-   - It will automatically inject the new version into all XML files securely.
-   - It will compile and digitally sign the MSIX package automatically.
+   **Option B: Build for GitHub (Internal / Beta)**
+   Double-click the **`scripts\build_github_release.bat`** script.
+   - It will compile the app natively for `win-x64`.
+   - It will digitally sign the installer using your local `ExploreDB_Certificate.pfx`.
+   - The final `.msix` and `.appinstaller` files will be placed in the **`GitHubRelease`** folder.
 
-   No matter which script you run, the final compiled files will automatically be placed in the **`GitHubRelease`** folder in the root of your project!
+   **Publishing a New Release (GitHub Only):**
+   If you are ready to officially launch a new version for GitHub, double-click **`scripts\publish_new_release.bat`**. This script does *everything* Option B does, but it asks you for a new version number first and injects it into all files.
 
 ### **Manual Build & Sign (Fallback)**
 
@@ -118,18 +129,49 @@ If the automated scripts fail, you can perform the steps manually:
 0. **Bump the Version Numbers (Manual)**:
    - `ExploreDB.csproj`: Update the `<Version>` and `<ApplicationDisplayVersion>` tags.
    - `Platforms\Windows\Package.appxmanifest`: Update the `Version="..."` attribute in the `<Identity>` tag.
-   - `ExploreDB.appinstaller`: Update both `Version="..."` attributes AND the URL at the bottom to point to your new GitHub tag (e.g., `.../download/v1.0.0.1/...`).
+   - `ExploreDB.appinstaller` (GitHub Only): Update both `Version="..."` attributes AND the URL at the bottom to point to your new GitHub tag.
 
-1. **Build and Publish (Terminal)**:
-   ```bash
-   dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64
-   ```
+1. **Inject the Correct Manifest**:
+   *(The .NET compiler only looks for a file named `Package.appxmanifest`. Because we use a dual-channel architecture, you must manually copy the correct template over the main file before building!)*
+   - **For Microsoft Store**: Go into the `Platforms\Windows` folder, copy `Package.Store.appxmanifest`, and rename the copy to `Package.appxmanifest` (overwriting the existing one).
+   - **For GitHub**: Go into the `Platforms\Windows` folder, copy `Package.GitHub.appxmanifest`, and rename the copy to `Package.appxmanifest` (overwriting the existing one).
 
-2. **Sign the Package**:
-   Locate your Windows SDK `signtool.exe` (usually in `C:\Users\<User>\.nuget\packages\microsoft.windows.sdk.buildtools\...\signtool.exe` or `C:\Program Files (x86)\Windows Kits\10\bin\...\signtool.exe`) and run:
+2. **Build (Terminal)**:
+   - **For GitHub**:
+     ```bash
+     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false
+     ```
+   - **For Microsoft Store** (Adds `-p:StoreBuild=true`):
+     ```bash
+     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false -p:StoreBuild=true
+     ```
+
+3. **Sign the Package (GitHub Only)**:
+   *(Microsoft Store builds do not need to be manually signed)*
+   Locate your Windows SDK `signtool.exe` and run:
    ```cmd
    signtool sign /fd SHA256 /a /f "cert\ExploreDB_Certificate.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
    ```
+
+### **Publishing a Release (Microsoft Store)**
+
+To publish an update to the Microsoft Store, you must upload the freshly built files from your `StoreRelease` folder to the Microsoft Partner Center.
+
+1. **Create a New Submission**:
+   - Go to your [Microsoft Partner Center Dashboard](https://partner.microsoft.com/en-us/dashboard/windows/overview).
+   - Navigate to **Apps and games** -> **ExploreDB**.
+   - Under the "Update" section, click **Update** (or Create a new submission).
+
+2. **Upload the Package**:
+   - Click on **Packages**.
+   - Drag and drop your compiled **`ExploreDB.msix`** (located in the `StoreRelease` folder) into the upload box.
+   - Click **Save**.
+
+3. **Submit to the Store**:
+   - Review your Pricing and Store Listing to ensure nothing needs changing.
+   - Click **Submit to the Store**. Microsoft will review the update and automatically push it to all users!
+
+---
 
 ### **Publishing a Release (GitHub Releases & Pages)**
 
