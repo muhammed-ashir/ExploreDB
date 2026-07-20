@@ -31,7 +31,7 @@ Here are the exact 3 steps to do right now:
 2. On the right sidebar, click **Create a new release** (or click the "Releases" heading and click Draft a new release).
 3. Click **Choose a tag** and type exactly: **`v1.0.0.0`** (and click "Create new tag").
 4. Make the Release Title: `Version 1.0.0.0`
-5. At the bottom, in the large box that says **"Attach binaries by dropping them here"**, drag and drop the remaining 3 files from your `D:\apps\ExploreDB\App` folder:
+5. At the bottom, in the large box that says **"Attach binaries by dropping them here"**, drag and drop the remaining 3 files from your `D:\apps\ExploreDB\GitHubRelease` folder:
    - `ExploreDB.appinstaller`
    - `ExploreDB_Certificate.pfx`
    - `trust_certificate.bat`

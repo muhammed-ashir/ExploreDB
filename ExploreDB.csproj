@@ -19,10 +19,14 @@
         <GenerateTestAppPackage>true</GenerateTestAppPackage>
         <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
         <ApplicationVersion>7</ApplicationVersion>
-        <ApplicationDisplayVersion>1.0.0.15</ApplicationDisplayVersion>
-        <Version>1.0.0.15</Version>
+        <ApplicationDisplayVersion>1.0.0.16</ApplicationDisplayVersion>
+        <Version>1.0.0.16</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(StoreBuild)' == 'true'">
+        <DefineConstants>$(DefineConstants);STORE_BUILD</DefineConstants>
     </PropertyGroup>
 
     <ItemGroup>

@@ -109,6 +109,8 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
    - It will automatically inject the new version into all XML files securely.
    - It will compile and digitally sign the MSIX package automatically.
 
+   No matter which script you run, the final compiled files will automatically be placed in the **`GitHubRelease`** folder in the root of your project!
+
 ### **Manual Build & Sign (Fallback)**
 
 If the automated scripts fail, you can perform the steps manually:
@@ -131,7 +133,7 @@ If the automated scripts fail, you can perform the steps manually:
 
 ### **Publishing a Release (GitHub Releases & Pages)**
 
-To publish an update to the team, you must upload the freshly built files from your `App` folder to the `ExploreDB-Releases` repository.
+To publish an update to the team, you must upload the freshly built files from your `GitHubRelease` folder to the `ExploreDB-Releases` repository.
 
 1. **Publish the Heavy Binaries (GitHub Releases)**:
    - Go to the `ExploreDB-Releases` repository on GitHub.
