@@ -1,12 +1,15 @@
 $ErrorActionPreference = "Stop"
 
 try {
-    # Read current version from AppxManifest
-    $manifest = "Platforms\Windows\Package.appxmanifest"
-    $content = Get-Content $manifest -Raw
+    # Read current version from GitHub AppxManifest (as the source of truth)
+    $manifestGithub = "Platforms\Windows\Package.GitHub.appxmanifest"
+    $manifestStore = "Platforms\Windows\Package.Store.appxmanifest"
+    
+    $contentGithub = Get-Content $manifestGithub -Raw
+    $contentStore = Get-Content $manifestStore -Raw
     
     $currentVersion = "Unknown"
-    if ($content -match '<Identity[^>]*?Version="([^"]+)"') {
+    if ($contentGithub -match '<Identity[^>]*?Version="([^"]+)"') {
         $currentVersion = $matches[1]
     }
     
@@ -40,10 +43,14 @@ try {
     Set-Content -Path $csproj -Value $csprojContent -NoNewline
     Write-Host " - Updated $csproj"
 
-    # 2. Update Package.appxmanifest
-    $content = $content -replace '(?s)(<Identity[^>]*?Version=")[^"]+(")', "`${1}$NewVersion`${2}"
-    Set-Content -Path $manifest -Value $content -NoNewline
-    Write-Host " - Updated $manifest"
+    # 2. Update Both Package Manifest Templates
+    $contentGithub = $contentGithub -replace '(?s)(<Identity[^>]*?Version=")[^"]+(")', "`${1}$NewVersion`${2}"
+    Set-Content -Path $manifestGithub -Value $contentGithub -NoNewline
+    Write-Host " - Updated $manifestGithub"
+
+    $contentStore = $contentStore -replace '(?s)(<Identity[^>]*?Version=")[^"]+(")', "`${1}$NewVersion`${2}"
+    Set-Content -Path $manifestStore -Value $contentStore -NoNewline
+    Write-Host " - Updated $manifestStore"
 
     # 3. Update ExploreDB.appinstaller
     $installer = "ExploreDB.appinstaller"

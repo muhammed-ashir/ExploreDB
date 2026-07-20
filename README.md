@@ -119,8 +119,10 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
    - It will digitally sign the installer using your local `ExploreDB_Certificate.pfx`.
    - The final `.msix` and `.appinstaller` files will be placed in the **`GitHubRelease`** folder.
 
-   **Publishing a New Release (GitHub Only):**
-   If you are ready to officially launch a new version for GitHub, double-click **`scripts\publish_new_release.bat`**. This script does *everything* Option B does, but it asks you for a new version number first and injects it into all files.
+   **Publishing a New Release:**
+   If you are ready to officially launch a new version, double-click **`scripts\publish_new_release.bat`**. 
+   - It will prompt you for a new version number and automatically bump it in all files.
+   - It will give you a menu asking if you want to build for the Microsoft Store, GitHub, or Both simultaneously!
 
 ### **Manual Build & Sign (Fallback)**
 
