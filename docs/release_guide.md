@@ -22,7 +22,7 @@ Before building a new release, you must increase the version number in **three**
 ## Step 2: Build the Installer
 Once the version numbers are bumped, compile the new package:
 1. Double-click the **`build_installer.bat`** script in your main repository folder.
-2. Wait for it to finish. It will automatically clean, compile, sign with `ExploreDB.pfx`, and package everything into the `App` folder.
+2. Wait for it to finish. It will automatically clean, compile, sign with `ExploreDB_Certificate.pfx`, and package everything into the `App` folder.
 
 ---
 

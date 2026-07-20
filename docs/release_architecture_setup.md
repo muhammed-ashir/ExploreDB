@@ -15,12 +15,12 @@ To package a .NET MAUI Blazor app into an MSIX file without using Visual Studio'
   3. Uses the hidden `signtool.exe` (downloaded via NuGet) to digitally sign the `.msix` file with our custom certificate.
 - Finally, the script packages the `.msix`, `.pfx`, `.bat`, and `.appinstaller` into a clean `App/` distribution folder.
 
-## 2. Certificate Generation (`ExploreDB.pfx`)
+## 2. Certificate Generation (`ExploreDB_Certificate.pfx`)
 Windows strictly requires all `.msix` installers to be cryptographically signed by a trusted certificate, otherwise, it blocks the installation. 
 
 **What we did:**
-- Since buying an Enterprise Code Signing Certificate costs hundreds of dollars a year, we used PowerShell to generate a **self-signed certificate** named `ExploreDB.pfx`.
-- We ensured the `Subject` of the certificate (`CN=ExploreDB`) perfectly matched the `Publisher` identity in the `Package.appxmanifest` file.
+- Since buying an Enterprise Code Signing Certificate costs hundreds of dollars a year, we used PowerShell to generate a **self-signed certificate** named `ExploreDB_Certificate.pfx`.
+- This `.pfx` file acts as our digital signature so Windows trusts the installer. We ensured the `Subject` of the certificate (`CN=ExploreDB`) perfectly matched the `Publisher` identity in the `Package.appxmanifest` file.
 - Because a self-signed certificate is not trusted by Windows by default, we created `trust_certificate.bat`. This script uses an elevated Administrator PowerShell window to securely inject the `.pfx` file into the end-user's "Trusted Root Certification Authorities" store. This only needs to be done once per computer.
 
 ## 3. Automatic Updates (`ExploreDB.appinstaller`)

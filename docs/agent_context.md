@@ -22,7 +22,7 @@
 The deployment pipeline is highly customized to bypass Visual Studio's heavy publishing UI and enable silent, web-based background updates for end users.
 
 - **Build Script**: `build_installer.bat` automates the `dotnet publish` process for MSIX and uses `signtool.exe` to digitally sign the package.
-- **Security**: The MSIX is signed using a custom self-signed certificate (`cert\ExploreDB.pfx`). Because it is self-signed, end users must run `trust_certificate.bat` one time to inject it into their Trusted Root Certification Authorities store.
+- **Security**: The MSIX is signed using a custom self-signed certificate (`cert\ExploreDB_Certificate.pfx`). Because it is self-signed, end users must run `trust_certificate.bat` one time to inject it into their Trusted Root Certification Authorities store.
 - **Auto-Updates**: The app utilizes Windows **AppInstaller**. The `ExploreDB.appinstaller` XML file configures the app to check for updates on launch.
 - **Hosting Strategy**: 
   - We use a dual-hosting setup to keep the main repository clean.

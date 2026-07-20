@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject ConnectionService ConnectionService
 @inject SchemaService SchemaService
 @inject NavigationManager Nav
@@ -49,16 +50,19 @@
         }
         else if (!UpdateDismissed)
         {
-            <div class="alert alert-info fade show m-3 d-flex align-items-center justify-content-between" style="background: rgba(13, 110, 253, 0.1); border: 1px solid rgba(13, 110, 253, 0.3); backdrop-filter: blur(10px); position: relative; z-index: 3000;" role="alert">
+            <div class="alert fade show m-3 d-flex align-items-center justify-content-between shadow-sm" style="background-color: #0f253f; border: 1px solid #1a3c63; color: white; position: relative; z-index: 3000;" role="alert">
                 <div>
-                    <strong>✨ A new version of ExploreDB is available!</strong> 
-                    @if (DownloadFailed)
-                    {
-                        <span class="ms-2 text-danger">Automatic download failed. <a href="#" @onclick="FallbackUpdate" @onclick:preventDefault class="fw-bold text-decoration-underline text-danger">Click here to download via Browser instead.</a></span>
-                    }
                     @if (InstallerLaunched)
                     {
-                        <span class="ms-2 text-success fw-bold">✅ Installer opened! Please check your taskbar.</span>
+                        <strong class="text-success">✅ Installer opened! Please check your taskbar.</strong>
+                    }
+                    else
+                    {
+                        <strong>✨ A new version of ExploreDB is available!</strong> 
+                        @if (DownloadFailed)
+                        {
+                            <span class="ms-2 text-danger">Automatic download failed. <a href="#" @onclick="FallbackUpdate" @onclick:preventDefault class="fw-bold text-decoration-underline text-danger">Click here to download via Browser instead.</a></span>
+                        }
                     }
                 </div>
                 <div>
@@ -243,6 +247,7 @@
     private bool IsDownloadingUpdate = false;
     private bool DownloadFailed = false;
     private bool InstallerLaunched = false;
+    private System.Threading.PeriodicTimer? _updateTimer;
 
     protected override async Task OnInitializedAsync()
     {
@@ -256,6 +261,27 @@
 
         // Check for updates silently in the background
         UpdateInfo = await UpdateService.CheckForUpdateAsync();
+
+        // Start background polling every 1 hour
+        _ = StartBackgroundUpdateCheck();
+    }
+
+    private async Task StartBackgroundUpdateCheck()
+    {
+        _updateTimer = new System.Threading.PeriodicTimer(TimeSpan.FromHours(1));
+        while (await _updateTimer.WaitForNextTickAsync())
+        {
+            try 
+            {
+                var newInfo = await UpdateService.CheckForUpdateAsync();
+                if (newInfo != null)
+                {
+                    UpdateInfo = newInfo;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch { }
+        }
     }
 
     private async Task DownloadAndUpdate()
@@ -344,5 +370,10 @@
         }
         
         IsBusy = false;
+    }
+
+    public void Dispose()
+    {
+        _updateTimer?.Dispose();
     }
 }

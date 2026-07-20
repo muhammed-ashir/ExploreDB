@@ -8,7 +8,7 @@
   <Identity
     Name="ExploreDB.App"
     Publisher="CN=ExploreDB"
-    Version="1.0.0.11" />
+    Version="1.0.0.15" />
 
   <Properties>
     <DisplayName>ExploreDB</DisplayName>

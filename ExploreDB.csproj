@@ -19,8 +19,8 @@
         <GenerateTestAppPackage>true</GenerateTestAppPackage>
         <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
         <ApplicationVersion>7</ApplicationVersion>
-        <ApplicationDisplayVersion>1.0.0.11</ApplicationDisplayVersion>
-        <Version>1.0.0.11</Version>
+        <ApplicationDisplayVersion>1.0.0.15</ApplicationDisplayVersion>
+        <Version>1.0.0.15</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
     </PropertyGroup>

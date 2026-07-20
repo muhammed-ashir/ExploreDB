@@ -24,14 +24,14 @@ set SIGNTOOL="C:\Users\muham\.nuget\packages\microsoft.windows.sdk.buildtools\10
 
 for /r "bin\x64\Release\" %%f in (ExploreDB_*_x64.msix) do (
     echo Signing: %%f
-    %SIGNTOOL% sign /fd SHA256 /a /f "cert\ExploreDB.pfx" /p "password" "%%f"
+    %SIGNTOOL% sign /fd SHA256 /a /f "cert\ExploreDB_Certificate.pfx" /p "password" "%%f"
     
     echo.
     echo [4/4] Packaging files into App folder...
     if not exist "App" mkdir "App"
     copy /Y "%%f" "App\ExploreDB.msix"
-    copy /Y "cert\ExploreDB.pfx" "App\"
-    copy /Y "scripts\trust_certificate.bat" "App\"
+    copy /Y "cert\ExploreDB_Certificate.pfx" "App\"
+    copy /Y "scripts\ExploreDB_Certificate_Installer.bat" "App\"
     copy /Y "ExploreDB.appinstaller" "App\"
 
     echo.
@@ -46,7 +46,7 @@ for /r "bin\x64\Release\" %%f in (ExploreDB_*_x64.msix) do (
     echo.
     echo OR, to share manually without GitHub:
     echo 1. Zip the entire "App" folder and share it directly.
-    echo 2. Tell them to run trust_certificate.bat as Administrator first.
+    echo 2. Tell them to run ExploreDB_Certificate_Installer.bat as Administrator first.
     echo 3. Double-click the .appinstaller file to install (if it fails, double-click the .msix).
     echo.
     goto :end

@@ -37,7 +37,7 @@ ExploreDB is a powerful, modern database exploration and querying tool built wit
 
 **🔗 Links to share with your team:** 
 *(Note: Your teammates only need to do Step 1 if this is their very first time installing it!)*
-- **Step 1 (Certificates)**: Download both [ExploreDB.pfx](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.pfx) and [trust_certificate.bat](https://zerinapps.github.io/ExploreDB-Releases/trust_certificate.bat)
+- **Step 1 (Certificates)**: Download both [ExploreDB_Certificate.pfx](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate.pfx) and [trust_certificate.bat](https://zerinapps.github.io/ExploreDB-Releases/trust_certificate.bat)
 - **Step 2 (App Installer)**: [Download the App Installer](https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller)
 
 ExploreDB is distributed via a web-based **App Installer** which automatically checks for and installs new updates silently in the background every time you open the app!
@@ -49,13 +49,13 @@ Because we use a custom development certificate, installing it on a brand new co
 **Prerequisites**: Because this app is heavily optimized for a small file size (under 20 MB), it requires the **[.NET 8.0 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)** to be installed on the computer first.
 
 1. **Trust the Certificate (First Time Only)**:
-   - Download the **`ExploreDB.pfx`** and **`trust_certificate.bat`** files from the links above.
+   - Download the **`ExploreDB_Certificate.pfx`** and **`trust_certificate.bat`** files from the links above.
    - Right-click on **`trust_certificate.bat`** and select **"Run as Administrator"**.
    - Press **Enter** on your keyboard, then click **Yes** on the prompt to allow the installation.
    - *Note: This tells Windows to trust our custom digital signature so the app can be installed safely.*
 
    **If the script fails, you can install the certificate manually:**
-   - Double-click the **`ExploreDB.pfx`** file.
+   - Double-click the **`ExploreDB_Certificate.pfx`** file.
    - On the very first screen, select **Local Machine** (instead of Current User) and click Next.
    - Click **"Yes"** on the Windows User Account Control (UAC) prompt that asks for permission.
    - Click Next on the file path screen.
@@ -101,7 +101,7 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
    Double-click the **`scripts\build_installer.bat`** script in the project root. This is used when you just want to test your app or build an installer for the *current* version you are working on.
    - It will clean the project.
    - It will build the MSIX package natively for `win-x64`.
-   - It will digitally sign the installer using the local Windows SDK `signtool.exe` and `ExploreDB.pfx`.
+   - It will digitally sign the installer using the local Windows SDK `signtool.exe` and `ExploreDB_Certificate.pfx`.
 
    **Option B: Publish a Release (For Shipping Updates)**
    If you are ready to officially launch a new version, double-click **`scripts\publish_new_release.bat`**. This script does *everything* the build script does, but it asks you for a new version number first.
@@ -126,7 +126,7 @@ If the automated scripts fail, you can perform the steps manually:
 2. **Sign the Package**:
    Locate your Windows SDK `signtool.exe` (usually in `C:\Users\<User>\.nuget\packages\microsoft.windows.sdk.buildtools\...\signtool.exe` or `C:\Program Files (x86)\Windows Kits\10\bin\...\signtool.exe`) and run:
    ```cmd
-   signtool sign /fd SHA256 /a /f "cert\ExploreDB.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
+   signtool sign /fd SHA256 /a /f "cert\ExploreDB_Certificate.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
    ```
 
 ### **Publishing a Release (GitHub Releases & Pages)**
@@ -163,7 +163,7 @@ If the `ExploreDB-Releases` repository ever gets accidentally deleted, the auto-
    - Select the `main` branch and click Save.
 
 3. **Re-upload the Files**:
-   - Go back to the **Code** tab and upload `ExploreDB.appinstaller`, `ExploreDB.pfx`, and `trust_certificate.bat`.
+   - Go back to the **Code** tab and upload `ExploreDB.appinstaller`, `ExploreDB_Certificate.pfx`, and `ExploreDB_Certificate_Installer.bat`.
    - Go to the **Releases** tab, draft a new release (e.g., `v1.0.0.0`), and upload your `.msix` file.
    
 *(Note: As long as you use the exact same repository name, the URL inside the `.appinstaller` will automatically match and everything will start working again instantly!)*

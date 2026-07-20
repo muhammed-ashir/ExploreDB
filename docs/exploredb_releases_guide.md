@@ -32,8 +32,8 @@ Here are the exact 3 steps to do right now:
 3. Click **Choose a tag** and type exactly: **`v1.0.0.0`** (and click "Create new tag").
 4. Make the Release Title: `Version 1.0.0.0`
 5. At the bottom, in the large box that says **"Attach binaries by dropping them here"**, drag and drop the remaining 3 files from your `D:\apps\ExploreDB\App` folder:
-   - `ExploreDB_1.0.0.0_x64.msix`
-   - `ExploreDB.pfx`
+   - `ExploreDB.appinstaller`
+   - `ExploreDB_Certificate.pfx`
    - `trust_certificate.bat`
 6. Click the green **Publish release** button.
 
