@@ -16,21 +16,27 @@
                             <h3 class="fw-bold mb-3">🚨 Update Required</h3>
                             <p class="mb-4 text-light">An update is required to continue using ExploreDB. You must update to the latest version before proceeding.</p>
                             
-                            @if (IsDownloadingUpdate)
-                            {
-                                <div class="mb-3 text-info fw-bold">
-                                    <span class="spinner-border spinner-border-sm me-2"></span> Downloading Update...
-                                </div>
-                            }
-                            else if (DownloadFailed)
+                            @if (DownloadFailed)
                             {
                                 <div class="mb-3 text-danger small">
                                     Automatic download failed.<br/>
                                     <a href="#" @onclick="FallbackUpdate" @onclick:preventDefault class="fw-bold text-decoration-underline text-danger">Click here to download via Browser instead.</a>
                                 </div>
                             }
+                            @if (InstallerLaunched)
+                            {
+                                <div class="mb-3 text-success fw-bold p-3 rounded" style="background: rgba(25, 135, 84, 0.2); border: 1px solid rgba(25, 135, 84, 0.4);">
+                                    ✅ Installer opened! Please check your taskbar.
+                                </div>
+                            }
                             
-                            @if (!IsDownloadingUpdate)
+                            @if (IsDownloadingUpdate)
+                            {
+                                <div class="p-2 text-info fw-bold">
+                                    <span class="spinner-border spinner-border-sm me-2"></span> Downloading Update...
+                                </div>
+                            }
+                            else if (!InstallerLaunched)
                             {
                                 <button class="btn btn-primary btn-lg w-100 fw-bold shadow" @onclick="DownloadAndUpdate">
                                     Update Now
@@ -46,17 +52,21 @@
             <div class="alert alert-info fade show m-3 d-flex align-items-center justify-content-between" style="background: rgba(13, 110, 253, 0.1); border: 1px solid rgba(13, 110, 253, 0.3); backdrop-filter: blur(10px); position: relative; z-index: 3000;" role="alert">
                 <div>
                     <strong>✨ A new version of ExploreDB is available!</strong> 
-                    @if (IsDownloadingUpdate)
-                    {
-                        <span class="ms-2"><span class="spinner-border spinner-border-sm me-1"></span> Downloading...</span>
-                    }
                     @if (DownloadFailed)
                     {
                         <span class="ms-2 text-danger">Automatic download failed. <a href="#" @onclick="FallbackUpdate" @onclick:preventDefault class="fw-bold text-decoration-underline text-danger">Click here to download via Browser instead.</a></span>
                     }
+                    @if (InstallerLaunched)
+                    {
+                        <span class="ms-2 text-success fw-bold">✅ Installer opened! Please check your taskbar.</span>
+                    }
                 </div>
                 <div>
-                    @if (!IsDownloadingUpdate)
+                    @if (IsDownloadingUpdate)
+                    {
+                        <span class="me-3 text-info fw-bold"><span class="spinner-border spinner-border-sm me-1"></span> Downloading...</span>
+                    }
+                    else if (!InstallerLaunched)
                     {
                         <button type="button" class="btn btn-primary btn-sm me-3" @onclick="DownloadAndUpdate">
                             Update Now
@@ -232,6 +242,7 @@
     private bool UpdateDismissed = false;
     private bool IsDownloadingUpdate = false;
     private bool DownloadFailed = false;
+    private bool InstallerLaunched = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -259,6 +270,10 @@
         if (!success)
         {
             DownloadFailed = true;
+        }
+        else
+        {
+            InstallerLaunched = true;
         }
         
         IsDownloadingUpdate = false;
