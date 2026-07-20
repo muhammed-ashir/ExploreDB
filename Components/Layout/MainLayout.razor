@@ -2,8 +2,71 @@
 @inject ConnectionService ConnectionService
 @inject SchemaService SchemaService
 @inject NavigationManager Nav
+@inject ExploreDB.Services.GitHubUpdateService UpdateService
 
 <div class="page text-white">
+    @if (UpdateInfo != null)
+    {
+        @if (UpdateInfo.IsMandatory)
+        {
+            <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 3000;">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content glass-card border-0 text-white" style="background-color: rgba(13, 110, 253, 0.2); border: 1px solid rgba(13, 110, 253, 0.4) !important;">
+                        <div class="modal-body text-center p-5">
+                            <h3 class="fw-bold mb-3">🚨 Update Required</h3>
+                            <p class="mb-4 text-light">An update is required to continue using ExploreDB. You must update to the latest version before proceeding.</p>
+                            
+                            @if (IsDownloadingUpdate)
+                            {
+                                <div class="mb-3 text-info fw-bold">
+                                    <span class="spinner-border spinner-border-sm me-2"></span> Downloading Update...
+                                </div>
+                            }
+                            else if (DownloadFailed)
+                            {
+                                <div class="mb-3 text-danger small">
+                                    Automatic download failed.<br/>
+                                    <a href="#" @onclick="FallbackUpdate" @onclick:preventDefault class="fw-bold text-decoration-underline text-danger">Click here to download via Browser instead.</a>
+                                </div>
+                            }
+                            
+                            @if (!IsDownloadingUpdate)
+                            {
+                                <button class="btn btn-primary btn-lg w-100 fw-bold shadow" @onclick="DownloadAndUpdate">
+                                    Update Now
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (!UpdateDismissed)
+        {
+            <div class="alert alert-info fade show m-3 d-flex align-items-center justify-content-between" style="background: rgba(13, 110, 253, 0.1); border: 1px solid rgba(13, 110, 253, 0.3); backdrop-filter: blur(10px); position: relative; z-index: 3000;" role="alert">
+                <div>
+                    <strong>✨ A new version of ExploreDB is available!</strong> 
+                    @if (IsDownloadingUpdate)
+                    {
+                        <span class="ms-2"><span class="spinner-border spinner-border-sm me-1"></span> Downloading...</span>
+                    }
+                    @if (DownloadFailed)
+                    {
+                        <span class="ms-2 text-danger">Automatic download failed. <a href="#" @onclick="FallbackUpdate" @onclick:preventDefault class="fw-bold text-decoration-underline text-danger">Click here to download via Browser instead.</a></span>
+                    }
+                </div>
+                <div>
+                    @if (!IsDownloadingUpdate)
+                    {
+                        <button type="button" class="btn btn-primary btn-sm me-3" @onclick="DownloadAndUpdate">
+                            Update Now
+                        </button>
+                    }
+                    <button type="button" class="btn-close" @onclick="() => UpdateDismissed = true" style="filter: invert(1); top: 0; padding: 0.75rem; position: relative; right: 0;"></button>
+                </div>
+            </div>
+        }
+    }
     @if (!IsConnected)
     {
         <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);">
@@ -165,7 +228,12 @@
     private List<ConnectionService.SavedConnection> PagedConnections => 
         FilteredConnections.Skip((ConnPage - 1) * ConnPageSize).Take(ConnPageSize).ToList();
 
-    protected override void OnInitialized()
+    private ExploreDB.Services.UpdateInfo? UpdateInfo;
+    private bool UpdateDismissed = false;
+    private bool IsDownloadingUpdate = false;
+    private bool DownloadFailed = false;
+
+    protected override async Task OnInitializedAsync()
     {
         ConnString = ConnectionService.ConnectionString;
         var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnString);
@@ -174,6 +242,32 @@
             ConnName = active.Name;
             ActiveConnId = active.Id;
         }
+
+        // Check for updates silently in the background
+        UpdateInfo = await UpdateService.CheckForUpdateAsync();
+    }
+
+    private async Task DownloadAndUpdate()
+    {
+        if (string.IsNullOrEmpty(UpdateInfo?.DownloadUrl)) return;
+        
+        IsDownloadingUpdate = true;
+        DownloadFailed = false;
+        StateHasChanged();
+
+        var success = await UpdateService.DownloadAndExecuteUpdateAsync(UpdateInfo.DownloadUrl);
+        if (!success)
+        {
+            DownloadFailed = true;
+        }
+        
+        IsDownloadingUpdate = false;
+        StateHasChanged();
+    }
+
+    private async Task FallbackUpdate()
+    {
+        await Microsoft.Maui.ApplicationModel.Launcher.OpenAsync("https://zerinapps.web.app/app/dbexplorer");
     }
 
     private void LoadConnection(ConnectionService.SavedConnection c)

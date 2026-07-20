@@ -52,7 +52,7 @@ try {
     $installerContent = $installerContent -replace '(?s)(<MainPackage[^>]*?Version=")[^"]+(")', "`${1}$NewVersion`${2}"
     
     # Update the GitHub download URL
-    $installerContent = $installerContent -replace '/download/v[^/]+/ExploreDB_[^_]+_x64\.msix', "/download/v$NewVersion/ExploreDB_${NewVersion}_x64.msix"
+    $installerContent = $installerContent -replace '(?<=Uri="https://github.com/zerinapps/ExploreDB-Releases/releases/download/)[^"]+', "v$NewVersion/ExploreDB.msix"
     Set-Content -Path $installer -Value $installerContent -NoNewline
     Write-Host " - Updated $installer"
     

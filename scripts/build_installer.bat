@@ -29,7 +29,7 @@ for /r "bin\x64\Release\" %%f in (ExploreDB_*_x64.msix) do (
     echo.
     echo [4/4] Packaging files into App folder...
     if not exist "App" mkdir "App"
-    copy /Y "%%f" "App\"
+    copy /Y "%%f" "App\ExploreDB.msix"
     copy /Y "cert\ExploreDB.pfx" "App\"
     copy /Y "scripts\trust_certificate.bat" "App\"
     copy /Y "ExploreDB.appinstaller" "App\"

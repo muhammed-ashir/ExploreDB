@@ -92,20 +92,22 @@ To compile a fresh MSIX package with all dependencies (including Win2D native as
    cd ExploreDB
    ```
 
-2. **Publish a Release (Automated)**:
-   If you are ready to publish a new version to GitHub, double-click **`scripts\publish_new_release.bat`**.
-   - It will prompt you for the new version number.
+2. **Build and Package Scripts**
+
+   > [!NOTE]
+   > You **do not** need to run both of the scripts below. They serve different purposes depending on whether you are just testing locally or releasing an update to users.
+
+   **Option A: Run the Automated Build Script (For Local Testing)**
+   Double-click the **`scripts\build_installer.bat`** script in the project root. This is used when you just want to test your app or build an installer for the *current* version you are working on.
+   - It will clean the project.
+   - It will build the MSIX package natively for `win-x64`.
+   - It will digitally sign the installer using the local Windows SDK `signtool.exe` and `ExploreDB.pfx`.
+
+   **Option B: Publish a Release (For Shipping Updates)**
+   If you are ready to officially launch a new version, double-click **`scripts\publish_new_release.bat`**. This script does *everything* the build script does, but it asks you for a new version number first.
+   - It will prompt you for the new version number (e.g., `1.0.1`).
    - It will automatically inject the new version into all XML files securely.
    - It will compile and digitally sign the MSIX package automatically.
-   
-3. **Run the Automated Build Script (Recommended)**:
-   Double-click the **`scripts\build_installer.bat`** script in the project root.
-   
-   This script will automatically:
-   - Clean the project.
-   - Build the MSIX package natively for `win-x64`.
-   - Digitally sign the installer using the local Windows SDK `signtool.exe` and `ExploreDB.pfx`.
-   - Print out the exact location of the freshly built and signed `.msix` file.
 
 ### **Manual Build & Sign (Fallback)**
 
@@ -134,9 +136,13 @@ To publish an update to the team, you must upload the freshly built files from y
 1. **Publish the Heavy Binaries (GitHub Releases)**:
    - Go to the `ExploreDB-Releases` repository on GitHub.
    - Click **Releases** -> **Draft a new release**.
-   - Create a tag that exactly matches your new version (e.g., `v1.0.0.1`).
+   - Create a tag that exactly matches your new version (e.g., `v1.0.0.1`). **CRITICAL: You must include the `v` at the beginning of the tag!**
    - Drag and drop your compiled **`ExploreDB_X.X.X.X_x64.msix`** file into the "Attach binaries" box.
-   - Publish the release.
+   - Click the green **Publish release** button at the bottom. **CRITICAL: Do not save it as a "Draft" or the installer will fail with a 404 error!**
+   
+   > [!TIP]
+   > **Forcing an Update (Mandatory Updates)**
+   > If you want to force users to update (blocking them from using the app until they do), simply type the exact keyword **`[CRITICAL UPDATE]`** anywhere inside the Release Notes box when publishing your release on GitHub. The app will detect this keyword and throw a full-screen, unclosable blocker modal!
 
 2. **Trigger the Auto-Update (GitHub Pages)**:
    - Go to the **Code** tab of the `ExploreDB-Releases` repository.
