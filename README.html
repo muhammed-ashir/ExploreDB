@@ -165,7 +165,7 @@
   <li><strong>Clone the repository</strong>:
     <div class="code-container"><div class="code-header"><span class="lang">bash</span><button class="copy-btn">Copy</button></div><pre><code>    git clone https://github.com/YOUR_USERNAME/ExploreDB.git
     cd ExploreDB
-    </code></pre>
+    </code></pre></div>
   </li>
   <li><strong>Build and Package Scripts</strong>
     <blockquote>You <strong>do not</strong> need to run both of the scripts below. They serve different purposes depending on whether you are releasing to the Microsoft Store or GitHub.</blockquote>
@@ -192,16 +192,41 @@
   </li>
 </ol>
 <h3><strong>Manual Build & Sign (Fallback)</strong></h3>
-<p>If the automated scripts fail, you can perform the steps manually:<ol><li><strong>Bump the Version Numbers (Manual)</strong>:</li></ol><ul><li><code>ExploreDB.csproj</code>: Update the <code>&lt;Version&gt;</code> and <code>&lt;ApplicationDisplayVersion&gt;</code> tags.</li></ul><ul><li><code>Platforms\Windows\Package.appxmanifest</code>: Update the <code>Version="..."</code> attribute in the <code>&lt;Identity&gt;</code> tag.</li></ul><ul><li><code>ExploreDB.appinstaller</code> (GitHub Only): Update both <code>Version="..."</code> attributes AND the URL at the bottom to point to your new GitHub tag.</li></ul><ol><li><strong>Inject the Correct Manifest</strong>:</li></ol></p>
-<p>   <em>(The .NET compiler only looks for a file named <code>Package.appxmanifest</code>. Because we use a dual-channel architecture, you must manually copy the correct template over the main file before building!)</em><ul><li><strong>For Microsoft Store</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.Store.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li></ul><ul><li><strong>For GitHub</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.GitHub.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li></ul><ol><li><strong>Build (Terminal)</strong>:</li></ol><ul><li><strong>For GitHub</strong>:</li></ul></p>
-     <div class="code-container"><div class="code-header"><span class="lang">bash</span><button class="copy-btn">Copy</button></div><pre><code>     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false
-</code></pre></div></div><ul><li><strong>For Microsoft Store</strong> (Adds <code>-p:StoreBuild=true</code>):</li></ul></p>
-     <div class="code-container"><div class="code-header"><span class="lang">bash</span><button class="copy-btn">Copy</button></div><pre><code>     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false -p:StoreBuild=true
-</code></pre></div><ol><li><strong>Sign the Package (GitHub Only)</strong>:</li></ol></p>
-<p>   <em>(Microsoft Store builds do not need to be manually signed)</em></p>
-<p>   Locate your Windows SDK <code>signtool.exe</code> and run:</p>
-   <div class="code-container"><div class="code-header"><span class="lang">cmd</span><button class="copy-btn">Copy</button></div><pre><code>   signtool sign /fd SHA256 /a /f "cert\ExploreDB_Certificate.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
-</code></pre></div></p>
+<p>If the automated scripts fail, you can perform the steps manually:</p>
+<ol>
+  <li><strong>Bump the Version Numbers (Manual)</strong>:
+    <ul>
+      <li><code>ExploreDB.csproj</code>: Update the <code>&lt;Version&gt;</code> and <code>&lt;ApplicationDisplayVersion&gt;</code> tags.</li>
+      <li><code>Platforms\Windows\Package.appxmanifest</code>: Update the <code>Version="..."</code> attribute in the <code>&lt;Identity&gt;</code> tag.</li>
+      <li><code>ExploreDB.appinstaller</code> (GitHub Only): Update both <code>Version="..."</code> attributes AND the URL at the bottom to point to your new GitHub tag.</li>
+    </ul>
+  </li>
+  <li><strong>Inject the Correct Manifest</strong>:
+    <p><em>(The .NET compiler only looks for a file named <code>Package.appxmanifest</code>. Because we use a dual-channel architecture, you must manually copy the correct template over the main file before building!)</em></p>
+    <ul>
+      <li><strong>For Microsoft Store</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.Store.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li>
+      <li><strong>For GitHub</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.GitHub.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li>
+    </ul>
+  </li>
+  <li><strong>Build (Terminal)</strong>:
+    <ul>
+      <li><strong>For GitHub</strong>:
+        <div class="code-container"><div class="code-header"><span class="lang">bash</span><button class="copy-btn">Copy</button></div><pre><code>     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false
+        </code></pre></div>
+      </li>
+      <li><strong>For Microsoft Store</strong> (Adds <code>-p:StoreBuild=true</code>):
+        <div class="code-container"><div class="code-header"><span class="lang">bash</span><button class="copy-btn">Copy</button></div><pre><code>     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false -p:StoreBuild=true
+        </code></pre></div>
+      </li>
+    </ul>
+  </li>
+  <li><strong>Sign the Package (GitHub Only)</strong>:
+    <p><em>(Microsoft Store builds do not need to be manually signed)</em></p>
+    <p>Locate your Windows SDK <code>signtool.exe</code> and run:</p>
+    <div class="code-container"><div class="code-header"><span class="lang">cmd</span><button class="copy-btn">Copy</button></div><pre><code>   signtool sign /fd SHA256 /a /f "cert\ExploreDB_Certificate.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
+    </code></pre></div>
+  </li>
+</ol>
 <h3><strong>Testing the Microsoft Store Build Locally</strong></h3>
 <p>Because the Microsoft Store version strips out digital signatures (so Microsoft can sign it themselves), you cannot easily install the Store <code>.msix</code> file on your local machine. </p>
 <p>To test Microsoft Store-specific logic locally, you must run it in Visual Studio:<ol><li><strong>Add x64 Configuration</strong>: </li></ol><ul><li>Open <code>ExploreDB.sln</code> in Visual Studio.</li></ul><ul><li>Click the <strong>Configuration Manager</strong> dropdown (next to the green Play button).</li></ul><ul><li>Under "Active solution platform", select <strong><code>&lt;New...&gt;</code></strong>.</li></ul><ul><li>Type <code>x64</code> and ensure "Create new project platforms" is checked, then hit OK.</li></ul><ol><li><strong>Enable Store Mode in Code</strong>:</li></ol><ul><li>Open your <code>ExploreDB.csproj</code> file.</li></ul><ul><li>Add the following code inside the main <code>&lt;PropertyGroup&gt;</code> block at the top of the file:</li></ul></p>
