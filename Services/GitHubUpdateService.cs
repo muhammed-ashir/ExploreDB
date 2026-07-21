@@ -24,6 +24,9 @@ public class GitHubUpdateService
     /// </summary>
     public async Task<UpdateInfo?> CheckForUpdateAsync()
     {
+#if STORE_BUILD
+        return null;
+#endif
         try
         {
             var response = await _httpClient.GetAsync(GitHubApiUrl);
