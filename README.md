@@ -157,15 +157,30 @@ If the automated scripts fail, you can perform the steps manually:
 
 ### **Testing the Microsoft Store Build Locally**
 
-Since the Microsoft Store version strips out the internal auto-updater and removes digital signatures (because Microsoft signs it themselves), you cannot easily install the Store `.msix` file on your local machine. 
+Because the Microsoft Store version strips out digital signatures (so Microsoft can sign it themselves), you cannot easily install the Store `.msix` file on your local machine. 
 
-To test that the Store features behave correctly (e.g., verifying the auto-updater is completely disabled), use Visual Studio:
-1. Open `ExploreDB.sln` in Visual Studio.
-2. In `ExploreDB.csproj`, temporarily set `<StoreBuild>true</StoreBuild>` inside a `<PropertyGroup>`.
-3. In the top toolbar next to the green Play button, select **ExploreDB (Package)** (the one with the solid green triangle icon).
-4. *(If it's your first time)* Open **Configuration Manager** from that same dropdown, and make sure the **Deploy** checkbox is checked for the ExploreDB project.
-5. Hit **F5**. Visual Studio will automatically deploy a temporary container and launch the app in full Microsoft Store mode!
-6. **Important**: Remember to remove `<StoreBuild>true</StoreBuild>` when you are done testing!
+To test Microsoft Store-specific logic locally, you must run it in Visual Studio:
+
+1. **Add x64 Configuration**: 
+   - Open `ExploreDB.sln` in Visual Studio.
+   - Click the **Configuration Manager** dropdown (next to the green Play button).
+   - Under "Active solution platform", select **`<New...>`**.
+   - Type `x64` and ensure "Create new project platforms" is checked, then hit OK.
+
+2. **Enable Store Mode in Code**:
+   - Open your `ExploreDB.csproj` file.
+   - Add the following code inside the main `<PropertyGroup>` block at the top of the file:
+   ```xml
+   <StoreBuild>true</StoreBuild>
+   ```
+
+3. **Launch the App**:
+   - In the top toolbar next to the green Play button, select **ExploreDB (Package)** (the one with the solid green triangle icon).
+   - Open **Configuration Manager** again, and make sure the **Deploy** checkbox is checked for the ExploreDB project.
+   - Hit **F5**. Visual Studio will automatically deploy a temporary container and launch the app in full Microsoft Store mode!
+
+> [!WARNING]
+> Remember to delete `<StoreBuild>true</StoreBuild>` from your `.csproj` when you are finished testing!
 
 ### **Publishing a Release (Microsoft Store)**
 
