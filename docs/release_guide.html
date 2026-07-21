@@ -58,13 +58,22 @@
 <hr>
 <h2>Step 1: Bump the Version Numbers</h2>
 <p>Before building a new release, you must increase the version number in <strong>three</strong> places. For example, if you are moving from <code>1.0.0.0</code> to <code>1.0.0.1</code>:</p>
-<ol><li><strong><code>ExploreDB.csproj</code></strong></li></ol>
-<p>   Open this file and find the <code>&lt;Version&gt;</code> and <code>&lt;ApplicationVersion&gt;</code> tags. Update them to your new version.</p>
-<ol><li><strong><code>Platforms\Windows\Package.appxmanifest</code></strong></li></ol>
-<p>   Open this file and find the <code>Version="..."</code> attribute inside the <code>&lt;Identity&gt;</code> tag at the very top. Update it.</p>
-<ol><li><strong><code>ExploreDB.appinstaller</code></strong></li></ol>
-<p>   Open this file and update the version number in <strong>three</strong> places:</p>
-<ul><li><code>&lt;AppInstaller Version="1.0.0.1"</code></li><li><code>&lt;MainPackage Version="1.0.0.1"</code></li><li>Update the GitHub download URL so it points to the new tag and new filename (e.g., <code>.../download/v1.0.0.1/ExploreDB_1.0.0.1_x64.msix</code>).</li></ul>
+<ol>
+  <li><strong><code>ExploreDB.csproj</code></strong>
+    <p>Open this file and find the <code>&lt;Version&gt;</code> and <code>&lt;ApplicationVersion&gt;</code> tags. Update them to your new version.</p>
+  </li>
+  <li><strong><code>Platforms\Windows\Package.appxmanifest</code></strong>
+    <p>Open this file and find the <code>Version="..."</code> attribute inside the <code>&lt;Identity&gt;</code> tag at the very top. Update it.</p>
+  </li>
+  <li><strong><code>ExploreDB.appinstaller</code></strong>
+    <p>Open this file and update the version number in <strong>three</strong> places:</p>
+    <ul>
+      <li><code>&lt;AppInstaller Version="1.0.0.1"</code></li>
+      <li><code>&lt;MainPackage Version="1.0.0.1"</code></li>
+      <li>Update the GitHub download URL so it points to the new tag and new filename (e.g., <code>.../download/v1.0.0.1/ExploreDB_1.0.0.1_x64.msix</code>).</li>
+    </ul>
+  </li>
+</ol>
 <hr>
 <h2>Step 2: Build the Installer</h2>
 <p>Once the version numbers are bumped, compile the new package:</p>
