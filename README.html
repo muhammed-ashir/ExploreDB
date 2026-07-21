@@ -229,28 +229,123 @@
 </ol>
 <h3><strong>Testing the Microsoft Store Build Locally</strong></h3>
 <p>Because the Microsoft Store version strips out digital signatures (so Microsoft can sign it themselves), you cannot easily install the Store <code>.msix</code> file on your local machine. </p>
-<p>To test Microsoft Store-specific logic locally, you must run it in Visual Studio:<ol><li><strong>Add x64 Configuration</strong>: </li></ol><ul><li>Open <code>ExploreDB.sln</code> in Visual Studio.</li></ul><ul><li>Click the <strong>Configuration Manager</strong> dropdown (next to the green Play button).</li></ul><ul><li>Under "Active solution platform", select <strong><code>&lt;New...&gt;</code></strong>.</li></ul><ul><li>Type <code>x64</code> and ensure "Create new project platforms" is checked, then hit OK.</li></ul><ol><li><strong>Enable Store Mode in Code</strong>:</li></ol><ul><li>Open your <code>ExploreDB.csproj</code> file.</li></ul><ul><li>Add the following code inside the main <code>&lt;PropertyGroup&gt;</code> block at the top of the file:</li></ul></p>
-   <div class="code-container"><div class="code-header"><span class="lang">xml</span><button class="copy-btn">Copy</button></div><pre><code>   &lt;StoreBuild&gt;true&lt;/StoreBuild&gt;
-</code></pre></div><ol><li><strong>Launch the App</strong>:</li></ol><ul><li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li></ul><ul><li>Open <strong>Configuration Manager</strong> again, and make sure the <strong>Deploy</strong> checkbox is checked for the ExploreDB project.</li></ul><ul><li>Hit <strong>F5</strong>. Visual Studio will automatically deploy a temporary container and launch the app in full Microsoft Store mode!</li></ul></p>
+<p>To test Microsoft Store-specific logic locally, you must run it in Visual Studio:</p>
+<ol>
+  <li><strong>Add x64 Configuration</strong>:
+    <ul>
+      <li>Open <code>ExploreDB.sln</code> in Visual Studio.</li>
+      <li>Click the <strong>Configuration Manager</strong> dropdown (next to the green Play button).</li>
+      <li>Under "Active solution platform", select <strong><code>&lt;New...&gt;</code></strong>.</li>
+      <li>Type <code>x64</code> and ensure "Create new project platforms" is checked, then hit OK.</li>
+    </ul>
+  </li>
+  <li><strong>Enable Store Mode in Code</strong>:
+    <ul>
+      <li>Open your <code>ExploreDB.csproj</code> file.</li>
+      <li>Add the following code inside the main <code>&lt;PropertyGroup&gt;</code> block at the top of the file:</li>
+    </ul>
+    <div class="code-container"><div class="code-header"><span class="lang">xml</span><button class="copy-btn">Copy</button></div><pre><code>   &lt;StoreBuild&gt;true&lt;/StoreBuild&gt;
+    </code></pre></div>
+  </li>
+  <li><strong>Launch the App</strong>:
+    <ul>
+      <li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li>
+      <li>Open <strong>Configuration Manager</strong> again, and make sure the <strong>Deploy</strong> checkbox is checked for the ExploreDB project.</li>
+      <li>Hit <strong>F5</strong>. Visual Studio will automatically deploy a temporary container and launch the app in full Microsoft Store mode!</li>
+    </ul>
+  </li>
+</ol>
 <blockquote>Remember to delete <code>&lt;StoreBuild&gt;true&lt;/StoreBuild&gt;</code> from your <code>.csproj</code> when you are finished testing!</blockquote>
 <h3><strong>Testing the GitHub Build Locally</strong></h3>
 <p>By default, Visual Studio automatically builds the GitHub version of ExploreDB when you press <strong>F5</strong> (as long as <code>&lt;StoreBuild&gt;true&lt;/StoreBuild&gt;</code> is not in your <code>.csproj</code>). </p>
-<p>To test any new features or changes for the GitHub release:<ol><li>Open <code>ExploreDB.sln</code> in Visual Studio.</li></ol><ol><li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li></ol><ol><li>Hit <strong>F5</strong>. Visual Studio will automatically deploy the temporary container and launch the app.</li></ol><ol><li><em>(Optional)</em> If you ever need to specifically test the auto-updater functionality, you can temporarily lower your <code>&lt;ApplicationDisplayVersion&gt;</code> and <code>&lt;Version&gt;</code> in the <code>.csproj</code> file before hitting F5. This will trick the app into thinking it's out of date and trigger the update banner!</li></ol></p>
+<p>To test any new features or changes for the GitHub release:</p>
+<ol>
+  <li>Open <code>ExploreDB.sln</code> in Visual Studio.</li>
+  <li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li>
+  <li>Hit <strong>F5</strong>. Visual Studio will automatically deploy the temporary container and launch the app.</li>
+  <li><em>(Optional)</em> If you ever need to specifically test the auto-updater functionality, you can temporarily lower your <code>&lt;ApplicationDisplayVersion&gt;</code> and <code>&lt;Version&gt;</code> in the <code>.csproj</code> file before hitting F5. This will trick the app into thinking it's out of date and trigger the update banner!</li>
+</ol>
 <h3><strong>Publishing a Release (Microsoft Store)</strong></h3>
-<p>To publish an update to the Microsoft Store, you must upload the freshly built files from your <code>StoreRelease</code> folder to the Microsoft Partner Center.<ol><li><strong>Create a New Submission</strong>:</li></ol><ul><li>Go to your <a href="https://partner.microsoft.com/en-us/dashboard/windows/overview" target="_blank">Microsoft Partner Center Dashboard</a>.</li></ul><ul><li>Navigate to <strong>Apps and games</strong> -&gt; <strong>ExploreDB</strong>.</li></ul><ul><li>Under the "Update" section, click <strong>Update</strong> (or Create a new submission).</li></ul><ol><li><strong>Upload the Package</strong>:</li></ol><ul><li>Click on <strong>Packages</strong>.</li></ul><ul><li>Drag and drop your compiled <strong><code>ExploreDB.msix</code></strong> (located in the <code>StoreRelease</code> folder) into the upload box.</li></ul><ul><li>Click <strong>Save</strong>.</li></ul><ol><li><strong>Submit to the Store</strong>:</li></ol><ul><li>Review your Pricing and Store Listing to ensure nothing needs changing.</li></ul><ul><li>Click <strong>Submit to the Store</strong>. Microsoft will review the update and automatically push it to all users!</li></ul></p>
+<p>To publish an update to the Microsoft Store, you must upload the freshly built files from your <code>StoreRelease</code> folder to the Microsoft Partner Center:</p>
+<ol>
+  <li><strong>Create a New Submission</strong>:
+    <ul>
+      <li>Go to your <a href="https://partner.microsoft.com/en-us/dashboard/windows/overview" target="_blank">Microsoft Partner Center Dashboard</a>.</li>
+      <li>Navigate to <strong>Apps and games</strong> -&gt; <strong>ExploreDB</strong>.</li>
+      <li>Under the "Update" section, click <strong>Update</strong> (or Create a new submission).</li>
+    </ul>
+  </li>
+  <li><strong>Upload the Package</strong>:
+    <ul>
+      <li>Click on <strong>Packages</strong>.</li>
+      <li>Drag and drop your compiled <strong><code>ExploreDB.msix</code></strong> (located in the <code>StoreRelease</code> folder) into the upload box.</li>
+      <li>Click <strong>Save</strong>.</li>
+    </ul>
+  </li>
+  <li><strong>Submit to the Store</strong>:
+    <ul>
+      <li>Review your Pricing and Store Listing to ensure nothing needs changing.</li>
+      <li>Click <strong>Submit to the Store</strong>. Microsoft will review the update and automatically push it to all users!</li>
+    </ul>
+  </li>
+</ol>
 <hr>
 <h3><strong>Publishing a Release (GitHub Releases & Pages)</strong></h3>
-<p>To publish an update to the team, you must upload the freshly built files from your <code>GitHubRelease</code> folder to the <code>ExploreDB-Releases</code> repository.<ol><li><strong>Publish the Heavy Binaries (GitHub Releases)</strong>:</li></ol><ul><li>Go to the <code>ExploreDB-Releases</code> repository on GitHub.</li><li>Click <strong>Releases</strong> -&gt; <strong>Draft a new release</strong>.</li><li>Create a tag that exactly matches your new version (e.g., <code>v1.0.0.1</code>). <strong>CRITICAL: You must include the <code>v</code> at the beginning of the tag!</strong></li><li>Drag and drop your compiled <strong><code>ExploreDB_X.X.X.X_x64.msix</code></strong> file into the "Attach binaries" box.</li><li>Click the green <strong>Publish release</strong> button at the bottom. <strong>CRITICAL: Do not save it as a "Draft" or the installer will fail with a 404 error!</strong></li></ul>
+<p>To publish an update to the team, you must upload the freshly built files from your <code>GitHubRelease</code> folder to the <code>ExploreDB-Releases</code> repository:</p>
+<ol>
+  <li><strong>Publish the Heavy Binaries (GitHub Releases)</strong>:
+    <ul>
+      <li>Go to the <code>ExploreDB-Releases</code> repository on GitHub.</li>
+      <li>Click <strong>Releases</strong> -&gt; <strong>Draft a new release</strong>.</li>
+      <li>Create a tag that exactly matches your new version (e.g., <code>v1.0.0.1</code>). <strong>CRITICAL: You must include the <code>v</code> at the beginning of the tag!</strong></li>
+      <li>Drag and drop your compiled <strong><code>ExploreDB_X.X.X.X_x64.msix</code></strong> file into the "Attach binaries" box.</li>
+      <li>Click the green <strong>Publish release</strong> button at the bottom. <strong>CRITICAL: Do not save it as a "Draft" or the installer will fail with a 404 error!</strong></li>
+    </ul>
     <blockquote>
       <p><strong>💡 TIP: Forcing an Update (Mandatory Updates)</strong></p>
       <p>If you want to force users to update (blocking them from using the app until they do), simply type the exact keyword <strong><code>[CRITICAL UPDATE]</code></strong> anywhere inside the Release Notes box when publishing your release on GitHub. The app will detect this keyword and throw a full-screen, unclosable blocker modal!</p>
     </blockquote>
-    <ol><li><strong>Trigger the Auto-Update (GitHub Pages)</strong>:</li></ol><ul><li>Go to the <strong>Code</strong> tab of the <code>ExploreDB-Releases</code> repository.</li></ul><ul><li>Click <strong>Add file</strong> -&gt; <strong>Upload files</strong>.</li></ul><ul><li>Drag and drop the updated 1 KB <strong><code>ExploreDB.appinstaller</code></strong> file to overwrite the old one in the root directory.</li></ul><ul><li>Commit the changes. Once GitHub Actions finishes deploying the Pages site, teammates' computers will automatically detect the update on their next launch!</li></ul></p>
+  </li>
+  <li><strong>Trigger the Auto-Update (GitHub Pages)</strong>:
+    <ul>
+      <li>Go to the <strong>Code</strong> tab of the <code>ExploreDB-Releases</code> repository.</li>
+      <li>Click <strong>Add file</strong> -&gt; <strong>Upload files</strong>.</li>
+      <li>Drag and drop the updated 1 KB <strong><code>ExploreDB.appinstaller</code></strong> file to overwrite the old one in the root directory.</li>
+      <li>Commit the changes. Once GitHub Actions finishes deploying the Pages site, teammates' computers will automatically detect the update on their next launch!</li>
+    </ul>
+  </li>
+</ol>
 <h3><strong>Disaster Recovery: Rebuilding the Release Infrastructure</strong></h3>
-<p>If the <code>ExploreDB-Releases</code> repository ever gets accidentally deleted, the auto-update links will break. Here is exactly how to rebuild the infrastructure from scratch:<ol><li><strong>Recreate the Repository</strong>:</li></ol><ul><li>Go to GitHub and create a new <strong>Public</strong> repository named <code>ExploreDB-Releases</code>. (It <em>must</em> be public so the Windows installer can access the files without logging in).</li></ul><ol><li><strong>Re-enable GitHub Pages</strong>:</li></ol><ul><li>In the new repo, go to <strong>Settings</strong> -&gt; <strong>Pages</strong>.</li></ul><ul><li>Under "Build and deployment", set the Source to <strong>Deploy from a branch</strong>.</li></ul><ul><li>Select the <code>main</code> branch and click Save.</li></ul><ol><li><strong>Re-upload the Files</strong>:</li></ol><ul><li>Go back to the <strong>Code</strong> tab and upload <code>ExploreDB.appinstaller</code>, <code>ExploreDB_Certificate.pfx</code>, and <code>ExploreDB_Certificate_Installer.bat</code>.</li></ul><ul><li>Go to the <strong>Releases</strong> tab, draft a new release (e.g., <code>v1.0.0.0</code>), and upload your <code>.msix</code> file.</li></ul></p>
+<p>If the <code>ExploreDB-Releases</code> repository ever gets accidentally deleted, the auto-update links will break. Here is exactly how to rebuild the infrastructure from scratch:</p>
+<ol>
+  <li><strong>Recreate the Repository</strong>:
+    <ul>
+      <li>Go to GitHub and create a new <strong>Public</strong> repository named <code>ExploreDB-Releases</code>. (It <em>must</em> be public so the Windows installer can access the files without logging in).</li>
+    </ul>
+  </li>
+  <li><strong>Re-enable GitHub Pages</strong>:
+    <ul>
+      <li>In the new repo, go to <strong>Settings</strong> -&gt; <strong>Pages</strong>.</li>
+      <li>Under "Build and deployment", set the Source to <strong>Deploy from a branch</strong>.</li>
+      <li>Select the <code>main</code> branch and click Save.</li>
+    </ul>
+  </li>
+  <li><strong>Re-upload the Files</strong>:
+    <ul>
+      <li>Go back to the <strong>Code</strong> tab and upload <code>ExploreDB.appinstaller</code>, <code>ExploreDB_Certificate.pfx</code>, and <code>ExploreDB_Certificate_Installer.bat</code>.</li>
+      <li>Go to the <strong>Releases</strong> tab, draft a new release (e.g., <code>v1.0.0.0</code>), and upload your <code>.msix</code> file.</li>
+    </ul>
+  </li>
+</ol>
 <p><em>(Note: As long as you use the exact same repository name, the URL inside the <code>.appinstaller</code> will automatically match and everything will start working again instantly!)</em></p>
 <p><strong>What if I have to use a different repository name?</strong></p>
-<p>If you rebuild the infrastructure using a <em>different</em> repository name (e.g., <code>ExploreDB-Updates</code>), the hardcoded URLs will break. To fix it:<ol><li>Open your local <code>ExploreDB.appinstaller</code> file.</li></ol><ol><li>Update the two <code>Uri</code> links inside it to point to your new repository name.</li></ol><ol><li>Upload the modified <code>.appinstaller</code> to the new repo.</li></ol><ol><li><strong>Crucial Step</strong>: Because the old link is broken, automatic updates will fail. You must tell all your teammates to manually download and run the new <code>.appinstaller</code> file one time. This will permanently repoint their computers to your new repository!</li></ol></p>
+<p>If you rebuild the infrastructure using a <em>different</em> repository name (e.g., <code>ExploreDB-Updates</code>), the hardcoded URLs will break. To fix it:</p>
+<ol>
+  <li>Open your local <code>ExploreDB.appinstaller</code> file.</li>
+  <li>Update the two <code>Uri</code> links inside it to point to your new repository name.</li>
+  <li>Upload the modified <code>.appinstaller</code> to the new repo.</li>
+  <li><strong>Crucial Step</strong>: Because the old link is broken, automatic updates will fail. You must tell all your teammates to manually download and run the new <code>.appinstaller</code> file one time. This will permanently repoint their computers to your new repository!</li>
+</ol>
 <hr>
 <h2>🤝 Contributing</h2>
 <p>Contributions are welcome! Please feel freSe to submit a Pull Request.</p>
