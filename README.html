@@ -79,34 +79,87 @@
 <h3><strong>Method 2: Manual Installation (GitHub Beta / Internal)</strong></h3>
 <p><em>(Use this method if you need to install internal test builds)</em></p>
 <p><strong>🔗 Links to share with your team:</strong> </p>
-<p><em>(Note: Your teammates only need to do Step 1 if this is their very first time installing it!)</em><ul><li><strong>Step 1 (Certificates)</strong>: Download both <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate.pfx" target="_blank">ExploreDB_Certificate.pfx</a> and <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate_Installer.bat" target="_blank">ExploreDB_Certificate_Installer.bat</a></li></ul><ul><li><strong>Step 2 (App Installer)</strong>: <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller" target="_blank">Download the App Installer</a></li></ul></p>
+<p><em>(Note: Your teammates only need to do Step 1 if this is their very first time installing it!)</em><ul><li><strong>Step 1 (Certificates)</strong>: Download both <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate.pfx" target="_blank">ExploreDB_Certificate.pfx</a> and <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate_Installer.bat" target="_blank">ExploreDB_Certificate_Installer.bat</a></li></ul><ul><li><strong>Step 2 (App Installer)</strong>: <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller" target="_blank">Download the App Installer</a></li></ul></p>
 <p>ExploreDB is distributed via a web-based <strong>App Installer</strong> which automatically checks for and installs new updates silently in the background every time you open the app!</p>
 <p>Because we use a custom development certificate, installing it on a brand new computer requires a quick one-time trust setup.</p>
 <h4><strong>Installation Steps for End Users</strong></h4>
-<p><strong>Prerequisites</strong>: Because this app is heavily optimized for a small file size (under 20 MB), it requires the <strong><a href="https://dotnet.microsoft.com/en-us/download/dotnet/8.0" target="_blank">.NET 8.0 Desktop Runtime (x64)</a></strong> to be installed on the computer first.<ol><li><strong>Trust the Certificate (First Time Only)</strong>:</li></ol><ul><li>Download the <strong><code>ExploreDB_Certificate.pfx</code></strong> and <strong><code>trust_certificate.bat</code></strong> files from the links above.</li></ul><ul><li>Right-click on <strong><code>trust_certificate.bat</code></strong> and select <strong>"Run as Administrator"</strong>.</li></ul><ul><li>Press <strong>Enter</strong> on your keyboard, then click <strong>Yes</strong> on the prompt to allow the installation.</li></ul><ul><li><em>Note: This tells Windows to trust our custom digital signature so the app can be installed safely.</em></li></ul></p>
-<p>   <strong>If the script fails, you can install the certificate manually:</strong><ul><li>Double-click the <strong><code>ExploreDB_Certificate.pfx</code></strong> file.</li></ul><ul><li>On the very first screen, select <strong>Local Machine</strong> (instead of Current User) and click Next.</li></ul><ul><li>Click <strong>"Yes"</strong> on the Windows User Account Control (UAC) prompt that asks for permission.</li></ul><ul><li>Click Next on the file path screen.</li></ul><ul><li>Type <code>password</code> for the password and click Next.</li></ul><ul><li>Choose <strong>"Place all certificates in the following store"</strong> and click <strong>Browse</strong>.</li></ul><ul><li>Select <strong>Trusted Root Certification Authorities</strong> and click OK, then Next, then Finish.</li></ul><ol><li><strong>Install the Application</strong>:</li></ol><ul><li>Download the tiny <strong><code>ExploreDB.appinstaller</code></strong> file from our <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller" target="_blank">GitHub Pages site</a>.</li></ul><ul><li>Double-click the downloaded file.</li></ul><ul><li>A Windows App Installer window will appear. Click <strong>Install</strong>.</li></ul><ul><li>The app will securely download the heavy binaries from our GitHub Releases page and launch!</li></ul><ol><li><strong>Launch & Auto-Updates</strong>:</li></ol><ul><li>For future uses, simply search for "ExploreDB" in your Windows Start Menu.</li></ul><ul><li>The app will automatically keep itself up-to-date!</li></ul></p>
+<p><strong>Prerequisites</strong>: Because this app is heavily optimized for a small file size (under 20 MB), it requires the <strong><a href="https://dotnet.microsoft.com/en-us/download/dotnet/8.0" target="_blank">.NET 8.0 Desktop Runtime (x64)</a></strong> to be installed on the computer first.</p>
+<ol>
+  <li><strong>Trust the Certificate (First Time Only)</strong>:
+    <ul>
+      <li>Download the <strong><code>ExploreDB_Certificate.pfx</code></strong> and <strong><code>trust_certificate.bat</code></strong> files from the links above.</li>
+      <li>Right-click on <strong><code>trust_certificate.bat</code></strong> and select <strong>"Run as Administrator"</strong>.</li>
+      <li>Press <strong>Enter</strong> on your keyboard, then click <strong>Yes</strong> on the prompt to allow the installation.</li>
+      <li><em>Note: This tells Windows to trust our custom digital signature so the app can be installed safely.</em></li>
+    </ul>
+    <p><strong>If the script fails, you can install the certificate manually:</strong></p>
+    <ul>
+      <li>Double-click the <strong><code>ExploreDB_Certificate.pfx</code></strong> file.</li>
+      <li>On the very first screen, select <strong>Local Machine</strong> (instead of Current User) and click Next.</li>
+      <li>Click <strong>"Yes"</strong> on the Windows User Account Control (UAC) prompt that asks for permission.</li>
+      <li>Click Next on the file path screen.</li>
+      <li>Type <code>password</code> for the password and click Next.</li>
+      <li>Choose <strong>"Place all certificates in the following store"</strong> and click <strong>Browse</strong>.</li>
+      <li>Select <strong>Trusted Root Certification Authorities</strong> and click OK, then Next, then Finish.</li>
+    </ul>
+  </li>
+  <li><strong>Install the Application</strong>:
+    <ul>
+      <li>Download the tiny <strong><code>ExploreDB.appinstaller</code></strong> file from our <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller" target="_blank">GitHub Pages site</a>.</li>
+      <li>Double-click the downloaded file.</li>
+      <li>A Windows App Installer window will appear. Click <strong>Install</strong>.</li>
+      <li>The app will securely download the heavy binaries from our GitHub Releases page and launch!</li>
+    </ul>
+  </li>
+  <li><strong>Launch & Auto-Updates</strong>:
+    <ul>
+      <li>For future uses, simply search for "ExploreDB" in your Windows Start Menu.</li>
+      <li>The app will automatically keep itself up-to-date!</li>
+    </ul>
+  </li>
+</ol>
 <hr>
 <h2>🛠️ Building from Source</h2>
-<h3><strong>Prerequisites</strong></h3><ul><li><a href="https://dotnet.microsoft.com/download/dotnet/8.0" target="_blank">.NET 8 SDK</a></li></ul><ul><li>Windows 10/11 (version 1809 or higher)</li></ul><ul><li>Visual Studio 2022 (optional, for IDE development)</li></ul>
+<h3><strong>Prerequisites</strong></h3><ul><li><a href="https://dotnet.microsoft.com/download/dotnet/8.0" target="_blank">.NET 8 SDK</a></li></ul><ul><li>Windows 10/11 (version 1809 or higher)</li></ul><ul><li>Visual Studio 2022 (optional, for IDE development)</li></ul>
 <h3><strong>Compiling the MSIX Installer</strong></h3>
-<p>To compile a fresh MSIX package with all dependencies (including Win2D native assets):<ol><li><strong>Clone the repository</strong>:</li></ol></p>
-   <pre><code>bash
-   git clone https://github.com/YOUR_USERNAME/ExploreDB.git
-   cd ExploreDB
-<p>   </code></pre><ol><li><strong>Build and Package Scripts</strong></li></ol></p>
-<p>   &gt; You <strong>do not</strong> need to run both of the scripts below. They serve different purposes depending on whether you are releasing to the Microsoft Store or GitHub.</p>
-<p>   <strong>Option A: Build for Microsoft Store (Public)</strong></p>
-<p>   Double-click the <strong><code>scripts\build_store_release.bat</code></strong> script. <ul><li>It will automatically inject the Microsoft Store cryptographic identity.</li></ul><ul><li>It will strip out the internal GitHub auto-updater UI to comply with Store policies.</li></ul><ul><li>The final <code>.msix</code> file will be placed in the <strong><code>StoreRelease</code></strong> folder, ready to drag-and-drop into the Microsoft Partner Center Dashboard.</li></ul></p>
-<p>   <strong>Option B: Build for GitHub (Internal / Beta)</strong></p>
-<p>   Double-click the <strong><code>scripts\build_github_release.bat</code></strong> script.<ul><li>It will compile the app natively for <code>win-x64</code>.</li></ul><ul><li>It will digitally sign the installer using your local <code>ExploreDB_Certificate.pfx</code>.</li></ul><ul><li>The final <code>.msix</code> and <code>.appinstaller</code> files will be placed in the <strong><code>GitHubRelease</code></strong> folder.</li></ul></p>
-<p>   <strong>Publishing a New Release:</strong></p>
-<p>   If you are ready to officially launch a new version, double-click <strong><code>scripts\publish_new_release.bat</code></strong>. <ul><li>It will prompt you for a new version number and automatically bump it in all files.</li></ul><ul><li>It will give you a menu asking if you want to build for the Microsoft Store, GitHub, or Both simultaneously!</li></ul></p>
+<p>To compile a fresh MSIX package with all dependencies (including Win2D native assets):</p>
+<ol>
+  <li><strong>Clone the repository</strong>:
+    <pre><code>bash
+    git clone https://github.com/YOUR_USERNAME/ExploreDB.git
+    cd ExploreDB
+    </code></pre>
+  </li>
+  <li><strong>Build and Package Scripts</strong>
+    <p>&gt; You <strong>do not</strong> need to run both of the scripts below. They serve different purposes depending on whether you are releasing to the Microsoft Store or GitHub.</p>
+    <p><strong>Option A: Build for Microsoft Store (Public)</strong></p>
+    <p>Double-click the <strong><code>scripts\build_store_release.bat</code></strong> script.</p>
+    <ul>
+      <li>It will automatically inject the Microsoft Store cryptographic identity.</li>
+      <li>It will strip out the internal GitHub auto-updater UI to comply with Store policies.</li>
+      <li>The final <code>.msix</code> file will be placed in the <strong><code>StoreRelease</code></strong> folder, ready to drag-and-drop into the Microsoft Partner Center Dashboard.</li>
+    </ul>
+    <p><strong>Option B: Build for GitHub (Internal / Beta)</strong></p>
+    <p>Double-click the <strong><code>scripts\build_github_release.bat</code></strong> script.</p>
+    <ul>
+      <li>It will compile the app natively for <code>win-x64</code>.</li>
+      <li>It will digitally sign the installer using your local <code>ExploreDB_Certificate.pfx</code>.</li>
+      <li>The final <code>.msix</code> and <code>.appinstaller</code> files will be placed in the <strong><code>GitHubRelease</code></strong> folder.</li>
+    </ul>
+    <p><strong>Publishing a New Release:</strong></p>
+    <p>If you are ready to officially launch a new version, double-click <strong><code>scripts\publish_new_release.bat</code></strong>.</p>
+    <ul>
+      <li>It will prompt you for a new version number and automatically bump it in all files.</li>
+      <li>It will give you a menu asking if you want to build for the Microsoft Store, GitHub, or Both simultaneously!</li>
+    </ul>
+  </li>
+</ol>
 <h3><strong>Manual Build & Sign (Fallback)</strong></h3>
-<p>If the automated scripts fail, you can perform the steps manually:<ol><li><strong>Bump the Version Numbers (Manual)</strong>:</li></ol><ul><li><code>ExploreDB.csproj</code>: Update the <code>&lt;Version&gt;</code> and <code>&lt;ApplicationDisplayVersion&gt;</code> tags.</li></ul><ul><li><code>Platforms\Windows\Package.appxmanifest</code>: Update the <code>Version="..."</code> attribute in the <code>&lt;Identity&gt;</code> tag.</li></ul><ul><li><code>ExploreDB.appinstaller</code> (GitHub Only): Update both <code>Version="..."</code> attributes AND the URL at the bottom to point to your new GitHub tag.</li></ul><ol><li><strong>Inject the Correct Manifest</strong>:</li></ol></p>
-<p>   <em>(The .NET compiler only looks for a file named <code>Package.appxmanifest</code>. Because we use a dual-channel architecture, you must manually copy the correct template over the main file before building!)</em><ul><li><strong>For Microsoft Store</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.Store.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li></ul><ul><li><strong>For GitHub</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.GitHub.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li></ul><ol><li><strong>Build (Terminal)</strong>:</li></ol><ul><li><strong>For GitHub</strong>:</li></ul></p>
+<p>If the automated scripts fail, you can perform the steps manually:<ol><li><strong>Bump the Version Numbers (Manual)</strong>:</li></ol><ul><li><code>ExploreDB.csproj</code>: Update the <code>&lt;Version&gt;</code> and <code>&lt;ApplicationDisplayVersion&gt;</code> tags.</li></ul><ul><li><code>Platforms\Windows\Package.appxmanifest</code>: Update the <code>Version="..."</code> attribute in the <code>&lt;Identity&gt;</code> tag.</li></ul><ul><li><code>ExploreDB.appinstaller</code> (GitHub Only): Update both <code>Version="..."</code> attributes AND the URL at the bottom to point to your new GitHub tag.</li></ul><ol><li><strong>Inject the Correct Manifest</strong>:</li></ol></p>
+<p>   <em>(The .NET compiler only looks for a file named <code>Package.appxmanifest</code>. Because we use a dual-channel architecture, you must manually copy the correct template over the main file before building!)</em><ul><li><strong>For Microsoft Store</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.Store.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li></ul><ul><li><strong>For GitHub</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.GitHub.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li></ul><ol><li><strong>Build (Terminal)</strong>:</li></ol><ul><li><strong>For GitHub</strong>:</li></ul></p>
      <pre><code>bash
      dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false
-<p>     </code></pre><ul><li><strong>For Microsoft Store</strong> (Adds <code>-p:StoreBuild=true</code>):</li></ul></p>
+<p>     </code></pre><ul><li><strong>For Microsoft Store</strong> (Adds <code>-p:StoreBuild=true</code>):</li></ul></p>
      <pre><code>bash
      dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false -p:StoreBuild=true
 <p>     </code></pre><ol><li><strong>Sign the Package (GitHub Only)</strong>:</li></ol></p>
