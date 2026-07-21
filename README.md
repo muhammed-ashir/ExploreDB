@@ -155,6 +155,18 @@ If the automated scripts fail, you can perform the steps manually:
    signtool sign /fd SHA256 /a /f "cert\ExploreDB_Certificate.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
    ```
 
+### **Testing the Microsoft Store Build Locally**
+
+Since the Microsoft Store version strips out the internal auto-updater and removes digital signatures (because Microsoft signs it themselves), you cannot easily install the Store `.msix` file on your local machine. 
+
+To test that the Store features behave correctly (e.g., verifying the auto-updater is completely disabled), use Visual Studio:
+1. Open `ExploreDB.sln` in Visual Studio.
+2. In `ExploreDB.csproj`, temporarily set `<StoreBuild>true</StoreBuild>` inside a `<PropertyGroup>`.
+3. In the top toolbar next to the green Play button, select **ExploreDB (Package)** (the one with the solid green triangle icon).
+4. *(If it's your first time)* Open **Configuration Manager** from that same dropdown, and make sure the **Deploy** checkbox is checked for the ExploreDB project.
+5. Hit **F5**. Visual Studio will automatically deploy a temporary container and launch the app in full Microsoft Store mode!
+6. **Important**: Remember to remove `<StoreBuild>true</StoreBuild>` when you are done testing!
+
 ### **Publishing a Release (Microsoft Store)**
 
 To publish an update to the Microsoft Store, you must upload the freshly built files from your `StoreRelease` folder to the Microsoft Partner Center.
