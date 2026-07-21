@@ -23,11 +23,9 @@
         <Version>1.1.2.0</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+		
     </PropertyGroup>
 
-	 <PropertyGroup>
-        <StoreBuild>true</StoreBuild>
-    </PropertyGroup>
     <PropertyGroup Condition="'$(StoreBuild)' == 'true'">
         <DefineConstants>$(DefineConstants);STORE_BUILD</DefineConstants>
     </PropertyGroup>
