@@ -186,14 +186,11 @@ To test Microsoft Store-specific logic locally, you must run it in Visual Studio
 
 By default, Visual Studio automatically builds the GitHub version of ExploreDB when you press **F5** (as long as `<StoreBuild>true</StoreBuild>` is not in your `.csproj`). 
 
-If you want to test the automatic update banner to see how it behaves when a new version is released on GitHub:
-1. Open your `ExploreDB.csproj` file.
-2. Find `<ApplicationDisplayVersion>` and `<Version>`.
-3. Temporarily change them to a lower version (e.g., `1.0.0.0`).
-4. Hit **F5** to launch the app.
-5. Because your local version is now lower than the latest release on GitHub, the app will instantly detect the "update" and show the GitHub Update Banner!
-
-*(Remember to change the version back to the correct number when you are done!)*
+To test any new features or changes for the GitHub release:
+1. Open `ExploreDB.sln` in Visual Studio.
+2. In the top toolbar next to the green Play button, select **ExploreDB (Package)** (the one with the solid green triangle icon).
+3. Hit **F5**. Visual Studio will automatically deploy the temporary container and launch the app.
+4. *(Optional)* If you ever need to specifically test the auto-updater functionality, you can temporarily lower your `<ApplicationDisplayVersion>` and `<Version>` in the `.csproj` file before hitting F5. This will trick the app into thinking it's out of date and trigger the update banner!
 
 ### **Publishing a Release (Microsoft Store)**
 
