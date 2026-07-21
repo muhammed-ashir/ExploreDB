@@ -111,13 +111,13 @@
 <hr>
 <h2>📦 Installation Guide</h2>
 <h3><strong>Method 1: Microsoft Store (Recommended)</strong></h3>
-<p>ExploreDB is officially available on the Microsoft Store for seamless installation and completely silent background updates!<ol><li>Open the <strong>Microsoft Store</strong> app on Windows.</li></ol><ol><li>Search for <strong>ExploreDB</strong> and click <strong>Install</strong>.</li></ol></p>
+<p>ExploreDB is officially available on the Microsoft Store for seamless installation and completely silent background updates!<ol><li>Open the <strong>Microsoft Store</strong> app on Windows.</li><li>Search for <strong>ExploreDB</strong> and click <strong>Install</strong>.</li></ol></p>
 <p><em>(Updates will be handled automatically by Windows!)</em></p>
 <hr>
 <h3><strong>Method 2: Manual Installation (GitHub Beta / Internal)</strong></h3>
 <p><em>(Use this method if you need to install internal test builds)</em></p>
 <p><strong>🔗 Links to share with your team:</strong> </p>
-<p><em>(Note: Your teammates only need to do Step 1 if this is their very first time installing it!)</em><ul><li><strong>Step 1 (Certificates)</strong>: Download both <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate.pfx" target="_blank">ExploreDB_Certificate.pfx</a> and <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate_Installer.bat" target="_blank">ExploreDB_Certificate_Installer.bat</a></li></ul><ul><li><strong>Step 2 (App Installer)</strong>: <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller" target="_blank">Download the App Installer</a></li></ul></p>
+<p><em>(Note: Your teammates only need to do Step 1 if this is their very first time installing it!)</em><ul><li><strong>Step 1 (Certificates)</strong>: Download both <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate.pfx" target="_blank">ExploreDB_Certificate.pfx</a> and <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate_Installer.bat" target="_blank">ExploreDB_Certificate_Installer.bat</a></li><li><strong>Step 2 (App Installer)</strong>: <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller" target="_blank">Download the App Installer</a></li></ul></p>
 <p>ExploreDB is distributed via a web-based <strong>App Installer</strong> which automatically checks for and installs new updates silently in the background every time you open the app!</p>
 <p>Because we use a custom development certificate, installing it on a brand new computer requires a quick one-time trust setup.</p>
 <h4><strong>Installation Steps for End Users</strong></h4>
@@ -158,7 +158,13 @@
 </ol>
 <hr>
 <h2>🛠️ Building from Source</h2>
-<h3><strong>Prerequisites</strong></h3><ul><li><a href="https://dotnet.microsoft.com/download/dotnet/8.0" target="_blank">.NET 8 SDK</a></li></ul><ul><li>Windows 10/11 (version 1809 or higher)</li></ul><ul><li>Visual Studio 2022 (optional, for IDE development)</li></ul>
+<h3><strong>Prerequisites</strong></h3>
+<ul>
+  <li><a href="https://dotnet.microsoft.com/download/dotnet/8.0" target="_blank">.NET 8 SDK</a></li>
+  <li>Windows 10/11 (version 1809 or higher)</li>
+  <li><strong>Windows Developer Mode</strong>: Must be toggled ON in Windows Settings (System -&gt; For developers) to allow Visual Studio to install the app locally.</li>
+  <li>Visual Studio 2022 (optional, for IDE development)</li>
+</ul>
 <h3><strong>Compiling the MSIX Installer</strong></h3>
 <p>To compile a fresh MSIX package with all dependencies (including Win2D native assets):</p>
 <ol>
@@ -251,6 +257,7 @@
     <ul>
       <li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li>
       <li>Open <strong>Configuration Manager</strong> again, and make sure the <strong>Deploy</strong> checkbox is checked for the ExploreDB project.</li>
+      <li><strong>Developer Mode</strong>: Make sure Developer Mode is turned ON in Windows Settings (System -&gt; For developers) otherwise deployment will fail.</li>
       <li>Hit <strong>F5</strong>. Visual Studio will automatically deploy a temporary container and launch the app in full Microsoft Store mode!</li>
     </ul>
   </li>
@@ -262,6 +269,7 @@
 <ol>
   <li>Open <code>ExploreDB.sln</code> in Visual Studio.</li>
   <li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li>
+  <li><strong>Developer Mode</strong>: Make sure Developer Mode is turned ON in Windows Settings (System -&gt; For developers) otherwise deployment will fail.</li>
   <li>Hit <strong>F5</strong>. Visual Studio will automatically deploy the temporary container and launch the app.</li>
   <li><em>(Optional)</em> If you ever need to specifically test the auto-updater functionality, you can temporarily lower your <code>&lt;ApplicationDisplayVersion&gt;</code> and <code>&lt;Version&gt;</code> in the <code>.csproj</code> file before hitting F5. This will trick the app into thinking it's out of date and trigger the update banner!</li>
 </ol>
