@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Release Guide - ExploreDB Documentation</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --text-color: #e2e8f0;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-color: #38bdf8;
+            --code-bg: #1e293b;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+            background-image: radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.15), transparent 25%),
+                              radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+            background-attachment: fixed;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 40px 50px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        h1, h2, h3, h4 { color: #fff; margin-top: 1.5em; font-weight: 600; }
+        h1 { font-size: 2.5em; border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; margin-top: 0; }
+        h2 { font-size: 1.8em; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px; }
+        h3 { font-size: 1.4em; color: var(--accent-color); margin-top: 1.2em; }
+        a { color: var(--accent-color); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: var(--code-bg); padding: 3px 6px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.9em; color: #fb7185; }
+        pre { background: var(--code-bg); padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--glass-border); margin: 15px 0; }
+        pre code { background: transparent; padding: 0; color: #e2e8f0; font-size: 0.95em; }
+        blockquote { border-left: 4px solid var(--accent-color); margin: 15px 0; padding-left: 15px; color: #94a3b8; background: rgba(56, 189, 248, 0.05); padding: 10px 15px; border-radius: 0 8px 8px 0; }
+        ul, ol { padding-left: 25px; margin: 10px 0; }
+        li { margin-bottom: 8px; }
+        hr { border: 0; border-top: 1px solid var(--glass-border); margin: 40px 0; }
+        p { margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+<h1>ExploreDB Release Guide</h1>
+<p>This document explains the exact step-by-step process for publishing a new version of ExploreDB in the future. Because you are using <code>.appinstaller</code>, your teammates' computers will automatically detect these updates and install them seamlessly!</p>
+<hr>
+<h2>Step 1: Bump the Version Numbers</h2>
+<p>Before building a new release, you must increase the version number in <strong>three</strong> places. For example, if you are moving from <code>1.0.0.0</code> to <code>1.0.0.1</code>:</p>
+<ol><li><strong><code>ExploreDB.csproj</code></strong></li></ol>
+<p>   Open this file and find the <code>&lt;Version&gt;</code> and <code>&lt;ApplicationVersion&gt;</code> tags. Update them to your new version.</p>
+<ol><li><strong><code>Platforms\Windows\Package.appxmanifest</code></strong></li></ol>
+<p>   Open this file and find the <code>Version="..."</code> attribute inside the <code>&lt;Identity&gt;</code> tag at the very top. Update it.</p>
+<ol><li><strong><code>ExploreDB.appinstaller</code></strong></li></ol>
+<p>   Open this file and update the version number in <strong>three</strong> places:</p>
+<ul><li><code>&lt;AppInstaller Version="1.0.0.1"</code></li><li><code>&lt;MainPackage Version="1.0.0.1"</code></li><li>Update the GitHub download URL so it points to the new tag and new filename (e.g., <code>.../download/v1.0.0.1/ExploreDB_1.0.0.1_x64.msix</code>).</li></ul>
+<hr>
+<h2>Step 2: Build the Installer</h2>
+<p>Once the version numbers are bumped, compile the new package:</p>
+<ol><li>Double-click the <strong><code>scripts\build_github_release.bat</code></strong> script in your main repository folder.</li><li>Wait for it to finish. It will automatically clean, compile, sign with <code>ExploreDB_Certificate.pfx</code>, and package everything into the <code>GitHubRelease</code> folder.</li></ol>
+<hr>
+<h2>Step 3: Publish to GitHub Releases (The Binary)</h2>
+<ol><li>Go to your public <code>ExploreDB-Releases</code> repository on GitHub.</li><li>Click <strong>Releases</strong> on the right side, then click <strong>Draft a new release</strong>.</li><li>Create a new tag that matches your version (e.g., <code>v1.0.0.1</code>).</li><li>Set the Release title to <code>Version 1.0.0.1</code>.</li><li>Drag and drop the massive <strong><code>ExploreDB_1.0.0.1_x64.msix</code></strong> file from your local <code>App</code> folder into the "Attach binaries" box.</li></ol>
+<p>   &gt; [!NOTE]</p>
+<p>   &gt; You do not need to re-upload the <code>.pfx</code> or <code>.bat</code> files for future updates. Those are only needed for the very first installation on a brand new computer.</p>
+<ol><li>Click <strong>Publish release</strong>.</li></ol>
+<hr>
+<h2>Step 4: Publish to GitHub Pages (The Trigger)</h2>
+<p>This step is what actually triggers the automatic update on your teammates' computers!</p>
+<ol><li>Go to the <strong>Code</strong> tab of your <code>ExploreDB-Releases</code> repository.</li><li>Click <strong>Add file</strong> -&gt; <strong>Upload files</strong>.</li><li>Drag and drop the tiny 1 KB <strong><code>ExploreDB.appinstaller</code></strong> file from your local <code>App</code> folder into the browser.</li><li>Click <strong>Commit changes</strong> to overwrite the old one.</li></ol>
+<blockquote>Wait about 60 seconds for GitHub Actions to deploy the new <code>.appinstaller</code> file. As soon as it finishes, the next time your teammates open ExploreDB, Windows will silently notice the new version and gracefully prompt them to update!</blockquote>
+    </div>
+</body>
+</html>

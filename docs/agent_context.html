@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Context - ExploreDB Documentation</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --text-color: #e2e8f0;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-color: #38bdf8;
+            --code-bg: #1e293b;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+            background-image: radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.15), transparent 25%),
+                              radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+            background-attachment: fixed;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 40px 50px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        h1, h2, h3, h4 { color: #fff; margin-top: 1.5em; font-weight: 600; }
+        h1 { font-size: 2.5em; border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; margin-top: 0; }
+        h2 { font-size: 1.8em; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px; }
+        h3 { font-size: 1.4em; color: var(--accent-color); margin-top: 1.2em; }
+        a { color: var(--accent-color); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: var(--code-bg); padding: 3px 6px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.9em; color: #fb7185; }
+        pre { background: var(--code-bg); padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--glass-border); margin: 15px 0; }
+        pre code { background: transparent; padding: 0; color: #e2e8f0; font-size: 0.95em; }
+        blockquote { border-left: 4px solid var(--accent-color); margin: 15px 0; padding-left: 15px; color: #94a3b8; background: rgba(56, 189, 248, 0.05); padding: 10px 15px; border-radius: 0 8px 8px 0; }
+        ul, ol { padding-left: 25px; margin: 10px 0; }
+        li { margin-bottom: 8px; }
+        hr { border: 0; border-top: 1px solid var(--glass-border); margin: 40px 0; }
+        p { margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+<h1>AI Agent Context Document</h1>
+<blockquote><strong>Note to Future AI Agents:</strong> Read this document first to gain full context of the ExploreDB project, its architecture, and its history. This acts as the long-term memory for the project.</blockquote>
+<h2>1. Project Overview</h2>
+<p><strong>Name</strong>: ExploreDB (Formerly <em>DbExplore</em>)</p>
+<p><strong>Purpose</strong>: A powerful, modern database exploration and querying tool that connects directly to SQL Server databases. It provides an intuitive, glassmorphic UI to navigate, analyze, and query data without requiring deep SQL knowledge.</p>
+<h2>2. Technology Stack</h2>
+<ul><li><strong>Framework</strong>: .NET 8.0 MAUI Blazor Hybrid</li><li><strong>Language</strong>: C#, HTML, CSS, JavaScript</li><li><strong>Database Access</strong>: <code>Microsoft.Data.SqlClient</code> (SQL Server)</li><li><strong>UI/UX</strong>: Custom CSS with a dark-themed, glassmorphic design philosophy. (Focus on modern aesthetics, smooth transitions, and dynamic components).</li><li><strong>Packaging</strong>: Windows MSIX Package (<code>win-x64</code>)</li></ul>
+<h2>3. Core Features & Business Logic</h2>
+<ul><li><strong>Pathfinder (Auto-Join Engine)</strong>: The flagship feature. Users select columns from multiple tables, and the app automatically calculates the shortest JOIN path between them. It intelligently chooses between <code>LEFT JOIN</code> and <code>INNER JOIN</code> based on foreign key nullability constraints and directionality.</li><li><strong>Query Runner</strong>: Allows execution of arbitrary, custom SQL queries with a dynamic results grid that handles unknown column structures on the fly.</li><li><strong>Schema Explorer</strong>: Discovers and visualizes database tables, views, stored procedures, column types, row counts, and complex parent-child foreign key relationships.</li></ul>
+<h2>4. Deployment & Release Architecture</h2>
+<p>The deployment pipeline is highly customized to bypass Visual Studio's heavy publishing UI and enable silent, web-based background updates for end users.</p>
+<ul><li><strong>Build Script</strong>: <code>build_installer.bat</code> automates the <code>dotnet publish</code> process for MSIX and uses <code>signtool.exe</code> to digitally sign the package.</li><li><strong>Security</strong>: The MSIX is signed using a custom self-signed certificate (<code>cert\ExploreDB_Certificate.pfx</code>). Because it is self-signed, end users must run <code>trust_certificate.bat</code> one time to inject it into their Trusted Root Certification Authorities store.</li><li><strong>Auto-Updates</strong>: The app utilizes Windows <strong>AppInstaller</strong>. The <code>ExploreDB.appinstaller</code> XML file configures the app to check for updates on launch.</li><li><strong>Hosting Strategy</strong>: </li><li>We use a dual-hosting setup to keep the main repository clean.</li><li>A secondary public repository (<code>ExploreDB-Releases</code>) is used.</li><li>The tiny <code>ExploreDB.appinstaller</code> file is hosted on <strong>GitHub Pages</strong> (providing a permanent URL for Windows to check).</li><li>The massive 18 MB <code>ExploreDB.msix</code> binaries are uploaded to <strong>GitHub Releases</strong>. The <code>.appinstaller</code> file redirects to these binaries.</li></ul>
+<h2>5. Important Project History & Quirks</h2>
+<ul><li><strong>Project Rename</strong>: The project was originally named <code>DbExplore</code> but was globally renamed to <code>ExploreDB</code>. If you ever see legacy references to <code>DbExplore</code> in old system paths or user context, map it to <code>ExploreDB</code>.</li><li><strong>Identity Strictness</strong>: Windows App Installer is extremely strict about the package <code>Identity</code>. The <code>Name</code> in <code>Package.appxmanifest</code> (<code>ExploreDB.App</code>) MUST exactly match the <code>Name</code> in <code>ExploreDB.appinstaller</code>.</li><li><strong>Custom Tools Priority</strong>: When working in this repository, always prioritize specialized tools (like <code>grep_search</code> or <code>multi_replace_file_content</code>) over generic shell commands to maintain code integrity.</li></ul>
+    </div>
+</body>
+</html>

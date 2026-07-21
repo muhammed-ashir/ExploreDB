@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ExploreDB Documentation</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --text-color: #e2e8f0;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-color: #38bdf8;
+            --code-bg: #1e293b;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+            background-image: radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.15), transparent 25%),
+                              radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+            background-attachment: fixed;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 40px 50px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        h1, h2, h3, h4 { color: #fff; margin-top: 1.5em; font-weight: 600; }
+        h1 { font-size: 2.5em; border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; margin-top: 0; }
+        h2 { font-size: 1.8em; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px; }
+        h3 { font-size: 1.4em; color: var(--accent-color); margin-top: 1.2em; }
+        a { color: var(--accent-color); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: var(--code-bg); padding: 3px 6px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.9em; color: #fb7185; }
+        pre { background: var(--code-bg); padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--glass-border); margin: 15px 0; }
+        pre code { background: transparent; padding: 0; color: #e2e8f0; font-size: 0.95em; }
+        blockquote { border-left: 4px solid var(--accent-color); margin: 15px 0; padding-left: 15px; color: #94a3b8; background: rgba(56, 189, 248, 0.05); padding: 10px 15px; border-radius: 0 8px 8px 0; }
+        ul, ol { padding-left: 25px; margin: 10px 0; }
+        li { margin-bottom: 8px; }
+        hr { border: 0; border-top: 1px solid var(--glass-border); margin: 40px 0; }
+        p { margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+<h1>ExploreDB 🚀</h1>
+<p>ExploreDB is a powerful, modern database exploration and querying tool built with .NET 8 MAUI Blazor Hybrid. It connects directly to SQL Server databases and provides an intuitive, glassmorphic UI to navigate, analyze, and query your data.</p>
+<hr>
+<h2>✨ Features</h2>
+<h3>⚡ <strong>Pathfinder (Auto-Join Query Generator)</strong></h3><ul><li>Select columns from any tables in your database.</li></ul><ul><li>Automatically discovers the shortest JOIN path between tables.</li></ul><ul><li><strong>Intelligent JOIN type selection</strong>:</li></ul><ul><li>Uses <code>LEFT JOIN</code> vs <code>INNER JOIN</code> based on FK nullable constraints.</li></ul><ul><li>Considers parent-child relationship direction.</li></ul><ul><li>Mixed JOIN strategies for optimal results.</li></ul><ul><li>Generates clean, alias-based SQL with proper formatting.</li></ul>
+<h3>🏃 <strong>Query Runner</strong></h3><ul><li>Write and execute custom SQL queries instantly.</li></ul><ul><li>Beautiful results grid with dynamic column generation.</li></ul><ul><li>Handles multiple result sets seamlessly.</li></ul>
+<h3>🔍 <strong>Table, View, & SP Explorers</strong></h3><ul><li>Browse all database tables, views, and stored procedures in a searchable grid.</li></ul><ul><li>View table schemas, column data types, and row counts.</li></ul><ul><li>Visualize parent (upstream) and child (downstream) relationships.</li></ul><ul><li>Understand foreign key dependencies at a glance.</li></ul>
+<h3>🎨 <strong>Modern UI</strong></h3><ul><li>Dark-themed glassmorphic design.</li></ul><ul><li>Smooth animations and transitions.</li></ul><ul><li>Clean, emoji-based iconography.</li></ul>
+<hr>
+<h2>📦 Installation Guide</h2>
+<h3><strong>Method 1: Microsoft Store (Recommended)</strong></h3>
+<p>ExploreDB is officially available on the Microsoft Store for seamless installation and completely silent background updates!<ol><li>Open the <strong>Microsoft Store</strong> app on Windows.</li></ol><ol><li>Search for <strong>ExploreDB</strong> and click <strong>Install</strong>.</li></ol></p>
+<p><em>(Updates will be handled automatically by Windows!)</em></p>
+<hr>
+<h3><strong>Method 2: Manual Installation (GitHub Beta / Internal)</strong></h3>
+<p><em>(Use this method if you need to install internal test builds)</em></p>
+<p><strong>🔗 Links to share with your team:</strong> </p>
+<p><em>(Note: Your teammates only need to do Step 1 if this is their very first time installing it!)</em><ul><li><strong>Step 1 (Certificates)</strong>: Download both <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate.pfx" target="_blank">ExploreDB_Certificate.pfx</a> and <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB_Certificate_Installer.bat" target="_blank">ExploreDB_Certificate_Installer.bat</a></li></ul><ul><li><strong>Step 2 (App Installer)</strong>: <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller" target="_blank">Download the App Installer</a></li></ul></p>
+<p>ExploreDB is distributed via a web-based <strong>App Installer</strong> which automatically checks for and installs new updates silently in the background every time you open the app!</p>
+<p>Because we use a custom development certificate, installing it on a brand new computer requires a quick one-time trust setup.</p>
+<h4><strong>Installation Steps for End Users</strong></h4>
+<p><strong>Prerequisites</strong>: Because this app is heavily optimized for a small file size (under 20 MB), it requires the <strong><a href="https://dotnet.microsoft.com/en-us/download/dotnet/8.0" target="_blank">.NET 8.0 Desktop Runtime (x64)</a></strong> to be installed on the computer first.<ol><li><strong>Trust the Certificate (First Time Only)</strong>:</li></ol><ul><li>Download the <strong><code>ExploreDB_Certificate.pfx</code></strong> and <strong><code>trust_certificate.bat</code></strong> files from the links above.</li></ul><ul><li>Right-click on <strong><code>trust_certificate.bat</code></strong> and select <strong>"Run as Administrator"</strong>.</li></ul><ul><li>Press <strong>Enter</strong> on your keyboard, then click <strong>Yes</strong> on the prompt to allow the installation.</li></ul><ul><li><em>Note: This tells Windows to trust our custom digital signature so the app can be installed safely.</em></li></ul></p>
+<p>   <strong>If the script fails, you can install the certificate manually:</strong><ul><li>Double-click the <strong><code>ExploreDB_Certificate.pfx</code></strong> file.</li></ul><ul><li>On the very first screen, select <strong>Local Machine</strong> (instead of Current User) and click Next.</li></ul><ul><li>Click <strong>"Yes"</strong> on the Windows User Account Control (UAC) prompt that asks for permission.</li></ul><ul><li>Click Next on the file path screen.</li></ul><ul><li>Type <code>password</code> for the password and click Next.</li></ul><ul><li>Choose <strong>"Place all certificates in the following store"</strong> and click <strong>Browse</strong>.</li></ul><ul><li>Select <strong>Trusted Root Certification Authorities</strong> and click OK, then Next, then Finish.</li></ul><ol><li><strong>Install the Application</strong>:</li></ol><ul><li>Download the tiny <strong><code>ExploreDB.appinstaller</code></strong> file from our <a href="https://zerinapps.github.io/ExploreDB-Releases/ExploreDB.appinstaller" target="_blank">GitHub Pages site</a>.</li></ul><ul><li>Double-click the downloaded file.</li></ul><ul><li>A Windows App Installer window will appear. Click <strong>Install</strong>.</li></ul><ul><li>The app will securely download the heavy binaries from our GitHub Releases page and launch!</li></ul><ol><li><strong>Launch & Auto-Updates</strong>:</li></ol><ul><li>For future uses, simply search for "ExploreDB" in your Windows Start Menu.</li></ul><ul><li>The app will automatically keep itself up-to-date!</li></ul></p>
+<hr>
+<h2>🛠️ Building from Source</h2>
+<h3><strong>Prerequisites</strong></h3><ul><li><a href="https://dotnet.microsoft.com/download/dotnet/8.0" target="_blank">.NET 8 SDK</a></li></ul><ul><li>Windows 10/11 (version 1809 or higher)</li></ul><ul><li>Visual Studio 2022 (optional, for IDE development)</li></ul>
+<h3><strong>Compiling the MSIX Installer</strong></h3>
+<p>To compile a fresh MSIX package with all dependencies (including Win2D native assets):<ol><li><strong>Clone the repository</strong>:</li></ol></p>
+   <pre><code>bash
+   git clone https://github.com/YOUR_USERNAME/ExploreDB.git
+   cd ExploreDB
+<p>   </code></pre><ol><li><strong>Build and Package Scripts</strong></li></ol></p>
+<p>   &gt; You <strong>do not</strong> need to run both of the scripts below. They serve different purposes depending on whether you are releasing to the Microsoft Store or GitHub.</p>
+<p>   <strong>Option A: Build for Microsoft Store (Public)</strong></p>
+<p>   Double-click the <strong><code>scripts\build_store_release.bat</code></strong> script. <ul><li>It will automatically inject the Microsoft Store cryptographic identity.</li></ul><ul><li>It will strip out the internal GitHub auto-updater UI to comply with Store policies.</li></ul><ul><li>The final <code>.msix</code> file will be placed in the <strong><code>StoreRelease</code></strong> folder, ready to drag-and-drop into the Microsoft Partner Center Dashboard.</li></ul></p>
+<p>   <strong>Option B: Build for GitHub (Internal / Beta)</strong></p>
+<p>   Double-click the <strong><code>scripts\build_github_release.bat</code></strong> script.<ul><li>It will compile the app natively for <code>win-x64</code>.</li></ul><ul><li>It will digitally sign the installer using your local <code>ExploreDB_Certificate.pfx</code>.</li></ul><ul><li>The final <code>.msix</code> and <code>.appinstaller</code> files will be placed in the <strong><code>GitHubRelease</code></strong> folder.</li></ul></p>
+<p>   <strong>Publishing a New Release:</strong></p>
+<p>   If you are ready to officially launch a new version, double-click <strong><code>scripts\publish_new_release.bat</code></strong>. <ul><li>It will prompt you for a new version number and automatically bump it in all files.</li></ul><ul><li>It will give you a menu asking if you want to build for the Microsoft Store, GitHub, or Both simultaneously!</li></ul></p>
+<h3><strong>Manual Build & Sign (Fallback)</strong></h3>
+<p>If the automated scripts fail, you can perform the steps manually:<ol><li><strong>Bump the Version Numbers (Manual)</strong>:</li></ol><ul><li><code>ExploreDB.csproj</code>: Update the <code>&lt;Version&gt;</code> and <code>&lt;ApplicationDisplayVersion&gt;</code> tags.</li></ul><ul><li><code>Platforms\Windows\Package.appxmanifest</code>: Update the <code>Version="..."</code> attribute in the <code>&lt;Identity&gt;</code> tag.</li></ul><ul><li><code>ExploreDB.appinstaller</code> (GitHub Only): Update both <code>Version="..."</code> attributes AND the URL at the bottom to point to your new GitHub tag.</li></ul><ol><li><strong>Inject the Correct Manifest</strong>:</li></ol></p>
+<p>   <em>(The .NET compiler only looks for a file named <code>Package.appxmanifest</code>. Because we use a dual-channel architecture, you must manually copy the correct template over the main file before building!)</em><ul><li><strong>For Microsoft Store</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.Store.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li></ul><ul><li><strong>For GitHub</strong>: Go into the <code>Platforms\Windows</code> folder, copy <code>Package.GitHub.appxmanifest</code>, and rename the copy to <code>Package.appxmanifest</code> (overwriting the existing one).</li></ul><ol><li><strong>Build (Terminal)</strong>:</li></ol><ul><li><strong>For GitHub</strong>:</li></ul></p>
+     <pre><code>bash
+     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false
+<p>     </code></pre><ul><li><strong>For Microsoft Store</strong> (Adds <code>-p:StoreBuild=true</code>):</li></ul></p>
+     <pre><code>bash
+     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false -p:StoreBuild=true
+<p>     </code></pre><ol><li><strong>Sign the Package (GitHub Only)</strong>:</li></ol></p>
+<p>   <em>(Microsoft Store builds do not need to be manually signed)</em></p>
+<p>   Locate your Windows SDK <code>signtool.exe</code> and run:</p>
+   <pre><code>cmd
+   signtool sign /fd SHA256 /a /f "cert\ExploreDB_Certificate.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
+<p>   </code></pre></p>
+<h3><strong>Testing the Microsoft Store Build Locally</strong></h3>
+<p>Because the Microsoft Store version strips out digital signatures (so Microsoft can sign it themselves), you cannot easily install the Store <code>.msix</code> file on your local machine. </p>
+<p>To test Microsoft Store-specific logic locally, you must run it in Visual Studio:<ol><li><strong>Add x64 Configuration</strong>: </li></ol><ul><li>Open <code>ExploreDB.sln</code> in Visual Studio.</li></ul><ul><li>Click the <strong>Configuration Manager</strong> dropdown (next to the green Play button).</li></ul><ul><li>Under "Active solution platform", select <strong><code>&lt;New...&gt;</code></strong>.</li></ul><ul><li>Type <code>x64</code> and ensure "Create new project platforms" is checked, then hit OK.</li></ul><ol><li><strong>Enable Store Mode in Code</strong>:</li></ol><ul><li>Open your <code>ExploreDB.csproj</code> file.</li></ul><ul><li>Add the following code inside the main <code>&lt;PropertyGroup&gt;</code> block at the top of the file:</li></ul></p>
+   <pre><code>xml
+   &lt;StoreBuild&gt;true&lt;/StoreBuild&gt;
+<p>   </code></pre><ol><li><strong>Launch the App</strong>:</li></ol><ul><li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li></ul><ul><li>Open <strong>Configuration Manager</strong> again, and make sure the <strong>Deploy</strong> checkbox is checked for the ExploreDB project.</li></ul><ul><li>Hit <strong>F5</strong>. Visual Studio will automatically deploy a temporary container and launch the app in full Microsoft Store mode!</li></ul></p>
+<blockquote>Remember to delete <code>&lt;StoreBuild&gt;true&lt;/StoreBuild&gt;</code> from your <code>.csproj</code> when you are finished testing!</blockquote>
+<h3><strong>Testing the GitHub Build Locally</strong></h3>
+<p>By default, Visual Studio automatically builds the GitHub version of ExploreDB when you press <strong>F5</strong> (as long as <code>&lt;StoreBuild&gt;true&lt;/StoreBuild&gt;</code> is not in your <code>.csproj</code>). </p>
+<p>To test any new features or changes for the GitHub release:<ol><li>Open <code>ExploreDB.sln</code> in Visual Studio.</li></ol><ol><li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li></ol><ol><li>Hit <strong>F5</strong>. Visual Studio will automatically deploy the temporary container and launch the app.</li></ol><ol><li><em>(Optional)</em> If you ever need to specifically test the auto-updater functionality, you can temporarily lower your <code>&lt;ApplicationDisplayVersion&gt;</code> and <code>&lt;Version&gt;</code> in the <code>.csproj</code> file before hitting F5. This will trick the app into thinking it's out of date and trigger the update banner!</li></ol></p>
+<h3><strong>Publishing a Release (Microsoft Store)</strong></h3>
+<p>To publish an update to the Microsoft Store, you must upload the freshly built files from your <code>StoreRelease</code> folder to the Microsoft Partner Center.<ol><li><strong>Create a New Submission</strong>:</li></ol><ul><li>Go to your <a href="https://partner.microsoft.com/en-us/dashboard/windows/overview" target="_blank">Microsoft Partner Center Dashboard</a>.</li></ul><ul><li>Navigate to <strong>Apps and games</strong> -&gt; <strong>ExploreDB</strong>.</li></ul><ul><li>Under the "Update" section, click <strong>Update</strong> (or Create a new submission).</li></ul><ol><li><strong>Upload the Package</strong>:</li></ol><ul><li>Click on <strong>Packages</strong>.</li></ul><ul><li>Drag and drop your compiled <strong><code>ExploreDB.msix</code></strong> (located in the <code>StoreRelease</code> folder) into the upload box.</li></ul><ul><li>Click <strong>Save</strong>.</li></ul><ol><li><strong>Submit to the Store</strong>:</li></ol><ul><li>Review your Pricing and Store Listing to ensure nothing needs changing.</li></ul><ul><li>Click <strong>Submit to the Store</strong>. Microsoft will review the update and automatically push it to all users!</li></ul></p>
+<hr>
+<h3><strong>Publishing a Release (GitHub Releases & Pages)</strong></h3>
+<p>To publish an update to the team, you must upload the freshly built files from your <code>GitHubRelease</code> folder to the <code>ExploreDB-Releases</code> repository.<ol><li><strong>Publish the Heavy Binaries (GitHub Releases)</strong>:</li></ol><ul><li>Go to the <code>ExploreDB-Releases</code> repository on GitHub.</li></ul><ul><li>Click <strong>Releases</strong> -&gt; <strong>Draft a new release</strong>.</li></ul><ul><li>Create a tag that exactly matches your new version (e.g., <code>v1.0.0.1</code>). <strong>CRITICAL: You must include the <code>v</code> at the beginning of the tag!</strong></li></ul><ul><li>Drag and drop your compiled <strong><code>ExploreDB_X.X.X.X_x64.msix</code></strong> file into the "Attach binaries" box.</li></ul><ul><li>Click the green <strong>Publish release</strong> button at the bottom. <strong>CRITICAL: Do not save it as a "Draft" or the installer will fail with a 404 error!</strong></li></ul></p>
+<p>   &gt; [!TIP]</p>
+<p>   &gt; <strong>Forcing an Update (Mandatory Updates)</strong></p>
+<p>   &gt; If you want to force users to update (blocking them from using the app until they do), simply type the exact keyword <strong><code>[CRITICAL UPDATE]</code></strong> anywhere inside the Release Notes box when publishing your release on GitHub. The app will detect this keyword and throw a full-screen, unclosable blocker modal!<ol><li><strong>Trigger the Auto-Update (GitHub Pages)</strong>:</li></ol><ul><li>Go to the <strong>Code</strong> tab of the <code>ExploreDB-Releases</code> repository.</li></ul><ul><li>Click <strong>Add file</strong> -&gt; <strong>Upload files</strong>.</li></ul><ul><li>Drag and drop the updated 1 KB <strong><code>ExploreDB.appinstaller</code></strong> file to overwrite the old one in the root directory.</li></ul><ul><li>Commit the changes. Once GitHub Actions finishes deploying the Pages site, teammates' computers will automatically detect the update on their next launch!</li></ul></p>
+<h3><strong>Disaster Recovery: Rebuilding the Release Infrastructure</strong></h3>
+<p>If the <code>ExploreDB-Releases</code> repository ever gets accidentally deleted, the auto-update links will break. Here is exactly how to rebuild the infrastructure from scratch:<ol><li><strong>Recreate the Repository</strong>:</li></ol><ul><li>Go to GitHub and create a new <strong>Public</strong> repository named <code>ExploreDB-Releases</code>. (It <em>must</em> be public so the Windows installer can access the files without logging in).</li></ul><ol><li><strong>Re-enable GitHub Pages</strong>:</li></ol><ul><li>In the new repo, go to <strong>Settings</strong> -&gt; <strong>Pages</strong>.</li></ul><ul><li>Under "Build and deployment", set the Source to <strong>Deploy from a branch</strong>.</li></ul><ul><li>Select the <code>main</code> branch and click Save.</li></ul><ol><li><strong>Re-upload the Files</strong>:</li></ol><ul><li>Go back to the <strong>Code</strong> tab and upload <code>ExploreDB.appinstaller</code>, <code>ExploreDB_Certificate.pfx</code>, and <code>ExploreDB_Certificate_Installer.bat</code>.</li></ul><ul><li>Go to the <strong>Releases</strong> tab, draft a new release (e.g., <code>v1.0.0.0</code>), and upload your <code>.msix</code> file.</li></ul></p>
+<p><em>(Note: As long as you use the exact same repository name, the URL inside the <code>.appinstaller</code> will automatically match and everything will start working again instantly!)</em></p>
+<p><strong>What if I have to use a different repository name?</strong></p>
+<p>If you rebuild the infrastructure using a <em>different</em> repository name (e.g., <code>ExploreDB-Updates</code>), the hardcoded URLs will break. To fix it:<ol><li>Open your local <code>ExploreDB.appinstaller</code> file.</li></ol><ol><li>Update the two <code>Uri</code> links inside it to point to your new repository name.</li></ol><ol><li>Upload the modified <code>.appinstaller</code> to the new repo.</li></ol><ol><li><strong>Crucial Step</strong>: Because the old link is broken, automatic updates will fail. You must tell all your teammates to manually download and run the new <code>.appinstaller</code> file one time. This will permanently repoint their computers to your new repository!</li></ol></p>
+<hr>
+<h2>🤝 Contributing</h2>
+<p>Contributions are welcome! Please feel freSe to submit a Pull Request.</p>
+<hr>
+<h2>📄 License</h2>
+<p>This project is licensed under the MIT License.</p>
+    </div>
+</body>
+</html>

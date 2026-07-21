@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Troubleshooting - ExploreDB Documentation</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --text-color: #e2e8f0;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-color: #38bdf8;
+            --code-bg: #1e293b;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+            background-image: radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.15), transparent 25%),
+                              radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+            background-attachment: fixed;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 40px 50px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        h1, h2, h3, h4 { color: #fff; margin-top: 1.5em; font-weight: 600; }
+        h1 { font-size: 2.5em; border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; margin-top: 0; }
+        h2 { font-size: 1.8em; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px; }
+        h3 { font-size: 1.4em; color: var(--accent-color); margin-top: 1.2em; }
+        a { color: var(--accent-color); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: var(--code-bg); padding: 3px 6px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.9em; color: #fb7185; }
+        pre { background: var(--code-bg); padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--glass-border); margin: 15px 0; }
+        pre code { background: transparent; padding: 0; color: #e2e8f0; font-size: 0.95em; }
+        blockquote { border-left: 4px solid var(--accent-color); margin: 15px 0; padding-left: 15px; color: #94a3b8; background: rgba(56, 189, 248, 0.05); padding: 10px 15px; border-radius: 0 8px 8px 0; }
+        ul, ol { padding-left: 25px; margin: 10px 0; }
+        li { margin-bottom: 8px; }
+        hr { border: 0; border-top: 1px solid var(--glass-border); margin: 40px 0; }
+        p { margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+<h1>ExploreDB Troubleshooting Guide</h1>
+<h2>Certificate Issues</h2>
+<h3>How to Uninstall the Development Certificate</h3>
+<p>If you need to verify or test the <code>ExploreDB_Certificate_Installer.bat</code> script, or if you simply want to remove the ExploreDB self-signed certificate from your computer, follow these steps:</p>
+<ol><li>Press the <strong>Windows Key</strong> on your keyboard, type <strong><code>certlm.msc</code></strong> (which stands for Certificate Local Machine), and hit <strong>Enter</strong>.</li><li>A "Certificates" window will open. In the left sidebar, click the little arrow next to <strong>Trusted Root Certification Authorities</strong> to expand it.</li><li>Click on the <strong>Certificates</strong> folder right below it.</li><li>In the main window, scroll down the alphabetical list until you find the certificate named <strong>ExploreDB</strong> (in the "Issued To" column).</li><li>Right-click on the <strong>ExploreDB</strong> certificate and select <strong>Delete</strong>.</li><li>Click <strong>Yes</strong> to confirm.</li></ol>
+<p><em>(Note: Once deleted, Windows will block the installation of <code>ExploreDB.msix</code> until you run the <code>ExploreDB_Certificate_Installer.bat</code> script again!)</em></p>
+    </div>
+</body>
+</html>
