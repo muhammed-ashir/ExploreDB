@@ -184,6 +184,9 @@ BundleArtifacts/
 !build_installer.bat
 !trust_certificate.bat
 !update_release.bat
+!scripts/build_store_release.bat
+!scripts/build_github_release.bat
+!scripts/publish_new_release.bat
 
 # Local settings
 settings.json
