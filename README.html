@@ -186,7 +186,7 @@
     <p>Double-click the <strong><code>scripts\build_github_release.bat</code></strong> script.</p>
     <ul>
       <li>It will compile the app natively for <code>win-x64</code>.</li>
-      <li>It will digitally sign the installer using your local <code>ExploreDB_Certificate.pfx</code>.</li>
+      <li>It will digitally sign the installer using the certificate thumbprint from your Windows Certificate Store.</li>
       <li>The final <code>.msix</code> and <code>.appinstaller</code> files will be placed in the <strong><code>GitHubRelease</code></strong> folder.</li>
     </ul>
     <p><strong>Publishing a New Release:</strong></p>
@@ -216,21 +216,15 @@
   </li>
   <li><strong>Build (Terminal)</strong>:
     <ul>
-      <li><strong>For GitHub</strong>:
-        <div class="code-container"><div class="code-header"><span class="lang">bash</span><button class="copy-btn">Copy</button></div><pre><code>     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false
+      <li><strong>For GitHub</strong> (Automatically signs using the installed Certificate Thumbprint):
+        <div class="code-container"><div class="code-header"><span class="lang">bash</span><button class="copy-btn">Copy</button></div><pre><code>     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:GitHubRelease=true
         </code></pre></div>
       </li>
-      <li><strong>For Microsoft Store</strong> (Adds <code>-p:StoreBuild=true</code>):
+      <li><strong>For Microsoft Store</strong> (Adds <code>-p:StoreBuild=true</code> and disables signing):
         <div class="code-container"><div class="code-header"><span class="lang">bash</span><button class="copy-btn">Copy</button></div><pre><code>     dotnet publish ExploreDB.csproj -f net8.0-windows10.0.19041.0 -c Release -r win-x64 -p:Platform=x64 -p:AppxPackageSigningEnabled=false -p:StoreBuild=true
         </code></pre></div>
       </li>
     </ul>
-  </li>
-  <li><strong>Sign the Package (GitHub Only)</strong>:
-    <p><em>(Microsoft Store builds do not need to be manually signed)</em></p>
-    <p>Locate your Windows SDK <code>signtool.exe</code> and run:</p>
-    <div class="code-container"><div class="code-header"><span class="lang">cmd</span><button class="copy-btn">Copy</button></div><pre><code>   signtool sign /fd SHA256 /a /f "cert\ExploreDB_Certificate.pfx" /p "password" "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_1.0.0.0_x64_Test\ExploreDB_1.0.0.0_x64.msix"
-    </code></pre></div>
   </li>
 </ol>
 <h3><strong>Testing the Microsoft Store Build Locally</strong></h3>
