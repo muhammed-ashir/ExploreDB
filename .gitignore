@@ -210,4 +210,4 @@ temp_msix*/
 *.zip
 .agents/
 
-!ExploreDB.pfx
+!scripts/ExploreDB_Certificate.pfx
