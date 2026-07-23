@@ -1,12 +1,68 @@
 @using ExploreDB.Services
 @inject NavigationManager Nav
+@inject ConnectionService ConnectionService
+@inject SchemaService SchemaService
 @implements IDisposable
 
-<div class="d-flex flex-column h-100 bg-dark">
+<div class="d-flex flex-column min-vh-100">
     <div class="p-3 border-bottom border-secondary">
-        <h5 class="text-white mb-3">
+        <h5 class="text-white mb-2">
             <span>ExploreDB</span>
         </h5>
+        @if (!string.IsNullOrEmpty(ActiveServer))
+        {
+            <div class="mt-2">
+                <label class="small text-muted mb-1" style="font-size: 0.75rem;">@ActiveServer</label>
+                <div class="position-relative">
+                    <input class="form-control form-control-sm bg-dark text-white border-secondary pe-4" 
+                           @bind="DatabaseSearch" 
+                           @bind:event="oninput"
+                           placeholder="Search database..." 
+                           @onfocus="OpenDropdown" />
+                    
+                    @if (IsDropdownOpen)
+                    {
+                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseDropdown"></div>
+                        <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto;">
+                            @if (IsLoadingDBs)
+                            {
+                                <div class="p-3 text-center text-info">
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    <small>Loading...</small>
+                                </div>
+                            }
+                            else if (ServerDatabases.Any())
+                            {
+                                var filtered = ServerDatabases.Where(d => string.IsNullOrWhiteSpace(DatabaseSearch) || d.Contains(DatabaseSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+                                if (filtered.Any())
+                                {
+                                    <div class="list-group list-group-flush">
+                                        @foreach (var db in filtered)
+                                        {
+                                            <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3 small" style="border-bottom: 1px solid #333 !important; font-size: 0.85rem;" @onclick="() => OnDatabaseSelected(db)">
+                                                @db
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="p-3 text-muted small text-center">No matches found.</div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="p-3 text-muted small text-center">No databases found.</div>
+                            }
+                        </div>
+                    }
+
+                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 10px; top: 0; pointer-events: none;">
+                        <i class="bi bi-chevron-down text-muted" style="font-size: 0.8rem;"></i>
+                    </div>
+                </div>
+            </div>
+        }
     </div>
 
     <div class="flex-grow-1">
@@ -68,6 +124,12 @@
 
 @code {
     private string CurrentUrl = "";
+    private string ActiveServer = "";
+    private string SelectedDatabase = "";
+    private string DatabaseSearch = "";
+    private bool IsDropdownOpen = false;
+    private List<string> ServerDatabases = new();
+    private bool IsLoadingDBs = false;
 
     private bool IsPathfinderActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
     private bool IsRunnerActive => CurrentUrl.Contains("/runner");
@@ -78,10 +140,98 @@
     private bool IsTricksActive => CurrentUrl.Contains("/tricks");
     private bool IsAdvancedSqlActive => CurrentUrl.Contains("/advanced");
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         Nav.LocationChanged += OnLocationChanged;
+        ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
         CurrentUrl = Nav.Uri;
+        await LoadServerDatabases();
+    }
+
+    private async void OnConnectionChangedHandler()
+    {
+        await LoadServerDatabases();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadServerDatabases()
+    {
+        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
+        if (active != null && !string.IsNullOrEmpty(active.Server))
+        {
+            if (ActiveServer != active.Server)
+            {
+                ActiveServer = active.Server;
+                IsLoadingDBs = true;
+                await InvokeAsync(StateHasChanged);
+
+                try 
+                {
+                    ServerDatabases = await ConnectionService.GetDatabasesAsync(active.Server, active.AuthType, active.Username, active.Password);
+                } 
+                catch 
+                {
+                    ServerDatabases.Clear();
+                }
+                IsLoadingDBs = false;
+            }
+            SelectedDatabase = active.Database;
+            DatabaseSearch = active.Database;
+        }
+        else
+        {
+            ActiveServer = "";
+            ServerDatabases.Clear();
+        }
+    }
+
+    private void OpenDropdown()
+    {
+        IsDropdownOpen = true;
+        DatabaseSearch = "";
+    }
+
+    private void CloseDropdown()
+    {
+        IsDropdownOpen = false;
+        DatabaseSearch = SelectedDatabase;
+    }
+
+    private async Task OnDatabaseSelected(string db)
+    {
+        SelectedDatabase = db;
+        DatabaseSearch = db;
+        IsDropdownOpen = false;
+        await SwitchDatabaseAsync();
+    }
+
+    private async Task SwitchDatabaseAsync()
+    {
+        if (string.IsNullOrEmpty(SelectedDatabase)) return;
+
+        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
+        if (active == null || active.Database == SelectedDatabase) return;
+
+        ConnectionService.NotifyDatabaseSwitching(SelectedDatabase);
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(50); // Give UI time to render the loader
+
+        var newConnString = ConnectionService.BuildConnectionString(active.Server, active.AuthType, active.Username, active.Password, SelectedDatabase);
+        
+        var success = await ConnectionService.TestConnectionAsync(newConnString);
+        if (success)
+        {
+            ConnectionService.UpsertConnection(active.Id, active.Name, active.Server, active.AuthType, active.Username, active.Password, SelectedDatabase, newConnString);
+            ConnectionService.SaveActiveConnection(newConnString);
+            await SchemaService.LoadSchemaAsync();
+        }
+        else
+        {
+            SelectedDatabase = active.Database; // Revert
+        }
+
+        ConnectionService.NotifyDatabaseSwitched();
+        await InvokeAsync(StateHasChanged);
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
@@ -93,5 +243,6 @@
     public void Dispose()
     {
         Nav.LocationChanged -= OnLocationChanged;
+        ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
     }
 }

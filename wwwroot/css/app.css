@@ -309,3 +309,20 @@ body {
 .cursor-pointer {
     cursor: pointer;
 }
+
+/* Custom Scrollbars */
+.custom-scrollbar-light::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.custom-scrollbar-light::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+.custom-scrollbar-light::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+.custom-scrollbar-light::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}

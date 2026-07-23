@@ -10,6 +10,11 @@ public class ConnectionService
     public List<SavedConnection> SavedConnections { get; private set; } = new();
 
     public event Action? OnConnectionChanged;
+    public event Action<string>? OnDatabaseSwitching;
+    public event Action? OnDatabaseSwitched;
+
+    public void NotifyDatabaseSwitching(string dbName) => OnDatabaseSwitching?.Invoke(dbName);
+    public void NotifyDatabaseSwitched() => OnDatabaseSwitched?.Invoke();
 
     public ConnectionService()
     {
@@ -38,12 +43,17 @@ public class ConnectionService
         OnConnectionChanged?.Invoke();
     }
 
-    public void UpsertConnection(string id, string name, string connString)
+    public void UpsertConnection(string id, string name, string server, string authType, string username, string password, string database, string connString)
     {
         var existing = SavedConnections.FirstOrDefault(c => c.Id == id);
         if (existing != null)
         {
             existing.Name = name;
+            existing.Server = server;
+            existing.AuthType = authType;
+            existing.Username = username;
+            existing.Password = password;
+            existing.Database = database;
             existing.ConnectionString = connString;
             existing.LastUsed = DateTime.Now;
         }
@@ -53,11 +63,74 @@ public class ConnectionService
             {
                 Id = string.IsNullOrEmpty(id) ? Guid.NewGuid().ToString() : id,
                 Name = string.IsNullOrWhiteSpace(name) ? "Unnamed Connection" : name,
+                Server = server,
+                AuthType = authType,
+                Username = username,
+                Password = password,
+                Database = database,
                 ConnectionString = connString,
                 LastUsed = DateTime.Now
             });
         }
         SaveToDisk();
+    }
+
+    public string BuildConnectionString(string server, string authType, string username, string password, string database = "")
+    {
+        var builder = new SqlConnectionStringBuilder
+        {
+            DataSource = server,
+            TrustServerCertificate = true // Helpful for local dev
+        };
+
+        if (authType == "Windows")
+        {
+            builder.IntegratedSecurity = true;
+        }
+        else if (authType == "EntraMfa")
+        {
+            builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryInteractive;
+            if (!string.IsNullOrWhiteSpace(username))
+            {
+                builder.UserID = username;
+            }
+        }
+        else
+        {
+            builder.UserID = username;
+            builder.Password = password;
+        }
+
+        if (!string.IsNullOrWhiteSpace(database))
+        {
+            builder.InitialCatalog = database;
+        }
+
+        return builder.ConnectionString;
+    }
+
+    public async Task<List<string>> GetDatabasesAsync(string server, string authType, string username, string password)
+    {
+        var connString = BuildConnectionString(server, authType, username, password, "master");
+        var databases = new List<string>();
+        try
+        {
+            using var conn = new SqlConnection(connString);
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                databases.Add(reader.GetString(0));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching databases: {ex.Message}");
+            throw;
+        }
+        return databases;
     }
 
     public void DeleteConnection(string id)
@@ -120,6 +193,12 @@ public class ConnectionService
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
         public string Name { get; set; } = string.Empty;
+        public string Server { get; set; } = string.Empty;
+        public string AuthType { get; set; } = "Windows";
+        public bool UseWindowsAuth { get; set; } = true;
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string Database { get; set; } = string.Empty;
         public string ConnectionString { get; set; } = string.Empty;
         public DateTime LastUsed { get; set; } = DateTime.Now;
     }

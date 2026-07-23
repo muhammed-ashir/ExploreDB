@@ -5,7 +5,18 @@
 @inject NavigationManager Nav
 @inject ExploreDB.Services.GitHubUpdateService UpdateService
 
-<div class="page text-white">
+<div class="container-fluid">
+    @if (IsSwitchingDatabaseGlobal)
+    {
+        <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <div class="spinner-border text-info" role="status" style="width: 3rem; height: 3rem;">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <h4 class="text-white mt-4 fw-bold">Switching to @SwitchingDatabaseName</h4>
+            <p class="text-light">Please wait while the schema is loading.</p>
+        </div>
+    }
+
     @if (UpdateInfo != null)
     {
         @if (UpdateInfo.IsMandatory)
@@ -83,55 +94,63 @@
     }
     @if (!IsConnected)
     {
-        <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);">
+        <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8);">
             <div class="modal-dialog modal-dialog-centered modal-lg">
                 <div class="modal-content glass-card border-0 text-white" style="background-color: #2b3035;">
                     <div class="modal-header border-bottom border-secondary">
-                        <h5 class="modal-title fw-bold">Connection Manager</h5>
+                        <h5 class="modal-title fw-bold mb-0">Connection Manager</h5>
                     </div>
                     <div class="modal-body p-0">
-                        <div class="row g-0">
-                            <!-- Left: Saved Connections -->
-                            <div class="col-md-5 border-end border-secondary d-flex flex-column" style="height: 400px;">
-                                <div class="p-3 border-bottom border-secondary">
-                                    <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
-                                </div>
-                                <div class="flex-grow-1 overflow-auto p-2">
-                                    @if (PagedConnections.Count == 0)
-                                    {
-                                        <div class="text-muted text-center mt-4 small">No saved connections.</div>
-                                    }
-                                    else
-                                    {
-                                        <div class="list-group list-group-flush">
-                                            @foreach (var c in PagedConnections)
-                                            {
-                                                <div class="list-group-item bg-transparent border-secondary p-2 @(ActiveConnId == c.Id ? "bg-primary text-white" : "text-light")">
-                                                    <div class="d-flex justify-content-between align-items-center">
-                                                        <div class="cursor-pointer flex-grow-1 pe-2 overflow-hidden" @onclick="() => LoadConnection(c)">
-                                                            <div class="fw-bold small text-truncate">@c.Name</div>
-                                                            <div class="text-opacity-75" style="font-size: 0.7em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">@c.ConnectionString</div>
-                                                        </div>
-                                                        <button class="btn btn-sm btn-outline-danger py-0 px-2 ms-2 border-0" title="Delete" @onclick="() => DeleteConnection(c.Id)">🗑️</button>
-                                                    </div>
-                                                </div>
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                                <div class="p-2 border-top border-secondary d-flex justify-content-between align-items-center">
-                                    <button class="btn btn-sm btn-outline-secondary border-0 text-white" disabled="@(ConnPage <= 1)" @onclick="() => ConnPage--">◀</button>
-                                    <span class="small text-muted">Page @ConnPage of @ConnTotalPages</span>
-                                    <button class="btn btn-sm btn-outline-secondary border-0 text-white" disabled="@(ConnPage >= ConnTotalPages)" @onclick="() => ConnPage++">▶</button>
-                                </div>
+                        <div class="d-flex flex-column" style="height: 450px;">
+                            <div class="p-3 border-bottom border-secondary d-flex gap-2">
+                                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
+                                <button class="btn btn-sm btn-outline-info text-nowrap d-flex align-items-center gap-1" @onclick="NewConnection">
+                                    <i class="bi bi-plus-lg"></i> New
+                                </button>
                             </div>
+                            <div class="flex-grow-1 overflow-auto p-2">
+                                @if (!FilteredConnections.Any())
+                                {
+                                    <div class="text-muted text-center mt-4 small">No saved connections.</div>
+                                }
+                                else
+                                {
+                                    <div class="list-group list-group-flush">
+                                        @foreach (var c in FilteredConnections)
+                                        {
+                                            <div class="list-group-item bg-transparent border-secondary p-2 @(ActiveConnId == c.Id ? "bg-primary text-white" : "text-light")">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <div class="cursor-pointer flex-grow-1 pe-2 overflow-hidden" @onclick="() => LoadConnection(c)">
+                                                        <div class="fw-bold mb-1" style="font-size: 0.9em;">@(string.IsNullOrWhiteSpace(c.Name) ? "Unnamed Connection" : c.Name)</div>
+                                                        <div class="text-opacity-75 text-white" style="font-size: 0.7em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                                            @(string.IsNullOrEmpty(c.Server) ? c.ConnectionString : $"{c.Server} ➔ {c.Database}")
+                                                        </div>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-danger d-flex align-items-center justify-content-center ms-2 rounded-circle shadow-sm" style="width: 30px; height: 30px; flex-shrink: 0;" title="Delete" @onclick="() => DeleteConnection(c.Id)">
+                                                        <i class="bi bi-trash3-fill" style="font-size: 0.85rem;"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                            <!-- Right: Connection Form -->
-                            <div class="col-md-7 p-4">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 class="fw-bold mb-0 text-info">Connection Details</h6>
-                                    <button class="btn btn-sm btn-outline-info py-0 px-2" @onclick="NewConnection">➕ New</button>
-                                </div>
+        @if (IsDetailsVisible)
+        {
+            <div class="modal fade show d-block" style="background: rgba(0,0,0,0.6); z-index: 1060;">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content glass-card border-secondary text-white shadow-lg" style="background-color: #2b3035;">
+                        <div class="modal-header border-bottom border-secondary">
+                            <h6 class="modal-title fw-bold text-info mb-0">Connection Details</h6>
+                            <button type="button" class="btn-close btn-close-white" @onclick="() => IsDetailsVisible = false" style="font-size: 0.8rem;"></button>
+                        </div>
+                        <div class="modal-body p-4">
                                 
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Connection Name</label>
@@ -139,8 +158,100 @@
                                 </div>
                                 
                                 <div class="mb-3">
-                                    <label class="form-label small text-muted">Connection String</label>
-                                    <textarea class="form-control bg-dark text-white border-secondary" rows="4" @bind="ConnString" placeholder="Server=myServer;Database=myDB;..."></textarea>
+                                    <label class="form-label small text-muted">Server Name / IP</label>
+                                    <input type="text" class="form-control bg-dark text-white border-secondary" @bind="Server" placeholder="localhost, .\SQLEXPRESS, etc." />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Authentication Type</label>
+                                    <div class="position-relative">
+                                        <div class="form-control bg-dark text-white border-secondary pe-5 cursor-pointer d-flex align-items-center" 
+                                             style="cursor: pointer; min-height: 38px;"
+                                             @onclick="() => IsAuthDropdownOpen = !IsAuthDropdownOpen">
+                                            @(AuthType == "Windows" ? "Windows Authentication" : AuthType == "SqlServer" ? "SQL Server Authentication" : "Microsoft Entra MFA")
+                                            <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
+                                                <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
+                                            </div>
+                                        </div>
+                                        @if (IsAuthDropdownOpen)
+                                        {
+                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsAuthDropdownOpen = false"></div>
+                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto;">
+                                                <button class="dropdown-item text-white @(AuthType == "Windows" ? "bg-primary" : "") py-2" type="button" @onclick='() => SetAuthType("Windows")'>Windows Authentication</button>
+                                                <button class="dropdown-item text-white @(AuthType == "SqlServer" ? "bg-primary" : "") py-2" type="button" @onclick='() => SetAuthType("SqlServer")'>SQL Server Authentication</button>
+                                                <button class="dropdown-item text-white @(AuthType == "EntraMfa" ? "bg-primary" : "") py-2" type="button" @onclick='() => SetAuthType("EntraMfa")'>Microsoft Entra MFA</button>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+
+                                @if (AuthType == "SqlServer" || AuthType == "EntraMfa")
+                                {
+                                    <div class="row mb-3">
+                                        <div class="@(AuthType == "EntraMfa" ? "col-12" : "col-6")">
+                                            <label class="form-label small text-muted">Username @(AuthType == "EntraMfa" ? "(Optional)" : "")</label>
+                                            <input type="text" class="form-control bg-dark text-white border-secondary" @bind="Username" placeholder="@(AuthType == "EntraMfa" ? "email@domain.com" : "")" />
+                                        </div>
+                                        @if (AuthType == "SqlServer")
+                                        {
+                                            <div class="col-6">
+                                                <label class="form-label small text-muted">Password</label>
+                                                <input type="password" class="form-control bg-dark text-white border-secondary" @bind="Password" />
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Database</label>
+                                    <div class="position-relative">
+                                        <input class="form-control bg-dark text-white border-secondary pe-5" 
+                                               @bind="DatabaseSearch" 
+                                               @bind:event="oninput"
+                                               placeholder="Type to search or select..." 
+                                               @onfocus="OpenDatabaseDropdown" />
+                                        
+                                        @if (IsDatabaseDropdownOpen)
+                                        {
+                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseDatabaseDropdown"></div>
+                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto;">
+                                                @if (IsFetchingDatabases)
+                                                {
+                                                    <div class="p-4 text-center text-info">
+                                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                                        <small>Loading databases...</small>
+                                                    </div>
+                                                }
+                                                else if (AvailableDatabases.Any())
+                                                {
+                                                    var filtered = AvailableDatabases.Where(d => string.IsNullOrWhiteSpace(DatabaseSearch) || d.Contains(DatabaseSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+                                                    if (filtered.Any())
+                                                    {
+                                                        <div class="list-group list-group-flush">
+                                                            @foreach (var db in filtered)
+                                                            {
+                                                                <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3" style="border-bottom: 1px solid #333 !important;" @onclick="() => SelectDatabase(db)">
+                                                                    @db
+                                                                </button>
+                                                            }
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <div class="p-3 text-muted small text-center">No matching databases found.</div>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">Server not connected or no databases.</div>
+                                                }
+                                            </div>
+                                        }
+
+                                        <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
+                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 @if (!string.IsNullOrEmpty(ErrorMsg))
@@ -155,12 +266,11 @@
                                         @(IsBusy ? "Connecting..." : "Connect")
                                     </button>
                                 </div>
-                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        }
     }
     else
     {
@@ -174,7 +284,12 @@
                     <button class="btn btn-sm btn-outline-secondary text-white border-0 me-3" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
                         <span style="font-size: 1.2rem; line-height: 1;">☰</span>
                     </button>
-                    <span class="fw-bold text-muted small">@GetWorkspaceTitle()</span>
+                    <div class="ms-auto d-flex align-items-center gap-3">
+                        <span class="fw-bold text-muted small">@GetWorkspaceTitle()</span>
+                        <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="Disconnect">
+                            <i class="bi bi-power" style="font-size: 1.2rem;"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="app-shell-content flex-grow-1">
                     @Body
@@ -187,11 +302,24 @@
 @code {
     private bool IsConnected = false;
     private bool IsBusy = false;
+    private bool SidebarCollapsed = false;
+    private bool IsDetailsVisible = false;
     private string ConnString = "";
     private string ConnName = "";
+    private string Server = "";
+    private string AuthType = "Windows";
+    private string Username = "";
+    private string Password = "";
+    private string Database = "";
+    private string DatabaseSearch = "";
+    private bool IsDatabaseDropdownOpen = false;
+    private bool IsAuthDropdownOpen = false;
+    private List<string> AvailableDatabases = new();
+    private bool IsFetchingDatabases = false;
+    private bool IsSwitchingDatabaseGlobal = false;
+    private string SwitchingDatabaseName = "";
     private string ActiveConnId = "";
     private string ErrorMsg = "";
-    private bool SidebarCollapsed = false;
 
     private string GetWorkspaceTitle()
     {
@@ -223,12 +351,8 @@
         set
         {
             _searchConn = value;
-            ConnPage = 1;
         }
     }
-
-    private int ConnPage = 1;
-    private int ConnPageSize = 5;
 
     private IEnumerable<ConnectionService.SavedConnection> FilteredConnections => 
         ConnectionService.SavedConnections
@@ -236,11 +360,6 @@
                         c.Name.Contains(SearchConn, StringComparison.OrdinalIgnoreCase) || 
                         c.ConnectionString.Contains(SearchConn, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(c => c.LastUsed);
-
-    private int ConnTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredConnections.Count() / (double)ConnPageSize));
-
-    private List<ConnectionService.SavedConnection> PagedConnections => 
-        FilteredConnections.Skip((ConnPage - 1) * ConnPageSize).Take(ConnPageSize).ToList();
 
     private ExploreDB.Services.UpdateInfo? UpdateInfo;
     private bool UpdateDismissed = false;
@@ -255,9 +374,15 @@
         var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnString);
         if (active != null)
         {
-            ConnName = active.Name;
-            ActiveConnId = active.Id;
+            LoadConnection(active);
         }
+        else if (ConnectionService.SavedConnections.Count == 0)
+        {
+            IsDetailsVisible = true;
+        }
+
+        ConnectionService.OnDatabaseSwitching += OnDatabaseSwitchingHandler;
+        ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
 
         // Check for updates silently in the background
         UpdateInfo = await UpdateService.CheckForUpdateAsync();
@@ -311,11 +436,75 @@
         await Microsoft.Maui.ApplicationModel.Launcher.OpenAsync("https://zerinapps.web.app/app/dbexplorer");
     }
 
+    private async Task OpenDatabaseDropdown()
+    {
+        IsDatabaseDropdownOpen = true;
+        DatabaseSearch = "";
+        if (!AvailableDatabases.Any() && !IsFetchingDatabases)
+        {
+            await FetchDatabases();
+        }
+    }
+
+    private void CloseDatabaseDropdown()
+    {
+        IsDatabaseDropdownOpen = false;
+        DatabaseSearch = Database;
+    }
+
+    private void SetAuthType(string type)
+    {
+        AuthType = type;
+        IsAuthDropdownOpen = false;
+    }
+
+    private void SelectDatabase(string db)
+    {
+        Database = db;
+        DatabaseSearch = db;
+        IsDatabaseDropdownOpen = false;
+    }
+
+    private async Task FetchDatabases()
+    {
+        if(string.IsNullOrWhiteSpace(Server)) return;
+        IsFetchingDatabases = true;
+        ErrorMsg = "";
+        try {
+            AvailableDatabases = await ConnectionService.GetDatabasesAsync(Server, AuthType, Username, Password);
+        } catch (Exception ex) {
+            ErrorMsg = "Failed to fetch databases: " + ex.Message;
+        }
+        IsFetchingDatabases = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnDatabaseSwitchingHandler(string dbName)
+    {
+        SwitchingDatabaseName = dbName;
+        IsSwitchingDatabaseGlobal = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnDatabaseSwitchedHandler()
+    {
+        IsSwitchingDatabaseGlobal = false;
+        InvokeAsync(StateHasChanged);
+    }
+
     private void LoadConnection(ConnectionService.SavedConnection c)
     {
         ActiveConnId = c.Id;
         ConnName = c.Name;
+        Server = c.Server;
+        AuthType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType;
+        Username = c.Username;
+        Password = c.Password;
+        Database = c.Database;
+        DatabaseSearch = c.Database;
         ConnString = c.ConnectionString;
+        AvailableDatabases.Clear();
+        IsDetailsVisible = true;
     }
 
     private void DeleteConnection(string id)
@@ -323,24 +512,30 @@
         ConnectionService.DeleteConnection(id);
         if (ActiveConnId == id)
         {
-            ActiveConnId = "";
-            ConnName = "";
-            ConnString = "";
+            NewConnection();
         }
-        if (ConnPage > ConnTotalPages) ConnPage = ConnTotalPages;
     }
 
     private void NewConnection()
     {
         ActiveConnId = "";
         ConnName = "";
+        Server = "";
+        AuthType = "Windows";
+        Username = "";
+        Password = "";
+        Database = "";
+        DatabaseSearch = "";
         ConnString = "";
+        AvailableDatabases.Clear();
+        IsDetailsVisible = true;
     }
 
     private void SaveCurrentConnection()
     {
-        if (string.IsNullOrWhiteSpace(ConnString)) return;
-        ConnectionService.UpsertConnection(ActiveConnId, ConnName, ConnString);
+        if (string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) return;
+        ConnString = ConnectionService.BuildConnectionString(Server, AuthType, Username, Password, Database);
+        ConnectionService.UpsertConnection(ActiveConnId, ConnName, Server, AuthType, Username, Password, Database, ConnString);
         
         var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnString && c.Name == (string.IsNullOrWhiteSpace(ConnName) ? "Unnamed Connection" : ConnName));
         if (saved != null) ActiveConnId = saved.Id;
@@ -348,32 +543,37 @@
 
     private async Task Connect()
     {
-        if (string.IsNullOrWhiteSpace(ConnString)) return;
+        if (string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) return;
+        ConnString = ConnectionService.BuildConnectionString(Server, AuthType, Username, Password, Database);
 
         IsBusy = true;
         ErrorMsg = "";
-        StateHasChanged();
         
-        await Task.Delay(100); // UI update
-
         var success = await ConnectionService.TestConnectionAsync(ConnString);
         if (success)
         {
-            SaveCurrentConnection();
+            ConnectionService.UpsertConnection(ActiveConnId, ConnName, Server, AuthType, Username, Password, Database, ConnString);
             ConnectionService.SaveActiveConnection(ConnString);
             await SchemaService.LoadSchemaAsync();
             IsConnected = true;
         }
         else
         {
-            ErrorMsg = "Connection failed. Please check the string.";
+            ErrorMsg = "Connection failed. Please check your details and try again.";
         }
-        
+
         IsBusy = false;
+    }
+
+    private void Disconnect()
+    {
+        IsConnected = false;
     }
 
     public void Dispose()
     {
         _updateTimer?.Dispose();
+        ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
+        ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
     }
 }
