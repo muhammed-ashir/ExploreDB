@@ -31,7 +31,7 @@
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(GitHubRelease)' == 'true'">
-        <PackageCertificateThumbprint>C9735DA881B212ADC44F4D6B940491F3E387BBEE</PackageCertificateThumbprint>
+        <PackageCertificateThumbprint>B0E20E1D115E17F7D5FAE21DD184ED1BE15BC081</PackageCertificateThumbprint>
     </PropertyGroup>
 
     <ItemGroup>

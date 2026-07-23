@@ -59,6 +59,13 @@
 <p>If you need to verify or test the <code>ExploreDB_Certificate_Installer.bat</code> script, or if you simply want to remove the ExploreDB self-signed certificate from your computer, follow these steps:</p>
 <ol><li>Press the <strong>Windows Key</strong> on your keyboard, type <strong><code>certlm.msc</code></strong> (which stands for Certificate Local Machine), and hit <strong>Enter</strong>.</li><li>A "Certificates" window will open. In the left sidebar, click the little arrow next to <strong>Trusted Root Certification Authorities</strong> to expand it.</li><li>Click on the <strong>Certificates</strong> folder right below it.</li><li>In the main window, scroll down the alphabetical list until you find the certificate named <strong>ExploreDB</strong> (in the "Issued To" column).</li><li>Right-click on the <strong>ExploreDB</strong> certificate and select <strong>Delete</strong>.</li><li>Click <strong>Yes</strong> to confirm.</li></ol>
 <p><em>(Note: Once deleted, Windows will block the installation of <code>ExploreDB.msix</code> until you run the <code>ExploreDB_Certificate_Installer.bat</code> script again!)</em></p>
+<h3>How to View Installed Certificates (Current User)</h3>
+<p>Using the Certificate Manager (GUI) is the easiest and most user-friendly way to view and manage certificates.</p>
+<ol>
+    <li>Press <strong>Win + R</strong> to open the Run dialog.</li>
+    <li>Type <strong><code>certmgr.msc</code></strong> and press Enter.</li>
+    <li>This opens the Certificate Manager for the current user. You can browse through folders like "Personal," "Trusted Root Certification Authorities," etc., to see installed certificates.</li>
+</ol>
     </div>
 </body>
 </html>
