@@ -258,15 +258,27 @@
 </ol>
 <blockquote>Remember to delete <code>&lt;StoreBuild&gt;true&lt;/StoreBuild&gt;</code> from your <code>.csproj</code> when you are finished testing!</blockquote>
 <h3><strong>Testing the GitHub Build Locally</strong></h3>
-<p>By default, Visual Studio automatically builds the GitHub version of ExploreDB when you press <strong>F5</strong> (as long as <code>&lt;StoreBuild&gt;true&lt;/StoreBuild&gt;</code> is not in your <code>.csproj</code>). </p>
-<p>To test any new features or changes for the GitHub release:</p>
+<p>To test any new features or changes for the GitHub release (such as auto-updater logic), you must enable GitHub mode locally:</p>
 <ol>
-  <li>Open <code>ExploreDB.sln</code> in Visual Studio.</li>
-  <li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li>
-  <li><strong>Developer Mode</strong>: Make sure Developer Mode is turned ON in Windows Settings (System -&gt; For developers) otherwise deployment will fail.</li>
-  <li>Hit <strong>F5</strong>. Visual Studio will automatically deploy the temporary container and launch the app.</li>
-  <li><em>(Optional)</em> If you ever need to specifically test the auto-updater functionality, you can temporarily lower your <code>&lt;ApplicationDisplayVersion&gt;</code> and <code>&lt;Version&gt;</code> in the <code>.csproj</code> file before hitting F5. This will trick the app into thinking it's out of date and trigger the update banner!</li>
+  <li><strong>Enable GitHub Mode in Code</strong>:
+    <ul>
+      <li>Open your <code>ExploreDB.csproj</code> file.</li>
+      <li>Add the following code inside the main <code>&lt;PropertyGroup&gt;</code> block at the top of the file:</li>
+    </ul>
+    <div class="code-container"><div class="code-header"><span class="lang">xml</span><button class="copy-btn">Copy</button></div><pre><code>   &lt;GitHubRelease&gt;true&lt;/GitHubRelease&gt;
+    </code></pre></div>
+  </li>
+  <li><strong>Launch the App</strong>:
+    <ul>
+      <li>Open <code>ExploreDB.sln</code> in Visual Studio.</li>
+      <li>In the top toolbar next to the green Play button, select <strong>ExploreDB (Package)</strong> (the one with the solid green triangle icon).</li>
+      <li><strong>Developer Mode</strong>: Make sure Developer Mode is turned ON in Windows Settings (System -&gt; For developers) otherwise deployment will fail.</li>
+      <li>Hit <strong>F5</strong>. Visual Studio will automatically deploy the temporary container and launch the app.</li>
+      <li><em>(Optional)</em> If you ever need to specifically test the auto-updater functionality, you can temporarily lower your <code>&lt;ApplicationDisplayVersion&gt;</code> and <code>&lt;Version&gt;</code> in the <code>.csproj</code> file before hitting F5. This will trick the app into thinking it's out of date and trigger the update banner!</li>
+    </ul>
+  </li>
 </ol>
+<blockquote>Remember to delete <code>&lt;GitHubRelease&gt;true&lt;/GitHubRelease&gt;</code> from your <code>.csproj</code> when you are finished testing!</blockquote>
 <h3><strong>Publishing a Release (Microsoft Store)</strong></h3>
 <p>To publish an update to the Microsoft Store, you must upload the freshly built files from your <code>StoreRelease</code> folder to the Microsoft Partner Center:</p>
 <ol>
