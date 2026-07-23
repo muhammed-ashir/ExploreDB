@@ -111,7 +111,6 @@ body {
 .query-preview {
     margin: 0;
     padding: 1rem;
-    min-height: 220px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 0.75rem;
     background: rgba(0, 0, 0, 0.25);
@@ -119,6 +118,8 @@ body {
     font-size: 0.82em;
     white-space: pre-wrap;
     word-break: break-word;
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 .column-list-scroll {

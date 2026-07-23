@@ -13,350 +13,512 @@
     else
     {
         <div class="row mb-4 align-items-center">
-            <div class="col-auto">
-                <button type="button" class="btn btn-outline-light btn-sm" @onclick="NavigateBack">Back</button>
-            </div>
             <div class="col">
-                <div class="d-flex align-items-center gap-2">
-                    <h2 class="text-white mb-0">@Table.Name</h2>
-                    <span class="badge bg-secondary">@Table.Schema</span>
+                <nav aria-label="breadcrumb">
+                    <div class="mb-1">
+                        <a href="javascript:void(0)" @onclick="NavigateBack" class="text-secondary text-decoration-none hover-text-white transition-colors fw-medium">
+                            <i class="bi bi-arrow-left me-1"></i> Back
+                        </a>
+                    </div>
+                </nav>
+                <div class="d-flex align-items-center gap-3 mt-2">
+                    <div class="text-primary d-flex align-items-center justify-content-center">
+                        <i class="bi bi-table" style="font-size: 2.2rem; line-height: 1;"></i>
+                    </div>
+                    <div class="d-flex flex-column overflow-hidden justify-content-center" style="min-width: 0;">
+                        <h5 class="text-white mb-0 fw-bold text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">@Table.Name</h5>
+                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">SCHEMA: @Table.Schema</small>
+                    </div>
                 </div>
-            </div>
-            <div class="col-auto">
-                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm">▶ Run in Query Runner</a>
             </div>
         </div>
 
-        <div class="row g-4">
-            <div class="col-md-4">
+        <style>
+            .schema-accordion .accordion-item {
+                border-radius: 0.375rem !important;
+                overflow: hidden;
+            }
+            .schema-accordion .accordion-button {
+                background-color: transparent !important;
+                color: #adb5bd !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+            .schema-accordion .accordion-button:not(.collapsed) {
+                background-color: rgba(255,255,255,0.05) !important;
+                color: #fff !important;
+                border-bottom: 1px solid #495057 !important;
+            }
+            .schema-accordion .accordion-button::after {
+                filter: invert(1) grayscale(100%) brightness(200%);
+            }
+        </style>
+        
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs border-secondary mb-4">
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Columns" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Columns")' style="cursor:pointer">
+                    Columns
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Relationships" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Relationships")' style="cursor:pointer">
+                    Relationships
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "SPs" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("SPs")' style="cursor:pointer">
+                    Procedures
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "ERDTree" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("ERDTree")' style="cursor:pointer">
+                    Visualizer
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Queries" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Queries")' style="cursor:pointer">
+                    Query
+                </a>
+            </li>
+        </ul>
+
+        <div class="tab-content pb-5">
+            @if (ActiveTab == "Columns")
+            {
+                <!-- Columns Tab -->
                 <div class="card glass-card text-white">
-                    <div class="card-header border-secondary fw-bold">Columns</div>
                     <div class="card-body">
-                        <input type="text"
-                               class="form-control bg-dark text-white border-secondary"
-                               placeholder="Search columns..."
-                               @bind="TableColumnSearchTerm"
-                               @bind:event="oninput" />
+                        <div class="mb-4">
+                            <div class="input-group shadow-sm w-100">
+                                <input type="text"
+                                       class="form-control bg-dark text-white border-secondary shadow-none"
+                                       placeholder="Search columns..."
+                                       @bind="TableColumnSearchTerm"
+                                       @bind:event="oninput" />
+                                <button class="btn @(ColumnSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ColumnSearchCaseSensitive = !ColumnSearchCaseSensitive">
+                                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                </button>
+                                <button class="btn @(ColumnSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { ColumnSearchMatchWholeWord = !ColumnSearchMatchWholeWord; if (ColumnSearchMatchWholeWord) ColumnSearchExactMatch = false; }">
+                                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                </button>
+                                <button class="btn @(ColumnSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ColumnSearchExactMatch = !ColumnSearchExactMatch; if (ColumnSearchExactMatch) ColumnSearchMatchWholeWord = false; }">
+                                    <i class="bi bi-bullseye fs-6"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="table-responsive custom-scrollbar-light">
+                            <table class="table table-dark table-hover align-middle border-secondary mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="border-secondary text-muted fw-normal">Column Name</th>
+                                        <th class="border-secondary text-muted fw-normal text-end">Data Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (VisibleTableColumns.Count == 0)
+                                    {
+                                        <tr>
+                                            <td colspan="2" class="text-center py-4 text-muted">No matching columns found.</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var col in VisibleTableColumns)
+                                        {
+                                            <tr>
+                                                <td class="border-secondary fw-medium">
+                                                    @{
+                                                        var fkTable = GetForeignKeyTable(col.Name);
+                                                    }
+                                                    @if (fkTable != null)
+                                                    {
+                                                        <a href="@BuildTableLink(fkTable)" class="text-white text-decoration-none d-inline-flex align-items-center hover-scale transition-transform" title="Navigate to @GetShortName(fkTable)">
+                                                            @col.Name
+                                                            @{
+                                                                var shortName = GetShortName(fkTable);
+                                                                var displayName = shortName.Length > 30 ? shortName.Substring(0, 30) + "..." : shortName;
+                                                            }
+                                                            <span class="badge bg-dark text-muted border border-secondary ms-2 align-middle d-inline-flex align-items-center gap-1" title="@shortName">
+                                                                <i class="bi bi-link-45deg" title="Foreign Key"></i>@displayName
+                                                            </span>
+                                                        </a>
+                                                    }
+                                                    else
+                                                    {
+                                                        @col.Name
+                                                        @if (IsPrimaryKey(col.Name)) {
+                                                            <i class="bi bi-key-fill text-muted ms-2" title="Primary Key"></i>
+                                                        }
+                                                    }
+                                                </td>
+                                                <td class="border-secondary text-end"><span class="badge bg-dark text-muted border border-secondary font-monospace">@col.DataType</span></td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="column-list-scroll">
-                        @if (VisibleTableColumns.Count == 0)
+                </div>
+            }
+            else if (ActiveTab == "Relationships")
+            {
+                <!-- Relationships Tab -->
+                <div class="accordion schema-accordion" id="relationshipsAccordion">
+                    <div class="accordion-item glass-card mb-3 border-secondary">
+                        <h2 class="accordion-header" id="headingParents">
+                            <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseParents" aria-expanded="true" aria-controls="collapseParents">
+                                Parents
+                            </button>
+                        </h2>
+                        <div id="collapseParents" class="accordion-collapse collapse show" aria-labelledby="headingParents" data-bs-parent="#relationshipsAccordion">
+                            <div class="accordion-body text-white">
+                                @if (Table.OutgoingKeys.Count == 0)
+                                {
+                                    <div class="text-muted small fst-italic">No parent tables.</div>
+                                }
+                                else
+                                {
+                                    <div class="row g-3">
+                                        @foreach (var rel in Table.OutgoingKeys)
+                                        {
+                                            <div class="col-md-6 col-xl-4">
+                                                <a href="@BuildTableLink(rel.ToTable)" class="d-block p-3 border bg-dark text-light border-secondary rounded text-decoration-none hover-scale transition-transform h-100">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <span class="fw-bold d-flex align-items-center gap-2">
+                                                            @GetShortName(rel.ToTable)
+                                                        </span>
+                                                        <i class="bi bi-arrow-right-short text-muted fs-4"></i>
+                                                    </div>
+                                                    <small class="text-muted font-monospace d-block mt-1">FK: @rel.FromColumn → @rel.ToColumn</small>
+                                                </a>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item glass-card mb-3 border-secondary">
+                        <h2 class="accordion-header" id="headingChildren">
+                            <button class="accordion-button fw-bold collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseChildren" aria-expanded="false" aria-controls="collapseChildren">
+                                Children
+                            </button>
+                        </h2>
+                        <div id="collapseChildren" class="accordion-collapse collapse" aria-labelledby="headingChildren" data-bs-parent="#relationshipsAccordion">
+                            <div class="accordion-body text-white">
+                                @if (Table.IncomingKeys.Count == 0)
+                                {
+                                    <div class="text-muted small fst-italic">No child tables.</div>
+                                }
+                                else
+                                {
+                                    <div class="row g-3">
+                                        @foreach (var rel in Table.IncomingKeys)
+                                        {
+                                            <div class="col-md-6 col-xl-4">
+                                                <a href="@BuildTableLink(rel.FromTable)" class="d-block p-3 border bg-dark text-light border-secondary rounded text-decoration-none hover-scale transition-transform h-100">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <span class="fw-bold d-flex align-items-center gap-2">
+                                                            @GetShortName(rel.FromTable)
+                                                        </span>
+                                                        <i class="bi bi-arrow-down-left-short text-muted fs-4"></i>
+                                                    </div>
+                                                    <small class="text-muted font-monospace d-block mt-1">FK: @rel.FromColumn → @rel.ToColumn</small>
+                                                </a>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (ActiveTab == "SPs")
+            {
+                <!-- SPs Tab -->
+                <div class="text-white mt-1">
+                    <div>
+                        @if (Table.ReferencedBySPs.Count == 0)
                         {
-                            <div class="px-3 pb-3 text-muted">No matching columns found.</div>
+                            <div class="text-muted p-4 text-center">No stored procedures reference this table.</div>
                         }
                         else
                         {
-                            <ul class="list-group list-group-flush">
-                                @foreach (var col in VisibleTableColumns)
+                            <div class="row g-3">
+                                @foreach (var dep in Table.ReferencedBySPs)
                                 {
-                                    <li class="list-group-item bg-transparent text-white border-secondary">
-                                        <div class="column-list-item">
-                                            <span>@col.Name</span>
-                                            <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
-                                        </div>
-                                    </li>
+                                    var spFull = $"[{dep.Schema}].[{dep.Name}]";
+                                    <div class="col-md-6 col-12">
+                                        <a href="@BuildProcLink(spFull)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid #3d444b; border-radius: 6px;">
+                                            <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                <div class="text-warning fw-bold fs-4 font-monospace">{}</div>
+                                                <div class="overflow-hidden" style="min-width: 0;">
+                                                    <div class="fw-bold text-light mb-1 text-wrap" style="font-size: 1.1rem; word-break: break-word;">@dep.Name</div>
+                                                    <div class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">SCHEMA: @dep.Schema.ToUpper()</div>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </div>
                                 }
-                            </ul>
+                            </div>
                         }
                     </div>
                 </div>
-            </div>
+            }
+            else if (ActiveTab == "ERDTree")
+            {
+                <div class="accordion schema-accordion" id="schemaAccordion">
+                    <div class="accordion-item glass-card mb-4">
+                        <h2 class="accordion-header" id="headingErd">
+                            <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseErd" aria-expanded="true" aria-controls="collapseErd">
+                                Visual ERD
+                            </button>
+                        </h2>
+                        <div id="collapseErd" class="accordion-collapse collapse show" aria-labelledby="headingErd" data-bs-parent="#schemaAccordion">
+                            <div class="accordion-body text-white">
+                                        @if (!string.IsNullOrEmpty(MermaidDefinition))
+                                        {
+                                            <div class="d-flex justify-content-end mb-2">
+                                                <div class="btn-group btn-group-sm shadow-sm">
+                                                    <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.zoomIn()" title="Zoom In">
+                                                        🔍 ➕
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.zoomOut()" title="Zoom Out">
+                                                        🔍 ➖
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.resetZoom(); window.mermaidPanZoom && window.mermaidPanZoom.resetPan();" title="Reset View">
+                                                        🔄 Reset
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                        <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="@(string.IsNullOrEmpty(MermaidDefinition) ? "padding: 3rem 1rem; width: 100%; border: 1px solid #444;" : "height: 600px; width: 100%; border: 1px solid #444;")">
+                                            @if (string.IsNullOrEmpty(MermaidDefinition))
+                                            {
+                                                <div class="text-muted">No foreign key relationships to display.</div>
+                                            }
+                                            else
+                                            {
+                                                <div class="mermaid w-100 h-100" style="background: transparent;">
+                                                    @MermaidDefinition
+                                                </div>
+                                            }
+                                        </div>
+                            </div>
+                        </div>
+                    </div>
 
-            <div class="col-md-8">
+                    <div class="accordion-item glass-card mb-4">
+                        <h2 class="accordion-header" id="headingTree">
+                            <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTree" aria-expanded="false" aria-controls="collapseTree">
+                                Text Tree
+                            </button>
+                        </h2>
+                        <div id="collapseTree" class="accordion-collapse collapse" aria-labelledby="headingTree" data-bs-parent="#schemaAccordion">
+                            <div class="accordion-body text-white">
+                                        <style>
+                                            ul.sql-tree {
+                                                padding-left: 20px;
+                                                list-style: none;
+                                                margin-bottom: 0;
+                                            }
+
+                                            ul.sql-tree li {
+                                                position: relative;
+                                                padding-top: 6px;
+                                                padding-bottom: 6px;
+                                                padding-left: 20px;
+                                            }
+
+                                            ul.sql-tree li::before {
+                                                content: "";
+                                                position: absolute;
+                                                top: 0;
+                                                left: 0;
+                                                border-left: 1px dashed #6c757d;
+                                                height: 100%;
+                                            }
+
+                                            ul.sql-tree li::after {
+                                                content: "";
+                                                position: absolute;
+                                                top: 18px;
+                                                left: 0;
+                                                border-top: 1px dashed #6c757d;
+                                                width: 15px;
+                                            }
+
+                                            ul.sql-tree li:last-child::before {
+                                                height: 19px;
+                                            }
+
+                                            .tree-conn {
+                                                color: #adb5bd;
+                                                font-size: 0.85em;
+                                            }
+                                        </style>
+
+                                        <div class="tree-root ms-2">
+
+
+                                            @if (Table.OutgoingKeys.Any())
+                                            {
+                                                <div class="fw-bold ms-2 mb-1 text-muted">Parents</div>
+                                                <div class="ms-2 mb-3">
+                                                    @RenderUpstream(Table, new HashSet<string>())
+                                                </div>
+                                            }
+
+                                            @if (Table.IncomingKeys.Any())
+                                            {
+                                                <div class="fw-bold ms-2 mb-1 text-muted">Children</div>
+                                                <div class="ms-2">
+                                                    @RenderDownstream(Table, new HashSet<string>())
+                                                </div>
+                                            }
+                                        </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (ActiveTab == "Queries")
+            {
                 <div class="row g-4">
                     <div class="col-12">
                         <div class="card glass-card text-white">
-                            <div class="card-header border-secondary text-info fw-bold">
-                                Parents (Upstream)
-                                <small class="d-block text-muted fw-normal">Tables this table relies on through foreign keys.</small>
-                            </div>
-                            <div class="card-body">
-                                @if (Table.OutgoingKeys.Count == 0)
-                                {
-                                    <span class="text-muted">No parent tables.</span>
-                                }
-                                else
-                                {
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach (var rel in Table.OutgoingKeys)
-                                        {
-                                            <a href="@BuildTableLink(rel.ToTable)" class="btn btn-outline-info btn-sm text-start" style="min-width: 200px;">
-                                                <div class="fw-bold">@GetShortName(rel.ToTable)</div>
-                                                <small class="text-muted" style="font-size: 0.7em;">FK: @rel.FromColumn -> @rel.ToColumn</small>
-                                            </a>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-12">
-                        <div class="card glass-card text-white">
-                            <div class="card-header border-secondary text-warning fw-bold">
-                                Children (Downstream)
-                                <small class="d-block text-muted fw-normal">Tables that rely on this table.</small>
-                            </div>
-                            <div class="card-body">
-                                @if (Table.IncomingKeys.Count == 0)
-                                {
-                                    <span class="text-muted">No child tables.</span>
-                                }
-                                else
-                                {
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach (var rel in Table.IncomingKeys)
-                                        {
-                                            <a href="@BuildTableLink(rel.FromTable)" class="btn btn-outline-warning btn-sm text-start" style="min-width: 200px;">
-                                                <div class="fw-bold">@GetShortName(rel.FromTable)</div>
-                                                <small class="text-muted" style="font-size: 0.7em;">FK: @rel.FromColumn -> @rel.ToColumn</small>
-                                            </a>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-12">
-                        <div class="card glass-card text-white">
-                            <div class="card-header border-secondary fw-bold" style="color: #b388ff;">
-                                Referenced by Stored Procedures
-                                <small class="d-block text-muted fw-normal">SPs that read from or write to this table.</small>
-                            </div>
-                            <div class="card-body">
-                                @if (Table.ReferencedBySPs.Count == 0)
-                                {
-                                    <span class="text-muted">No stored procedures reference this table.</span>
-                                }
-                                else
-                                {
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach (var dep in Table.ReferencedBySPs)
-                                        {
-                                            var spFull = $"[{dep.Schema}].[{dep.Name}]";
-                                            <a href="@BuildProcLink(spFull)" class="btn btn-sm text-start" style="min-width: 180px; border-color: #b388ff; color: #b388ff;">
-                                                <div class="fw-bold">@dep.Name</div>
-                                                <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
-                                            </a>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card glass-card text-white">
-                    <div class="card-header border-secondary p-0 d-flex justify-content-between align-items-center bg-dark">
-                        <ul class="nav nav-tabs border-0 flex-grow-1">
-                            <li class="nav-item">
-                                <a class="nav-link @(ActiveRelationshipTab == "ERD" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold text-success" : "text-muted")"
-                                   @onclick='() => SetActiveRelationshipTab("ERD")' style="cursor:pointer">Visual ERD</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link @(ActiveRelationshipTab == "Text" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold text-success" : "text-muted")"
-                                   @onclick='() => SetActiveRelationshipTab("Text")' style="cursor:pointer">Text Tree</a>
-                            </li>
-                        </ul>
-                    </div>
-                    <div class="card-body">
-                        @if (ActiveRelationshipTab == "Text")
-                        {
-                        <style>
-                            ul.sql-tree {
-                                padding-left: 20px;
-                                list-style: none;
-                                margin-bottom: 0;
-                            }
-
-                            ul.sql-tree li {
-                                position: relative;
-                                padding-top: 6px;
-                                padding-bottom: 6px;
-                                padding-left: 20px;
-                            }
-
-                            ul.sql-tree li::before {
-                                content: "";
-                                position: absolute;
-                                top: 0;
-                                left: 0;
-                                border-left: 1px dashed #6c757d;
-                                height: 100%;
-                            }
-
-                            ul.sql-tree li::after {
-                                content: "";
-                                position: absolute;
-                                top: 18px;
-                                left: 0;
-                                border-top: 1px dashed #6c757d;
-                                width: 15px;
-                            }
-
-                            ul.sql-tree li:last-child::before {
-                                height: 19px;
-                            }
-
-                            .tree-conn {
-                                color: #adb5bd;
-                                font-size: 0.85em;
-                            }
-                        </style>
-
-                        <div class="tree-root ms-2">
-                            <div class="mb-3">
-                                <span style="color: #fff; font-size: 1.1em; font-weight: bold; border: 1px solid #6c757d; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.2);">
-                                    @GetShortName(Table.Name)
-                                </span>
-                                <span class="badge bg-secondary ms-2">Current Context</span>
-                            </div>
-
-                            @if (Table.OutgoingKeys.Any())
-                            {
-                                <div class="fw-bold ms-2 mb-1" style="color: #0dcaf0;">Upstream (Parents)</div>
-                                <div class="ms-2 mb-3">
-                                    @RenderUpstream(Table, new HashSet<string>())
+                            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center gap-3">
+                                <div>
+                                    SELECT Query
                                 </div>
-                            }
-
-                            @if (Table.IncomingKeys.Any())
-                            {
-                                <div class="fw-bold ms-2 mb-1" style="color: #ffc107;">Downstream (Children)</div>
-                                <div class="ms-2">
-                                    @RenderDownstream(Table, new HashSet<string>())
-                                </div>
-                            }
-                        </div>
-                        }
-                        else if (ActiveRelationshipTab == "ERD")
-                        {
-                            @if (!string.IsNullOrEmpty(MermaidDefinition))
-                            {
-                                <div class="d-flex justify-content-end mb-2">
-                                    <div class="btn-group btn-group-sm shadow-sm">
-                                        <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.zoomIn()" title="Zoom In">
-                                            🔍 ➕
-                                        </button>
-                                        <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.zoomOut()" title="Zoom Out">
-                                            🔍 ➖
-                                        </button>
-                                        <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.resetZoom(); window.mermaidPanZoom && window.mermaidPanZoom.resetPan();" title="Reset View">
-                                            🔄 Reset
-                                        </button>
-                                    </div>
-                                </div>
-                            }
-                            <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="@(string.IsNullOrEmpty(MermaidDefinition) ? "padding: 3rem 1rem; width: 100%; border: 1px solid #444;" : "height: 600px; width: 100%; border: 1px solid #444;")">
-                                @if (string.IsNullOrEmpty(MermaidDefinition))
-                                {
-                                    <div class="text-muted">No foreign key relationships to display.</div>
-                                }
-                                else
-                                {
-                                    <div class="mermaid w-100 h-100" style="background: transparent;">
-                                        @MermaidDefinition
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row mt-4 mb-5 g-4">
-            <div class="col-xl-6">
-                <div class="card glass-card text-white h-100">
-                    <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center gap-3">
-                        <div>
-                            INSERT Query
-                            <small class="d-block text-muted fw-normal">Generates a parameterized insert using all discovered columns.</small>
-                        </div>
-                        <button type="button"
-                                class="btn btn-sm @(InsertCopied ? "btn-success" : "btn-outline-light")"
-                                @onclick="CopyInsertQuery">
-                            @(InsertCopied ? "Copied" : "Copy")
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div class="text-muted small mb-3">Target table: <span class="font-monospace">@QuotedTableName(Table!)</span></div>
-                        <pre class="query-preview mb-0">@InsertQuery</pre>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-xl-6">
-                <div class="card glass-card text-white h-100">
-                    <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center gap-3">
-                        <div>
-                            UPDATE Query
-                            <small class="d-block text-muted fw-normal">Pick only the columns you want in the SET clause.</small>
-                        </div>
-                        <button type="button"
-                                class="btn btn-sm @(UpdateCopied ? "btn-success" : "btn-outline-light")"
-                                @onclick="CopyUpdateQuery">
-                            @(UpdateCopied ? "Copied" : "Copy")
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        @if (Table.Columns.Count == 0)
-                        {
-                            <span class="text-muted">No columns available for query generation.</span>
-                        }
-                        else
-                        {
-                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-                                <span class="text-muted small">Choose the columns to include in the update. One column is shown per line for easier scanning.</span>
                                 <div class="d-flex gap-2">
-                                    <button type="button" class="btn btn-sm btn-outline-light" @onclick="SelectAllUpdateColumns">Select All</button>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ClearUpdateColumns">Clear</button>
+                                    <button type="button"
+                                            class="btn btn-sm @(SelectCopied ? "btn-success" : "btn-outline-light")"
+                                            @onclick="CopySelectQuery">
+                                        @(SelectCopied ? "Copied" : "Copy")
+                                    </button>
+                                    <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2">
+                                        <i class="bi bi-play-fill"></i> Run in Query Runner
+                                    </a>
                                 </div>
                             </div>
-
-                            <div class="mb-3">
-                                <input type="text"
-                                       class="form-control bg-dark text-white border-secondary"
-                                       placeholder="Search update columns..."
-                                       @bind="UpdateColumnSearchTerm"
-                                       @bind:event="oninput" />
+                            <div class="card-body">
+                                <pre class="query-preview mb-0">@SelectQuery</pre>
                             </div>
+                        </div>
+                    </div>
 
-                            <div class="query-option-list mb-3">
-                                @if (VisibleUpdateColumns.Count == 0)
+                    <div class="col-12">
+                        <div class="card glass-card text-white">
+                            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center gap-3">
+                                <div>
+                                    INSERT Query
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="button"
+                                            class="btn btn-sm @(InsertCopied ? "btn-success" : "btn-outline-light")"
+                                            @onclick="CopyInsertQuery">
+                                        @(InsertCopied ? "Copied" : "Copy")
+                                    </button>
+                                    <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2">
+                                        <i class="bi bi-play-fill"></i> Run in Query Runner
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <pre class="query-preview mb-0">@InsertQuery</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="card glass-card text-white">
+                            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center gap-3">
+                                <div>
+                                    UPDATE Query
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="button"
+                                            class="btn btn-sm @(UpdateCopied ? "btn-success" : "btn-outline-light")"
+                                            @onclick="CopyUpdateQuery">
+                                        @(UpdateCopied ? "Copied" : "Copy")
+                                    </button>
+                                    <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2">
+                                        <i class="bi bi-play-fill"></i> Run in Query Runner
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                @if (Table.Columns.Count == 0)
                                 {
-                                    <div class="text-muted small">No matching columns found.</div>
+                                    <span class="text-muted">No columns available for query generation.</span>
                                 }
                                 else
                                 {
-                                    <div class="d-grid gap-2">
-                                        @foreach (var col in VisibleUpdateColumns)
+                                    <div class="d-flex gap-2 mb-3">
+                                        <div class="input-group input-group-sm flex-grow-1" style="min-width: 0;">
+                                            <input type="text"
+                                                   class="form-control bg-dark text-white border-secondary shadow-none"
+                                                   placeholder="Search update columns..."
+                                                   @bind="UpdateColumnSearchTerm"
+                                                   @bind:event="oninput" />
+                                            <button class="btn @(UpdateColumnSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => UpdateColumnSearchCaseSensitive = !UpdateColumnSearchCaseSensitive">
+                                                <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                            </button>
+                                            <button class="btn @(UpdateColumnSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { UpdateColumnSearchMatchWholeWord = !UpdateColumnSearchMatchWholeWord; if (UpdateColumnSearchMatchWholeWord) UpdateColumnSearchExactMatch = false; }">
+                                                <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                            </button>
+                                            <button class="btn @(UpdateColumnSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { UpdateColumnSearchExactMatch = !UpdateColumnSearchExactMatch; if (UpdateColumnSearchExactMatch) UpdateColumnSearchMatchWholeWord = false; }">
+                                                <i class="bi bi-bullseye fs-6"></i>
+                                            </button>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-light text-nowrap px-3" @onclick="SelectAllUpdateColumns">Select All</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap px-3" @onclick="ClearUpdateColumns">Clear</button>
+                                    </div>
+
+                                    <div class="query-option-list mb-3 custom-scrollbar-light" style="max-height: 250px; overflow-y: auto;">
+                                        @if (VisibleUpdateColumns.Count == 0)
                                         {
-                                            <label class="query-option-item">
-                                                <div class="query-option-meta">
-                                                    <input type="checkbox"
-                                                           class="form-check-input"
-                                                           checked="@IsUpdateColumnSelected(col.Name)"
-                                                           @onchange="args => SetUpdateColumnSelection(col.Name, args.Value)" />
-                                                    <span class="fw-semibold query-option-name">@col.Name</span>
-                                                </div>
-                                                <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
-                                            </label>
+                                            <div class="text-muted small">No matching columns found.</div>
+                                        }
+                                        else
+                                        {
+                                            <div class="d-grid gap-2">
+                                                @foreach (var col in VisibleUpdateColumns)
+                                                {
+                                                    <label class="query-option-item">
+                                                        <div class="query-option-meta">
+                                                            <input type="checkbox"
+                                                                   class="form-check-input"
+                                                                   checked="@IsUpdateColumnSelected(col.Name)"
+                                                                   @onchange="args => SetUpdateColumnSelection(col.Name, args.Value)" />
+                                                            <span class="fw-semibold query-option-name">@col.Name</span>
+                                                        </div>
+                                                        <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
+                                                    </label>
+                                                }
+                                            </div>
                                         }
                                     </div>
+
+                                    <div class="text-muted small mb-2">A dummy `WHERE` clause is added automatically below.</div>
+                                    <pre class="query-preview mb-0">@UpdateQuery</pre>
                                 }
                             </div>
-
-                            <div class="text-muted small mb-2">A dummy `WHERE` clause is added automatically below.</div>
-                            <pre class="query-preview mb-0">@UpdateQuery</pre>
-                        }
+                        </div>
                     </div>
                 </div>
-            </div>
+            }
         </div>
 
     }
@@ -372,14 +534,22 @@
     private TableInfo? Table;
     private HashSet<string> SelectedUpdateColumns = new(StringComparer.OrdinalIgnoreCase);
     private string TableColumnSearchTerm = string.Empty;
+    private bool ColumnSearchCaseSensitive;
+    private bool ColumnSearchMatchWholeWord;
+    private bool ColumnSearchExactMatch;
     private string UpdateColumnSearchTerm = string.Empty;
+    private bool UpdateColumnSearchCaseSensitive = false;
+    private bool UpdateColumnSearchMatchWholeWord = false;
+    private bool UpdateColumnSearchExactMatch = false;
+    private bool SelectCopied;
     private bool InsertCopied;
     private bool UpdateCopied;
-    private string ActiveRelationshipTab = "ERD";
+    private string ActiveTab = "Columns";
     private string MermaidDefinition = string.Empty;
 
-    private List<ColumnInfo> VisibleTableColumns => FilterColumns(TableColumnSearchTerm);
-    private List<ColumnInfo> VisibleUpdateColumns => FilterColumns(UpdateColumnSearchTerm);
+    private List<ColumnInfo> VisibleTableColumns => FilterColumns(TableColumnSearchTerm, ColumnSearchCaseSensitive, ColumnSearchMatchWholeWord, ColumnSearchExactMatch);
+    private List<ColumnInfo> VisibleUpdateColumns => FilterColumns(UpdateColumnSearchTerm, UpdateColumnSearchCaseSensitive, UpdateColumnSearchMatchWholeWord, UpdateColumnSearchExactMatch);
+    private string SelectQuery => $"SELECT TOP 100 * FROM {QuotedTableName(Table!)};";
     private string InsertQuery => BuildInsertQuery();
     private string UpdateQuery => BuildUpdateQuery();
 
@@ -400,17 +570,17 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && ActiveRelationshipTab == "ERD" && !string.IsNullOrEmpty(MermaidDefinition))
+        if (firstRender && ActiveTab == "ERDTree" && !string.IsNullOrEmpty(MermaidDefinition))
         {
             await Task.Delay(100);
             try { await JS.InvokeVoidAsync("renderMermaid"); } catch { }
         }
     }
 
-    private async Task SetActiveRelationshipTab(string tab)
+    private async Task SetActiveTab(string tab)
     {
-        ActiveRelationshipTab = tab;
-        if (tab == "ERD" && !string.IsNullOrEmpty(MermaidDefinition))
+        ActiveTab = tab;
+        if (tab == "ERDTree" && !string.IsNullOrEmpty(MermaidDefinition))
         {
             StateHasChanged();
             await Task.Delay(50);
@@ -581,23 +751,30 @@
         return SelectedUpdateColumns.Contains(columnName);
     }
 
-    private List<ColumnInfo> FilterColumns(string searchTerm)
+    private List<ColumnInfo> FilterColumns(string searchTerm, bool caseSensitive, bool matchWholeWord, bool exactMatch)
     {
-        if (Table == null)
-        {
-            return new List<ColumnInfo>();
-        }
+        if (Table == null) return new List<ColumnInfo>();
+        if (string.IsNullOrWhiteSpace(searchTerm)) return Table.Columns.ToList();
 
-        if (string.IsNullOrWhiteSpace(searchTerm))
-        {
-            return Table.Columns.ToList();
-        }
+        var searchStr = caseSensitive ? searchTerm : searchTerm.ToLower();
 
-        return Table.Columns
-            .Where(c =>
-                c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                c.DataType.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        return Table.Columns.Where(c =>
+        {
+            var colName = caseSensitive ? c.Name : c.Name.ToLower();
+            var dataType = caseSensitive ? c.DataType : c.DataType.ToLower();
+
+            if (exactMatch)
+            {
+                return colName == searchStr || dataType == searchStr;
+            }
+            if (matchWholeWord)
+            {
+                return colName.Split(' ', '.', '_').Contains(searchStr) || 
+                       dataType.Split(' ', '.', '_').Contains(searchStr);
+            }
+            
+            return colName.Contains(searchStr) || dataType.Contains(searchStr);
+        }).ToList();
     }
 
     private void SetUpdateColumnSelection(string columnName, object? value)
@@ -645,6 +822,11 @@
         await CopyQueryAsync(InsertQuery, "InsertCopied");
     }
 
+    private async Task CopySelectQuery()
+    {
+        await CopyQueryAsync(SelectQuery, "SelectCopied");
+    }
+
     private async Task CopyUpdateQuery()
     {
         await CopyQueryAsync(UpdateQuery, "UpdateCopied");
@@ -656,6 +838,7 @@
         
         switch (copyStateVar)
         {
+            case "SelectCopied": SelectCopied = true; break;
             case "InsertCopied": InsertCopied = true; break;
             case "UpdateCopied": UpdateCopied = true; break;
         }
@@ -665,6 +848,7 @@
         
         switch (copyStateVar)
         {
+            case "SelectCopied": SelectCopied = false; break;
             case "InsertCopied": InsertCopied = false; break;
             case "UpdateCopied": UpdateCopied = false; break;
         }
@@ -738,4 +922,21 @@
             }
         </ul>
     };
+
+    private bool IsForeignKey(string columnName)
+    {
+        return Table?.OutgoingKeys.Any(k => k.FromColumn == columnName) ?? false;
+    }
+
+    private string? GetForeignKeyTable(string columnName)
+    {
+        return Table?.OutgoingKeys.FirstOrDefault(k => k.FromColumn == columnName)?.ToTable;
+    }
+
+    private bool IsPrimaryKey(string columnName)
+    {
+        if (string.Equals(columnName, "Id", StringComparison.OrdinalIgnoreCase)) return true;
+        if (Table != null && string.Equals(columnName, Table.Name + "Id", StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 }
