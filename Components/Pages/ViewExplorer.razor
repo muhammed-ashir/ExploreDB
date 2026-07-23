@@ -8,43 +8,49 @@
     <div class="row mb-4">
         <div class="col">
             <h2 class="fw-bold mb-0">View Explorer</h2>
-            <p class="text-secondary small">Browse and search all database views</p>
+
         </div>
     </div>
 
     <div class="row mb-3">
         <div class="col-md-6">
-            <input type="text" 
-                   class="form-control bg-dark text-white border-secondary mb-2" 
-                   placeholder="🔎 Search views..." 
-                   @bind="SearchTerm" 
-                   @bind:event="oninput" />
-            <div class="d-flex gap-2">
-                <button class="btn btn-sm @(ExactMatch ? "btn-primary" : "btn-outline-secondary")" 
-                        @onclick="() => ExactMatch = !ExactMatch"
-                        title="Exact match">
-                    🎯 Exact Match
+            <div class="input-group shadow-sm">
+                <input type="text" 
+                       class="form-control bg-dark text-white border-secondary" 
+                       placeholder="Search views..." 
+                       @bind="SearchTerm" 
+                       @bind:event="oninput" />
+                <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
+                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                 </button>
-                <button class="btn btn-sm @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary")" 
-                        @onclick="() => MatchWholeWord = !MatchWholeWord"
-                        title="Match whole word">
-                    📝 Whole Word
+                <button class="btn @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
+                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
                 </button>
-                <button class="btn btn-sm @(CaseSensitive ? "btn-primary" : "btn-outline-secondary")" 
-                        @onclick="() => CaseSensitive = !CaseSensitive"
-                        title="Case sensitive">
-                    🔤 Case Sensitive
+                <button class="btn @(ExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
+                    <i class="bi bi-bullseye fs-6"></i>
                 </button>
             </div>
         </div>
         <div class="col-md-6 text-end align-self-center">
             <div class="d-flex justify-content-end align-items-center gap-2 mb-1">
                 <label class="text-muted small mb-0">Show</label>
-                <div class="btn-group btn-group-sm">
-                    <button class="btn @(_pageSize == 12 ? "btn-primary" : "btn-outline-secondary text-white")" @onclick="() => SetPageSize(12)">12</button>
-                    <button class="btn @(_pageSize == 24 ? "btn-primary" : "btn-outline-secondary text-white")" @onclick="() => SetPageSize(24)">24</button>
-                    <button class="btn @(_pageSize == 48 ? "btn-primary" : "btn-outline-secondary text-white")" @onclick="() => SetPageSize(48)">48</button>
-                    <button class="btn @(_pageSize == 96 ? "btn-primary" : "btn-outline-secondary text-white")" @onclick="() => SetPageSize(96)">96</button>
+                <div class="position-relative">
+                    <div class="form-control form-control-sm bg-dark text-white border-secondary shadow-sm cursor-pointer d-flex justify-content-between align-items-center" style="width: 75px;" @onclick="() => IsPageSizeDropdownOpen = !IsPageSizeDropdownOpen">
+                        <span>@_pageSize</span>
+                        <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem;"></i>
+                    </div>
+                    @if (IsPageSizeDropdownOpen)
+                    {
+                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsPageSizeDropdownOpen = false"></div>
+                        <div class="dropdown-menu show bg-dark border-secondary shadow-lg p-1 mt-1" style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 75px;">
+                            @foreach (var size in new[] { 12, 24, 48, 96 })
+                            {
+                                <button class="dropdown-item text-white py-1 @(_pageSize == size ? "bg-primary" : "")" type="button" @onclick="() => { SetPageSize(size); IsPageSizeDropdownOpen = false; }">
+                                    @size
+                                </button>
+                            }
+                        </div>
+                    }
                 </div>
                 <label class="text-muted small mb-0">per page</label>
             </div>
@@ -75,18 +81,19 @@
         {
             @foreach (var view in PagedViews)
             {
-                <div class="col-md-6 col-lg-4 col-xl-3 mb-3">
+                <div class="col-12 col-xl-6 mb-3">
                     <a href="view/@Uri.EscapeDataString(view.FullName)" class="text-decoration-none">
-                        <div class="card glass-card text-white node-card h-100">
-                            <div class="card-body">
-                                <h5 class="card-title">
-                                    @view.Name
-                                </h5>
-                                <p class="card-text">
-                                    <small class="text-muted">Schema: @view.Schema</small><br />
-                                    <small class="text-info">@view.Columns.Count columns</small>
-                                </p>
+                        <div class="card glass-card text-white node-card h-100 py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale">
+                            <div class="d-flex align-items-center gap-3 overflow-hidden">
+                                <div class="text-success fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
+                                    <i class="bi bi-layout-text-window"></i>
+                                </div>
+                                <div class="overflow-hidden" style="min-width: 0;">
+                                    <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">@view.Name</h5>
+                                    <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7em; letter-spacing: 1px;">Schema: @view.Schema</small>
+                                </div>
                             </div>
+
                         </div>
                     </a>
                 </div>
@@ -142,6 +149,7 @@
     private bool CaseSensitive = false;
 
     private int _pageSize = 24;
+    private bool IsPageSizeDropdownOpen = false;
     private int CurrentPage = 1;
 
     private void SetPageSize(int size)

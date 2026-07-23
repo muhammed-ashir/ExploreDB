@@ -359,124 +359,6 @@
             </div>
         </div>
 
-        <div class="row mb-5">
-            <div class="col-12">
-                <div class="card glass-card text-white">
-                    <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center gap-3">
-                        <div>
-                            JOINED Queries
-                            <small class="d-block text-muted fw-normal">Update or Delete from this table using data from related tables with generated join clauses.</small>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        @if (Table.Columns.Count == 0)
-                        {
-                            <span class="text-muted">No columns available for joined update generation.</span>
-                        }
-                        else if (!HasJoinedUpdateTableCandidates)
-                        {
-                            <span class="text-muted">No other tables are available in the loaded schema for joined update generation.</span>
-                        }
-                        else
-                        {
-                            <div class="text-muted small mb-4">
-                                Target alias: <span class="font-monospace">t</span>.
-                                Search and add the tables you want to read from, and the join path will be discovered automatically like Pathfinder.
-                            </div>
-
-                            @if (JoinedUpdateJoinPlan?.UnreachableTables.Count > 0)
-                            {
-                                <div class="alert alert-warning border-0 mb-4 joined-update-alert">
-                                    Could not auto-connect:
-                                    <span class="fw-semibold">@string.Join(", ", JoinedUpdateJoinPlan.UnreachableTables.Select(GetShortName))</span>.
-                                    Try a different table selection or check whether the relationships exist in the schema.
-                                </div>
-                            }
-
-                            <div class="row g-4">
-                                <div class="col-xl-5">
-                                    <div class="card bg-dark border-secondary shadow-sm" style="height: 100%; min-height: 500px;">
-                                        <div class="card-header border-secondary p-2" style="position: sticky; top: 0; z-index: 20; background: inherit;">
-                                            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                                                <div class="text-uppercase text-muted small fw-bold" style="letter-spacing: 0.08em;">Select Columns</div>
-                                                @if (SelectedJoinedUpdateColumns.Count > 0)
-                                                {
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0" @onclick="ClearJoinedUpdateSelections">Clear</button>
-                                                }
-                                            </div>
-                                            <input type="text"
-                                                   class="form-control form-control-sm bg-black text-white border-secondary"
-                                                   placeholder="🔎 Search tables and columns..."
-                                                   @bind="JoinedUpdateSearchTerm"
-                                                   @bind:event="oninput" />
-                                            <div class="text-muted small mt-2" style="font-size: 0.75rem;">
-                                                Select columns from <span class="text-warning">@Table.Name</span> to UPDATE, and columns from other tables to JOIN them.
-                                            </div>
-                                        </div>
-                                        <div style="overflow-y: auto; max-height: 600px; flex: 1;">
-                                            <div class="card-body p-0">
-                                                <div class="list-group list-group-flush">
-                                                    @foreach (var schemaTable in FilteredJoinedUpdateTables)
-                                                    {
-                                                        var matchingColumns = schemaTable.Columns.Where(c => MatchJoinedUpdateSearch(schemaTable.Name, c.Name)).ToList();
-                                                        if (!matchingColumns.Any()) continue;
-                                                        var isTargetTable = schemaTable.FullName == Table.FullName;
-
-                                                        <div class="list-group-item bg-transparent text-light border-secondary">
-                                                            <div class="d-flex align-items-center gap-2">
-                                                                <span class="small fw-bold text-uppercase mb-0" style="color: @(isTargetTable ? "#ffc107" : "#6ea8fe");">
-                                                                    @schemaTable.Name @(isTargetTable ? "(Target)" : "")
-                                                                </span>
-                                                            </div>
-                                                            @foreach(var col in matchingColumns)
-                                                            {
-                                                                var key = $"{schemaTable.FullName}.{col.Name}";
-                                                                var isSelected = SelectedJoinedUpdateColumns.Contains(key);
-                                                                <div class="form-check mt-1">
-                                                                    <input class="form-check-input" type="checkbox" id="@key" 
-                                                                           checked="@isSelected" 
-                                                                           @onchange="(e) => ToggleJoinedUpdateColumn(key, schemaTable.FullName, e.Value is true)" />
-                                                                    <label class="form-check-label small text-break cursor-pointer" for="@key">
-                                                                        @col.Name
-                                                                    </label>
-                                                                </div>
-                                                            }
-                                                        </div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-xl-7">
-                                    <div class="d-flex flex-column gap-4 h-100">
-                                        <div class="query-builder-panel flex-grow-1">
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <div class="fw-bold text-info">UPDATE Query</div>
-                                                <button type="button" class="btn btn-sm @(JoinedUpdateCopied ? "btn-success" : "btn-outline-light")" @onclick="CopyJoinedUpdateQuery">
-                                                    @(JoinedUpdateCopied ? "Copied" : "Copy")
-                                                </button>
-                                            </div>
-                                            <pre class="query-preview mb-0">@JoinedUpdateQuery</pre>
-                                        </div>
-                                        <div class="query-builder-panel flex-grow-1">
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <div class="fw-bold text-danger">DELETE Query</div>
-                                                <button type="button" class="btn btn-sm @(JoinedDeleteCopied ? "btn-danger" : "btn-outline-light")" @onclick="CopyJoinedDeleteQuery">
-                                                    @(JoinedDeleteCopied ? "Copied" : "Copy")
-                                                </button>
-                                            </div>
-                                            <pre class="query-preview mb-0">@JoinedDeleteQuery</pre>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
     }
 </div>
 
@@ -491,26 +373,15 @@
     private HashSet<string> SelectedUpdateColumns = new(StringComparer.OrdinalIgnoreCase);
     private string TableColumnSearchTerm = string.Empty;
     private string UpdateColumnSearchTerm = string.Empty;
-    private string JoinedUpdateSearchTerm = string.Empty;
     private bool InsertCopied;
     private bool UpdateCopied;
-    private bool JoinedUpdateCopied;
-    private bool JoinedDeleteCopied;
     private string ActiveRelationshipTab = "ERD";
     private string MermaidDefinition = string.Empty;
-    private HashSet<string> SelectedJoinedUpdateColumns = new(StringComparer.OrdinalIgnoreCase);
-    private PathfinderJoinPlan? JoinedUpdateJoinPlan;
 
     private List<ColumnInfo> VisibleTableColumns => FilterColumns(TableColumnSearchTerm);
     private List<ColumnInfo> VisibleUpdateColumns => FilterColumns(UpdateColumnSearchTerm);
-    private bool HasJoinedUpdateTableCandidates => Table != null && SchemaService.Tables.Any(t => !string.Equals(t.FullName, Table.FullName, StringComparison.OrdinalIgnoreCase));
-    private IEnumerable<TableInfo> FilteredJoinedUpdateTables => SchemaService.Tables;
-    private List<PathfinderJoinStep> JoinedUpdateJoinSteps => JoinedUpdateJoinPlan?.Steps ?? new List<PathfinderJoinStep>();
     private string InsertQuery => BuildInsertQuery();
     private string UpdateQuery => BuildUpdateQuery();
-    private string JoinedUpdateQuery => BuildJoinedUpdateQuery();
-    private string JoinedDeleteQuery => BuildJoinedDeleteQuery();
-    private static readonly string[] JoinedUpdateJoinTypes = new[] { "INNER JOIN", "LEFT JOIN" };
 
     protected override void OnParametersSet()
     {
@@ -519,13 +390,11 @@
 
         InsertCopied = false;
         UpdateCopied = false;
-        JoinedUpdateCopied = false;
         SelectedUpdateColumns = Table?.Columns
             .Select(c => c.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         TableColumnSearchTerm = string.Empty;
         UpdateColumnSearchTerm = string.Empty;
-        InitializeJoinedUpdateState();
         GenerateMermaidERD();
     }
 
@@ -679,106 +548,6 @@
             $"WHERE <add_condition_here>;";
     }
 
-    private string BuildJoinedUpdateQuery()
-    {
-        if (Table == null)
-        {
-            return string.Empty;
-        }
-
-        if (SelectedJoinedUpdateColumns.Count == 0)
-        {
-            return "-- Search and select columns to generate a joined UPDATE query.";
-        }
-
-        if (JoinedUpdateJoinPlan == null)
-        {
-            return string.Empty;
-        }
-
-        var columnsToUpdate = SelectedJoinedUpdateColumns
-            .Where(c => c.StartsWith(Table.FullName + ".", StringComparison.OrdinalIgnoreCase))
-            .Select(c => c.Substring(c.LastIndexOf('.') + 1))
-            .ToList();
-
-        var sourceColumns = SelectedJoinedUpdateColumns
-            .Where(c => !c.StartsWith(Table.FullName + ".", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        return PathfinderService.GenerateJoinedUpdateQuery(JoinedUpdateJoinPlan, columnsToUpdate, sourceColumns).Sql;
-    }
-
-    private string BuildJoinedDeleteQuery()
-    {
-        if (Table == null)
-        {
-            return string.Empty;
-        }
-
-        if (SelectedJoinedUpdateColumns.Count == 0)
-        {
-            return "-- Search and select columns to generate a joined DELETE query.";
-        }
-
-        if (JoinedUpdateJoinPlan == null)
-        {
-            return string.Empty;
-        }
-
-        return PathfinderService.GenerateJoinedDeleteQuery(JoinedUpdateJoinPlan).Sql;
-    }
-
-    private void InitializeJoinedUpdateState()
-    {
-        JoinedUpdateSearchTerm = string.Empty;
-        SelectedJoinedUpdateColumns.Clear();
-        RefreshJoinedUpdateJoinPlan();
-    }
-
-    private void RefreshJoinedUpdateJoinPlan()
-    {
-        if (Table == null)
-        {
-            JoinedUpdateJoinPlan = null;
-            return;
-        }
-
-        var joinTables = SelectedJoinedUpdateColumns
-            .Where(c => !c.StartsWith(Table.FullName + ".", StringComparison.OrdinalIgnoreCase))
-            .Select(c => c.Substring(0, c.LastIndexOf('.')))
-            .Distinct()
-            .ToList();
-
-        JoinedUpdateJoinPlan = PathfinderService.GenerateJoinPlan(joinTables, Table.FullName, rootAlias: "t", joinedAliasPrefix: "j");
-    }
-
-    private bool MatchJoinedUpdateSearch(string tableName, string colName)
-    {
-        if (string.IsNullOrWhiteSpace(JoinedUpdateSearchTerm)) return true;
-
-        var searchTerm = JoinedUpdateSearchTerm.ToLower();
-        return tableName.ToLower().Contains(searchTerm) || colName.ToLower().Contains(searchTerm);
-    }
-
-    private void ToggleJoinedUpdateColumn(string key, string tableName, bool isChecked)
-    {
-        if (isChecked)
-        {
-            SelectedJoinedUpdateColumns.Add(key);
-        }
-        else
-        {
-            SelectedJoinedUpdateColumns.Remove(key);
-        }
-
-        RefreshJoinedUpdateJoinPlan();
-    }
-
-    private void ClearJoinedUpdateSelections()
-    {
-        SelectedJoinedUpdateColumns.Clear();
-        RefreshJoinedUpdateJoinPlan();
-    }
 
     private static string QuoteIdentifier(string identifier)
     {
@@ -881,16 +650,6 @@
         await CopyQueryAsync(UpdateQuery, "UpdateCopied");
     }
 
-    private async Task CopyJoinedUpdateQuery()
-    {
-        await CopyQueryAsync(JoinedUpdateQuery, "JoinedUpdateCopied");
-    }
-
-    private async Task CopyJoinedDeleteQuery()
-    {
-        await CopyQueryAsync(JoinedDeleteQuery, "JoinedDeleteCopied");
-    }
-
     private async Task CopyQueryAsync(string query, string copyStateVar)
     {
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", query);
@@ -899,8 +658,6 @@
         {
             case "InsertCopied": InsertCopied = true; break;
             case "UpdateCopied": UpdateCopied = true; break;
-            case "JoinedUpdateCopied": JoinedUpdateCopied = true; break;
-            case "JoinedDeleteCopied": JoinedDeleteCopied = true; break;
         }
         
         StateHasChanged();
@@ -910,8 +667,6 @@
         {
             case "InsertCopied": InsertCopied = false; break;
             case "UpdateCopied": UpdateCopied = false; break;
-            case "JoinedUpdateCopied": JoinedUpdateCopied = false; break;
-            case "JoinedDeleteCopied": JoinedDeleteCopied = false; break;
         }
         
         StateHasChanged();
@@ -919,46 +674,6 @@
 
 
 
-    private static int GetJoinedUpdateSearchScore(TableInfo table, string searchTerm)
-    {
-        if (table.Name.Equals(searchTerm, StringComparison.OrdinalIgnoreCase))
-        {
-            return 0;
-        }
-
-        var qualifiedName = $"{table.Schema}.{table.Name}";
-        if (qualifiedName.Equals(searchTerm, StringComparison.OrdinalIgnoreCase))
-        {
-            return 1;
-        }
-
-        if (table.Name.StartsWith(searchTerm, StringComparison.OrdinalIgnoreCase))
-        {
-            return 2;
-        }
-
-        if (qualifiedName.StartsWith(searchTerm, StringComparison.OrdinalIgnoreCase))
-        {
-            return 3;
-        }
-
-        if (table.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-        {
-            return 4;
-        }
-
-        if (table.Schema.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-        {
-            return 5;
-        }
-
-        if (qualifiedName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-        {
-            return 6;
-        }
-
-        return -1;
-    }
 
     private RenderFragment RenderUpstream(TableInfo currentTable, HashSet<string> path) => __builder =>
     {

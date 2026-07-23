@@ -1,174 +1,32 @@
-@page "/runner"
+@page "/"
 @using ExploreDB.Services
 @using Dapper
 @using Microsoft.Data.SqlClient
 @using System.Data
 @using Microsoft.Extensions.Configuration
-@inject SchemaService SchemaService
 @inject ConnectionService ConnectionService
 @inject QueryStateService QueryStateService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject IJSRuntime JS
 
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-end border-bottom border-secondary pb-2 mb-4 mt-2">
-        <h2 class="text-white mb-0">Query Runner</h2>
-        <ul class="nav nav-tabs border-0">
-            <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Table" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
-                   @onclick='() => SetTab("Table")' style="cursor:pointer">Tables</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "View" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
-                   @onclick='() => SetTab("View")' style="cursor:pointer">Views</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Sp" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
-                   @onclick='() => SetTab("Sp")' style="cursor:pointer">Stored Procs</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Custom" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
-                   @onclick='() => SetTab("Custom")' style="cursor:pointer">Custom</a>
-            </li>
-        </ul>
+    <div class="d-flex justify-content-between align-items-center mb-4 mt-2">
+        <h2 class="text-white mb-0 fw-bold">Query Runner</h2>
+        <button class="btn btn-primary px-4 fw-bold shadow" @onclick="ExecuteAsync" disabled="@IsExecuting">
+            @if (IsExecuting) { <span class="spinner-border spinner-border-sm me-2"></span><span>Executing...</span> }
+            else { <i class="bi bi-play-fill me-1"></i><span>Execute</span> }
+        </button>
     </div>
 
     <!-- Execution Harness Area -->
     <div class="row g-4 mb-4">
-        @if (ActiveTab != "Custom")
-        {
-            <div class="col-md-4">
-                <div class="card glass-card text-white h-100">
-                    <div class="card-body">
-                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary mb-3"
-                               placeholder="Search @(ActiveTab)..." @bind="SearchTerm" @bind:event="oninput" />
-
-                        <div style="max-height: 400px; overflow-y: auto;">
-                            @if (ActiveTab == "Table")
-                            {
-                                <ul class="list-group list-group-flush">
-                                @foreach (var tbl in FilteredTables)
-                                {
-                                    <li class="list-group-item bg-transparent text-white border-secondary cursor-pointer @(SelectedObject == tbl.FullName ? "bg-primary" : "")"
-                                        @onclick="() => SelectObject(tbl.FullName)">
-                                        @tbl.Name
-                                    </li>
-                                }
-                                </ul>
-                            }
-                            else if (ActiveTab == "View")
-                            {
-                                <ul class="list-group list-group-flush">
-                                @foreach (var vw in FilteredViews)
-                                {
-                                    <li class="list-group-item bg-transparent text-white border-secondary cursor-pointer @(SelectedObject == vw.FullName ? "bg-primary" : "")"
-                                        @onclick="() => SelectObject(vw.FullName)">
-                                        @vw.Name
-                                    </li>
-                                }
-                                </ul>
-                            }
-                            else if (ActiveTab == "Sp")
-                            {
-                                <ul class="list-group list-group-flush">
-                                @foreach (var sp in FilteredSps)
-                                {
-                                    <li class="list-group-item bg-transparent text-white border-secondary cursor-pointer @(SelectedObject == sp.FullName ? "bg-primary" : "")"
-                                        @onclick="() => SelectObject(sp.FullName)">
-                                        @sp.Name
-                                    </li>
-                                }
-                                </ul>
-                            }
-                        </div>
-                    </div>
+        <div class="col-12">
+            <div class="card glass-card text-white shadow-sm border-secondary">
+                <div class="card-body p-0">
+                    <textarea class="form-control bg-dark text-success border-0 font-monospace p-3 rounded" style="resize: vertical; min-height: 250px;" @bind="QueryStateService.CustomQuery" placeholder="Enter SQL query here..."></textarea>
                 </div>
             </div>
-            
-            <div class="col-md-8">
-                <div class="card glass-card text-white h-100">
-                    <div class="card-header border-secondary d-flex justify-content-between align-items-center">
-                        <div>
-                            <!-- <span class="fw-bold">Execution Harness</span> -->
-                            @if (!string.IsNullOrEmpty(SelectedObject))
-                            {
-                                <span class="badge bg-secondary ms-2">@SelectedObject</span>
-                            }
-                        </div>
-                        <button class="btn btn-sm btn-primary" @onclick="ExecuteAsync" disabled="@(IsExecuting || string.IsNullOrEmpty(SelectedObject))">
-                            @if (IsExecuting) { <span class="spinner-border spinner-border-sm"></span> }
-                            else { <span>Execute</span> }
-                        </button>
-                    </div>
-                    <div class="card-body" style="overflow-y: auto; max-height: 400px;">
-                        @if (ActiveTab == "Sp" && SelectedSp != null)
-                        {
-                            <h6 class="text-info border-bottom border-secondary pb-2">Parameters</h6>
-                            @if (SelectedSp.Parameters.Count == 0)
-                            {
-                                <span class="text-muted fst-italic">No parameters.</span>
-                            }
-                            else
-                            {
-                                <div class="row g-3">
-                                    @foreach (var p in SelectedSp.Parameters)
-                                    {
-                                        <div class="col-md-4">
-                                            <label class="form-label small fw-bold mb-1 text-warning" style="font-family: monospace;">
-                                                @p.Name
-                                                @if (p.IsOutput) { <span class="badge bg-danger ms-1" style="font-size: 0.6em;">OUT</span> }
-                                                <span class="text-info ms-2" style="font-size: 0.8em;">@p.DisplayType</span>
-                                            </label>
-                                            @if (!p.IsOutput)
-                                            {
-                                                var val = GetParamValueString(p.Name);
-                                                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
-                                                       value="@val" @oninput="(e) => SetParamValueString(p.Name, e.Value?.ToString())"
-                                                       placeholder="@(p.HasDefault ? $"Default: {p.DefaultValue ?? "NULL"}" : "Value...")" />
-                                            }
-                                            else
-                                            {
-                                                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
-                                                       value="@GetOutputValueString(p.Name)" readonly placeholder="Output will appear here..." />
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        }
-                        else if (!string.IsNullOrEmpty(SelectedObject))
-                        {
-                            <div class="p-0">
-                                <textarea class="form-control bg-dark text-success border-0 font-monospace p-3" style="resize: vertical; min-height: 250px;" @bind="ObjectQuery" placeholder="Enter SQL query here..."></textarea>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="text-muted p-4 text-center">
-                                Select an object to generate a query.
-                            </div>
-                        }
-                    </div>
-                </div>
-            </div>
-        }
-        else
-        {
-            <div class="col-12">
-                <div class="card glass-card text-white">
-                    <div class="card-header border-secondary d-flex justify-content-between align-items-center">
-                        <span class="fw-bold">Custom Query</span>
-                        <button class="btn btn-sm btn-primary" @onclick="ExecuteAsync" disabled="@IsExecuting">
-                            @if (IsExecuting) { <span class="spinner-border spinner-border-sm"></span> }
-                            else { <span>Execute</span> }
-                        </button>
-                    </div>
-                    <div class="card-body p-0">
-                        <textarea class="form-control bg-dark text-white border-0 font-monospace p-3" style="resize: vertical; min-height: 250px;" @bind="QueryStateService.CustomQuery" placeholder="Enter SQL query here..."></textarea>
-                    </div>
-                </div>
-            </div>
-        }
+        </div>
     </div>
 
     <!-- Results Area -->
@@ -200,7 +58,7 @@
                         else if (ResultSets.Count == 0 && !HasExecuted)
                         {
                             <div class="text-muted text-center mt-5">
-                                @(ActiveTab == "Custom" ? "Enter a custom query and click Execute to see results." : "Select an object and click Execute to see results.")
+                                Enter a custom query and click Execute to see results.
                             </div>
                         }
                         else if (ResultSets.Count == 0 && HasExecuted)
@@ -238,89 +96,20 @@
     [SupplyParameterFromQuery]
     public string? ObjectName { get; set; }
 
-    private string ActiveTab = "Table";
-    private string SearchTerm = "";
-    private string? SelectedObject;
-    private SpInfo? SelectedSp;
-    
     private string ResultTab = "Results";
     private bool IsExecuting = false;
     private bool HasExecuted = false;
     
-    private Dictionary<string, string?> InputValues = new();
-    private Dictionary<string, string?> OutputValues = new();
     private List<IEnumerable<dynamic>> ResultSets = new();
     private List<string> Messages = new();
-    private string ObjectQuery = "";
-
-    private IEnumerable<TableInfo> FilteredTables => SchemaService.Tables.Where(t => string.IsNullOrEmpty(SearchTerm) || t.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
-    private IEnumerable<ViewInfo> FilteredViews => SchemaService.Views.Where(v => string.IsNullOrEmpty(SearchTerm) || v.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
-    private IEnumerable<SpInfo> FilteredSps => SchemaService.StoredProcedures.Where(s => string.IsNullOrEmpty(SearchTerm) || s.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
 
     protected override void OnInitialized()
     {
-        if (!string.IsNullOrEmpty(ObjectType))
-        {
-            if (ObjectType.Equals("table", StringComparison.OrdinalIgnoreCase)) ActiveTab = "Table";
-            else if (ObjectType.Equals("view", StringComparison.OrdinalIgnoreCase)) ActiveTab = "View";
-            else if (ObjectType.Equals("sp", StringComparison.OrdinalIgnoreCase)) ActiveTab = "Sp";
-            else if (ObjectType.Equals("custom", StringComparison.OrdinalIgnoreCase)) ActiveTab = "Custom";
-        }
-        
-        if (!string.IsNullOrEmpty(ObjectName))
-        {
-            SelectObject(Uri.UnescapeDataString(ObjectName));
-        }
     }
-
-    private void SetTab(string tab)
-    {
-        ActiveTab = tab;
-        SearchTerm = "";
-        SelectedObject = null;
-        SelectedSp = null;
-        ResultSets.Clear();
-        Messages.Clear();
-        HasExecuted = false;
-        ResultTab = "Results";
-    }
-
-    private void SelectObject(string fullName)
-    {
-        SelectedObject = fullName;
-        ResultSets.Clear();
-        Messages.Clear();
-        HasExecuted = false;
-        ResultTab = "Results";
-        
-        if (ActiveTab == "Sp")
-        {
-            SelectedSp = SchemaService.StoredProcedures.FirstOrDefault(s => s.FullName == fullName);
-            InputValues.Clear();
-            OutputValues.Clear();
-            if (SelectedSp != null)
-            {
-                foreach (var p in SelectedSp.Parameters)
-                {
-                    if (!p.IsOutput) InputValues[p.Name] = string.Empty;
-                    else OutputValues[p.Name] = string.Empty;
-                }
-            }
-        }
-        else if (ActiveTab == "Table" || ActiveTab == "View")
-        {
-            ObjectQuery = $"SELECT TOP 1000 * FROM {fullName}";
-        }
-    }
-
-    private string GetParamValueString(string name) => InputValues.TryGetValue(name, out var val) ? (val ?? "") : "";
-    private void SetParamValueString(string name, string? val) => InputValues[name] = val;
-    private string GetOutputValueString(string name) => OutputValues.TryGetValue(name, out var val) ? (val ?? "") : "";
 
     private async Task ExecuteAsync()
     {
         if (IsExecuting) return;
-        if (ActiveTab != "Custom" && string.IsNullOrEmpty(SelectedObject)) return;
 
         IsExecuting = true;
         HasExecuted = true;
@@ -339,91 +128,40 @@
             };
             await conn.OpenAsync();
 
-            if (ActiveTab == "Custom")
+            if (string.IsNullOrWhiteSpace(QueryStateService.CustomQuery))
             {
-                if (string.IsNullOrWhiteSpace(QueryStateService.CustomQuery))
+                Messages.Add("Error: Query is empty.");
+                ResultTab = "Messages";
+                return;
+            }
+
+            var q = QueryStateService.CustomQuery.TrimStart();
+            bool isSelectOrWith = q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
+                                  q.StartsWith("with", StringComparison.OrdinalIgnoreCase);
+
+            if (!isSelectOrWith)
+            {
+                bool allowNonSelect = Config.GetValue<bool>("AllowNonSelectQueries", false);
+                if (!allowNonSelect)
                 {
-                    Messages.Add("Error: Query is empty.");
+                    Messages.Add("Error: Execution of non-SELECT statements is disabled.");
                     ResultTab = "Messages";
                     return;
                 }
 
-                var q = QueryStateService.CustomQuery.TrimStart();
-                bool isSelectOrWith = q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
-                                      q.StartsWith("with", StringComparison.OrdinalIgnoreCase);
-
-                if (!isSelectOrWith)
+                bool confirm = await JS.InvokeAsync<bool>("confirm", "⚠️ WARNING: This query may modify data or schema.\n\nAre you sure you want to execute it?");
+                if (!confirm)
                 {
-                    bool allowNonSelect = Config.GetValue<bool>("AllowNonSelectQueries", false);
-                    if (!allowNonSelect)
-                    {
-                        Messages.Add("Error: Execution of non-SELECT statements is disabled.");
-                        ResultTab = "Messages";
-                        return;
-                    }
-
-                    bool confirm = await JS.InvokeAsync<bool>("confirm", "⚠️ WARNING: This query may modify data or schema.\n\nAre you sure you want to execute it?");
-                    if (!confirm)
-                    {
-                        Messages.Add("Execution cancelled by user.");
-                        ResultTab = "Messages";
-                        return;
-                    }
-                }
-
-                var rs = await conn.QueryAsync<dynamic>(QueryStateService.CustomQuery);
-                ResultSets.Add(rs);
-                Messages.Add("Executed custom query.");
-                Messages.Add($"Rows returned: {rs.Count()}");
-            }
-            else if (ActiveTab == "Table" || ActiveTab == "View")
-            {
-                if (string.IsNullOrWhiteSpace(ObjectQuery))
-                {
-                    Messages.Add("Error: Query is empty.");
+                    Messages.Add("Execution cancelled by user.");
                     ResultTab = "Messages";
                     return;
                 }
-                var rs = await conn.QueryAsync<dynamic>(ObjectQuery);
-                ResultSets.Add(rs);
-                Messages.Add($"Executed query for {SelectedObject}.");
-                Messages.Add($"Rows returned: {rs.Count()}");
             }
-            else if (ActiveTab == "Sp" && SelectedSp != null)
-            {
-                var dapperParams = new DynamicParameters();
-                foreach (var p in SelectedSp.Parameters)
-                {
-                    if (p.IsOutput)
-                    {
-                        dapperParams.Add(p.Name, dbType: null, direction: ParameterDirection.Output, size: p.MaxLength > 0 ? p.MaxLength : -1);
-                    }
-                    else
-                    {
-                        var val = InputValues.TryGetValue(p.Name, out var str) && !string.IsNullOrWhiteSpace(str) ? str : null;
-                        dapperParams.Add(p.Name, val);
-                    }
-                }
 
-                dapperParams.Add("@__ReturnValue", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
-
-                using var multi = await conn.QueryMultipleAsync(SelectedSp.FullName, dapperParams, commandType: CommandType.StoredProcedure);
-                
-                while (!multi.IsConsumed)
-                {
-                    var rs = await multi.ReadAsync<dynamic>();
-                    ResultSets.Add(rs);
-                }
-
-                foreach (var p in SelectedSp.Parameters.Where(p => p.IsOutput))
-                {
-                    var outVal = dapperParams.Get<object>(p.Name);
-                    OutputValues[p.Name] = outVal?.ToString() ?? "NULL";
-                }
-                
-                var retVal = dapperParams.Get<int>("@__ReturnValue");
-                Messages.Add($"Return Value: {retVal}");
-            }
+            var rs = await conn.QueryAsync<dynamic>(QueryStateService.CustomQuery);
+            ResultSets.Add(rs);
+            Messages.Add("Executed custom query.");
+            Messages.Add($"Rows returned: {rs.Count()}");
         }
         catch (Exception ex)
         {

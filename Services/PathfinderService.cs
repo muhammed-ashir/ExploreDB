@@ -101,7 +101,7 @@ public sealed class PathfinderService
         };
     }
 
-    public PathfinderQueryResult GenerateJoinedUpdateQuery(PathfinderJoinPlan joinPlan, IReadOnlyList<string> columnsToUpdate, IReadOnlyList<string> sourceColumns)
+    public PathfinderQueryResult GenerateJoinedUpdateQuery(PathfinderJoinPlan joinPlan, IReadOnlyDictionary<string, string?> columnMappings)
     {
         if (!string.IsNullOrWhiteSpace(joinPlan.ErrorMessage))
         {
@@ -124,33 +124,41 @@ public sealed class PathfinderService
         var newLine = Environment.NewLine;
         
         string setLines;
-        if (columnsToUpdate.Count == 0)
+        if (columnMappings.Count == 0)
         {
             setLines = "    -- TODO: Map your columns here";
         }
         else
         {
             var setList = new List<string>();
-            foreach (var col in columnsToUpdate)
+            foreach (var kvp in columnMappings)
             {
-                // Try to find a matching source column by name
-                var sourceMatch = sourceColumns.FirstOrDefault(sc => sc.EndsWith($".{col}", StringComparison.OrdinalIgnoreCase));
+                var targetCol = kvp.Key;
+                var sourceVal = kvp.Value;
                 
-                if (sourceMatch != null)
+                if (string.IsNullOrEmpty(sourceVal))
                 {
-                    // sourceMatch is like "[dbo].[OtherTable].ColumnName"
-                    // We need to find the alias for "[dbo].[OtherTable]"
-                    var sourceTableName = sourceMatch.Substring(0, sourceMatch.LastIndexOf('.'));
+                    setList.Add($"    {joinPlan.RootAlias}.{QuoteIdentifier(targetCol)} = @set_{targetCol}");
+                    continue;
+                }
+                
+                // sourceVal is expected to be like "[dbo].[OtherTable].ColumnName"
+                var lastDot = sourceVal.LastIndexOf('.');
+                if (lastDot > -1)
+                {
+                    var sourceTableName = sourceVal.Substring(0, lastDot);
+                    var sourceColName = sourceVal.Substring(lastDot + 1);
                     var alias = joinPlan.GetAliasForTable(sourceTableName);
+                    
                     if (alias != null)
                     {
-                        setList.Add($"    {joinPlan.RootAlias}.{QuoteIdentifier(col)} = {alias}.{QuoteIdentifier(col)}");
+                        setList.Add($"    {joinPlan.RootAlias}.{QuoteIdentifier(targetCol)} = {alias}.{QuoteIdentifier(sourceColName)}");
                         continue;
                     }
                 }
                 
-                // Fallback to a placeholder
-                setList.Add($"    {joinPlan.RootAlias}.{QuoteIdentifier(col)} = @set_{col}");
+                // Fallback if we couldn't resolve the alias perfectly
+                setList.Add($"    {joinPlan.RootAlias}.{QuoteIdentifier(targetCol)} = {sourceVal}");
             }
             setLines = string.Join($",{newLine}", setList);
         }

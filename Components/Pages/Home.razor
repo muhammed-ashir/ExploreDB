@@ -1,4 +1,4 @@
-@page "/"
+@page "/builder"
 @using ExploreDB.Services
 @inject SchemaService SchemaService
 @inject PathfinderService PathfinderService
@@ -9,9 +9,16 @@
 
 <div class="container-fluid">
     <div class="row mb-4">
-        <div class="col">
-            <h2 class="fw-bold mb-0">Pathfinder <span class="text-primary">Auto-Join</span></h2>
-            <p class="text-secondary small">Select columns from different tables, and I'll discover the JOIN path for you.</p>
+        <div class="col d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="fw-bold text-white mb-0">Query Builder</h2>
+
+            </div>
+            <div class="btn-group shadow-sm">
+                <button class="btn @(CurrentMode == QueryMode.Select ? "btn-primary" : "btn-dark border-secondary text-light")" @onclick="() => SetMode(QueryMode.Select)">SELECT</button>
+                <button class="btn @(CurrentMode == QueryMode.Update ? "btn-primary" : "btn-dark border-secondary text-light")" @onclick="() => SetMode(QueryMode.Update)">UPDATE</button>
+                <button class="btn @(CurrentMode == QueryMode.Delete ? "btn-primary" : "btn-dark border-secondary text-light")" @onclick="() => SetMode(QueryMode.Delete)">DELETE</button>
+            </div>
         </div>
     </div>
 
@@ -21,43 +28,68 @@
             <div class="card bg-dark border-secondary shadow-sm d-flex flex-column" style="flex: 1; min-height: 0;">
                 <div class="card-header border-secondary p-2" style="position: sticky; top: 0; z-index: 30; background: inherit;">
                     <div class="row g-2">
-                        <div class="col-12 d-flex gap-2 position-relative">
-                            <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" 
-                                   placeholder="🔎 Search..." @bind="SearchCol" @bind:event="oninput" />
-                            
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-secondary text-white dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                                    ⚙️ Filters
+                        @if (CurrentMode != QueryMode.Select)
+                        {
+                            <div class="col-12 mb-2">
+                                <label class="small text-warning fw-bold mb-1">Target Table (To @CurrentMode)</label>
+                                <div class="position-relative w-100">
+                                    <div class="form-control form-control-sm bg-black text-white border-warning position-relative cursor-pointer" @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
+                                        <span>@(string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable)</span>
+                                        <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
+                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
+                                        </div>
+                                    </div>
+                                    @if (IsTargetTableDropdownOpen)
+                                    {
+                                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTargetTableDropdownOpen = false"></div>
+                                        <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 250px; overflow-y: auto;">
+                                            <div class="p-1 mb-1">
+                                                <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
+                                            </div>
+                                            @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
+                                            {
+                                                <button class="dropdown-item text-white py-1 @(TargetTable == table.FullName ? "bg-primary" : "")" type="button" @onclick="() => SelectTargetTable(table.FullName)">
+                                                    @table.Name
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <hr class="border-secondary mt-1 mb-2 opacity-50"/>
+                            <label class="small text-info fw-bold mb-1">Source/Filter Tables (To JOIN)</label>
+                        }
+                        <div class="col-12 d-flex flex-column gap-2 position-relative">
+                            <div class="input-group input-group-sm shadow-sm">
+                                <input type="text" class="form-control bg-black text-white border-secondary" 
+                                       placeholder="Search..." @bind="SearchCol" @bind:event="oninput" />
+                                <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
+                                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                 </button>
-                                <div class="dropdown-menu dropdown-menu-end bg-dark border-secondary p-3 shadow" style="width: 250px;">
-                                    <h6 class="dropdown-header text-info px-0 pt-0">Search Scope</h6>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="radio" name="searchScope" id="scopeAll" checked="@(SearchFilter == "All")" @onchange='() => SearchFilter = "All"'>
-                                        <label class="form-check-label text-light cursor-pointer" for="scopeAll">Tables & Columns</label>
-                                    </div>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="radio" name="searchScope" id="scopeTable" checked="@(SearchFilter == "Table")" @onchange='() => SearchFilter = "Table"'>
-                                        <label class="form-check-label text-light cursor-pointer" for="scopeTable">Tables Only</label>
-                                    </div>
-                                    <div class="form-check mb-3">
-                                        <input class="form-check-input" type="radio" name="searchScope" id="scopeCol" checked="@(SearchFilter == "Column")" @onchange='() => SearchFilter = "Column"'>
-                                        <label class="form-check-label text-light cursor-pointer" for="scopeCol">Columns Only</label>
-                                    </div>
-                                    
-                                    <h6 class="dropdown-header text-info px-0">Text Options</h6>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" id="chkExact" checked="@ExactMatch" @onchange="() => ExactMatch = !ExactMatch">
-                                        <label class="form-check-label text-light cursor-pointer" for="chkExact">Exact Match</label>
-                                    </div>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" id="chkWord" checked="@MatchWholeWord" @onchange="() => MatchWholeWord = !MatchWholeWord">
-                                        <label class="form-check-label text-light cursor-pointer" for="chkWord">Whole Word</label>
-                                    </div>
-                                    <div class="form-check mb-0">
-                                        <input class="form-check-input" type="checkbox" id="chkCase" checked="@CaseSensitive" @onchange="() => CaseSensitive = !CaseSensitive">
-                                        <label class="form-check-label text-light cursor-pointer" for="chkCase">Case Sensitive</label>
+                                <button class="btn @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
+                                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                </button>
+                                <button class="btn @(ExactMatch ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
+                                    <i class="bi bi-bullseye"></i>
+                                </button>
+                            </div>
+                            
+                            <div class="position-relative w-100 mt-1">
+                                <div class="form-control form-control-sm bg-black text-white border-secondary position-relative cursor-pointer" @onclick="() => IsScopeDropdownOpen = !IsScopeDropdownOpen">
+                                    <span>@(SearchFilter == "All" ? "Tables & Columns" : SearchFilter == "Table" ? "Tables Only" : "Columns Only")</span>
+                                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
+                                        <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
                                     </div>
                                 </div>
+                                @if (IsScopeDropdownOpen)
+                                {
+                                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsScopeDropdownOpen = false"></div>
+                                    <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050;">
+                                        <button class="dropdown-item text-white @(SearchFilter == "All" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "All"; IsScopeDropdownOpen = false; }'>Tables & Columns</button>
+                                        <button class="dropdown-item text-white @(SearchFilter == "Table" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "Table"; IsScopeDropdownOpen = false; }'>Tables Only</button>
+                                        <button class="dropdown-item text-white @(SearchFilter == "Column" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "Column"; IsScopeDropdownOpen = false; }'>Columns Only</button>
+                                    </div>
+                                }
                             </div>
                         </div>
                     </div>
@@ -172,6 +204,59 @@
 
         <!-- Result Area -->
         <div class="col-md-8 d-flex flex-column gap-4">
+                @if (CurrentMode == QueryMode.Update && !string.IsNullOrEmpty(TargetTable))
+                {
+                    <div class="card bg-dark border-secondary shadow-sm">
+                        <div class="card-header border-secondary fw-bold text-warning d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-sliders pe-1"></i> Update Column Mapping</span>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="ClearMappings">Reset Mappings</button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive custom-scrollbar-light" style="max-height: 400px;">
+                                <table class="table table-dark table-hover mb-0 align-middle">
+                                    <thead style="position: sticky; top: 0; z-index: 10;">
+                                        <tr>
+                                            <th class="border-secondary bg-dark text-muted fw-normal" style="width: 40%;">Target Column (@TargetTable)</th>
+                                            <th class="border-secondary bg-dark text-muted fw-normal" style="width: 10%;"></th>
+                                            <th class="border-secondary bg-dark text-muted fw-normal" style="width: 50%;">Source Value / Mapped Column</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var col in SchemaService.Tables.FirstOrDefault(t => t.FullName == TargetTable)?.Columns ?? new List<ColumnInfo>())
+                                        {
+                                            var targetColName = col.Name;
+                                            UpdateMappings.TryGetValue(targetColName, out var mappedValue);
+                                            <tr>
+                                                <td class="border-secondary font-monospace small">@targetColName</td>
+                                                <td class="border-secondary text-center text-muted"><i class="bi bi-arrow-right"></i></td>
+                                                <td class="border-secondary">
+                                                    <select class="form-select form-select-sm bg-black text-white border-secondary" 
+                                                            value="@mappedValue" 
+                                                            @onchange="(e) => MapColumn(targetColName, e.Value?.ToString())">
+                                                        <option value="">-- Leave Unchanged --</option>
+                                                        <optgroup label="Custom Value">
+                                                            <option value="@($"@set_{targetColName}")">Parameter (@($"@set_{targetColName}"))</option>
+                                                        </optgroup>
+                                                        @if (SelectedColumns.Count > 0)
+                                                        {
+                                                            <optgroup label="Source Columns (From Selection)">
+                                                                @foreach (var sc in SelectedColumns)
+                                                                {
+                                                                    <option value="@sc">@sc</option>
+                                                                }
+                                                            </optgroup>
+                                                        }
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                }
+
              <!-- Generated SQL Box -->
              <div class="card bg-dark border-secondary shadow-sm" style="flex: 1;">
                  <div class="card-header border-secondary d-flex justify-content-between align-items-center">
@@ -297,6 +382,14 @@
     private bool ExactMatch = false;
     private bool MatchWholeWord = false;
     private bool CaseSensitive = false;
+    public enum QueryMode { Select, Update, Delete }
+    private QueryMode CurrentMode = QueryMode.Select;
+    private string? TargetTable;
+    private Dictionary<string, string?> UpdateMappings = new();
+    private bool IsTargetTableDropdownOpen = false;
+    private string TargetTableSearch = "";
+    
+    private bool IsScopeDropdownOpen = false;
     
     // List (not HashSet) preserves insertion order — first selected table becomes the JOIN root
     private List<string> SelectedColumns = new();
@@ -416,41 +509,112 @@
     {
         OptimalTableOrder = null;
 
-        if (SelectedColumns.Count == 0)
+        if (CurrentMode == QueryMode.Select && SelectedColumns.Count == 0)
         {
             GeneratedSql = "-- Select columns on the left to generate a query.";
             HasOneToMany = false;
+            LastJoinPlan = null;
+            return;
+        }
+        else if (CurrentMode != QueryMode.Select && string.IsNullOrEmpty(TargetTable))
+        {
+            GeneratedSql = $"-- Select a Target Table to generate an {CurrentMode.ToString().ToUpper()} query.";
+            HasOneToMany = false;
+            LastJoinPlan = null;
             return;
         }
 
-        // Extract table names in selection order (preserves root choice)
-        // key format: "[schema].[Table].ColumnName"
         var tables = SelectedColumns
             .Select(k => k.Substring(0, k.LastIndexOf('.')))
-            .Distinct() // preserve first-occurrence order (List maintains insertion order)
+            .Distinct()
             .ToList();
 
-        var result = PathfinderService.GenerateQuery(tables, SelectedColumns.ToList(), IgnoredRoutingTables);
-        GeneratedSql = result.Sql;
-        HasOneToMany = result.HasOneToMany;
-        LastJoinPlan = result.JoinPlan;
-
-        if (HasOneToMany && tables.Count > 1)
+        if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable))
         {
-            foreach (var candidate in tables.Skip(1))
+            if (!tables.Contains(TargetTable))
             {
-                var testOrder = new List<string> { candidate };
-                testOrder.AddRange(tables.Where(t => t != candidate));
+                tables.Insert(0, TargetTable);
+            }
+            else
+            {
+                tables.Remove(TargetTable);
+                tables.Insert(0, TargetTable);
+            }
+        }
 
-                var plan = PathfinderService.GenerateJoinPlan(testOrder);
-                if (plan != null && string.IsNullOrEmpty(plan.ErrorMessage) && !plan.HasOneToMany && plan.UnreachableTables.Count == 0)
+        if (CurrentMode == QueryMode.Select)
+        {
+            var result = PathfinderService.GenerateQuery(tables, SelectedColumns.ToList(), IgnoredRoutingTables);
+            GeneratedSql = result.Sql;
+            HasOneToMany = result.HasOneToMany;
+            LastJoinPlan = result.JoinPlan;
+
+            if (HasOneToMany && tables.Count > 1)
+            {
+                foreach (var candidate in tables.Skip(1))
                 {
-                    OptimalTableOrder = plan.Steps.Select(s => s.FullName).ToList();
-                    OptimalTableOrder.Insert(0, plan.RootTable);
-                    break;
+                    var testOrder = new List<string> { candidate };
+                    testOrder.AddRange(tables.Where(t => t != candidate));
+
+                    var plan = PathfinderService.GenerateJoinPlan(testOrder);
+                    if (plan != null && string.IsNullOrEmpty(plan.ErrorMessage) && !plan.HasOneToMany && plan.UnreachableTables.Count == 0)
+                    {
+                        OptimalTableOrder = plan.Steps.Select(s => s.FullName).ToList();
+                        OptimalTableOrder.Insert(0, plan.RootTable);
+                        break;
+                    }
                 }
             }
         }
+        else if (CurrentMode == QueryMode.Update)
+        {
+            var plan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j");
+            var result = PathfinderService.GenerateJoinedUpdateQuery(plan, UpdateMappings);
+            GeneratedSql = result.Sql;
+            HasOneToMany = result.HasOneToMany;
+            LastJoinPlan = plan;
+        }
+        else if (CurrentMode == QueryMode.Delete)
+        {
+            var plan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j");
+            var result = PathfinderService.GenerateJoinedDeleteQuery(plan);
+            GeneratedSql = result.Sql;
+            HasOneToMany = result.HasOneToMany;
+            LastJoinPlan = plan;
+        }
+    }
+
+    private void SetMode(QueryMode mode)
+    {
+        CurrentMode = mode;
+        Generate();
+    }
+
+    private void SelectTargetTable(string table)
+    {
+        TargetTable = table;
+        IsTargetTableDropdownOpen = false;
+        UpdateMappings.Clear();
+        Generate();
+    }
+
+    private void ClearMappings()
+    {
+        UpdateMappings.Clear();
+        Generate();
+    }
+
+    private void MapColumn(string targetCol, string? sourceCol)
+    {
+        if (string.IsNullOrEmpty(sourceCol))
+        {
+            UpdateMappings.Remove(targetCol);
+        }
+        else
+        {
+            UpdateMappings[targetCol] = sourceCol;
+        }
+        Generate();
     }
 
     private void ApplyOptimalOrder()
@@ -498,7 +662,7 @@
     private void RunInRunner()
     {
         QueryStateService.CustomQuery = GeneratedSql;
-        Navigation.NavigateTo("/runner?type=custom");
+        Navigation.NavigateTo("/?type=custom");
     }
 
     private async Task CopySql()

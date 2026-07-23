@@ -4,7 +4,7 @@
 @inject SchemaService SchemaService
 @implements IDisposable
 
-<div class="d-flex flex-column min-vh-100">
+<div class="d-flex flex-column h-100">
     <div class="p-3 border-bottom border-secondary">
         <h5 class="text-white mb-2">
             <span>ExploreDB</span>
@@ -65,20 +65,17 @@
         }
     </div>
 
-    <div class="flex-grow-1">
-        <div class="list-group list-group-flush">
-            <div class="px-3 pt-3 pb-2 text-uppercase small fw-bold" style="color: #6c757d; letter-spacing: 0.08em;">
-                Workspace
-            </div>
+    <div class="flex-grow-1 custom-scrollbar-light" style="overflow-y: auto;">
+        <div class="list-group list-group-flush pb-3">
 
             <a href=""
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsPathfinderActive ? "active" : "")">
-                <span>Pathfinder</span>
-            </a>
-
-            <a href="runner"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsRunnerActive ? "active" : "")">
                 <span>Query Runner</span>
+            </a>
+
+            <a href="builder"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsPathfinderActive ? "active" : "")">
+                <span>Query Builder</span>
             </a>
 
             <a href="explorer"
@@ -96,23 +93,10 @@
                 <span>SP Explorer</span>
             </a>
 
-            <div class="px-3 pt-4 pb-2 text-uppercase small fw-bold" style="color: #6c757d; letter-spacing: 0.08em;">
-                Learning
-            </div>
 
-            <a href="joins"
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsJoinGuideActive ? "active" : "")">
-                <span>Join Guide</span>
-            </a>
-
-            <a href="tricks"
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsTricksActive ? "active" : "")">
-                <span>DB Tricks & Tips</span>
-            </a>
-
-            <a href="advanced"
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsAdvancedSqlActive ? "active" : "")">
-                <span>Advanced SQL Guide</span>
+            <a href="learning"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsLearningActive ? "active" : "")">
+                <span>Learning Hub</span>
             </a>
         </div>
     </div>
@@ -131,14 +115,12 @@
     private List<string> ServerDatabases = new();
     private bool IsLoadingDBs = false;
 
-    private bool IsPathfinderActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
-    private bool IsRunnerActive => CurrentUrl.Contains("/runner");
-    private bool IsJoinGuideActive => CurrentUrl.Contains("/joins");
+    private bool IsRunnerActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
+    private bool IsPathfinderActive => CurrentUrl.Contains("/builder");
+    private bool IsLearningActive => CurrentUrl.Contains("/learning");
     private bool IsExplorerActive => CurrentUrl.Contains("/explorer");
     private bool IsViewExplorerActive => CurrentUrl.Contains("/views") && !CurrentUrl.Contains("/view/");
     private bool IsSpExplorerActive => CurrentUrl.Contains("/procs") || CurrentUrl.Contains("/proc/");
-    private bool IsTricksActive => CurrentUrl.Contains("/tricks");
-    private bool IsAdvancedSqlActive => CurrentUrl.Contains("/advanced");
 
     protected override async Task OnInitializedAsync()
     {
@@ -156,32 +138,47 @@
 
     private async Task LoadServerDatabases()
     {
-        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
-        if (active != null && !string.IsNullOrEmpty(active.Server))
-        {
-            if (ActiveServer != active.Server)
-            {
-                ActiveServer = active.Server;
-                IsLoadingDBs = true;
-                await InvokeAsync(StateHasChanged);
-
-                try 
-                {
-                    ServerDatabases = await ConnectionService.GetDatabasesAsync(active.Server, active.AuthType, active.Username, active.Password);
-                } 
-                catch 
-                {
-                    ServerDatabases.Clear();
-                }
-                IsLoadingDBs = false;
-            }
-            SelectedDatabase = active.Database;
-            DatabaseSearch = active.Database;
-        }
-        else
+        if (string.IsNullOrEmpty(ConnectionService.ConnectionString))
         {
             ActiveServer = "";
             ServerDatabases.Clear();
+            return;
+        }
+
+        try
+        {
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+            string server = builder.DataSource;
+            
+            if (ActiveServer != server)
+            {
+                ActiveServer = server;
+                IsLoadingDBs = true;
+                await InvokeAsync(StateHasChanged);
+                
+                var dbs = new List<string>();
+                using (var conn = new Microsoft.Data.SqlClient.SqlConnection(ConnectionService.ConnectionString))
+                {
+                    await conn.OpenAsync();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        dbs.Add(reader.GetString(0));
+                    }
+                }
+                ServerDatabases = dbs;
+                IsLoadingDBs = false;
+            }
+            SelectedDatabase = builder.InitialCatalog;
+            DatabaseSearch = SelectedDatabase;
+        }
+        catch
+        {
+            ActiveServer = "";
+            ServerDatabases.Clear();
+            IsLoadingDBs = false;
         }
     }
 
@@ -209,29 +206,36 @@
     {
         if (string.IsNullOrEmpty(SelectedDatabase)) return;
 
-        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
-        if (active == null || active.Database == SelectedDatabase) return;
-
-        ConnectionService.NotifyDatabaseSwitching(SelectedDatabase);
-        await InvokeAsync(StateHasChanged);
-        await Task.Delay(50); // Give UI time to render the loader
-
-        var newConnString = ConnectionService.BuildConnectionString(active.Server, active.AuthType, active.Username, active.Password, SelectedDatabase);
-        
-        var success = await ConnectionService.TestConnectionAsync(newConnString);
-        if (success)
+        try
         {
-            ConnectionService.UpsertConnection(active.Id, active.Name, active.Server, active.AuthType, active.Username, active.Password, SelectedDatabase, newConnString);
-            ConnectionService.SaveActiveConnection(newConnString);
-            await SchemaService.LoadSchemaAsync();
-        }
-        else
-        {
-            SelectedDatabase = active.Database; // Revert
-        }
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+            if (builder.InitialCatalog == SelectedDatabase) return;
+            
+            ConnectionService.NotifyDatabaseSwitching(SelectedDatabase);
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(50); // Give UI time to render the loader
+            
+            builder.InitialCatalog = SelectedDatabase;
+            var newConnString = builder.ConnectionString;
+            
+            var result = await ConnectionService.TestConnectionAsync(newConnString);
+            if (result.Success)
+            {
+                ConnectionService.SaveActiveConnection(newConnString);
+                await SchemaService.LoadSchemaAsync();
+            }
+            else
+            {
+                var oldBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                SelectedDatabase = oldBuilder.InitialCatalog; // Revert
+            }
 
-        ConnectionService.NotifyDatabaseSwitched();
-        await InvokeAsync(StateHasChanged);
+            ConnectionService.NotifyDatabaseSwitched();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+        }
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)

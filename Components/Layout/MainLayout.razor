@@ -5,7 +5,7 @@
 @inject NavigationManager Nav
 @inject ExploreDB.Services.GitHubUpdateService UpdateService
 
-<div class="container-fluid">
+<div class="container-fluid p-0">
     @if (IsSwitchingDatabaseGlobal)
     {
         <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center;">
@@ -103,7 +103,18 @@
                     <div class="modal-body p-0">
                         <div class="d-flex flex-column" style="height: 450px;">
                             <div class="p-3 border-bottom border-secondary d-flex gap-2">
-                                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
+                                <div class="input-group input-group-sm flex-grow-1 shadow-sm">
+                                    <input type="text" class="form-control bg-dark text-white border-secondary" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
+                                    <button class="btn @(FilterCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Match Case" @onclick="() => FilterCaseSensitive = !FilterCaseSensitive">
+                                        <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                    </button>
+                                    <button class="btn @(FilterWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Match Whole Word" @onclick="() => { FilterWholeWord = !FilterWholeWord; if (FilterWholeWord) FilterExactMatch = false; }">
+                                        <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                    </button>
+                                    <button class="btn @(FilterExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Exact Match" @onclick="() => { FilterExactMatch = !FilterExactMatch; if (FilterExactMatch) FilterWholeWord = false; }">
+                                        <i class="bi bi-bullseye fs-6"></i>
+                                    </button>
+                                </div>
                                 <button class="btn btn-sm btn-outline-info text-nowrap d-flex align-items-center gap-1" @onclick="NewConnection">
                                     <i class="bi bi-plus-lg"></i> New
                                 </button>
@@ -122,12 +133,19 @@
                                                 <div class="d-flex justify-content-between align-items-center">
                                                     <div class="cursor-pointer flex-grow-1 pe-2 overflow-hidden" @onclick="() => LoadConnection(c)">
                                                         <div class="fw-bold mb-1" style="font-size: 0.9em;">@(string.IsNullOrWhiteSpace(c.Name) ? "Unnamed Connection" : c.Name)</div>
-                                                        <div class="text-opacity-75 text-white" style="font-size: 0.7em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                                            @(string.IsNullOrEmpty(c.Server) ? c.ConnectionString : $"{c.Server} ➔ {c.Database}")
+                                                        <div class="text-opacity-75 text-white" style="font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                                            @{
+                                                                string authType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType;
+                                                                string authDisplay = string.Equals(authType, "SqlServer", StringComparison.OrdinalIgnoreCase) 
+                                                                    ? $"SQL Auth ({(string.IsNullOrEmpty(c.Username) ? "sa" : c.Username)})" 
+                                                                    : "Windows Auth";
+                                                                string coreDetails = string.IsNullOrEmpty(c.Server) ? c.ConnectionString : $"{c.Server} • {authDisplay}";
+                                                            }
+                                                            @coreDetails
                                                         </div>
                                                     </div>
-                                                    <button class="btn btn-sm btn-danger d-flex align-items-center justify-content-center ms-2 rounded-circle shadow-sm" style="width: 30px; height: 30px; flex-shrink: 0;" title="Delete" @onclick="() => DeleteConnection(c.Id)">
-                                                        <i class="bi bi-trash3-fill" style="font-size: 0.85rem;"></i>
+                                                    <button class="btn p-0 text-danger ms-2 shadow-none bg-transparent border-0" style="flex-shrink: 0;" title="Delete" @onclick="() => ConfirmDelete(c)">
+                                                        <i class="bi bi-trash3-fill" style="font-size: 1.15rem;"></i>
                                                     </button>
                                                 </div>
                                             </div>
@@ -256,17 +274,75 @@
 
                                 @if (!string.IsNullOrEmpty(ErrorMsg))
                                 {
-                                    <div class="alert alert-danger py-2 small">@ErrorMsg</div>
+                                    <div class="alert alert-danger py-2 px-3 small mb-0 mt-3 d-flex align-items-start" style="background-color: rgba(220, 53, 69, 0.1); border: 1px solid rgba(220, 53, 69, 0.2); color: #ea868f;" title="@ErrorMsg">
+                                        <i class="bi bi-exclamation-triangle-fill me-2" style="margin-top: 2px;"></i>
+                                        <div style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.5;">
+                                            @ErrorMsg
+                                        </div>
+                                    </div>
                                 }
 
                                 <div class="d-flex gap-2 mt-4">
-                                    <button class="btn btn-outline-success flex-grow-1" @onclick="SaveCurrentConnection">Save Profile</button>
-                                    <button class="btn btn-premium flex-grow-1 fw-bold" @onclick="Connect" disabled="@IsBusy">
+                                    <button class="btn btn-outline-success flex-grow-1 @(string.IsNullOrWhiteSpace(Server) ? "opacity-50" : "")" style="@(string.IsNullOrWhiteSpace(Server) ? "cursor: not-allowed;" : "")" @onclick="SaveCurrentConnection">Save Profile</button>
+                                    <button class="btn btn-premium flex-grow-1 fw-bold @((string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) ? "opacity-50" : "")" style="@((string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) ? "cursor: not-allowed;" : "")" @onclick="Connect" disabled="@(IsBusy)">
                                         @if(IsBusy) { <span class="spinner-border spinner-border-sm me-2"></span> }
                                         @(IsBusy ? "Connecting..." : "Connect")
                                     </button>
                                 </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ConnectionToDelete != null)
+        {
+            <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); z-index: 1070;">
+                <div class="modal-dialog modal-dialog-centered modal-sm">
+                    <div class="modal-content glass-card border-danger text-white shadow-lg text-center p-4" style="background-color: #2b3035;">
+                        <div class="mb-3 text-danger">
+                            <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i>
+                        </div>
+                        <h5 class="fw-bold mb-2">Delete Connection?</h5>
+                        <p class="small text-muted mb-4">Are you sure you want to delete <strong>@(string.IsNullOrWhiteSpace(ConnectionToDelete.Name) ? "Unnamed Connection" : ConnectionToDelete.Name)</strong>? This action cannot be undone.</p>
+                        <div class="d-flex justify-content-center gap-3">
+                            <button class="btn btn-outline-secondary px-4 rounded-pill" @onclick="CancelDelete">Cancel</button>
+                            <button class="btn btn-danger px-4 rounded-pill fw-bold shadow" @onclick="ExecuteDelete">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ShowSavePrompt)
+        {
+            <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); z-index: 1070;">
+                <div class="modal-dialog modal-dialog-centered modal-sm">
+                    <div class="modal-content glass-card border-primary text-white shadow-lg text-center p-4" style="background-color: #2b3035;">
+                        <div class="mb-3 text-primary">
+                            <i class="bi bi-floppy-fill" style="font-size: 3rem;"></i>
+                        </div>
+                        <h5 class="fw-bold mb-2">Save Profile?</h5>
+                        <p class="small text-muted mb-4">Would you like to save this connection for future use?</p>
+                        <div class="d-flex justify-content-center gap-3">
+                            <button class="btn btn-outline-secondary px-4 rounded-pill" @onclick="() => FinalizeConnect(false)">No</button>
+                            <button class="btn btn-primary px-4 rounded-pill fw-bold shadow" @onclick="() => FinalizeConnect(true)">Yes, Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ShowToast)
+        {
+            <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
+                <div class="toast show align-items-center text-white border-0 shadow-lg" role="alert" style="animation: slideInUp 0.3s ease; background-color: #2b3035; border-left: 4px solid var(--bs-@ToastThemeClass) !important;">
+                    <div class="d-flex">
+                        <div class="toast-body d-flex align-items-center flex-grow-1 overflow-hidden" title="@ToastMessage">
+                            <i class="bi @ToastIconClass me-3 fs-5 text-@ToastThemeClass flex-shrink-0"></i>
+                            <span class="text-truncate">@ToastMessage</span>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-3 m-auto flex-shrink-0" @onclick="() => ShowToast = false"></button>
                     </div>
                 </div>
             </div>
@@ -304,6 +380,12 @@
     private bool IsBusy = false;
     private bool SidebarCollapsed = false;
     private bool IsDetailsVisible = false;
+    private bool ShowSavePrompt = false;
+    private bool ShowToast = false;
+    private string ToastMessage = "";
+    private string ToastThemeClass = "success";
+    private string ToastIconClass = "bi-check-circle-fill";
+    private ConnectionService.SavedConnection ConnectionToDelete = null;
     private string ConnString = "";
     private string ConnName = "";
     private string Server = "";
@@ -320,6 +402,9 @@
     private string SwitchingDatabaseName = "";
     private string ActiveConnId = "";
     private string ErrorMsg = "";
+    private bool FilterCaseSensitive = false;
+    private bool FilterWholeWord = false;
+    private bool FilterExactMatch = false;
 
     private string GetWorkspaceTitle()
     {
@@ -356,9 +441,35 @@
 
     private IEnumerable<ConnectionService.SavedConnection> FilteredConnections => 
         ConnectionService.SavedConnections
-            .Where(c => string.IsNullOrEmpty(SearchConn) || 
-                        c.Name.Contains(SearchConn, StringComparison.OrdinalIgnoreCase) || 
-                        c.ConnectionString.Contains(SearchConn, StringComparison.OrdinalIgnoreCase))
+            .Where(c => 
+            {
+                if (string.IsNullOrEmpty(SearchConn)) return true;
+                
+                string searchFor = SearchConn;
+                string name = c.Name ?? "";
+                string connStr = c.ConnectionString ?? "";
+                
+                StringComparison comp = FilterCaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+                
+                if (FilterExactMatch)
+                {
+                    return string.Equals(name, searchFor, comp) || string.Equals(connStr, searchFor, comp);
+                }
+                
+                if (FilterWholeWord)
+                {
+                    try 
+                    {
+                        string pattern = $@"\b{System.Text.RegularExpressions.Regex.Escape(searchFor)}\b";
+                        System.Text.RegularExpressions.RegexOptions opt = FilterCaseSensitive ? System.Text.RegularExpressions.RegexOptions.None : System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+                        return System.Text.RegularExpressions.Regex.IsMatch(name, pattern, opt) || 
+                               System.Text.RegularExpressions.Regex.IsMatch(connStr, pattern, opt);
+                    }
+                    catch { return false; }
+                }
+                
+                return name.Contains(searchFor, comp) || connStr.Contains(searchFor, comp);
+            })
             .OrderByDescending(c => c.LastUsed);
 
     private ExploreDB.Services.UpdateInfo? UpdateInfo;
@@ -500,16 +611,31 @@
         AuthType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType;
         Username = c.Username;
         Password = c.Password;
-        Database = c.Database;
-        DatabaseSearch = c.Database;
+        Database = "";
+        DatabaseSearch = "";
         ConnString = c.ConnectionString;
         AvailableDatabases.Clear();
         IsDetailsVisible = true;
     }
 
-    private void DeleteConnection(string id)
+    private void ConfirmDelete(ConnectionService.SavedConnection c)
     {
+        ConnectionToDelete = c;
+    }
+
+    private void CancelDelete()
+    {
+        ConnectionToDelete = null;
+    }
+
+    private void ExecuteDelete()
+    {
+        if (ConnectionToDelete == null) return;
+        
+        string id = ConnectionToDelete.Id;
         ConnectionService.DeleteConnection(id);
+        ConnectionToDelete = null;
+        
         if (ActiveConnId == id)
         {
             NewConnection();
@@ -531,38 +657,133 @@
         IsDetailsVisible = true;
     }
 
-    private void SaveCurrentConnection()
+    private async Task SaveCurrentConnection()
     {
-        if (string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) return;
-        ConnString = ConnectionService.BuildConnectionString(Server, AuthType, Username, Password, Database);
-        ConnectionService.UpsertConnection(ActiveConnId, ConnName, Server, AuthType, Username, Password, Database, ConnString);
+        if (string.IsNullOrWhiteSpace(Server))
+        {
+            await TriggerToast("Please enter valid inputs.", "danger", "bi-exclamation-circle-fill");
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(ActiveConnId))
+        {
+            var loaded = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == ActiveConnId);
+            if (loaded != null)
+            {
+                bool coreChanged = !string.Equals(loaded.Server ?? "", Server ?? "", StringComparison.OrdinalIgnoreCase) || 
+                                   !string.Equals(loaded.AuthType ?? "", AuthType ?? "", StringComparison.OrdinalIgnoreCase) ||
+                                   !string.Equals(loaded.Username ?? "", Username ?? "", StringComparison.OrdinalIgnoreCase);
+                if (coreChanged)
+                {
+                    ActiveConnId = ""; // Branch off to a new connection save
+                }
+            }
+        }
+
+        bool isAlreadySaved = !string.IsNullOrEmpty(ActiveConnId) && ConnectionService.SavedConnections.Any(c => 
+            c.Id == ActiveConnId &&
+            string.Equals(c.Name ?? "", ConnName ?? "", StringComparison.Ordinal) &&
+            string.Equals(c.Server ?? "", Server ?? "", StringComparison.OrdinalIgnoreCase) && 
+            string.Equals(c.AuthType ?? "", AuthType ?? "", StringComparison.OrdinalIgnoreCase) && 
+            string.Equals(c.Username ?? "", Username ?? "", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(c.Password ?? "", Password ?? "", StringComparison.Ordinal));
+
+        if (isAlreadySaved)
+        {
+            await TriggerToast("Profile already saved.", "info", "bi-info-circle-fill");
+            return;
+        }
+        ConnString = ConnectionService.BuildConnectionString(Server, AuthType, Username, Password, "");
+        bool isUpdate = !string.IsNullOrEmpty(ActiveConnId);
+        ConnectionService.UpsertConnection(ActiveConnId, ConnName, Server, AuthType, Username, Password, "", ConnString);
         
         var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnString && c.Name == (string.IsNullOrWhiteSpace(ConnName) ? "Unnamed Connection" : ConnName));
         if (saved != null) ActiveConnId = saved.Id;
+
+        await TriggerToast(isUpdate ? "Profile updated successfully." : "Profile saved successfully.", "success", "bi-check-circle-fill");
     }
 
     private async Task Connect()
     {
-        if (string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) return;
+        if (string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database))
+        {
+            await TriggerToast("Please enter valid inputs.", "danger", "bi-exclamation-circle-fill");
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(ActiveConnId))
+        {
+            var loaded = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == ActiveConnId);
+            if (loaded != null)
+            {
+                bool coreChanged = !string.Equals(loaded.Server ?? "", Server ?? "", StringComparison.OrdinalIgnoreCase) || 
+                                   !string.Equals(loaded.AuthType ?? "", AuthType ?? "", StringComparison.OrdinalIgnoreCase) ||
+                                   !string.Equals(loaded.Username ?? "", Username ?? "", StringComparison.OrdinalIgnoreCase);
+                if (coreChanged)
+                {
+                    ActiveConnId = ""; // Branch off to a new connection save
+                }
+            }
+        }
+        
         ConnString = ConnectionService.BuildConnectionString(Server, AuthType, Username, Password, Database);
 
         IsBusy = true;
-        ErrorMsg = "";
-        
-        var success = await ConnectionService.TestConnectionAsync(ConnString);
-        if (success)
+        var result = await ConnectionService.TestConnectionAsync(ConnString);
+        IsBusy = false;
+
+        if (result.Success)
         {
-            ConnectionService.UpsertConnection(ActiveConnId, ConnName, Server, AuthType, Username, Password, Database, ConnString);
-            ConnectionService.SaveActiveConnection(ConnString);
-            await SchemaService.LoadSchemaAsync();
-            IsConnected = true;
+            bool isSaved = ConnectionService.SavedConnections.Any(c => 
+                string.Equals(c.Server, Server, StringComparison.OrdinalIgnoreCase) && 
+                string.Equals(c.AuthType, AuthType, StringComparison.OrdinalIgnoreCase) && 
+                string.Equals(c.Username ?? "", Username ?? "", StringComparison.OrdinalIgnoreCase));
+                
+            if (!isSaved)
+            {
+                ShowSavePrompt = true;
+            }
+            else
+            {
+                await FinalizeConnect(false);
+            }
         }
         else
         {
-            ErrorMsg = "Connection failed. Please check your details and try again.";
+            await TriggerToast($"Connection failed: {result.ErrorMessage}", "danger", "bi-exclamation-triangle-fill");
         }
+    }
 
+    private async Task FinalizeConnect(bool save)
+    {
+        ShowSavePrompt = false;
+        IsBusy = true;
+        
+        if (save)
+        {
+            string baseConnString = ConnectionService.BuildConnectionString(Server, AuthType, Username, Password, "");
+            ConnectionService.UpsertConnection(ActiveConnId, ConnName, Server, AuthType, Username, Password, "", baseConnString);
+            
+            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == baseConnString && c.Name == (string.IsNullOrWhiteSpace(ConnName) ? "Unnamed Connection" : ConnName));
+            if (saved != null) ActiveConnId = saved.Id;
+        }
+        
+        ConnectionService.SaveActiveConnection(ConnString);
+        await SchemaService.LoadSchemaAsync();
+        IsConnected = true;
         IsBusy = false;
+    }
+
+    private async Task TriggerToast(string message, string themeClass, string iconClass)
+    {
+        ToastMessage = message;
+        ToastThemeClass = themeClass;
+        ToastIconClass = iconClass;
+        ShowToast = true;
+        StateHasChanged();
+        await Task.Delay(3000);
+        ShowToast = false;
+        StateHasChanged();
     }
 
     private void Disconnect()

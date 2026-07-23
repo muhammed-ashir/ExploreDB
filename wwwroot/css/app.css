@@ -38,7 +38,7 @@ body {
     top: 0;
     align-self: flex-start;
     height: 100vh;
-    overflow-y: auto;
+    overflow-y: hidden;
     overflow-x: hidden;
     transition: all 0.3s ease;
 }
@@ -95,8 +95,9 @@ body {
 }
 
 .sidebar-item.active {
-    background-color: var(--primary-color);
-    color: white;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: white !important;
+    border-left: 3px solid var(--primary-color) !important;
 }
 
 .node-card {

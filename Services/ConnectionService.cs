@@ -21,18 +21,17 @@ public class ConnectionService
         LoadSettings();
     }
 
-    public async Task<bool> TestConnectionAsync(string connString)
+    public async Task<(bool Success, string ErrorMessage)> TestConnectionAsync(string connString)
     {
         try
         {
             using var conn = new SqlConnection(connString);
             await conn.OpenAsync();
-            return true;
+            return (true, string.Empty);
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
-            return false;
+            return (false, ex.Message);
         }
     }
 
