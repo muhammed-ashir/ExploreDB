@@ -23,7 +23,7 @@
                     @if (IsDropdownOpen)
                     {
                         <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseDropdown"></div>
-                        <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto;">
+                        <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
                             @if (IsLoadingDBs)
                             {
                                 <div class="p-3 text-center text-info">
@@ -65,7 +65,7 @@
         }
     </div>
 
-    <div class="flex-grow-1 custom-scrollbar-light" style="overflow-y: auto;">
+    <div class="flex-grow-1 custom-scrollbar-light" style="overflow-y: auto; overscroll-behavior: contain;">
         <div class="list-group list-group-flush pb-3">
 
             <a href=""

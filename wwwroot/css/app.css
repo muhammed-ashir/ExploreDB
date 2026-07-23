@@ -15,8 +15,6 @@ body {
     margin: 0;
     background-color: var(--bg-dark);
     color: var(--text-light);
-    overflow-x: hidden;
-    overflow-y: auto;
 }
 
 .page {
@@ -25,9 +23,10 @@ body {
 
 .app-shell {
     display: flex;
-    min-height: 100vh;
+    height: 100vh;
     width: 100%;
     align-items: flex-start;
+    overflow: hidden;
 }
 
 .app-shell-sidebar {
@@ -79,7 +78,7 @@ body {
 
 .sidebar {
     height: 100vh;
-    overflow-y: auto;
+    overflow: hidden;
     background-color: #1a1d20;
     border-right: 1px solid #343a40;
 }
@@ -126,6 +125,7 @@ body {
     max-height: 420px;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
     scrollbar-gutter: stable;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -146,6 +146,7 @@ body {
     max-height: 320px;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
     padding: 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 0.75rem;
