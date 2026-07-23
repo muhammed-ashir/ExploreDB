@@ -5,35 +5,43 @@
     {
         <div class="mt-4 mb-4">
             <h2 class="fw-bold text-white mb-1">Learning Hub</h2>
-            <p class="text-secondary">Select a topic below to explore guides, tricks, and advanced SQL concepts.</p>
         </div>
         
-        <div class="row g-4 flex-grow-1">
-            <div class="col-md-4">
-                <div class="card glass-card text-white h-100 p-4 border-secondary transition-transform shadow-sm" style="cursor: pointer;" @onclick='() => SetTopic("joins")' onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
-                    <div class="text-center mb-4 mt-2">
-                        <i class="bi bi-diagram-3 text-primary" style="font-size: 3.5rem;"></i>
+        <div class="row g-3 flex-grow-1 align-content-start">
+            <div class="col-12 col-xl-6">
+                <div class="card glass-card text-white node-card py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale" style="cursor: pointer;" @onclick='() => SetTopic("joins")'>
+                    <div class="d-flex align-items-center gap-3 overflow-hidden">
+                        <div class="text-primary fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
+                            <i class="bi bi-journal-text"></i>
+                        </div>
+                        <div class="overflow-hidden" style="min-width: 0;">
+                            <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">Join Guide</h5>
+                        </div>
                     </div>
-                    <h4 class="text-center fw-bold mb-3">Join Guide</h4>
-                    <p class="text-secondary text-center small">A practical SQL Server join reference for choosing the right join, preventing duplicates, and debugging multi-table queries.</p>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="card glass-card text-white h-100 p-4 border-secondary transition-transform shadow-sm" style="cursor: pointer;" @onclick='() => SetTopic("tricks")' onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
-                    <div class="text-center mb-4 mt-2">
-                        <i class="bi bi-magic text-info" style="font-size: 3.5rem;"></i>
+            <div class="col-12 col-xl-6">
+                <div class="card glass-card text-white node-card py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale" style="cursor: pointer;" @onclick='() => SetTopic("tricks")'>
+                    <div class="d-flex align-items-center gap-3 overflow-hidden">
+                        <div class="text-info fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
+                            <i class="bi bi-journal-text"></i>
+                        </div>
+                        <div class="overflow-hidden" style="min-width: 0;">
+                            <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">DB Tricks & Tips</h5>
+                        </div>
                     </div>
-                    <h4 class="text-center fw-bold mb-3">DB Tricks & Tips</h4>
-                    <p class="text-secondary text-center small">Useful snippets, best practices, and clever tricks for exploring and working with your databases more efficiently.</p>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="card glass-card text-white h-100 p-4 border-secondary transition-transform shadow-sm" style="cursor: pointer;" @onclick='() => SetTopic("advanced")' onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
-                    <div class="text-center mb-4 mt-2">
-                        <i class="bi bi-braces-asterisk text-warning" style="font-size: 3.5rem;"></i>
+            <div class="col-12 col-xl-6">
+                <div class="card glass-card text-white node-card py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale" style="cursor: pointer;" @onclick='() => SetTopic("advanced")'>
+                    <div class="d-flex align-items-center gap-3 overflow-hidden">
+                        <div class="text-warning fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
+                            <i class="bi bi-journal-text"></i>
+                        </div>
+                        <div class="overflow-hidden" style="min-width: 0;">
+                            <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">Advanced SQL</h5>
+                        </div>
                     </div>
-                    <h4 class="text-center fw-bold mb-3">Advanced SQL</h4>
-                    <p class="text-secondary text-center small">Take your skills to the next level with a deep dive into window functions, CTEs, complex aggregations, and performance tuning.</p>
                 </div>
             </div>
         </div>
