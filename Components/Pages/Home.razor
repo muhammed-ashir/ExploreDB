@@ -7,6 +7,14 @@
 @inject QueryStateService QueryStateService
 @implements IDisposable
 
+<style>
+    .compact-accordion .accordion-button::after {
+        background-size: 0.85rem;
+        width: 0.85rem;
+        height: 0.85rem;
+    }
+</style>
+
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col d-flex justify-content-between align-items-center">
@@ -24,176 +32,219 @@
 
     <div class="row">
         <!-- Column Picker -->
+        <!-- Builder Panel -->
         <div class="col-md-4 d-flex flex-column gap-4">
             <div class="card bg-dark border-secondary shadow-sm d-flex flex-column" style="flex: 1; min-height: 0;">
-                <div class="card-header border-secondary p-2" style="position: sticky; top: 0; z-index: 30; background: inherit;">
-                    <div class="row g-2">
-                        @if (CurrentMode != QueryMode.Select)
-                        {
-                            <div class="col-12 mb-2">
-                                <label class="small text-warning fw-bold mb-1">Target Table (To @CurrentMode)</label>
-                                <div class="position-relative w-100">
-                                    <div class="form-control form-control-sm bg-black text-white border-warning position-relative cursor-pointer" @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
-                                        <span>@(string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable)</span>
-                                        <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
-                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
-                                        </div>
-                                    </div>
-                                    @if (IsTargetTableDropdownOpen)
-                                    {
-                                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTargetTableDropdownOpen = false"></div>
-                                        <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 250px; overflow-y: auto;">
-                                            <div class="p-1 mb-1">
-                                                <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
-                                            </div>
-                                            @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
-                                            {
-                                                <button class="dropdown-item text-white py-1 @(TargetTable == table.FullName ? "bg-primary" : "")" type="button" @onclick="() => SelectTargetTable(table.FullName)">
-                                                    @table.Name
-                                                </button>
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                            <hr class="border-secondary mt-1 mb-2 opacity-50"/>
-                            <label class="small text-info fw-bold mb-1">Source/Filter Tables (To JOIN)</label>
-                        }
-                        <div class="col-12 d-flex flex-column gap-2 position-relative">
-                            <div class="input-group input-group-sm shadow-sm">
-                                <input type="text" class="form-control bg-black text-white border-secondary" 
-                                       placeholder="Search..." @bind="SearchCol" @bind:event="oninput" />
-                                <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
-                                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
-                                </button>
-                                <button class="btn @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
-                                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
-                                </button>
-                                <button class="btn @(ExactMatch ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
-                                    <i class="bi bi-bullseye"></i>
-                                </button>
-                            </div>
-                            
-                            <div class="position-relative w-100 mt-1">
-                                <div class="form-control form-control-sm bg-black text-white border-secondary position-relative cursor-pointer" @onclick="() => IsScopeDropdownOpen = !IsScopeDropdownOpen">
-                                    <span>@(SearchFilter == "All" ? "Tables & Columns" : SearchFilter == "Table" ? "Tables Only" : "Columns Only")</span>
-                                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
-                                        <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
-                                    </div>
-                                </div>
-                                @if (IsScopeDropdownOpen)
-                                {
-                                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsScopeDropdownOpen = false"></div>
-                                    <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050;">
-                                        <button class="dropdown-item text-white @(SearchFilter == "All" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "All"; IsScopeDropdownOpen = false; }'>Tables & Columns</button>
-                                        <button class="dropdown-item text-white @(SearchFilter == "Table" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "Table"; IsScopeDropdownOpen = false; }'>Tables Only</button>
-                                        <button class="dropdown-item text-white @(SearchFilter == "Column" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "Column"; IsScopeDropdownOpen = false; }'>Columns Only</button>
-                                    </div>
-                                }
-                            </div>
-                        </div>
+                <!-- Tab Header -->
+                <div class="card-header border-secondary p-0" style="position: sticky; top: 0; z-index: 30; background: #1a1d20; border-bottom: 1px solid #343a40 !important;">
+                    <div class="d-flex w-100">
+                        <button class="btn flex-grow-1 rounded-0 py-2 text-uppercase d-flex justify-content-center align-items-center" 
+                                style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s ease-in-out; border: none; border-bottom: 3px solid @(ActiveBuilderTab == "Available" ? "#0d6efd" : "transparent"); color: @(ActiveBuilderTab == "Available" ? "#fff" : "#6c757d"); background: @(ActiveBuilderTab == "Available" ? "rgba(13, 110, 253, 0.05)" : "transparent"); box-shadow: none;"
+                                @onclick='() => ActiveBuilderTab = "Available"'>
+                            Available
+                        </button>
+                        <button class="btn flex-grow-1 rounded-0 py-2 text-uppercase d-flex justify-content-center align-items-center" 
+                                style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s ease-in-out; border: none; border-bottom: 3px solid @(ActiveBuilderTab == "Selected" ? "#0d6efd" : "transparent"); color: @(ActiveBuilderTab == "Selected" ? "#fff" : "#6c757d"); background: @(ActiveBuilderTab == "Selected" ? "rgba(13, 110, 253, 0.05)" : "transparent"); box-shadow: none;"
+                                @onclick='() => ActiveBuilderTab = "Selected"'>
+                            Selected 
+                            @if (SelectedColumns.Count > 0)
+                            {
+                                var tableCount = SelectedColumns.Select(k => k.Substring(0, k.LastIndexOf('.'))).Distinct().Count();
+                                <span class="badge bg-primary ms-2 rounded-pill" style="font-size: 0.6rem; padding: 0.15rem 0.35rem; line-height: 1;">@tableCount</span>
+                            }
+                        </button>
                     </div>
                 </div>
-                <div style="overflow-y: auto; max-height: 600px; flex: 1;">
-                    <div class="card-body p-0">
-                        @if (SchemaService.Tables.Count == 0)
-                        {
-                            <div class="p-3 text-center text-muted">Connect to a database to start.</div>
-                        }
-                        else
-                        {
-                            <div class="list-group list-group-flush">
+                
+                <div class="d-flex flex-column" style="flex: 1; min-height: 0;">
+                    @if (ActiveBuilderTab == "Available")
+                    {
+                        <!-- Search header -->
+                        <div class="p-2 mt-2 border-bottom border-secondary" style="background: #1a1d20; z-index: 25; flex-shrink: 0;">
+                            <div class="row g-2">
+                                @if (CurrentMode != QueryMode.Select)
+                                {
+                                    <div class="col-12 mb-2">
+                                        <label class="small text-warning fw-bold mb-1">Target Table (To @CurrentMode)</label>
+                                        <div class="position-relative w-100">
+                                            <div class="form-control form-control-sm bg-black text-white border-warning position-relative cursor-pointer" @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
+                                                <span>@(string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable)</span>
+                                                <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
+                                                    <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
+                                                </div>
+                                            </div>
+                                            @if (IsTargetTableDropdownOpen)
+                                            {
+                                                <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTargetTableDropdownOpen = false"></div>
+                                                <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 250px; overflow-y: auto;">
+                                                    <div class="p-1 mb-1">
+                                                        <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
+                                                    </div>
+                                                    @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
+                                                    {
+                                                        <button class="dropdown-item text-white py-1 @(TargetTable == table.FullName ? "bg-primary" : "")" type="button" @onclick="() => SelectTargetTable(table.FullName)">
+                                                            @table.Name
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                    <hr class="border-secondary mt-1 mb-2 opacity-50"/>
+                                    <label class="small text-info fw-bold mb-1">Source/Filter Tables (To JOIN)</label>
+                                }
+                                <div class="col-12 d-flex flex-column gap-2 position-relative">
+                                    <div class="input-group input-group-sm shadow-sm">
+                                        <input type="text" class="form-control bg-black text-white border-secondary" 
+                                               placeholder="Search..." @bind="SearchCol" @bind:event="oninput" />
+                                        <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
+                                            <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                        </button>
+                                        <button class="btn @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
+                                            <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                        </button>
+                                        <button class="btn @(ExactMatch ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
+                                            <i class="bi bi-bullseye"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="position-relative w-100 mt-1">
+                                        <div class="form-control form-control-sm bg-black text-white border-secondary position-relative cursor-pointer" @onclick="() => IsScopeDropdownOpen = !IsScopeDropdownOpen">
+                                            <span>@(SearchFilter == "All" ? "Tables & Columns" : SearchFilter == "Table" ? "Tables Only" : "Columns Only")</span>
+                                            <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
+                                                <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
+                                            </div>
+                                        </div>
+                                        @if (IsScopeDropdownOpen)
+                                        {
+                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsScopeDropdownOpen = false"></div>
+                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050;">
+                                                <button class="dropdown-item text-white @(SearchFilter == "All" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "All"; IsScopeDropdownOpen = false; }'>Tables & Columns</button>
+                                                <button class="dropdown-item text-white @(SearchFilter == "Table" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "Table"; IsScopeDropdownOpen = false; }'>Tables Only</button>
+                                                <button class="dropdown-item text-white @(SearchFilter == "Column" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "Column"; IsScopeDropdownOpen = false; }'>Columns Only</button>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Available Tables list -->
+                        <div style="overflow-y: auto; overflow-x: hidden; flex: 1; max-height: 800px;">
+                            <div class="accordion accordion-flush compact-accordion" id="availableTablesAccordion">
+                            @if (SchemaService.Tables.Count == 0)
+                            {
+                                <div class="p-3 text-center text-muted">Connect to a database to start.</div>
+                            }
+                            else
+                            {
                                 @foreach (var table in FilteredTables)
                                 {
                                     var matchingColumns = table.Columns.Where(c => SearchMatch(table.Name, c.Name)).ToList();
                                     @if (matchingColumns.Any())
                                     {
-                                        <div class="list-group-item bg-transparent text-light border-secondary">
-                                            <div class="d-flex align-items-center gap-2">
-                                                <input class="form-check-input mt-0"
-                                                       type="checkbox"
-                                                       id="@GetTableCheckboxId(table)"
-                                                       checked="@AreAllColumnsSelected(table)"
-                                                       @onchange="(e) => ToggleTableColumns(table, e.Value is true)" />
-                                                <label class="small fw-bold text-uppercase cursor-pointer mb-0" style="color: #6ea8fe;" for="@GetTableCheckboxId(table)">
-                                                    @table.Name
-                                                </label>
-                                            </div>
-                                            @foreach(var col in matchingColumns)
-                                            {
-                                                var key = GetColumnKey(table, col.Name);
-                                                var isSelected = SelectedColumns.Contains(key);
-                                                <div class="form-check mt-1">
-                                                    <input class="form-check-input" type="checkbox" id="@key" 
-                                                           checked="@isSelected" 
-                                                           @onchange="(e) => ToggleColumn(key, table.FullName, e.Value is true)" />
-                                                    <label class="form-check-label small text-break cursor-pointer" for="@key">
-                                                        @col.Name
-                                                    </label>
+                                        var tableId = "table_" + table.FullName.Replace(".", "_").Replace("\"", "");
+                                        <div class="accordion-item bg-transparent border-bottom border-secondary">
+                                            <h2 class="accordion-header" id="heading_@tableId">
+                                                <div class="d-flex align-items-center bg-dark">
+                                                    <div class="ps-3 pe-1 py-0 d-flex align-items-center gap-2">
+                                                        <input class="form-check-input m-0"
+                                                               type="checkbox"
+                                                               id="@GetTableCheckboxId(table)"
+                                                               checked="@AreAllColumnsSelected(table)"
+                                                               @onchange="(e) => ToggleTableColumns(table, e.Value is true)" 
+                                                               @onclick:stopPropagation 
+                                                               style="width: 0.85rem; height: 0.85rem; cursor: pointer; margin-top: 2px !important;" />
+                                                    </div>
+                                                    <button class="accordion-button collapsed bg-transparent text-light shadow-none fw-bold text-uppercase px-2" 
+                                                            type="button" 
+                                                            data-bs-toggle="collapse" 
+                                                            data-bs-target="#collapse_@tableId" 
+                                                            aria-expanded="false" 
+                                                            aria-controls="collapse_@tableId"
+                                                            style="color: #6ea8fe !important; font-size: 0.75rem; min-height: 28px; padding-top: 0.35rem !important; padding-bottom: 0.35rem !important; flex: 1; min-width: 0;"
+                                                            title="@table.Name">
+                                                        <span class="text-truncate text-start flex-grow-1 pe-2" style="min-width: 0;">@table.Name</span>
+                                                    </button>
                                                 </div>
-                                            }
+                                            </h2>
+                                            <div id="collapse_@tableId" class="accordion-collapse collapse" aria-labelledby="heading_@tableId" data-bs-parent="#availableTablesAccordion">
+                                                <div class="accordion-body py-2 px-0 bg-black">
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach(var col in matchingColumns)
+                                                        {
+                                                            var key = GetColumnKey(table, col.Name);
+                                                            var isSelected = SelectedColumns.Contains(key);
+                                                            <div class="list-group-item bg-transparent border-0 py-1 ps-4 pe-2 text-light d-flex align-items-center" style="min-height: 28px;">
+                                                                <input class="form-check-input me-2 mt-0" type="checkbox" id="@key" 
+                                                                       checked="@isSelected" 
+                                                                       @onchange="(e) => ToggleColumn(key, table.FullName, e.Value is true)" 
+                                                                       style="width: 0.8rem; height: 0.8rem; cursor: pointer;" />
+                                                                <label class="form-check-label text-truncate cursor-pointer flex-grow-1" for="@key" style="font-size: 0.75rem; margin-top: 1px; min-width: 0;" title="@col.Name">
+                                                                    @col.Name
+                                                                </label>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     }
                                 }
+                            }
                             </div>
-                        }
-                    </div>
-                </div>
-            </div>
-
-            <!-- Selected Columns Box -->
-            <div class="card bg-dark border-secondary shadow-sm d-flex flex-column" style="flex: 1; min-height: 0;">
-                <div class="card-header border-secondary d-flex justify-content-between align-items-center" style="position: sticky; top: 0; z-index: 20; background: inherit;">
-                    <span class="fw-bold">Selected Tables &amp; Columns</span>
-                    <button class="btn btn-sm btn-outline-warning" @onclick="ClearAll">
-                        Clear All
-                    </button>
-                </div>
-                <div class="card-body p-0 bg-black" style="overflow-y: auto; flex: 1;">
-                    @if (SelectedColumns.Count == 0)
-                    {
-                        <div class="p-4 text-center text-muted mt-3 mb-3">Select columns from the left to start building your query.</div>
+                        </div>
                     }
-                    else
+                    else if (ActiveBuilderTab == "Selected")
                     {
-                        <div class="p-3 d-flex flex-column gap-3">
-                            @{ var uniqueTables = SelectedColumns.Select(k => k.Substring(0, k.LastIndexOf('.'))).Distinct().ToList(); }
-                            @foreach (var group in SelectedColumns.GroupBy(k => k.Substring(0, k.LastIndexOf('.'))))
+                        <!-- Selected Columns Content -->
+                        <div class="p-0 bg-black" style="overflow-y: auto; flex: 1; min-height: 200px; max-height: 800px;">
+                            @if (SelectedColumns.Count == 0)
                             {
-                                var table = group.Key;
-                                var isFirst = table == uniqueTables.First();
-                                var isLast = table == uniqueTables.Last();
-                                
-                                <div class="border rounded p-3 mb-3 border-secondary" style="background-color: #1a1d20; transition: all 0.2s;">
-                                    <div class="text-info fw-bold mb-3 pb-2 border-bottom border-secondary">
-                                        <div class="text-break mb-2" style="font-size: 1.1rem; word-break: break-all;">@table</div>
-                                        <div class="d-flex gap-2">
-                                            <div class="btn-group">
-                                                <button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Move Up" disabled="@isFirst" @onclick="() => MoveTable(table, -1)">
-                                                    Up
-                                                </button>
-                                                <button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Move Down" disabled="@isLast" @onclick="() => MoveTable(table, 1)">
-                                                    Down
-                                                </button>
+                                <div class="p-4 text-center text-muted mt-3 mb-3">Select columns from the Available tab to start building your query.</div>
+                            }
+                            else
+                            {
+                                <div class="p-3 d-flex flex-column gap-3">
+                                    @{ var uniqueTables = SelectedColumns.Select(k => k.Substring(0, k.LastIndexOf('.'))).Distinct().ToList(); }
+                                    @foreach (var group in SelectedColumns.GroupBy(k => k.Substring(0, k.LastIndexOf('.'))))
+                                    {
+                                        var table = group.Key;
+                                        var isFirst = table == uniqueTables.First();
+                                        var isLast = table == uniqueTables.Last();
+                                        
+                                        <div class="border rounded p-3 mb-3 border-secondary" style="background-color: #1a1d20; transition: all 0.2s;">
+                                            <div class="text-info fw-bold mb-3 pb-2 border-bottom border-secondary">
+                                                <div class="text-break mb-2" style="font-size: 1.1rem; word-break: break-all;">@table</div>
+                                                <div class="d-flex gap-2">
+                                                    <div class="btn-group">
+                                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Move Up" disabled="@isFirst" @onclick="() => MoveTable(table, -1)">
+                                                            Up
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Move Down" disabled="@isLast" @onclick="() => MoveTable(table, 1)">
+                                                            Down
+                                                        </button>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-outline-danger py-0 px-2" 
+                                                            title="Remove Table"
+                                                            @onclick="() => RemoveTable(table)">
+                                                        Remove
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <button class="btn btn-sm btn-outline-danger py-0 px-2" 
-                                                    title="Remove Table"
-                                                    @onclick="() => RemoveTable(table)">
-                                                Remove
-                                            </button>
+                                            <div class="d-flex flex-wrap gap-2">
+                                                @foreach (var key in group)
+                                                {
+                                                    var col = key.Substring(key.LastIndexOf('.') + 1);
+                                                    <span class="badge bg-secondary d-flex align-items-center gap-2 p-2 border border-secondary text-wrap text-break text-start" style="font-size: 0.9rem; max-width: 100%;">
+                                                        <span class="flex-grow-1">@col</span>
+                                                        <button type="button" class="btn-close btn-close-white flex-shrink-0" style="font-size: 0.5rem;" aria-label="Remove"
+                                                                @onclick="() => ToggleColumn(key, table, false)"></button>
+                                                    </span>
+                                                }
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach (var key in group)
-                                        {
-                                            var col = key.Substring(key.LastIndexOf('.') + 1);
-                                            <span class="badge bg-secondary d-flex align-items-center gap-2 p-2 border border-secondary text-wrap text-break text-start" style="font-size: 0.9rem; max-width: 100%;">
-                                                <span class="flex-grow-1">@col</span>
-                                                <button type="button" class="btn-close btn-close-white flex-shrink-0" style="font-size: 0.5rem;" aria-label="Remove"
-                                                        @onclick="() => ToggleColumn(key, table, false)"></button>
-                                            </span>
-                                        }
-                                    </div>
+                                    }
                                 </div>
                             }
                         </div>
@@ -262,11 +313,14 @@
                  <div class="card-header border-secondary d-flex justify-content-between align-items-center">
                      <span class="fw-bold">Generated SQL</span>
                      <div class="d-flex gap-2">
-                         <button class="btn btn-sm btn-primary" @onclick="RunInRunner" disabled="@(SelectedColumns.Count == 0)">
-                             <i class="bi bi-play-fill"></i> Run
+                         <button class="btn btn-sm btn-outline-warning" @onclick="ClearAll" title="Clear all selections">
+                             Clear
                          </button>
                          <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
                              @CopyLabel
+                         </button>
+                         <button class="btn btn-sm btn-primary" @onclick="RunInRunner" disabled="@(SelectedColumns.Count == 0)">
+                             <i class="bi bi-play-fill"></i> Run
                          </button>
                      </div>
                  </div>
@@ -377,6 +431,7 @@
 </div>
 
 @code {
+    private string ActiveBuilderTab = "Available";
     private string SearchCol = "";
     private string SearchFilter = "All";
     private bool ExactMatch = false;
