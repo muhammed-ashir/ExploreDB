@@ -14,22 +14,20 @@
     {
         <div class="row mb-4 align-items-center">
             <div class="col">
-                <nav aria-label="breadcrumb">
-                    <div class="mb-1">
-                        <a href="javascript:void(0)" @onclick="NavigateBack" class="text-secondary text-decoration-none hover-text-white transition-colors fw-medium">
-                            <i class="bi bi-arrow-left me-1"></i> Back
-                        </a>
-                    </div>
-                </nav>
-                <div class="d-flex align-items-center gap-3 mt-2">
-                    <div class="text-primary d-flex align-items-center justify-content-center">
-                        <i class="bi bi-table" style="font-size: 2.2rem; line-height: 1;"></i>
-                    </div>
+                <div class="d-flex align-items-center gap-3">
                     <div class="d-flex flex-column overflow-hidden justify-content-center" style="min-width: 0;">
-                        <h5 class="text-white mb-0 fw-bold text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">@Table.Name</h5>
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">SCHEMA: @Table.Schema</small>
+                        <h5 class="text-white mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="letter-spacing: 0.5px; word-break: break-word;">
+                            @Table.Name
+                            <span class="badge fw-normal align-middle" style="background-color: rgba(13, 110, 253, 0.15); color: #8bb9fe; border: 1px solid rgba(13, 110, 253, 0.4); font-size: 0.45em; padding: 0.35em 0.6em;">TABLE</span>
+                        </h5>
+                        <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">SCHEMA: <span class="text-lowercase">@Table.Schema</span></small>
                     </div>
                 </div>
+            </div>
+            <div class="col-auto">
+                <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm border-secondary text-light">
+                    <i class="bi bi-arrow-left"></i> Back
+                </a>
             </div>
         </div>
 
@@ -37,6 +35,7 @@
             .schema-accordion .accordion-item {
                 border-radius: 0.375rem !important;
                 overflow: hidden;
+                border-top: 1px solid #495057 !important;
             }
             .schema-accordion .accordion-button {
                 background-color: transparent !important;
@@ -51,6 +50,12 @@
             }
             .schema-accordion .accordion-button::after {
                 filter: invert(1) grayscale(100%) brightness(200%);
+            }
+            .schema-accordion .accordion-button:not(.collapsed) + .query-actions {
+                display: flex !important;
+            }
+            .schema-accordion .query-actions {
+                display: none !important;
             }
         </style>
         
@@ -189,15 +194,17 @@
                                     <div class="row g-3">
                                         @foreach (var rel in Table.OutgoingKeys)
                                         {
-                                            <div class="col-md-6 col-xl-4">
-                                                <a href="@BuildTableLink(rel.ToTable)" class="d-block p-3 border bg-dark text-light border-secondary rounded text-decoration-none hover-scale transition-transform h-100">
-                                                    <div class="d-flex justify-content-between align-items-center">
-                                                        <span class="fw-bold d-flex align-items-center gap-2">
-                                                            @GetShortName(rel.ToTable)
-                                                        </span>
-                                                        <i class="bi bi-arrow-right-short text-muted fs-4"></i>
+                                            <div class="col-12 col-md-6">
+                                                <a href="@BuildTableLink(rel.ToTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
+                                                    <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                        <div class="text-primary fw-bold fs-4">
+                                                            <i class="bi bi-table"></i>
+                                                        </div>
+                                                        <div class="overflow-hidden" style="min-width: 0;">
+                                                            <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@(rel.ToTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault())</div>
+                                                            <div class="text-muted mt-1" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@(rel.ToTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault())</span></div>
+                                                        </div>
                                                     </div>
-                                                    <small class="text-muted font-monospace d-block mt-1">FK: @rel.FromColumn → @rel.ToColumn</small>
                                                 </a>
                                             </div>
                                         }
@@ -224,15 +231,17 @@
                                     <div class="row g-3">
                                         @foreach (var rel in Table.IncomingKeys)
                                         {
-                                            <div class="col-md-6 col-xl-4">
-                                                <a href="@BuildTableLink(rel.FromTable)" class="d-block p-3 border bg-dark text-light border-secondary rounded text-decoration-none hover-scale transition-transform h-100">
-                                                    <div class="d-flex justify-content-between align-items-center">
-                                                        <span class="fw-bold d-flex align-items-center gap-2">
-                                                            @GetShortName(rel.FromTable)
-                                                        </span>
-                                                        <i class="bi bi-arrow-down-left-short text-muted fs-4"></i>
+                                            <div class="col-12 col-md-6">
+                                                <a href="@BuildTableLink(rel.FromTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
+                                                    <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                        <div class="text-primary fw-bold fs-4">
+                                                            <i class="bi bi-table"></i>
+                                                        </div>
+                                                        <div class="overflow-hidden" style="min-width: 0;">
+                                                            <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@(rel.FromTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault())</div>
+                                                            <div class="text-muted mt-1" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@(rel.FromTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault())</span></div>
+                                                        </div>
                                                     </div>
-                                                    <small class="text-muted font-monospace d-block mt-1">FK: @rel.FromColumn → @rel.ToColumn</small>
                                                 </a>
                                             </div>
                                         }
@@ -264,7 +273,7 @@
                                                 <div class="text-warning fw-bold fs-4 font-monospace">{}</div>
                                                 <div class="overflow-hidden" style="min-width: 0;">
                                                     <div class="fw-bold text-light mb-1 text-wrap" style="font-size: 1.1rem; word-break: break-word;">@dep.Name</div>
-                                                    <div class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">SCHEMA: @dep.Schema.ToUpper()</div>
+                                                    <div class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
                                                 </div>
                                             </div>
                                         </a>
@@ -394,71 +403,75 @@
             }
             else if (ActiveTab == "Queries")
             {
-                <div class="row g-4">
-                    <div class="col-12">
-                        <div class="card glass-card text-white">
-                            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center gap-3">
-                                <div>
-                                    SELECT Query
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <button type="button"
-                                            class="btn btn-sm @(SelectCopied ? "btn-success" : "btn-outline-light")"
-                                            @onclick="CopySelectQuery">
-                                        @(SelectCopied ? "Copied" : "Copy")
-                                    </button>
-                                    <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2">
-                                        <i class="bi bi-play-fill"></i> Run in Query Runner
-                                    </a>
-                                </div>
+                <div class="accordion schema-accordion" id="queryAccordion">
+                    <div class="accordion-item glass-card mb-4">
+                        <h2 class="accordion-header position-relative" id="headingSelectQuery">
+                            <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSelectQuery" aria-expanded="true" aria-controls="collapseSelectQuery">
+                                SELECT Query
+                            </button>
+                            <div class="query-actions position-absolute top-50 translate-middle-y gap-2" style="right: 55px; z-index: 10;">
+                                <button type="button"
+                                        class="btn btn-sm d-flex align-items-center gap-2 @(SelectCopied ? "btn-success" : "btn-outline-light")"
+                                        @onclick="CopySelectQuery"
+                                        @onclick:stopPropagation="true">
+                                    <i class="bi @(SelectCopied ? "bi-check2" : "bi-clipboard")"></i> @(SelectCopied ? "Copied!" : "Copy")
+                                </button>
+                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
+                                    <i class="bi bi-play-fill"></i> Run
+                                </a>
                             </div>
-                            <div class="card-body">
+                        </h2>
+                        <div id="collapseSelectQuery" class="accordion-collapse collapse show" aria-labelledby="headingSelectQuery" data-bs-parent="#queryAccordion">
+                            <div class="accordion-body text-white pt-3">
                                 <pre class="query-preview mb-0">@SelectQuery</pre>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-12">
-                        <div class="card glass-card text-white">
-                            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center gap-3">
-                                <div>
-                                    INSERT Query
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <button type="button"
-                                            class="btn btn-sm @(InsertCopied ? "btn-success" : "btn-outline-light")"
-                                            @onclick="CopyInsertQuery">
-                                        @(InsertCopied ? "Copied" : "Copy")
-                                    </button>
-                                    <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2">
-                                        <i class="bi bi-play-fill"></i> Run in Query Runner
-                                    </a>
-                                </div>
+                    <div class="accordion-item glass-card mb-4">
+                        <h2 class="accordion-header position-relative" id="headingInsertQuery">
+                            <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseInsertQuery" aria-expanded="false" aria-controls="collapseInsertQuery">
+                                INSERT Query
+                            </button>
+                            <div class="query-actions position-absolute top-50 translate-middle-y gap-2" style="right: 55px; z-index: 10;">
+                                <button type="button"
+                                        class="btn btn-sm d-flex align-items-center gap-2 @(InsertCopied ? "btn-success" : "btn-outline-light")"
+                                        @onclick="CopyInsertQuery"
+                                        @onclick:stopPropagation="true">
+                                    <i class="bi @(InsertCopied ? "bi-check2" : "bi-clipboard")"></i> @(InsertCopied ? "Copied!" : "Copy")
+                                </button>
+                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
+                                    <i class="bi bi-play-fill"></i> Run
+                                </a>
                             </div>
-                            <div class="card-body">
+                        </h2>
+                        <div id="collapseInsertQuery" class="accordion-collapse collapse" aria-labelledby="headingInsertQuery" data-bs-parent="#queryAccordion">
+                            <div class="accordion-body text-white pt-3">
                                 <pre class="query-preview mb-0">@InsertQuery</pre>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-12">
-                        <div class="card glass-card text-white">
-                            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center gap-3">
-                                <div>
-                                    UPDATE Query
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <button type="button"
-                                            class="btn btn-sm @(UpdateCopied ? "btn-success" : "btn-outline-light")"
-                                            @onclick="CopyUpdateQuery">
-                                        @(UpdateCopied ? "Copied" : "Copy")
-                                    </button>
-                                    <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2">
-                                        <i class="bi bi-play-fill"></i> Run in Query Runner
-                                    </a>
-                                </div>
+                    <div class="accordion-item glass-card mb-4">
+                        <h2 class="accordion-header position-relative" id="headingUpdateQuery">
+                            <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseUpdateQuery" aria-expanded="false" aria-controls="collapseUpdateQuery">
+                                UPDATE Query
+                            </button>
+                            <div class="query-actions position-absolute top-50 translate-middle-y gap-2" style="right: 55px; z-index: 10;">
+                                <button type="button"
+                                        class="btn btn-sm d-flex align-items-center gap-2 @(UpdateCopied ? "btn-success" : "btn-outline-light")"
+                                        @onclick="CopyUpdateQuery"
+                                        @onclick:stopPropagation="true">
+                                    <i class="bi @(UpdateCopied ? "bi-check2" : "bi-clipboard")"></i> @(UpdateCopied ? "Copied!" : "Copy")
+                                </button>
+                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
+                                    <i class="bi bi-play-fill"></i> Run
+                                </a>
                             </div>
-                            <div class="card-body">
+                        </h2>
+                        <div id="collapseUpdateQuery" class="accordion-collapse collapse" aria-labelledby="headingUpdateQuery" data-bs-parent="#queryAccordion">
+                            <div class="accordion-body text-white pt-3">
+                                
                                 @if (Table.Columns.Count == 0)
                                 {
                                     <span class="text-muted">No columns available for query generation.</span>

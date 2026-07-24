@@ -275,25 +275,22 @@ public class SchemaService
                 {
                     var lineageSql = $@"
                         SELECT 
-                            c.name AS ViewColumn,
-                            d.referenced_schema_name AS SourceSchema,
+                            ISNULL(d.referenced_schema_name, 'dbo') AS SourceSchema,
                             d.referenced_entity_name AS SourceTable,
                             d.referenced_minor_name AS SourceColumn
                         FROM sys.dm_sql_referenced_entities('{view.FullName}', 'OBJECT') d
-                        JOIN sys.columns c ON c.object_id = d.referencing_id AND c.column_id = d.referencing_minor_id
                         WHERE d.referenced_minor_name IS NOT NULL";
 
                     var lineage = await conn.QueryAsync<dynamic>(lineageSql);
                     
-                    var colDict = view.Columns.ToDictionary(c => c.Name);
+                    var colDict = view.Columns.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
                     
                     foreach(var item in lineage)
                     {
-                        var colName = (string)item.ViewColumn;
-                        if (colDict.TryGetValue(colName, out var col))
+                        var sourceColName = (string)item.SourceColumn;
+                        // Best effort: match view column by the same name as the source column
+                        if (colDict.TryGetValue(sourceColName, out var col))
                         {
-                            // If multiple sources map to one column (e.g. concatenation), this might overwrite or we could append.
-                            // For now, let's just take the first one or formatted string.
                             if (string.IsNullOrEmpty(col.SourceTable))
                             {
                                 col.SourceSchema = item.SourceSchema;

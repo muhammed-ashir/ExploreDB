@@ -16,135 +16,212 @@
     }
     else
     {
+        <!-- Header -->
         <div class="row mb-4 align-items-center">
-            <div class="col-auto">
-                <button class="btn btn-outline-light btn-sm" @onclick="NavigateBack">Back</button>
-            </div>
             <div class="col">
-                <h2 class="text-white mb-1">@Sp.Name</h2>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="badge bg-secondary">@Sp.Schema</span>
-                    <span class="badge bg-dark border border-secondary text-muted">@Sp.Parameters.Count param@(Sp.Parameters.Count == 1 ? "" : "s")</span>
-                    @if (Sp.CreatedDate.HasValue)
-                    {
-                        <small class="text-muted" style="font-size: 0.8em;">Created @Sp.CreatedDate.Value.ToString("dd MMM yyyy")</small>
-                    }
-                    @if (Sp.ModifiedDate.HasValue)
-                    {
-                        <small class="text-muted" style="font-size: 0.8em;">Modified @Sp.ModifiedDate.Value.ToString("dd MMM yyyy")</small>
-                    }
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex flex-column overflow-hidden justify-content-center" style="min-width: 0;">
+                        <h5 class="text-white mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="letter-spacing: 0.5px; word-break: break-word;">
+                            @Sp.Name
+                            <span class="badge bg-warning text-dark fw-normal align-middle" style="font-size: 0.45em; padding: 0.35em 0.6em;">SP</span>
+                        </h5>
+                        <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">SCHEMA: <span class="text-lowercase">@Sp.Schema</span></small>
+                    </div>
                 </div>
             </div>
             <div class="col-auto">
-                <a href="/runner?type=sp&name=@Uri.EscapeDataString(Sp.FullName)" class="btn btn-primary btn-sm">▶ Run in Query Runner</a>
+                <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm border-secondary text-light">
+                    <i class="bi bi-arrow-left"></i> Back
+                </a>
             </div>
         </div>
 
-        <div class="row g-4">
-            <div class="col-md-4">
+        <style>
+            .schema-accordion .accordion-item {
+                border-radius: 0.375rem !important;
+                overflow: hidden;
+                border-top: 1px solid #495057 !important;
+            }
+            .schema-accordion .accordion-button {
+                background-color: transparent !important;
+                color: #adb5bd !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+            .schema-accordion .accordion-button:not(.collapsed) {
+                background-color: rgba(255,255,255,0.05) !important;
+                color: #fff !important;
+                border-bottom: 1px solid #495057 !important;
+            }
+            .schema-accordion .accordion-button::after {
+                filter: invert(1) grayscale(100%) brightness(200%);
+            }
+        </style>
+
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs border-secondary mb-4">
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Parameters" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Parameters")' style="cursor:pointer">
+                    Parameters
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Dependencies" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Dependencies")' style="cursor:pointer">
+                    Dependencies
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Execution" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Execution")' style="cursor:pointer">
+                    Execution
+                </a>
+            </li>
+        </ul>
+
+        <div class="tab-content pb-5">
+            @if (ActiveTab == "Parameters")
+            {
                 <div class="card glass-card text-white">
-                    <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center">
-                        <div>
-                            EXECUTE Statement
-                            <small class="d-block text-muted fw-normal">Ready to run in SSMS or Azure Data Studio</small>
-                        </div>
-                        <button class="btn btn-sm @(Copied ? "btn-success" : "btn-outline-light")"
-                                @onclick="CopyExecStatement"
-                                title="Copy to clipboard">
-                            @(Copied ? "Copied" : "Copy")
-                        </button>
-                    </div>
-                    <div class="card-body p-0">
-                        <pre class="m-0 p-3 text-success" style="font-size: 0.82em; white-space: pre-wrap; word-break: break-all; background: transparent; border: none;">@ExecStatement</pre>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-8">
-                <div class="card glass-card text-white h-100 d-flex flex-column" style="min-height: 500px;">
-                    <div class="card-header border-secondary p-0">
-                        <ul class="nav nav-tabs border-secondary">
-                            <li class="nav-item">
-                                <a class="nav-link @(ActiveTab == "Scratchpad" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
-                                   @onclick='() => SetActiveTab("Scratchpad")' style="cursor:pointer">Scratchpad</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link @(ActiveTab == "Dependencies" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
-                                   @onclick='() => SetActiveTab("Dependencies")' style="cursor:pointer">Dependencies</a>
-                            </li>
-                        </ul>
-                    </div>
-                    <div class="card-body overflow-auto flex-grow-1" style="max-height: 800px;">
-                        @if (ActiveTab == "Scratchpad")
-                        {
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="text-muted small">Runnable script version of this procedure.</span>
-                                <button class="btn btn-sm btn-outline-light" @onclick="CopyScratchpad">Copy Code</button>
+                    <div class="card-body">
+                        <div class="mb-4">
+                            <div class="input-group shadow-sm w-100">
+                                <input type="text"
+                                       class="form-control bg-dark text-white border-secondary shadow-none"
+                                       placeholder="Search parameters..."
+                                       @bind="ParamSearchTerm"
+                                       @bind:event="oninput" />
+                                <button class="btn @(ParamCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ParamCaseSensitive = !ParamCaseSensitive">
+                                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                </button>
+                                <button class="btn @(ParamMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { ParamMatchWholeWord = !ParamMatchWholeWord; if (ParamMatchWholeWord) ParamExactMatch = false; }">
+                                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                </button>
+                                <button class="btn @(ParamExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ParamExactMatch = !ParamExactMatch; if (ParamExactMatch) ParamMatchWholeWord = false; }">
+                                    <i class="bi bi-bullseye fs-6"></i>
+                                </button>
                             </div>
-                            @if (ScratchpadText == null)
-                            {
-                                <div class="text-center mt-5"><div class="spinner-border spinner-border-sm text-secondary"></div></div>
-                            }
-                            else
-                            {
-                                <pre class="m-0 p-3 bg-black text-success border border-secondary" style="font-size: 0.82em; white-space: pre-wrap;">@ScratchpadText</pre>
-                            }
-                        }
-                        else if (ActiveTab == "Dependencies")
-                        {
-                            @if (Sp.Dependencies.Count == 0)
-                            {
-                                <span class="text-muted fst-italic">No resolvable dependencies found.</span>
-                                <div class="mt-2">
-                                    <small class="text-secondary">This can happen with cross-database references, dynamic SQL, or system procedures.</small>
-                                </div>
-                            }
-                            else
-                            {
-                                if (DepTables.Any())
-                                {
-                                    <div class="mb-3">
-                                        <div class="text-uppercase text-muted small mb-2" style="letter-spacing: 0.08em; font-size: 0.7em;">
-                                            Tables (@DepTables.Count)
-                                        </div>
-                                        <div class="d-flex flex-wrap gap-2">
-                                            @foreach (var dep in DepTables)
-                                            {
-                                                <a href="@BuildDependencyLink(dep)"
-                                                   class="btn btn-outline-primary btn-sm text-start"
-                                                   style="min-width: 180px;">
-                                                    <div class="fw-bold">@dep.Name</div>
-                                                    <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
-                                                </a>
-                                            }
-                                        </div>
-                                    </div>
-                                }
+                        </div>
 
-                                if (DepViews.Any())
-                                {
-                                    <div>
-                                        <div class="text-uppercase text-muted small mb-2" style="letter-spacing: 0.08em; font-size: 0.7em;">
-                                            Views (@DepViews.Count)
-                                        </div>
-                                        <div class="d-flex flex-wrap gap-2">
-                                            @foreach (var dep in DepViews)
-                                            {
-                                                <a href="@BuildDependencyLink(dep)"
-                                                   class="btn btn-outline-info btn-sm text-start"
-                                                   style="min-width: 180px;">
-                                                    <div class="fw-bold">@dep.Name</div>
-                                                    <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
-                                                </a>
-                                            }
-                                        </div>
-                                    </div>
-                                }
-                            }
-                        }
+                        <div class="table-responsive custom-scrollbar-light">
+                            <table class="table table-dark table-hover align-middle border-secondary mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="border-secondary text-muted fw-normal">Parameter Name</th>
+                                        <th class="border-secondary text-muted fw-normal">Default Value</th>
+                                        <th class="border-secondary text-muted fw-normal text-end">Data Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (VisibleParams.Count == 0)
+                                    {
+                                        <tr>
+                                            <td colspan="3" class="text-center py-4 text-muted">No matching parameters found.</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var p in VisibleParams)
+                                        {
+                                            <tr>
+                                                <td class="border-secondary fw-medium align-middle">
+                                                    @p.Name
+                                                    @if (p.IsOutput)
+                                                    {
+                                                        <span class="badge bg-warning text-dark border border-warning ms-2 align-middle fw-normal" style="font-size: 0.5em;">OUTPUT</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-dark border border-secondary text-muted ms-2 align-middle fw-normal" style="font-size: 0.5em;">INPUT</span>
+                                                    }
+                                                </td>
+                                                <td class="border-secondary">
+                                                    @if (p.HasDefault)
+                                                    {
+                                                        <span class="font-monospace text-success" style="font-size: 0.85em;">@p.DefaultValue</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted fst-italic small">none</span>
+                                                    }
+                                                </td>
+                                                <td class="border-secondary text-end">
+                                                    <span class="badge bg-dark text-muted border border-secondary font-monospace" style="font-size: 0.85em;">
+                                                        @p.DisplayType
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-            </div>
+            }
+            else if (ActiveTab == "Dependencies")
+            {
+                <div class="text-white mt-1">
+                    @if (Sp.Dependencies.Count == 0)
+                    {
+                        <div class="card glass-card border-secondary text-center py-5">
+                            <div class="text-muted small fst-italic">No resolvable dependencies found.</div>
+                            <div class="mt-2">
+                                <small class="text-secondary">This can happen with cross-database references, dynamic SQL, or system procedures.</small>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="mt-2 mb-4">
+                            <div class="row g-3">
+                                @foreach (var dep in Sp.Dependencies.OrderBy(d => d.Type).ThenBy(d => d.Name))
+                                {
+                                    <div class="col-md-6 col-12">
+                                        <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid rgba(255, 255, 255, 0.1);">
+                                            <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                <div class="@(dep.Type == "Table" ? "text-primary" : "text-success") fw-bold fs-4">
+                                                    <i class="bi @(dep.Type == "Table" ? "bi-table" : "bi-layout-text-window")"></i>
+                                                </div>
+                                                <div class="overflow-hidden" style="min-width: 0;">
+                                                    <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@dep.Name</div>
+                                                    <div class="text-muted" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else if (ActiveTab == "Execution")
+            {
+                <div class="card glass-card text-white">
+                    <div class="card-body p-0 position-relative">
+                        <div class="p-3 d-flex justify-content-between align-items-center border-bottom border-secondary bg-dark bg-opacity-50">
+                            <div>
+                                <span class="fw-bold">EXECUTE Statement</span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm @(Copied ? "btn-success" : "btn-outline-light")"
+                                        @onclick="CopyExecStatement"
+                                        title="Copy to clipboard">
+                                    <i class="bi @(Copied ? "bi-check2" : "bi-clipboard")"></i> @(Copied ? "Copied" : "Copy")
+                                </button>
+                                <a href="/runner?type=sp&name=@Uri.EscapeDataString(Sp.FullName)" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1">
+                                    <i class="bi bi-play-fill"></i> Run
+                                </a>
+                            </div>
+                        </div>
+                        <div class="p-4" style="background: rgba(0, 0, 0, 0.3);">
+                            <pre class="m-0 text-success query-preview" style="background: transparent; border: none; font-size: 0.85em;">@ExecStatement</pre>
+                        </div>
+                    </div>
+                </div>
+            }
         </div>
     }
 </div>
@@ -158,80 +235,95 @@
 
     private SpInfo? Sp;
     private bool Copied = false;
-    private string ActiveTab = "Scratchpad";
-    private string? ScratchpadText;
+    private string ActiveTab = "Parameters";
+    
+    // Parameter Search State
+    private string _paramSearchTerm = "";
+    private string ParamSearchTerm
+    {
+        get => _paramSearchTerm;
+        set
+        {
+            if (_paramSearchTerm != value)
+            {
+                _paramSearchTerm = value;
+                FilterParams();
+            }
+        }
+    }
+
+    private bool _paramCaseSensitive = false;
+    private bool ParamCaseSensitive
+    {
+        get => _paramCaseSensitive;
+        set { _paramCaseSensitive = value; FilterParams(); }
+    }
+
+    private bool _paramMatchWholeWord = false;
+    private bool ParamMatchWholeWord
+    {
+        get => _paramMatchWholeWord;
+        set { _paramMatchWholeWord = value; FilterParams(); }
+    }
+
+    private bool _paramExactMatch = false;
+    private bool ParamExactMatch
+    {
+        get => _paramExactMatch;
+        set { _paramExactMatch = value; FilterParams(); }
+    }
+
+    private List<SpParameter> VisibleParams = new();
 
     private List<Dependency> DepTables => Sp?.Dependencies.Where(d => d.Type == "Table").OrderBy(d => d.Name).ToList() ?? new();
     private List<Dependency> DepViews => Sp?.Dependencies.Where(d => d.Type == "View").OrderBy(d => d.Name).ToList() ?? new();
 
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
         var decoded = Uri.UnescapeDataString(FullName);
         Sp = SchemaService.StoredProcedures.FirstOrDefault(s => s.FullName == decoded);
         Copied = false;
         
-        ActiveTab = "Scratchpad";
-        ScratchpadText = null;
+        ActiveTab = "Parameters";
 
         if (Sp != null)
         {
-            await LoadScratchpadAsync();
+            FilterParams();
         }
     }
 
-    private async Task SetActiveTab(string tab)
+    private void FilterParams()
     {
-        ActiveTab = tab;
-        if (tab == "Scratchpad")
+        if (Sp == null) return;
+        
+        if (string.IsNullOrWhiteSpace(ParamSearchTerm))
         {
-            await LoadScratchpadAsync();
-        }
-    }
-
-
-
-    private async Task LoadScratchpadAsync()
-    {
-        if (Sp == null || ScratchpadText != null) return;
-        var def = await SchemaService.GetStoredProcedureDefinitionAsync(Sp.FullName);
-        if (string.IsNullOrWhiteSpace(def))
-        {
-            ScratchpadText = "-- Could not load definition.";
+            VisibleParams = Sp.Parameters.ToList();
             return;
         }
 
-        var body = def;
-        // Attempt to strip out the CREATE PROCEDURE header
-        // This regex looks for the CREATE/ALTER PROCEDURE statement, skips everything up to the first 'AS',
-        // and captures the rest. Note: This is a simple approximation and might fail if 'AS' is heavily used in comments before the actual AS.
-        var match = Regex.Match(def, @"(?i)\b(?:CREATE|ALTER)\s+(?:PROCEDURE|PROC)\b.*?\bAS\b(.*)", RegexOptions.Singleline);
-        if (match.Success && match.Groups.Count > 1)
-        {
-            body = match.Groups[1].Value.TrimStart();
-        }
+        var comparison = ParamCaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var query = ParamSearchTerm.Trim();
 
-        var lines = new System.Text.StringBuilder();
-        lines.AppendLine($"-- Scratchpad for {Sp.FullName}");
-        foreach (var p in Sp.Parameters)
+        VisibleParams = Sp.Parameters.Where(p =>
         {
-            string defaultValue = "NULL";
-            if (p.HasDefault && p.DefaultValue != null)
+            if (ParamExactMatch)
             {
-                defaultValue = p.DefaultValue;
+                return p.Name.Equals(query, comparison);
             }
-            lines.AppendLine($"DECLARE {p.Name} {p.DisplayType} = {defaultValue};");
-        }
-        lines.AppendLine();
-        lines.AppendLine("-- Procedure Body:");
-        lines.AppendLine(body);
+            if (ParamMatchWholeWord)
+            {
+                var regexOpts = ParamCaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
+                return Regex.IsMatch(p.Name, $@"\b{Regex.Escape(query)}\b", regexOpts);
+            }
 
-        ScratchpadText = lines.ToString();
+            return p.Name.Contains(query, comparison);
+        }).ToList();
     }
 
-    private async Task CopyScratchpad()
+    private void SetActiveTab(string tab)
     {
-        if (string.IsNullOrWhiteSpace(ScratchpadText)) return;
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", ScratchpadText);
+        ActiveTab = tab;
     }
 
     private void NavigateBack()

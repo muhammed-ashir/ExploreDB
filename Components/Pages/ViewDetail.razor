@@ -2,6 +2,7 @@
 @using ExploreDB.Services
 @inject SchemaService SchemaService
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <div class="container-fluid">
     @if (View == null)
@@ -10,148 +11,292 @@
     }
     else
     {
+        <!-- Header -->
         <div class="row mb-4 align-items-center">
-            <div class="col-auto">
-                <button class="btn btn-outline-light btn-sm" @onclick="NavigateBack">Back</button>
-            </div>
             <div class="col">
-                <div class="d-flex align-items-center gap-2">
-                    <h2 class="text-white mb-0">@View.Name</h2>
-                    <span class="badge bg-secondary">@View.Schema</span>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex flex-column overflow-hidden justify-content-center" style="min-width: 0;">
+                        <h5 class="text-white mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="letter-spacing: 0.5px; word-break: break-word;">
+                            @View.Name
+                            <span class="badge bg-info text-dark fw-normal align-middle" style="font-size: 0.45em; padding: 0.35em 0.6em;">VIEW</span>
+                        </h5>
+                        <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">SCHEMA: <span class="text-lowercase">@View.Schema</span></small>
+                    </div>
                 </div>
             </div>
             <div class="col-auto">
-                <a href="/runner?type=view&name=@Uri.EscapeDataString(View.FullName)" class="btn btn-primary btn-sm">▶ Run in Query Runner</a>
+                <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm border-secondary text-light">
+                    <i class="bi bi-arrow-left"></i> Back
+                </a>
             </div>
+
         </div>
 
-        <div class="row g-4">
-            <div class="col-md-4">
-                <div class="card glass-card h-100 text-white">
-                    <div class="card-header border-secondary fw-bold">Columns</div>
-                    <ul class="list-group list-group-flush">
-                        @foreach (var col in View.Columns)
-                        {
-                            <li class="list-group-item bg-transparent text-white border-secondary">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="fw-bold">@col.Name</span>
-                                    <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
+        <style>
+            .schema-accordion .accordion-item {
+                border-radius: 0.375rem !important;
+                overflow: hidden;
+                border-top: 1px solid #495057 !important;
+            }
+            .schema-accordion .accordion-button {
+                background-color: transparent !important;
+                color: #adb5bd !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+            .schema-accordion .accordion-button:not(.collapsed) {
+                background-color: rgba(255,255,255,0.05) !important;
+                color: #fff !important;
+                border-bottom: 1px solid #495057 !important;
+            }
+            .schema-accordion .accordion-button::after {
+                filter: invert(1) grayscale(100%) brightness(200%);
+            }
+        </style>
+
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs border-secondary mb-4">
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Columns" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Columns")' style="cursor:pointer">
+                    Columns
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Relationships" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Relationships")' style="cursor:pointer">
+                    Relationships
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "SPs" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("SPs")' style="cursor:pointer">
+                    Procedures
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Queries" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Queries")' style="cursor:pointer">
+                    Query
+                </a>
+            </li>
+        </ul>
+
+        <div class="tab-content pb-5">
+            @if (ActiveTab == "Columns")
+            {
+                <!-- Columns Tab -->
+                <div class="card glass-card text-white">
+                    <div class="card-body">
+                        <div class="mb-4">
+                            <div class="input-group shadow-sm w-100">
+                                <input type="text"
+                                       class="form-control bg-dark text-white border-secondary shadow-none"
+                                       placeholder="Search columns..."
+                                       @bind="ColumnSearchTerm"
+                                       @bind:event="oninput" />
+                                <button class="btn @(ColumnSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ColumnSearchCaseSensitive = !ColumnSearchCaseSensitive">
+                                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                </button>
+                                <button class="btn @(ColumnSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { ColumnSearchMatchWholeWord = !ColumnSearchMatchWholeWord; if (ColumnSearchMatchWholeWord) ColumnSearchExactMatch = false; }">
+                                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                </button>
+                                <button class="btn @(ColumnSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ColumnSearchExactMatch = !ColumnSearchExactMatch; if (ColumnSearchExactMatch) ColumnSearchMatchWholeWord = false; }">
+                                    <i class="bi bi-bullseye fs-6"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="table-responsive custom-scrollbar-light">
+                            <table class="table table-dark table-hover align-middle border-secondary mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="border-secondary text-muted fw-normal">Column Name</th>
+                                        <th class="border-secondary text-muted fw-normal text-end">Data Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (VisibleColumns.Count == 0)
+                                    {
+                                        <tr>
+                                            <td colspan="2" class="text-center py-4 text-muted">No matching columns found.</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var col in VisibleColumns)
+                                        {
+                                            <tr>
+                                                <td class="border-secondary fw-medium">
+                                                    @col.Name
+                                                    @if (!string.IsNullOrEmpty(col.SourceTable))
+                                                    {
+                                                        var sourceFullName = $"[{col.SourceSchema}].[{col.SourceTable}]";
+                                                        <a href="@BuildObjectLink(sourceFullName)" class="badge bg-dark border border-secondary text-decoration-none text-light ms-2 hover-scale transition-transform" title="Source: @sourceFullName">
+                                                            <i class="bi bi-link-45deg text-muted"></i> @col.SourceSchema<span class="text-secondary">.</span>@col.SourceTable
+                                                        </a>
+                                                    }
+                                                </td>
+                                                <td class="border-secondary text-end">
+                                                    <span class="badge bg-dark text-muted border border-secondary font-monospace" style="font-size: 0.85em;">
+                                                        @col.DataType
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (ActiveTab == "Relationships")
+            {
+                <!-- Relationships Tab -->
+                <div class="text-white mt-1">
+                    <div class="accordion schema-accordion" id="relationshipsAccordion">
+                        <div class="accordion-item glass-card mb-3 border-secondary">
+                            <h2 class="accordion-header" id="headingParents">
+                                <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseParents" aria-expanded="true" aria-controls="collapseParents">
+                                    Parents
+                                </button>
+                            </h2>
+                            <div id="collapseParents" class="accordion-collapse collapse show" aria-labelledby="headingParents" data-bs-parent="#relationshipsAccordion">
+                                <div class="accordion-body text-white">
+                                    @if (View.Parents.Count == 0)
+                                    {
+                                        <div class="text-muted small fst-italic">No upstream dependencies.</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="row g-3">
+                                            @foreach (var dep in View.Parents)
+                                            {
+                                                <div class="col-12 col-md-6">
+                                                    <a href="@BuildObjectLink(dep.FullName)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
+                                                        <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                            <div class="@(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success") fw-bold fs-4">
+                                                                <i class="bi @(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-layout-text-window")"></i>
+                                                            </div>
+                                                            <div class="overflow-hidden" style="min-width: 0;">
+                                                                <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@GetShortName(dep.Name)</div>
+                                                                <div class="text-muted mt-1" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
                                 </div>
-                                @if (!string.IsNullOrEmpty(col.SourceTable))
-                                {
-                                    <div class="small mt-1" style="font-size: 0.85em;">
-                                        <span class="text-secondary">Source:</span>
-                                        @{
-                                            var sourceFullName = $"[{col.SourceSchema}].[{col.SourceTable}]";
-                                            var textClass = IsView(sourceFullName) ? "text-info" : "text-primary";
-                                        }
-                                        <a href="@BuildObjectLink(sourceFullName)" class="text-decoration-none @textClass">
-                                            @col.SourceTable
-                                        </a>
-                                        <span class="text-secondary">.</span><span class="text-light">@col.SourceColumn</span>
-                                    </div>
-                                }
-                            </li>
+                            </div>
+                        </div>
+
+                        <div class="accordion-item glass-card mb-3 border-secondary">
+                            <h2 class="accordion-header" id="headingChildren">
+                                <button class="accordion-button fw-bold collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseChildren" aria-expanded="false" aria-controls="collapseChildren">
+                                    Children
+                                </button>
+                            </h2>
+                            <div id="collapseChildren" class="accordion-collapse collapse" aria-labelledby="headingChildren" data-bs-parent="#relationshipsAccordion">
+                                <div class="accordion-body text-white">
+                                    @if (View.Children.Count == 0)
+                                    {
+                                        <div class="text-muted small fst-italic">No downstream dependent views.</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="row g-3">
+                                            @foreach (var dep in View.Children)
+                                            {
+                                                <div class="col-12 col-md-6">
+                                                    <a href="@BuildObjectLink(dep.FullName)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
+                                                        <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                            <div class="@(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success") fw-bold fs-4">
+                                                                <i class="bi @(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-layout-text-window")"></i>
+                                                            </div>
+                                                            <div class="overflow-hidden" style="min-width: 0;">
+                                                                <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@GetShortName(dep.Name)</div>
+                                                                <div class="text-muted mt-1" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (ActiveTab == "SPs")
+            {
+                <!-- SPs Tab -->
+                <div class="text-white mt-1">
+                    <div>
+                        @if (View.ReferencedBySPs.Count == 0)
+                        {
+                            <div class="text-muted p-4 text-center">No stored procedures reference this view.</div>
                         }
-                    </ul>
+                        else
+                        {
+                            <div class="row g-3">
+                                @foreach (var dep in View.ReferencedBySPs)
+                                {
+                                    var spFull = $"[{dep.Schema}].[{dep.Name}]";
+                                    <div class="col-md-6 col-12">
+                                        <a href="@BuildProcLink(spFull)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid #3d444b; border-radius: 6px;">
+                                            <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                <div class="text-warning fw-bold fs-4 font-monospace">{}</div>
+                                                <div class="overflow-hidden" style="min-width: 0;">
+                                                    <div class="fw-bold text-light mb-1 text-wrap" style="font-size: 1.1rem; word-break: break-word;">@dep.Name</div>
+                                                    <div class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
                 </div>
-            </div>
-
-            <div class="col-md-8">
-                <div class="row g-4">
+            }
+            else if (ActiveTab == "Queries")
+            {
+                <!-- Query Tab -->
+                <div class="row">
                     <div class="col-12">
-                        <div class="card glass-card text-white">
-                            <div class="card-header border-secondary text-info fw-bold">
-                                Parents (Upstream)
-                                <small class="d-block text-muted fw-normal">Tables or views this view selects from.</small>
+                        <div class="card glass-card text-white mb-4">
+                            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center py-3">
+                                <div>
+                                    SELECT Query
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-light d-flex align-items-center gap-2" @onclick="CopySelectQuery">
+                                        @if (SelectCopied)
+                                        {
+                                            <i class="bi bi-check2 text-success"></i> <span>Copied!</span>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-clipboard"></i> <span>Copy</span>
+                                        }
+                                    </button>
+                                    <a href="/runner?type=view&name=@Uri.EscapeDataString(View.FullName)&query=@Uri.EscapeDataString(SelectQuery)" class="btn btn-sm btn-primary d-flex align-items-center gap-2">
+                                        <i class="bi bi-play-fill"></i> Run
+                                    </a>
+                                </div>
                             </div>
                             <div class="card-body">
-                                @if (View.Parents.Count == 0)
-                                {
-                                    <span class="text-muted">No dependencies found.</span>
-                                }
-                                else
-                                {
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach (var dep in View.Parents)
-                                        {
-                                            var badgeClass = dep.Type == "Table" ? "bg-primary" : "bg-info text-dark";
-
-                                            <a href="@BuildObjectLink(dep.FullName)" class="btn btn-outline-info btn-sm text-start" style="min-width: 200px;">
-                                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                                    <span class="fw-bold">@GetShortName(dep.Name)</span>
-                                                    <span class="badge @badgeClass" style="font-size: 0.7em;">@dep.Type</span>
-                                                </div>
-                                                <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
-                                            </a>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-12">
-                        <div class="card glass-card text-white">
-                            <div class="card-header border-secondary text-warning fw-bold">
-                                Children (Downstream)
-                                <small class="d-block text-muted fw-normal">Views that select from this view.</small>
-                            </div>
-                            <div class="card-body">
-                                @if (View.Children.Count == 0)
-                                {
-                                    <span class="text-muted">No dependent views.</span>
-                                }
-                                else
-                                {
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach (var dep in View.Children)
-                                        {
-                                            var badgeClass = dep.Type == "Table" ? "bg-primary" : "bg-info text-dark";
-
-                                            <a href="@BuildObjectLink(dep.FullName)" class="btn btn-outline-warning btn-sm text-start" style="min-width: 200px;">
-                                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                                    <span class="fw-bold">@GetShortName(dep.Name)</span>
-                                                    <span class="badge @badgeClass" style="font-size: 0.7em;">@dep.Type</span>
-                                                </div>
-                                                <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
-                                            </a>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-12">
-                        <div class="card glass-card text-white">
-                            <div class="card-header border-secondary fw-bold" style="color: #b388ff;">
-                                Referenced by Stored Procedures
-                                <small class="d-block text-muted fw-normal">SPs that read from this view.</small>
-                            </div>
-                            <div class="card-body">
-                                @if (View.ReferencedBySPs.Count == 0)
-                                {
-                                    <span class="text-muted">No stored procedures reference this view.</span>
-                                }
-                                else
-                                {
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach (var dep in View.ReferencedBySPs)
-                                        {
-                                            var spFull = $"[{dep.Schema}].[{dep.Name}]";
-                                            <a href="@BuildProcLink(spFull)" class="btn btn-sm text-start" style="min-width: 180px; border-color: #b388ff; color: #b388ff;">
-                                                <div class="fw-bold">@dep.Name</div>
-                                                <small class="text-muted" style="font-size: 0.7em;">@dep.Schema</small>
-                                            </a>
-                                        }
-                                    </div>
-                                }
+                                <pre class="query-preview mb-0">@SelectQuery</pre>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            }
         </div>
     }
 </div>
@@ -164,11 +309,28 @@
     public string? ReturnUrl { get; set; }
 
     private ViewInfo? View;
+    private string ActiveTab = "Columns";
+
+    private string ColumnSearchTerm = string.Empty;
+    private bool ColumnSearchCaseSensitive = false;
+    private bool ColumnSearchMatchWholeWord = false;
+    private bool ColumnSearchExactMatch = false;
+
+    private bool SelectCopied;
+
+    private List<ColumnInfo> VisibleColumns => FilterColumns(ColumnSearchTerm, ColumnSearchCaseSensitive, ColumnSearchMatchWholeWord, ColumnSearchExactMatch);
+    private string SelectQuery => $"SELECT TOP 100 * FROM {QuotedViewName(View!)};";
 
     protected override void OnParametersSet()
     {
         var decoded = Uri.UnescapeDataString(FullName);
         View = SchemaService.Views.FirstOrDefault(t => t.FullName == decoded);
+        ColumnSearchTerm = string.Empty;
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        ActiveTab = tab;
     }
 
     private void NavigateBack()
@@ -209,13 +371,60 @@
         return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
     }
 
-    private string GetShortName(string name)
+    private string GetShortName(string fullName)
     {
-        return name.Replace("[", "").Replace("]", "");
+        if (string.IsNullOrWhiteSpace(fullName)) return string.Empty;
+        var parts = fullName.Split('.');
+        if (parts.Length == 2)
+        {
+            return parts[1].Trim('[', ']');
+        }
+        return fullName.Trim('[', ']');
     }
 
     private bool IsView(string fullName)
     {
-        return SchemaService.Views.Any(v => v.FullName == fullName);
+        return SchemaService.Views.Any(v => v.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private string QuotedViewName(ViewInfo view)
+    {
+        return $"[{view.Schema}].[{view.Name}]";
+    }
+
+    private List<ColumnInfo> FilterColumns(string searchTerm, bool caseSensitive, bool matchWholeWord, bool exactMatch)
+    {
+        if (View == null) return new List<ColumnInfo>();
+        if (string.IsNullOrWhiteSpace(searchTerm)) return View.Columns.ToList();
+
+        var searchStr = caseSensitive ? searchTerm : searchTerm.ToLower();
+
+        return View.Columns.Where(c =>
+        {
+            var colName = caseSensitive ? c.Name : c.Name.ToLower();
+            var dataType = caseSensitive ? c.DataType : c.DataType.ToLower();
+
+            if (exactMatch)
+            {
+                return colName == searchStr || dataType == searchStr;
+            }
+            if (matchWholeWord)
+            {
+                return colName.Split(' ', '.', '_').Contains(searchStr) || 
+                       dataType.Split(' ', '.', '_').Contains(searchStr);
+            }
+            
+            return colName.Contains(searchStr) || dataType.Contains(searchStr);
+        }).ToList();
+    }
+
+    private async Task CopySelectQuery()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", SelectQuery);
+        SelectCopied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        SelectCopied = false;
+        StateHasChanged();
     }
 }

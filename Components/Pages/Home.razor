@@ -263,7 +263,7 @@
                      <span class="fw-bold">Generated SQL</span>
                      <div class="d-flex gap-2">
                          <button class="btn btn-sm btn-primary" @onclick="RunInRunner" disabled="@(SelectedColumns.Count == 0)">
-                             ▶ Run in Query Runner
+                             <i class="bi bi-play-fill"></i> Run
                          </button>
                          <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
                              @CopyLabel

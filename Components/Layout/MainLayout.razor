@@ -332,21 +332,6 @@
                 </div>
             </div>
         }
-
-        @if (ShowToast)
-        {
-            <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
-                <div class="toast show align-items-center text-white border-0 shadow-lg" role="alert" style="animation: slideInUp 0.3s ease; background-color: #2b3035; border-left: 4px solid var(--bs-@ToastThemeClass) !important;">
-                    <div class="d-flex">
-                        <div class="toast-body d-flex align-items-center flex-grow-1 overflow-hidden" title="@ToastMessage">
-                            <i class="bi @ToastIconClass me-3 fs-5 text-@ToastThemeClass flex-shrink-0"></i>
-                            <span class="text-truncate">@ToastMessage</span>
-                        </div>
-                        <button type="button" class="btn-close btn-close-white me-3 m-auto flex-shrink-0" @onclick="() => ShowToast = false"></button>
-                    </div>
-                </div>
-            </div>
-        }
     }
     else
     {
@@ -362,7 +347,7 @@
                     </button>
                     <div class="ms-auto d-flex align-items-center gap-3">
                         <span class="fw-bold text-muted small">@GetWorkspaceTitle()</span>
-                        <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="Disconnect">
+                        <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="PromptDisconnect">
                             <i class="bi bi-power" style="font-size: 1.2rem;"></i>
                         </button>
                     </div>
@@ -373,6 +358,40 @@
             </main>
         </div>
     }
+
+    @if (ShowDisconnectPrompt)
+    {
+        <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); z-index: 1070;">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content glass-card border-info text-white shadow-lg text-center p-4" style="background-color: #2b3035;">
+                    <div class="mb-3 text-info">
+                        <i class="bi bi-power" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="fw-bold mb-2">Disconnect?</h5>
+                    <p class="small text-muted mb-4">Are you sure you want to disconnect?</p>
+                    <div class="d-flex justify-content-center gap-3">
+                        <button class="btn btn-outline-secondary px-4 rounded-pill" @onclick="() => ShowDisconnectPrompt = false">Cancel</button>
+                        <button class="btn btn-info px-4 rounded-pill fw-bold shadow text-dark" @onclick="ConfirmDisconnect">Disconnect</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (ShowToast)
+    {
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
+            <div class="toast show align-items-center text-white border-0 shadow-lg" role="alert" style="animation: slideInUp 0.3s ease; background-color: #2b3035; border-left: 4px solid var(--bs-@ToastThemeClass) !important;">
+                <div class="d-flex">
+                    <div class="toast-body d-flex align-items-center flex-grow-1 overflow-hidden" title="@ToastMessage">
+                        <i class="bi @ToastIconClass me-3 fs-5 text-@ToastThemeClass flex-shrink-0"></i>
+                        <span class="text-truncate">@ToastMessage</span>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-3 m-auto flex-shrink-0" @onclick="() => ShowToast = false"></button>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -381,6 +400,7 @@
     private bool SidebarCollapsed = false;
     private bool IsDetailsVisible = false;
     private bool ShowSavePrompt = false;
+    private bool ShowDisconnectPrompt = false;
     private bool ShowToast = false;
     private string ToastMessage = "";
     private string ToastThemeClass = "success";
@@ -784,6 +804,16 @@
         await Task.Delay(3000);
         ShowToast = false;
         StateHasChanged();
+    }
+    private void PromptDisconnect()
+    {
+        ShowDisconnectPrompt = true;
+    }
+
+    private void ConfirmDisconnect()
+    {
+        ShowDisconnectPrompt = false;
+        Disconnect();
     }
 
     private void Disconnect()
