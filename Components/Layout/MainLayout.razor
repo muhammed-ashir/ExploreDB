@@ -284,7 +284,7 @@
 
                                 <div class="d-flex gap-2 mt-4">
                                     <button class="btn btn-outline-success flex-grow-1 @(string.IsNullOrWhiteSpace(Server) ? "opacity-50" : "")" style="@(string.IsNullOrWhiteSpace(Server) ? "cursor: not-allowed;" : "")" @onclick="SaveCurrentConnection">Save Profile</button>
-                                    <button class="btn btn-premium flex-grow-1 fw-bold @((string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) ? "opacity-50" : "")" style="@((string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) ? "cursor: not-allowed;" : "")" @onclick="Connect" disabled="@(IsBusy)">
+                                    <button class="btn btn-primary flex-grow-1 fw-bold @((string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) ? "opacity-50" : "")" style="@((string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) ? "cursor: not-allowed;" : "")" @onclick="Connect" disabled="@(IsBusy)">
                                         @if(IsBusy) { <span class="spinner-border spinner-border-sm me-2"></span> }
                                         @(IsBusy ? "Connecting..." : "Connect")
                                     </button>
