@@ -464,7 +464,7 @@
                                         @onclick:stopPropagation="true">
                                     <i class="bi @(SelectCopied ? "bi-check2" : "bi-clipboard")"></i> @(SelectCopied ? "Copied!" : "Copy")
                                 </button>
-                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
+                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)&query=@Uri.EscapeDataString(SelectQuery)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
                                     <i class="bi bi-play-fill"></i> Run
                                 </a>
                             </span>
@@ -488,7 +488,7 @@
                                         @onclick:stopPropagation="true">
                                     <i class="bi @(InsertCopied ? "bi-check2" : "bi-clipboard")"></i> @(InsertCopied ? "Copied!" : "Copy")
                                 </button>
-                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
+                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)&query=@Uri.EscapeDataString(InsertQuery)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
                                     <i class="bi bi-play-fill"></i> Run
                                 </a>
                             </span>
@@ -512,7 +512,7 @@
                                         @onclick:stopPropagation="true">
                                     <i class="bi @(UpdateCopied ? "bi-check2" : "bi-clipboard")"></i> @(UpdateCopied ? "Copied!" : "Copy")
                                 </button>
-                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
+                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)&query=@Uri.EscapeDataString(UpdateQuery)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
                                     <i class="bi bi-play-fill"></i> Run
                                 </a>
                             </span>

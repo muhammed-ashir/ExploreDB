@@ -1,4 +1,5 @@
 @page "/"
+@page "/runner"
 @using ExploreDB.Services
 @using Dapper
 @using Microsoft.Data.SqlClient
@@ -91,11 +92,14 @@
 </div>
 
 @code {
-    [SupplyParameterFromQuery]
+    [SupplyParameterFromQuery(Name = "type")]
     public string? ObjectType { get; set; }
 
-    [SupplyParameterFromQuery]
+    [SupplyParameterFromQuery(Name = "name")]
     public string? ObjectName { get; set; }
+
+    [SupplyParameterFromQuery(Name = "query")]
+    public string? InitialQuery { get; set; }
 
     private string ResultTab = "Results";
     private bool IsExecuting = false;
@@ -104,8 +108,12 @@
     private List<IEnumerable<dynamic>> ResultSets = new();
     private List<string> Messages = new();
 
-    protected override void OnInitialized()
+    protected override void OnParametersSet()
     {
+        if (!string.IsNullOrWhiteSpace(InitialQuery))
+        {
+            QueryStateService.CustomQuery = InitialQuery;
+        }
     }
 
     private async Task ExecuteAsync()

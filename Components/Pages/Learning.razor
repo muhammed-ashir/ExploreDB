@@ -8,44 +8,50 @@
                 <h2 class="fw-bold text-white mb-0">Learning Hub</h2>
             </div>
         </div>
+        <div class="mb-4 d-flex justify-content-start">
+            <div class="input-group shadow-sm w-50">
+                <input type="text"
+                       class="form-control bg-dark text-white border-secondary shadow-none"
+                       placeholder="Search topics..."
+                       @bind="SearchTerm"
+                       @bind:event="oninput" />
+                <button class="btn @(SearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => SearchCaseSensitive = !SearchCaseSensitive">
+                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                </button>
+                <button class="btn @(SearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { SearchMatchWholeWord = !SearchMatchWholeWord; if (SearchMatchWholeWord) SearchExactMatch = false; }">
+                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                </button>
+                <button class="btn @(SearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { SearchExactMatch = !SearchExactMatch; if (SearchExactMatch) SearchMatchWholeWord = false; }">
+                    <i class="bi bi-bullseye fs-6"></i>
+                </button>
+            </div>
+        </div>
         
         <div class="row g-3 flex-grow-1 align-content-start">
-            <div class="col-12 col-xl-6">
-                <div class="card glass-card text-white node-card py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale" style="cursor: pointer;" @onclick='() => SetTopic("joins")'>
-                    <div class="d-flex align-items-center gap-3 overflow-hidden">
-                        <div class="text-primary fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
-                            <i class="bi bi-journal-text"></i>
-                        </div>
-                        <div class="overflow-hidden" style="min-width: 0;">
-                            <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">Join Guide</h5>
+            @if (!FilteredTopics.Any())
+            {
+                <div class="col-12">
+                    <div class="text-muted p-4 text-center">No matching topics found.</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var topic in FilteredTopics)
+                {
+                    <div class="col-12 col-xl-6">
+                        <div class="card glass-card text-white node-card py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale" style="cursor: pointer;" @onclick='() => SetTopic(topic.Id)'>
+                            <div class="d-flex align-items-center gap-3 overflow-hidden">
+                                <div class="@topic.ColorClass fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
+                                    <i class="bi @topic.Icon"></i>
+                                </div>
+                                <div class="overflow-hidden" style="min-width: 0;">
+                                    <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">@topic.Title</h5>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-            <div class="col-12 col-xl-6">
-                <div class="card glass-card text-white node-card py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale" style="cursor: pointer;" @onclick='() => SetTopic("tricks")'>
-                    <div class="d-flex align-items-center gap-3 overflow-hidden">
-                        <div class="text-info fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
-                            <i class="bi bi-journal-text"></i>
-                        </div>
-                        <div class="overflow-hidden" style="min-width: 0;">
-                            <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">DB Tricks & Tips</h5>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-xl-6">
-                <div class="card glass-card text-white node-card py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale" style="cursor: pointer;" @onclick='() => SetTopic("advanced")'>
-                    <div class="d-flex align-items-center gap-3 overflow-hidden">
-                        <div class="text-warning fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
-                            <i class="bi bi-journal-text"></i>
-                        </div>
-                        <div class="overflow-hidden" style="min-width: 0;">
-                            <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">Advanced SQL</h5>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                }
+            }
         </div>
     }
     else
@@ -73,6 +79,44 @@
 
 @code {
     private string ActiveTopic = "";
+    private string SearchTerm = "";
+    private bool SearchCaseSensitive = false;
+    private bool SearchMatchWholeWord = false;
+    private bool SearchExactMatch = false;
+
+    private record TopicCard(string Id, string Title, string Icon, string ColorClass);
+
+    private List<TopicCard> AllTopics = new()
+    {
+        new("joins", "Join Guide", "bi-journal-text", "text-primary"),
+        new("tricks", "DB Tricks & Tips", "bi-journal-text", "text-info"),
+        new("advanced", "Advanced SQL", "bi-journal-text", "text-warning")
+    };
+
+    private IEnumerable<TopicCard> FilteredTopics
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchTerm)) return AllTopics;
+
+            var query = SearchCaseSensitive ? SearchTerm : SearchTerm.ToLowerInvariant();
+            
+            return AllTopics.Where(t => 
+            {
+                var title = SearchCaseSensitive ? t.Title : t.Title.ToLowerInvariant();
+                
+                if (SearchExactMatch) return title == query;
+                
+                if (SearchMatchWholeWord) 
+                {
+                    var parts = title.Split(new[] { ' ', '&' }, StringSplitOptions.RemoveEmptyEntries);
+                    return parts.Any(p => p == query);
+                }
+                
+                return title.Contains(query);
+            });
+        }
+    }
 
     private void SetTopic(string topic)
     {

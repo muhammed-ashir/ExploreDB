@@ -233,7 +233,7 @@
                                         title="Copy to clipboard">
                                     <i class="bi @(Copied ? "bi-check2" : "bi-clipboard")"></i> @(Copied ? "Copied" : "Copy")
                                 </button>
-                                <a href="/runner?type=sp&name=@Uri.EscapeDataString(Sp.FullName)" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1">
+                                <a href="/runner?type=sp&name=@Uri.EscapeDataString(Sp.FullName)&query=@Uri.EscapeDataString(ExecStatement)" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1">
                                     <i class="bi bi-play-fill"></i> Run
                                 </a>
                             </div>
