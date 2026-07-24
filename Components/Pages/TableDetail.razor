@@ -176,6 +176,24 @@
             else if (ActiveTab == "Relationships")
             {
                 <!-- Relationships Tab -->
+                <div class="mb-4 d-flex justify-content-start">
+                    <div class="input-group shadow-sm w-50">
+                        <input type="text"
+                               class="form-control bg-dark text-white border-secondary shadow-none"
+                               placeholder="Search relationships..."
+                               @bind="RelationshipSearchTerm"
+                               @bind:event="oninput" />
+                        <button class="btn @(RelationshipSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => RelationshipSearchCaseSensitive = !RelationshipSearchCaseSensitive">
+                            <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                        </button>
+                        <button class="btn @(RelationshipSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { RelationshipSearchMatchWholeWord = !RelationshipSearchMatchWholeWord; if (RelationshipSearchMatchWholeWord) RelationshipSearchExactMatch = false; }">
+                            <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                        </button>
+                        <button class="btn @(RelationshipSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { RelationshipSearchExactMatch = !RelationshipSearchExactMatch; if (RelationshipSearchExactMatch) RelationshipSearchMatchWholeWord = false; }">
+                            <i class="bi bi-bullseye fs-6"></i>
+                        </button>
+                    </div>
+                </div>
                 <div class="accordion schema-accordion" id="relationshipsAccordion">
                     <div class="accordion-item glass-card mb-3 border-secondary">
                         <h2 class="accordion-header" id="headingParents">
@@ -189,10 +207,14 @@
                                 {
                                     <div class="text-muted small fst-italic">No parent tables.</div>
                                 }
+                                else if (!FilteredOutgoingKeys.Any())
+                                {
+                                    <div class="text-muted small fst-italic">No matching parent tables found.</div>
+                                }
                                 else
                                 {
                                     <div class="row g-3">
-                                        @foreach (var rel in Table.OutgoingKeys)
+                                        @foreach (var rel in FilteredOutgoingKeys)
                                         {
                                             <div class="col-12 col-md-6">
                                                 <a href="@BuildTableLink(rel.ToTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
@@ -226,10 +248,14 @@
                                 {
                                     <div class="text-muted small fst-italic">No child tables.</div>
                                 }
+                                else if (!FilteredIncomingKeys.Any())
+                                {
+                                    <div class="text-muted small fst-italic">No matching child tables found.</div>
+                                }
                                 else
                                 {
                                     <div class="row g-3">
-                                        @foreach (var rel in Table.IncomingKeys)
+                                        @foreach (var rel in FilteredIncomingKeys)
                                         {
                                             <div class="col-12 col-md-6">
                                                 <a href="@BuildTableLink(rel.FromTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
@@ -256,15 +282,37 @@
             {
                 <!-- SPs Tab -->
                 <div class="text-white mt-1">
+                    <div class="mb-4 d-flex justify-content-start">
+                        <div class="input-group shadow-sm w-50">
+                            <input type="text"
+                                   class="form-control bg-dark text-white border-secondary shadow-none"
+                                   placeholder="Search procedures..."
+                                   @bind="ProcedureSearchTerm"
+                                   @bind:event="oninput" />
+                            <button class="btn @(ProcedureSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ProcedureSearchCaseSensitive = !ProcedureSearchCaseSensitive">
+                                <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                            </button>
+                            <button class="btn @(ProcedureSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { ProcedureSearchMatchWholeWord = !ProcedureSearchMatchWholeWord; if (ProcedureSearchMatchWholeWord) ProcedureSearchExactMatch = false; }">
+                                <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                            </button>
+                            <button class="btn @(ProcedureSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ProcedureSearchExactMatch = !ProcedureSearchExactMatch; if (ProcedureSearchExactMatch) ProcedureSearchMatchWholeWord = false; }">
+                                <i class="bi bi-bullseye fs-6"></i>
+                            </button>
+                        </div>
+                    </div>
                     <div>
                         @if (Table.ReferencedBySPs.Count == 0)
                         {
                             <div class="text-muted p-4 text-center">No stored procedures reference this table.</div>
                         }
+                        else if (!FilteredProcedures.Any())
+                        {
+                            <div class="text-muted p-4 text-center">No matching stored procedures found.</div>
+                        }
                         else
                         {
                             <div class="row g-3">
-                                @foreach (var dep in Table.ReferencedBySPs)
+                                @foreach (var dep in FilteredProcedures)
                                 {
                                     var spFull = $"[{dep.Schema}].[{dep.Name}]";
                                     <div class="col-md-6 col-12">
@@ -409,7 +457,7 @@
                             <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSelectQuery" aria-expanded="true" aria-controls="collapseSelectQuery">
                                 SELECT Query
                             </button>
-                            <div class="query-actions position-absolute top-50 translate-middle-y gap-2" style="right: 55px; z-index: 10;">
+                            <span class="query-actions position-absolute top-50 translate-middle-y gap-2" style="right: 55px; z-index: 10;">
                                 <button type="button"
                                         class="btn btn-sm d-flex align-items-center gap-2 @(SelectCopied ? "btn-success" : "btn-outline-light")"
                                         @onclick="CopySelectQuery"
@@ -419,7 +467,7 @@
                                 <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
                                     <i class="bi bi-play-fill"></i> Run
                                 </a>
-                            </div>
+                            </span>
                         </h2>
                         <div id="collapseSelectQuery" class="accordion-collapse collapse show" aria-labelledby="headingSelectQuery" data-bs-parent="#queryAccordion">
                             <div class="accordion-body text-white pt-3">
@@ -433,7 +481,7 @@
                             <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseInsertQuery" aria-expanded="false" aria-controls="collapseInsertQuery">
                                 INSERT Query
                             </button>
-                            <div class="query-actions position-absolute top-50 translate-middle-y gap-2" style="right: 55px; z-index: 10;">
+                            <span class="query-actions position-absolute top-50 translate-middle-y gap-2" style="right: 55px; z-index: 10;">
                                 <button type="button"
                                         class="btn btn-sm d-flex align-items-center gap-2 @(InsertCopied ? "btn-success" : "btn-outline-light")"
                                         @onclick="CopyInsertQuery"
@@ -443,7 +491,7 @@
                                 <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
                                     <i class="bi bi-play-fill"></i> Run
                                 </a>
-                            </div>
+                            </span>
                         </h2>
                         <div id="collapseInsertQuery" class="accordion-collapse collapse" aria-labelledby="headingInsertQuery" data-bs-parent="#queryAccordion">
                             <div class="accordion-body text-white pt-3">
@@ -457,7 +505,7 @@
                             <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseUpdateQuery" aria-expanded="false" aria-controls="collapseUpdateQuery">
                                 UPDATE Query
                             </button>
-                            <div class="query-actions position-absolute top-50 translate-middle-y gap-2" style="right: 55px; z-index: 10;">
+                            <span class="query-actions position-absolute top-50 translate-middle-y gap-2" style="right: 55px; z-index: 10;">
                                 <button type="button"
                                         class="btn btn-sm d-flex align-items-center gap-2 @(UpdateCopied ? "btn-success" : "btn-outline-light")"
                                         @onclick="CopyUpdateQuery"
@@ -467,7 +515,7 @@
                                 <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
                                     <i class="bi bi-play-fill"></i> Run
                                 </a>
-                            </div>
+                            </span>
                         </h2>
                         <div id="collapseUpdateQuery" class="accordion-collapse collapse" aria-labelledby="headingUpdateQuery" data-bs-parent="#queryAccordion">
                             <div class="accordion-body text-white pt-3">
@@ -510,13 +558,13 @@
                                                 @foreach (var col in VisibleUpdateColumns)
                                                 {
                                                     <label class="query-option-item">
-                                                        <div class="query-option-meta">
+                                                        <span class="query-option-meta">
                                                             <input type="checkbox"
                                                                    class="form-check-input"
                                                                    checked="@IsUpdateColumnSelected(col.Name)"
                                                                    @onchange="args => SetUpdateColumnSelection(col.Name, args.Value)" />
                                                             <span class="fw-semibold query-option-name">@col.Name</span>
-                                                        </div>
+                                                        </span>
                                                         <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
                                                     </label>
                                                 }
@@ -560,6 +608,78 @@
     private string ActiveTab = "Columns";
     private string MermaidDefinition = string.Empty;
 
+    private string RelationshipSearchTerm = string.Empty;
+    private bool RelationshipSearchCaseSensitive = false;
+    private bool RelationshipSearchMatchWholeWord = false;
+    private bool RelationshipSearchExactMatch = false;
+
+    private string ProcedureSearchTerm = string.Empty;
+    private bool ProcedureSearchCaseSensitive = false;
+    private bool ProcedureSearchMatchWholeWord = false;
+    private bool ProcedureSearchExactMatch = false;
+
+    private IEnumerable<Relationship> FilteredOutgoingKeys
+    {
+        get
+        {
+            if (Table == null) return Array.Empty<Relationship>();
+            if (string.IsNullOrWhiteSpace(RelationshipSearchTerm)) return Table.OutgoingKeys;
+            
+            var searchStr = RelationshipSearchCaseSensitive ? RelationshipSearchTerm : RelationshipSearchTerm.ToLowerInvariant();
+            
+            return Table.OutgoingKeys.Where(k => 
+            {
+                var val = RelationshipSearchCaseSensitive ? k.ToTable : k.ToTable.ToLowerInvariant();
+                if (RelationshipSearchExactMatch) return val == searchStr;
+                if (RelationshipSearchMatchWholeWord) return val.Split('.', '[', ']', '_', '-').Contains(searchStr);
+                return val.Contains(searchStr);
+            });
+        }
+    }
+
+    private IEnumerable<Relationship> FilteredIncomingKeys
+    {
+        get
+        {
+            if (Table == null) return Array.Empty<Relationship>();
+            if (string.IsNullOrWhiteSpace(RelationshipSearchTerm)) return Table.IncomingKeys;
+            
+            var searchStr = RelationshipSearchCaseSensitive ? RelationshipSearchTerm : RelationshipSearchTerm.ToLowerInvariant();
+            
+            return Table.IncomingKeys.Where(k => 
+            {
+                var val = RelationshipSearchCaseSensitive ? k.FromTable : k.FromTable.ToLowerInvariant();
+                if (RelationshipSearchExactMatch) return val == searchStr;
+                if (RelationshipSearchMatchWholeWord) return val.Split('.', '[', ']', '_', '-').Contains(searchStr);
+                return val.Contains(searchStr);
+            });
+        }
+    }
+
+    private IEnumerable<Dependency> FilteredProcedures
+    {
+        get
+        {
+            if (Table == null) return Array.Empty<Dependency>();
+            if (string.IsNullOrWhiteSpace(ProcedureSearchTerm)) return Table.ReferencedBySPs;
+            
+            var searchStr = ProcedureSearchCaseSensitive ? ProcedureSearchTerm : ProcedureSearchTerm.ToLowerInvariant();
+            
+            return Table.ReferencedBySPs.Where(d => 
+            {
+                var nameVal = ProcedureSearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
+                var schemaVal = ProcedureSearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
+                
+                if (ProcedureSearchExactMatch) 
+                    return nameVal == searchStr || schemaVal == searchStr;
+                if (ProcedureSearchMatchWholeWord) 
+                    return nameVal.Split('_', '-', '.').Contains(searchStr) || schemaVal.Split('_', '-', '.').Contains(searchStr);
+                    
+                return nameVal.Contains(searchStr) || schemaVal.Contains(searchStr);
+            });
+        }
+    }
+
     private List<ColumnInfo> VisibleTableColumns => FilterColumns(TableColumnSearchTerm, ColumnSearchCaseSensitive, ColumnSearchMatchWholeWord, ColumnSearchExactMatch);
     private List<ColumnInfo> VisibleUpdateColumns => FilterColumns(UpdateColumnSearchTerm, UpdateColumnSearchCaseSensitive, UpdateColumnSearchMatchWholeWord, UpdateColumnSearchExactMatch);
     private string SelectQuery => $"SELECT TOP 100 * FROM {QuotedTableName(Table!)};";
@@ -578,6 +698,8 @@
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         TableColumnSearchTerm = string.Empty;
         UpdateColumnSearchTerm = string.Empty;
+        RelationshipSearchTerm = string.Empty;
+        ProcedureSearchTerm = string.Empty;
         GenerateMermaidERD();
     }
 

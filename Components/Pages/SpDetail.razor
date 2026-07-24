@@ -163,6 +163,24 @@
             else if (ActiveTab == "Dependencies")
             {
                 <div class="text-white mt-1">
+                    <div class="mb-4 d-flex justify-content-start">
+                        <div class="input-group shadow-sm w-50">
+                            <input type="text"
+                                   class="form-control bg-dark text-white border-secondary shadow-none"
+                                   placeholder="Search dependencies..."
+                                   @bind="DependencySearchTerm"
+                                   @bind:event="oninput" />
+                            <button class="btn @(DependencySearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => DependencySearchCaseSensitive = !DependencySearchCaseSensitive">
+                                <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                            </button>
+                            <button class="btn @(DependencySearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { DependencySearchMatchWholeWord = !DependencySearchMatchWholeWord; if (DependencySearchMatchWholeWord) DependencySearchExactMatch = false; }">
+                                <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                            </button>
+                            <button class="btn @(DependencySearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { DependencySearchExactMatch = !DependencySearchExactMatch; if (DependencySearchExactMatch) DependencySearchMatchWholeWord = false; }">
+                                <i class="bi bi-bullseye fs-6"></i>
+                            </button>
+                        </div>
+                    </div>
                     @if (Sp.Dependencies.Count == 0)
                     {
                         <div class="card glass-card border-secondary text-center py-5">
@@ -172,11 +190,15 @@
                             </div>
                         </div>
                     }
+                    else if (!FilteredDependencies.Any())
+                    {
+                        <div class="text-muted p-4 text-center">No matching dependencies found.</div>
+                    }
                     else
                     {
                         <div class="mt-2 mb-4">
                             <div class="row g-3">
-                                @foreach (var dep in Sp.Dependencies.OrderBy(d => d.Type).ThenBy(d => d.Name))
+                                @foreach (var dep in FilteredDependencies)
                                 {
                                     <div class="col-md-6 col-12">
                                         <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid rgba(255, 255, 255, 0.1);">
@@ -275,8 +297,36 @@
 
     private List<SpParameter> VisibleParams = new();
 
-    private List<Dependency> DepTables => Sp?.Dependencies.Where(d => d.Type == "Table").OrderBy(d => d.Name).ToList() ?? new();
-    private List<Dependency> DepViews => Sp?.Dependencies.Where(d => d.Type == "View").OrderBy(d => d.Name).ToList() ?? new();
+    private string DependencySearchTerm = string.Empty;
+    private bool DependencySearchCaseSensitive = false;
+    private bool DependencySearchMatchWholeWord = false;
+    private bool DependencySearchExactMatch = false;
+
+    private IEnumerable<Dependency> FilteredDependencies
+    {
+        get
+        {
+            if (Sp == null) return Array.Empty<Dependency>();
+            
+            var deps = Sp.Dependencies.OrderBy(d => d.Type).ThenBy(d => d.Name);
+            if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return deps;
+            
+            var searchStr = DependencySearchCaseSensitive ? DependencySearchTerm : DependencySearchTerm.ToLowerInvariant();
+            
+            return deps.Where(d => 
+            {
+                var nameVal = DependencySearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
+                var schemaVal = DependencySearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
+                
+                if (DependencySearchExactMatch) 
+                    return nameVal == searchStr || schemaVal == searchStr;
+                if (DependencySearchMatchWholeWord) 
+                    return nameVal.Split('_', '-', '.').Contains(searchStr) || schemaVal.Split('_', '-', '.').Contains(searchStr);
+                    
+                return nameVal.Contains(searchStr) || schemaVal.Contains(searchStr);
+            });
+        }
+    }
 
     protected override void OnParametersSet()
     {

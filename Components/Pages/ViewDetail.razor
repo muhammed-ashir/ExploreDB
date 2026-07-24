@@ -155,6 +155,24 @@
             {
                 <!-- Relationships Tab -->
                 <div class="text-white mt-1">
+                    <div class="mb-4 d-flex justify-content-start">
+                        <div class="input-group shadow-sm w-50">
+                            <input type="text"
+                                   class="form-control bg-dark text-white border-secondary shadow-none"
+                                   placeholder="Search relationships..."
+                                   @bind="RelationshipSearchTerm"
+                                   @bind:event="oninput" />
+                            <button class="btn @(RelationshipSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => RelationshipSearchCaseSensitive = !RelationshipSearchCaseSensitive">
+                                <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                            </button>
+                            <button class="btn @(RelationshipSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { RelationshipSearchMatchWholeWord = !RelationshipSearchMatchWholeWord; if (RelationshipSearchMatchWholeWord) RelationshipSearchExactMatch = false; }">
+                                <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                            </button>
+                            <button class="btn @(RelationshipSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { RelationshipSearchExactMatch = !RelationshipSearchExactMatch; if (RelationshipSearchExactMatch) RelationshipSearchMatchWholeWord = false; }">
+                                <i class="bi bi-bullseye fs-6"></i>
+                            </button>
+                        </div>
+                    </div>
                     <div class="accordion schema-accordion" id="relationshipsAccordion">
                         <div class="accordion-item glass-card mb-3 border-secondary">
                             <h2 class="accordion-header" id="headingParents">
@@ -168,10 +186,14 @@
                                     {
                                         <div class="text-muted small fst-italic">No upstream dependencies.</div>
                                     }
+                                    else if (!FilteredParents.Any())
+                                    {
+                                        <div class="text-muted small fst-italic">No matching upstream dependencies found.</div>
+                                    }
                                     else
                                     {
                                         <div class="row g-3">
-                                            @foreach (var dep in View.Parents)
+                                            @foreach (var dep in FilteredParents)
                                             {
                                                 <div class="col-12 col-md-6">
                                                     <a href="@BuildObjectLink(dep.FullName)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
@@ -205,10 +227,14 @@
                                     {
                                         <div class="text-muted small fst-italic">No downstream dependent views.</div>
                                     }
+                                    else if (!FilteredChildren.Any())
+                                    {
+                                        <div class="text-muted small fst-italic">No matching downstream dependent views found.</div>
+                                    }
                                     else
                                     {
                                         <div class="row g-3">
-                                            @foreach (var dep in View.Children)
+                                            @foreach (var dep in FilteredChildren)
                                             {
                                                 <div class="col-12 col-md-6">
                                                     <a href="@BuildObjectLink(dep.FullName)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
@@ -236,15 +262,37 @@
             {
                 <!-- SPs Tab -->
                 <div class="text-white mt-1">
+                    <div class="mb-4 d-flex justify-content-start">
+                        <div class="input-group shadow-sm w-50">
+                            <input type="text"
+                                   class="form-control bg-dark text-white border-secondary shadow-none"
+                                   placeholder="Search procedures..."
+                                   @bind="ProcedureSearchTerm"
+                                   @bind:event="oninput" />
+                            <button class="btn @(ProcedureSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ProcedureSearchCaseSensitive = !ProcedureSearchCaseSensitive">
+                                <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                            </button>
+                            <button class="btn @(ProcedureSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { ProcedureSearchMatchWholeWord = !ProcedureSearchMatchWholeWord; if (ProcedureSearchMatchWholeWord) ProcedureSearchExactMatch = false; }">
+                                <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                            </button>
+                            <button class="btn @(ProcedureSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ProcedureSearchExactMatch = !ProcedureSearchExactMatch; if (ProcedureSearchExactMatch) ProcedureSearchMatchWholeWord = false; }">
+                                <i class="bi bi-bullseye fs-6"></i>
+                            </button>
+                        </div>
+                    </div>
                     <div>
                         @if (View.ReferencedBySPs.Count == 0)
                         {
                             <div class="text-muted p-4 text-center">No stored procedures reference this view.</div>
                         }
+                        else if (!FilteredProcedures.Any())
+                        {
+                            <div class="text-muted p-4 text-center">No matching stored procedures found.</div>
+                        }
                         else
                         {
                             <div class="row g-3">
-                                @foreach (var dep in View.ReferencedBySPs)
+                                @foreach (var dep in FilteredProcedures)
                                 {
                                     var spFull = $"[{dep.Schema}].[{dep.Name}]";
                                     <div class="col-md-6 col-12">
@@ -316,7 +364,89 @@
     private bool ColumnSearchMatchWholeWord = false;
     private bool ColumnSearchExactMatch = false;
 
+    private string RelationshipSearchTerm = string.Empty;
+    private bool RelationshipSearchCaseSensitive = false;
+    private bool RelationshipSearchMatchWholeWord = false;
+    private bool RelationshipSearchExactMatch = false;
+
+    private string ProcedureSearchTerm = string.Empty;
+    private bool ProcedureSearchCaseSensitive = false;
+    private bool ProcedureSearchMatchWholeWord = false;
+    private bool ProcedureSearchExactMatch = false;
+
     private bool SelectCopied;
+
+    private IEnumerable<Dependency> FilteredParents
+    {
+        get
+        {
+            if (View == null) return Array.Empty<Dependency>();
+            if (string.IsNullOrWhiteSpace(RelationshipSearchTerm)) return View.Parents;
+            
+            var searchStr = RelationshipSearchCaseSensitive ? RelationshipSearchTerm : RelationshipSearchTerm.ToLowerInvariant();
+            
+            return View.Parents.Where(d => 
+            {
+                var nameVal = RelationshipSearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
+                var schemaVal = RelationshipSearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
+                
+                if (RelationshipSearchExactMatch) 
+                    return nameVal == searchStr || schemaVal == searchStr;
+                if (RelationshipSearchMatchWholeWord) 
+                    return nameVal.Split('_', '-', '.').Contains(searchStr) || schemaVal.Split('_', '-', '.').Contains(searchStr);
+                    
+                return nameVal.Contains(searchStr) || schemaVal.Contains(searchStr);
+            });
+        }
+    }
+
+    private IEnumerable<Dependency> FilteredChildren
+    {
+        get
+        {
+            if (View == null) return Array.Empty<Dependency>();
+            if (string.IsNullOrWhiteSpace(RelationshipSearchTerm)) return View.Children;
+            
+            var searchStr = RelationshipSearchCaseSensitive ? RelationshipSearchTerm : RelationshipSearchTerm.ToLowerInvariant();
+            
+            return View.Children.Where(d => 
+            {
+                var nameVal = RelationshipSearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
+                var schemaVal = RelationshipSearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
+                
+                if (RelationshipSearchExactMatch) 
+                    return nameVal == searchStr || schemaVal == searchStr;
+                if (RelationshipSearchMatchWholeWord) 
+                    return nameVal.Split('_', '-', '.').Contains(searchStr) || schemaVal.Split('_', '-', '.').Contains(searchStr);
+                    
+                return nameVal.Contains(searchStr) || schemaVal.Contains(searchStr);
+            });
+        }
+    }
+
+    private IEnumerable<Dependency> FilteredProcedures
+    {
+        get
+        {
+            if (View == null) return Array.Empty<Dependency>();
+            if (string.IsNullOrWhiteSpace(ProcedureSearchTerm)) return View.ReferencedBySPs;
+            
+            var searchStr = ProcedureSearchCaseSensitive ? ProcedureSearchTerm : ProcedureSearchTerm.ToLowerInvariant();
+            
+            return View.ReferencedBySPs.Where(d => 
+            {
+                var nameVal = ProcedureSearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
+                var schemaVal = ProcedureSearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
+                
+                if (ProcedureSearchExactMatch) 
+                    return nameVal == searchStr || schemaVal == searchStr;
+                if (ProcedureSearchMatchWholeWord) 
+                    return nameVal.Split('_', '-', '.').Contains(searchStr) || schemaVal.Split('_', '-', '.').Contains(searchStr);
+                    
+                return nameVal.Contains(searchStr) || schemaVal.Contains(searchStr);
+            });
+        }
+    }
 
     private List<ColumnInfo> VisibleColumns => FilterColumns(ColumnSearchTerm, ColumnSearchCaseSensitive, ColumnSearchMatchWholeWord, ColumnSearchExactMatch);
     private string SelectQuery => $"SELECT TOP 100 * FROM {QuotedViewName(View!)};";

@@ -26,8 +26,23 @@
             </div>
             <label class="text-muted small mb-0 ms-2">per page</label>
         </div>
-        <div style="width: 250px;">
-            <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search in results..." @bind="SearchTerm" @bind:event="oninput" />
+        <div style="width: 350px;">
+            <div class="input-group input-group-sm flex-grow-1" style="min-width: 0;">
+                <input type="text"
+                       class="form-control bg-dark text-white border-secondary shadow-none"
+                       placeholder="Search in results..."
+                       @bind="SearchTerm"
+                       @bind:event="oninput" />
+                <button class="btn @(SearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => SearchCaseSensitive = !SearchCaseSensitive">
+                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                </button>
+                <button class="btn @(SearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { SearchMatchWholeWord = !SearchMatchWholeWord; if (SearchMatchWholeWord) SearchExactMatch = false; }">
+                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                </button>
+                <button class="btn @(SearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { SearchExactMatch = !SearchExactMatch; if (SearchExactMatch) SearchMatchWholeWord = false; }">
+                    <i class="bi bi-bullseye fs-6"></i>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -141,6 +156,27 @@ else
         }
     }
 
+    private bool _searchCaseSensitive = false;
+    private bool SearchCaseSensitive
+    {
+        get => _searchCaseSensitive;
+        set { _searchCaseSensitive = value; CurrentPage = 1; }
+    }
+    
+    private bool _searchMatchWholeWord = false;
+    private bool SearchMatchWholeWord
+    {
+        get => _searchMatchWholeWord;
+        set { _searchMatchWholeWord = value; CurrentPage = 1; }
+    }
+    
+    private bool _searchExactMatch = false;
+    private bool SearchExactMatch
+    {
+        get => _searchExactMatch;
+        set { _searchExactMatch = value; CurrentPage = 1; }
+    }
+
     private int _pageSize = 24;
     private bool IsPageSizeDropdownOpen = false;
     private int PageSize
@@ -184,9 +220,24 @@ else
             if (string.IsNullOrWhiteSpace(SearchTerm))
                 return Rows;
 
-            var lowerSearch = SearchTerm.ToLowerInvariant();
+            var searchStr = SearchCaseSensitive ? SearchTerm : SearchTerm.ToLowerInvariant();
+            
             return Rows.Where(r => 
-                r.Values.Any(v => v != null && v.ToString()!.ToLowerInvariant().Contains(lowerSearch))
+                r.Values.Any(v => 
+                {
+                    if (v == null) return false;
+                    var valStr = SearchCaseSensitive ? v.ToString()! : v.ToString()!.ToLowerInvariant();
+                    
+                    if (SearchExactMatch)
+                    {
+                        return valStr == searchStr;
+                    }
+                    if (SearchMatchWholeWord)
+                    {
+                        return valStr.Split(' ', '.', '_', '-', ',', ';', ':', '/', '\\').Contains(searchStr);
+                    }
+                    return valStr.Contains(searchStr);
+                })
             ).ToList();
         }
     }
