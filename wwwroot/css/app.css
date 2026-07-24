@@ -332,4 +332,5 @@ body {
 *::-webkit-scrollbar-thumb:hover,
 .custom-scrollbar-light::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
 }
