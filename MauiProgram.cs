@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using ExploreDB.Services;
 using Microsoft.Extensions.Configuration;
 using System.IO;
+using Microsoft.Maui.LifecycleEvents;
 
 namespace ExploreDB;
 
@@ -16,7 +17,28 @@ public static class MauiProgram
 			.ConfigureFonts(fonts =>
 			{
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-			});
+			})
+#if WINDOWS
+            .ConfigureLifecycleEvents(events =>
+            {
+                events.AddWindows(wndLifeCycleBuilder =>
+                {
+                    wndLifeCycleBuilder.OnWindowCreated(window =>
+                    {
+                        try
+                        {
+                            var handle = WinRT.Interop.WindowNative.GetWindowHandle(window);
+                            var id = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(handle);
+                            var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(id);
+                            
+                            var iconPath = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "Images\\app.ico");
+                            appWindow.SetIcon(iconPath);
+                        }
+                        catch { }
+                    });
+                });
+            });
+#endif
 
 		builder.Services.AddMauiBlazorWebView();
 

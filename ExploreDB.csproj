@@ -23,6 +23,7 @@
         <Version>1.1.2.0</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+        <ApplicationIcon>Platforms\Windows\Images\app.ico</ApplicationIcon>
 		
     </PropertyGroup>
 

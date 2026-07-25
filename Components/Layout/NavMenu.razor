@@ -5,20 +5,18 @@
 @implements IDisposable
 
 <div class="d-flex flex-column h-100">
-    <div class="p-3 border-bottom border-secondary">
-        <h5 class="text-white mb-2">
-            <span>ExploreDB</span>
-        </h5>
+    <div class="px-3 pb-3 pt-2 border-bottom border-secondary">
         @if (!string.IsNullOrEmpty(ActiveServer))
         {
-            <div class="mt-2">
-                <label class="small text-muted mb-1" style="font-size: 0.75rem;">@ActiveServer</label>
+            <div>
+                <label class="small text-muted mb-2 text-truncate d-block" title="@ActiveServer" style="font-size: 0.75rem; max-width: 100%;">@ActiveServer</label>
                 <div class="position-relative">
                     <input class="form-control form-control-sm bg-dark text-white border-secondary pe-4" 
                            @bind="DatabaseSearch" 
                            @bind:event="oninput"
                            placeholder="Search database..." 
-                           @onfocus="OpenDropdown" />
+                           @onfocus="OpenDropdown"
+                           style="cursor: pointer;" />
                     
                     @if (IsDropdownOpen)
                     {

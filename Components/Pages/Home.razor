@@ -61,7 +61,7 @@
                     @if (ActiveBuilderTab == "Available")
                     {
                         <!-- Search header -->
-                        <div class="p-2 mt-2 border-bottom border-secondary" style="background: #1a1d20; z-index: 25; flex-shrink: 0;">
+                        <div class="p-2 pt-3 border-bottom border-secondary" style="background: #1a1d20; z-index: 25; flex-shrink: 0;">
                             <div class="row g-2">
                                 @if (CurrentMode != QueryMode.Select)
                                 {
@@ -121,22 +121,33 @@
                                         </button>
                                     </div>
                                     
-                                    <div class="position-relative w-100 mt-1">
-                                        <div class="form-control form-control-sm bg-black text-white border-secondary position-relative cursor-pointer" @onclick="() => IsScopeDropdownOpen = !IsScopeDropdownOpen">
-                                            <span>@(SearchFilter == "All" ? "Tables & Columns" : SearchFilter == "Table" ? "Tables Only" : "Columns Only")</span>
-                                            <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
-                                                <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
-                                            </div>
+                                    <div class="d-flex align-items-center px-1">
+                                        <div class="form-check form-check-inline mb-0">
+                                            <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="searchTable" 
+                                                   checked="@(SearchFilter == "All" || SearchFilter == "Table")" 
+                                                   @onchange='(e) => { 
+                                                       bool isChecked = (bool)(e.Value ?? false);
+                                                       bool isColumnChecked = SearchFilter == "All" || SearchFilter == "Column";
+                                                       if (isChecked && isColumnChecked) SearchFilter = "All";
+                                                       else if (isChecked) SearchFilter = "Table";
+                                                       else if (isColumnChecked) SearchFilter = "Column";
+                                                       else SearchFilter = "None";
+                                                   }'>
+                                            <label class="form-check-label text-light small cursor-pointer user-select-none" for="searchTable">Table</label>
                                         </div>
-                                        @if (IsScopeDropdownOpen)
-                                        {
-                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsScopeDropdownOpen = false"></div>
-                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050;">
-                                                <button class="dropdown-item text-white @(SearchFilter == "All" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "All"; IsScopeDropdownOpen = false; }'>Tables & Columns</button>
-                                                <button class="dropdown-item text-white @(SearchFilter == "Table" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "Table"; IsScopeDropdownOpen = false; }'>Tables Only</button>
-                                                <button class="dropdown-item text-white @(SearchFilter == "Column" ? "bg-primary" : "") py-2" type="button" @onclick='() => { SearchFilter = "Column"; IsScopeDropdownOpen = false; }'>Columns Only</button>
-                                            </div>
-                                        }
+                                        <div class="form-check form-check-inline mb-0">
+                                            <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="searchColumn" 
+                                                   checked="@(SearchFilter == "All" || SearchFilter == "Column")" 
+                                                   @onchange='(e) => { 
+                                                       bool isChecked = (bool)(e.Value ?? false);
+                                                       bool isTableChecked = SearchFilter == "All" || SearchFilter == "Table";
+                                                       if (isChecked && isTableChecked) SearchFilter = "All";
+                                                       else if (isChecked) SearchFilter = "Column";
+                                                       else if (isTableChecked) SearchFilter = "Table";
+                                                       else SearchFilter = "None";
+                                                   }'>
+                                            <label class="form-check-label text-light small cursor-pointer user-select-none" for="searchColumn">Column</label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -588,6 +599,7 @@
         {
             "Table" => tableMatches,
             "Column" => colMatches,
+            "None" => false,
             _ => tableMatches || colMatches
         };
     }
