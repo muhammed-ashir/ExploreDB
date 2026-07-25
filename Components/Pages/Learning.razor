@@ -1,7 +1,8 @@
 @page "/learning"
+@using ExploreDB.Services
 
 <div class="container-fluid h-100 d-flex flex-column pb-5">
-    @if (string.IsNullOrEmpty(ActiveTopic))
+    @if (string.IsNullOrEmpty(ActiveTopicId))
     {
         <div class="row mb-4">
             <div class="col">
@@ -45,7 +46,8 @@
                                     <i class="bi @topic.Icon"></i>
                                 </div>
                                 <div class="overflow-hidden" style="min-width: 0;">
-                                    <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">@topic.Title</h5>
+                                    <div class="text-secondary small fw-bold text-uppercase mb-1" style="font-size: 0.7rem; letter-spacing: 1px;">@topic.Category</div>
+                                    <h6 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">@topic.Title</h6>
                                 </div>
                             </div>
                         </div>
@@ -56,44 +58,40 @@
     }
     else
     {
+        var activeTopic = AllTopics.FirstOrDefault(t => t.Id == ActiveTopicId);
+        
         <div class="mt-4 flex-grow-1 overflow-auto custom-scrollbar-light pe-3">
             <button class="btn btn-outline-secondary btn-sm mb-4 text-light border-secondary hover-bg-dark" @onclick='() => SetTopic("")'>
                 <i class="bi bi-arrow-left me-2"></i> Back to Topics
             </button>
             
-            @if (ActiveTopic == "joins")
+            @if (activeTopic != null)
             {
-                <JoinGuide />
-            }
-            else if (ActiveTopic == "tricks")
-            {
-                <DbTricks />
-            }
-            else if (ActiveTopic == "advanced")
-            {
-                <AdvancedSql />
+                <div class="mb-4">
+                    <div class="mb-2">
+                        <h2 class="fw-bold mb-0">@activeTopic.Title</h2>
+                    </div>
+                    <div class="text-secondary small fw-bold text-uppercase" style="letter-spacing: 1px;">@activeTopic.Category</div>
+                </div>
+
+                <div class="topic-content">
+                    @((MarkupString)activeTopic.ContentHtml)
+                </div>
             }
         </div>
     }
 </div>
 
 @code {
-    private string ActiveTopic = "";
+    private string ActiveTopicId = "";
     private string SearchTerm = "";
     private bool SearchCaseSensitive = false;
     private bool SearchMatchWholeWord = false;
     private bool SearchExactMatch = false;
 
-    private record TopicCard(string Id, string Title, string Icon, string ColorClass);
+    private List<LearningTopic> AllTopics = LearningData.GetTopics();
 
-    private List<TopicCard> AllTopics = new()
-    {
-        new("joins", "Join Guide", "bi-journal-text", "text-primary"),
-        new("tricks", "DB Tricks & Tips", "bi-journal-text", "text-info"),
-        new("advanced", "Advanced SQL", "bi-journal-text", "text-warning")
-    };
-
-    private IEnumerable<TopicCard> FilteredTopics
+    private IEnumerable<LearningTopic> FilteredTopics
     {
         get
         {
@@ -104,22 +102,25 @@
             return AllTopics.Where(t => 
             {
                 var title = SearchCaseSensitive ? t.Title : t.Title.ToLowerInvariant();
+                var cat = SearchCaseSensitive ? t.Category : t.Category.ToLowerInvariant();
                 
-                if (SearchExactMatch) return title == query;
+                var searchTarget = $"{title} {cat}";
+
+                if (SearchExactMatch) return title == query || cat == query;
                 
                 if (SearchMatchWholeWord) 
                 {
-                    var parts = title.Split(new[] { ' ', '&' }, StringSplitOptions.RemoveEmptyEntries);
+                    var parts = searchTarget.Split(new[] { ' ', '&' }, StringSplitOptions.RemoveEmptyEntries);
                     return parts.Any(p => p == query);
                 }
                 
-                return title.Contains(query);
+                return searchTarget.Contains(query);
             });
         }
     }
 
-    private void SetTopic(string topic)
+    private void SetTopic(string topicId)
     {
-        ActiveTopic = topic;
+        ActiveTopicId = topicId;
     }
 }
