@@ -13,6 +13,7 @@
         width: 0.85rem;
         height: 0.85rem;
     }
+
 </style>
 
 <div class="container-fluid">
@@ -68,7 +69,7 @@
                                         <label class="small text-warning fw-bold mb-1">Target Table (To @CurrentMode)</label>
                                         <div class="position-relative w-100">
                                             <div class="form-control form-control-sm bg-black text-white border-warning position-relative cursor-pointer" @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
-                                                <span>@(string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable)</span>
+                                                <div class="text-truncate" style="padding-right: 20px;" title="@(string.IsNullOrEmpty(TargetTable) ? "" : TargetTable)">@(string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable)</div>
                                                 <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
                                                     <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
                                                 </div>
@@ -76,13 +77,15 @@
                                             @if (IsTargetTableDropdownOpen)
                                             {
                                                 <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTargetTableDropdownOpen = false"></div>
-                                                <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 250px; overflow-y: auto;">
+                                                <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 250px; overflow-y: auto; overflow-x: hidden;">
                                                     <div class="p-1 mb-1">
                                                         <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
                                                     </div>
                                                     @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
                                                     {
-                                                        <button class="dropdown-item text-white py-1 @(TargetTable == table.FullName ? "bg-primary" : "")" type="button" @onclick="() => SelectTargetTable(table.FullName)">
+                                                        <button class="dropdown-item text-white py-1 text-truncate @(TargetTable == table.FullName ? "bg-primary" : "")" type="button" 
+                                                                data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(table.FullName)" data-bs-placement="right" 
+                                                                @onclick="() => SelectTargetTable(table.FullName)">
                                                             @table.Name
                                                         </button>
                                                     }
@@ -91,7 +94,7 @@
                                         </div>
                                     </div>
                                     <hr class="border-secondary mt-1 mb-2 opacity-50"/>
-                                    <label class="small text-info fw-bold mb-1">Source/Filter Tables (To JOIN)</label>
+                                    <label class="small text-info fw-bold mb-1">Filter Tables (To JOIN)</label>
                                 }
                                 <div class="col-12 d-flex flex-column gap-2 position-relative">
                                     <div class="input-group input-group-sm shadow-sm">
@@ -163,7 +166,7 @@
                                                             aria-expanded="false" 
                                                             aria-controls="collapse_@tableId"
                                                             style="color: #6ea8fe !important; font-size: 0.75rem; min-height: 28px; padding-top: 0.35rem !important; padding-bottom: 0.35rem !important; flex: 1; min-width: 0;"
-                                                            title="@table.Name">
+                                                            data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @table.Name<br/><b>Schema:</b> @table.Schema.ToLower()" data-bs-placement="bottom">
                                                         <span class="text-truncate text-start flex-grow-1 pe-2" style="min-width: 0;">@table.Name</span>
                                                     </button>
                                                 </div>
@@ -219,8 +222,10 @@
                                         var tableName = parts.Length > 1 ? parts[1] : cleanTable;
                                         
                                         <div class="p-2 mb-2 border border-secondary rounded" style="background-color: rgba(255,255,255,0.03);">
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <div class="text-light fw-bold text-truncate cursor-pointer" style="font-size: 0.85rem;" title="View details for @table" @onclick="() => NavigateToDetails(table)">
+                                            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+                                                <div class="text-light fw-bold text-truncate cursor-pointer" style="font-size: 0.85rem;" 
+                                                     data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @tableName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom"
+                                                     @onclick="() => NavigateToDetails(table)">
                                                     @tableName
                                                 </div>
                                                 <div class="d-flex gap-1 flex-shrink-0 align-items-center">
@@ -228,9 +233,6 @@
                                                     <button class="btn btn-sm btn-link text-secondary p-0" style="text-decoration: none; @(isLast ? "cursor: not-allowed; pointer-events: auto;" : "")" title="@(isLast ? "Cannot move down - already at the bottom" : "Move Down")" disabled="@isLast" @onclick="() => MoveTable(table, 1)"><i class="bi bi-arrow-down-short fs-5"></i></button>
                                                     <button class="btn btn-sm btn-link text-danger p-0 ms-1 opacity-75" style="text-decoration: none;" title="Remove Table" @onclick="() => RemoveTable(table)"><i class="bi bi-trash fs-6"></i></button>
                                                 </div>
-                                            </div>
-                                            <div class="text-muted mb-3 pb-3 border-bottom" style="font-size: 0.65rem; letter-spacing: 0.5px; border-color: rgba(255,255,255,0.1) !important;">
-                                                <span class="text-light opacity-75 text-truncate d-inline-block align-middle cursor-pointer" style="max-width: 120px;" title="View details for @table" @onclick="() => NavigateToDetails(table)">@schemaName</span> <span class="mx-1 align-middle">|</span> <span class="badge rounded-pill border border-secondary text-secondary align-middle" style="font-size: 0.55rem; padding: 0.15rem 0.35rem; letter-spacing: 0; background-color: rgba(255,255,255,0.02);">TABLE</span>
                                             </div>
                                             <div class="d-flex flex-wrap gap-1 mt-2">
                                                 @foreach (var key in group)
@@ -264,13 +266,11 @@
                         <div class="card-body p-0">
                             <div class="table-responsive custom-scrollbar-light" style="max-height: 400px;">
                                 <table class="table table-dark table-hover mb-0 align-middle">
-                                    <thead style="position: sticky; top: 0; z-index: 10;">
-                                        <tr>
-                                            <th class="border-secondary bg-dark text-muted fw-normal" style="width: 40%;">Target Column (@TargetTable)</th>
-                                            <th class="border-secondary bg-dark text-muted fw-normal" style="width: 10%;"></th>
-                                            <th class="border-secondary bg-dark text-muted fw-normal" style="width: 50%;">Source Value / Mapped Column</th>
-                                        </tr>
-                                    </thead>
+                                    <colgroup>
+                                        <col style="width: 40%;">
+                                        <col style="width: 10%;">
+                                        <col style="width: 50%;">
+                                    </colgroup>
                                     <tbody>
                                         @foreach (var col in SchemaService.Tables.FirstOrDefault(t => t.FullName == TargetTable)?.Columns ?? new List<ColumnInfo>())
                                         {
@@ -340,13 +340,13 @@
                          {
                              <h6 class="text-info fw-bold mb-3">Join Path Routing</h6>
                              <div class="d-flex flex-wrap gap-2 align-items-center small mb-3">
-                                 <span class="badge bg-dark border border-secondary px-2 py-1 fs-6 text-light cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" title="@LastJoinPlan.RootTable" @onclick="() => NavigateToDetails(LastJoinPlan.RootTable)">@LastJoinPlan.RootTable.Split('.').Last().Replace("[", "").Replace("]", "")</span>
+                                 <span class="badge bg-dark border border-secondary px-2 py-1 fs-6 text-light cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(LastJoinPlan.RootTable)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(LastJoinPlan.RootTable)">@LastJoinPlan.RootTable.Split('.').Last().Replace("[", "").Replace("]", "")</span>
                                  @foreach (var step in LastJoinPlan.Steps)
                                  {
                                      <span class="text-secondary fw-bold fs-5">➔</span>
                                      var isIgnored = IgnoredRoutingTables.Contains(step.FullName);
                                      <div class="btn-group btn-group-sm shadow-sm">
-                                         <span class="btn btn-dark border-secondary py-1 text-light fw-bold cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" title="@step.FullName" @onclick="() => NavigateToDetails(step.FullName)">
+                                         <span class="btn btn-dark border-secondary py-1 text-light fw-bold cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(step.FullName)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(step.FullName)">
                                              @step.FullName.Split('.').Last().Replace("[", "").Replace("]", "")
                                          </span>
                                          @if (!step.IsSelectedTable)
@@ -449,7 +449,6 @@
         </div>
     </div>
 }
-}
 
 @if (ShowDeleteModal)
 {
@@ -471,6 +470,14 @@
 }
 
 @code {
+    private string GetTooltipHtml(string fullName)
+    {
+        var tableInfo = SchemaService.Tables.FirstOrDefault(t => t.FullName == fullName);
+        var schema = tableInfo?.Schema.ToLower() ?? fullName.Split('.').First().Replace("[", "").Replace("]", "").ToLower();
+        var name = tableInfo?.Name ?? fullName.Split('.').Last().Replace("[", "").Replace("]", "");
+        return $"<b>Type:</b> Table<br/><b>Name:</b> {name}<br/><b>Schema:</b> {schema}";
+    }
+
     private void NavigateToDetails(string fullName)
     {
         if (SchemaService.Tables.Any(t => t.FullName == fullName))

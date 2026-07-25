@@ -82,15 +82,16 @@
             @foreach (var table in PagedTables)
             {
                 <div class="col-12 col-xl-6 mb-3">
-                    <a href="table/@Uri.EscapeDataString(table.FullName)" class="text-decoration-none">
+                    <a href="table/@Uri.EscapeDataString(table.FullName)" class="text-decoration-none"
+                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @table.Name<br/><b>Schema:</b> @table.Schema.ToLower()" data-bs-placement="bottom">
                         <div class="card glass-card text-white node-card h-100 py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale">
-                            <div class="d-flex align-items-center gap-3 overflow-hidden">
-                                <div class="text-primary fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
+                            <div class="d-flex align-items-center gap-3 overflow-hidden w-100">
+                                <div class="text-primary fs-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px;">
                                     <i class="bi bi-table"></i>
                                 </div>
                                 <div class="overflow-hidden" style="min-width: 0;">
-                                    <h5 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">@table.Name</h5>
-                                    <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@table.Schema</span></small>
+                                    <h5 class="mb-0 fw-bold text-white text-truncate" style="letter-spacing: 0.5px;">@table.Name</h5>
+                                    <small class="text-muted fw-bold text-truncate d-block" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@table.Schema</span></small>
                                 </div>
                             </div>
                         </div>
