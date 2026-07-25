@@ -543,6 +543,17 @@ JOIN dbo.Departments d ON e.DepartmentID = d.DepartmentID
 GROUP BY d.DepartmentName;
 GO
 
+-- This view references ANOTHER view (acting as a child view)
+CREATE VIEW dbo.vw_HighTurnoverDepartments AS
+SELECT 
+    DepartmentName, 
+    TotalEmployees, 
+    TerminatedEmployees,
+    (CAST(TerminatedEmployees AS FLOAT) / NULLIF(TotalEmployees, 0)) * 100 AS TurnoverRate
+FROM dbo.vw_EmployeeTurnover
+WHERE (CAST(TerminatedEmployees AS FLOAT) / NULLIF(TotalEmployees, 0)) > 0.10;
+GO
+
 CREATE VIEW dbo.vw_ManufacturingDefects AS
 SELECT p.ProductName, al.LineName,
        COUNT(qi.InspectionID) AS TotalInspections,
@@ -590,6 +601,128 @@ BEGIN
     SET NOCOUNT ON;
     INSERT INTO dbo.PageViews (SessionID, UserID, PageURL, IPAddress)
     VALUES (@SessionID, @UserID, @PageURL, @IPAddress);
+END
+GO
+
+CREATE PROCEDURE dbo.sp_RegisterUserAndLogActivity
+    @FirstName dbo.NameType,
+    @LastName dbo.NameType,
+    @Email dbo.EmailType,
+    @SessionID NVARCHAR(100),
+    @IPAddress dbo.IPAddressType
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @NewUserID INT;
+    
+    -- Insert the new user
+    INSERT INTO dbo.Users (FirstName, LastName, Email, CreatedAt, IsActive)
+    VALUES (@FirstName, @LastName, @Email, GETDATE(), 1);
+    
+    SET @NewUserID = SCOPE_IDENTITY();
+    
+    -- CALLING ANOTHER STORED PROCEDURE HERE
+    EXEC dbo.sp_LogPageView 
+        @SessionID = @SessionID, 
+        @UserID = @NewUserID, 
+        @PageURL = '/auth/register-success', 
+        @IPAddress = @IPAddress;
+        
+    SELECT @NewUserID AS UserID;
+END
+GO
+
+CREATE PROCEDURE dbo.sp_GetComprehensiveEmployeeReport
+    @DepartmentName NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- This query pulls data by joining actual tables with a pre-aggregated view
+    SELECT 
+        e.EmployeeID,
+        u.FirstName + ' ' + u.LastName AS EmployeeName,
+        e.JobTitle,
+        e.BaseSalary,
+        et.DepartmentName,
+        et.TotalEmployees,
+        et.TerminatedEmployees,
+        (CAST(et.TerminatedEmployees AS FLOAT) / NULLIF(et.TotalEmployees, 0)) * 100 AS TurnoverPercentage
+    FROM dbo.Employees e
+    JOIN dbo.Users u ON e.UserID = u.UserID
+    JOIN dbo.Departments d ON e.DepartmentID = d.DepartmentID
+    JOIN dbo.vw_EmployeeTurnover et ON d.DepartmentName = et.DepartmentName
+    WHERE d.DepartmentName = @DepartmentName;
+END
+GO
+
+CREATE PROCEDURE dbo.sp_AnalyzeAndLogDepartmentTurnover
+    @DepartmentName NVARCHAR(100),
+    @ExecutedByUserID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @TurnoverRate FLOAT;
+    DECLARE @LogMessage NVARCHAR(1000);
+    DECLARE @SessionID NVARCHAR(100) = 'ANALYTICS_JOB_' + CAST(NEWID() AS NVARCHAR(36));
+    
+    -- 1 & 2. Referencing a VIEW (vw_EmployeeTurnover) and a TABLE (Departments)
+    SELECT 
+        @TurnoverRate = (CAST(et.TerminatedEmployees AS FLOAT) / NULLIF(et.TotalEmployees, 0)) * 100
+    FROM dbo.vw_EmployeeTurnover et
+    JOIN dbo.Departments d ON et.DepartmentName = d.DepartmentName
+    WHERE d.DepartmentName = @DepartmentName;
+    
+    SET @LogMessage = '/reports/turnover?dept=' + @DepartmentName + '&rate=' + ISNULL(CAST(@TurnoverRate AS NVARCHAR(50)), '0');
+    
+    -- 3. Calling another stored procedure
+    EXEC dbo.sp_LogPageView 
+        @SessionID = @SessionID, 
+        @UserID = @ExecutedByUserID, 
+        @PageURL = @LogMessage, 
+        @IPAddress = '127.0.0.1';
+        
+    -- Return the final analysis dataset (combining View and Table again)
+    SELECT 
+        d.DepartmentName,
+        d.ManagerUserID,
+        et.TotalEmployees,
+        et.TerminatedEmployees,
+        @TurnoverRate AS TurnoverPercentage
+    FROM dbo.vw_EmployeeTurnover et
+    JOIN dbo.Departments d ON et.DepartmentName = d.DepartmentName
+    WHERE d.DepartmentName = @DepartmentName;
+END
+GO
+
+-- =======================================================================================
+-- NO DEPENDENCY STORED PROCEDURE
+-- =======================================================================================
+CREATE PROCEDURE dbo.sp_CalculateCompoundInterest
+    @PrincipalAmount DECIMAL(18,4),
+    @AnnualInterestRate DECIMAL(5,4),
+    @Years INT,
+    @CompoundingFrequencyPerYear INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- This Stored Procedure has ZERO dependencies on any tables or views!
+    -- It purely performs mathematical calculations based on the input parameters.
+    -- Formula: A = P * (1 + r/n)^(nt)
+    
+    DECLARE @FinalAmount DECIMAL(18,4);
+    
+    SET @FinalAmount = @PrincipalAmount * POWER((1 + (@AnnualInterestRate / @CompoundingFrequencyPerYear)), (@CompoundingFrequencyPerYear * @Years));
+    
+    SELECT 
+        @PrincipalAmount AS Principal,
+        @AnnualInterestRate AS InterestRate,
+        @Years AS Years,
+        @FinalAmount AS FinalAmount,
+        (@FinalAmount - @PrincipalAmount) AS TotalInterestEarned;
 END
 GO
 
