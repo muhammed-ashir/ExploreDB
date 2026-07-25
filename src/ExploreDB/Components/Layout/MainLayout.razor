@@ -177,7 +177,7 @@
                                 
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Server Name / IP</label>
-                                    <input type="text" class="form-control bg-dark text-white border-secondary" @bind="Server" placeholder="localhost, .\SQLEXPRESS, etc." />
+                                    <input type="text" class="form-control bg-dark text-white border-secondary" @bind="Server" placeholder="e.g. server.database.windows.net or 192.168.1.50" />
                                 </div>
 
                                 <div class="mb-3">
@@ -207,7 +207,7 @@
                                 {
                                     <div class="row mb-3">
                                         <div class="@(AuthType == "EntraMfa" ? "col-12" : "col-6")">
-                                            <label class="form-label small text-muted">Username @(AuthType == "EntraMfa" ? "(Optional)" : "")</label>
+                                            <label class="form-label small text-muted">@(AuthType == "EntraMfa" ? "Email Address" : "Username")</label>
                                             <input type="text" class="form-control bg-dark text-white border-secondary" @bind="Username" placeholder="@(AuthType == "EntraMfa" ? "email@domain.com" : "")" />
                                         </div>
                                         @if (AuthType == "SqlServer")
@@ -223,7 +223,7 @@
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Database</label>
                                     <div class="position-relative">
-                                        <input class="form-control bg-dark text-white border-secondary pe-5" 
+                                        <input class="form-control bg-dark text-white border-secondary pe-5" style="cursor: pointer;"
                                                @bind="DatabaseSearch" 
                                                @bind:event="oninput"
                                                placeholder="Type to search or select..." 
@@ -599,6 +599,12 @@
     private async Task FetchDatabases()
     {
         if(string.IsNullOrWhiteSpace(Server)) return;
+        if(AuthType != "Windows" && string.IsNullOrWhiteSpace(Username)) 
+        {
+            string fieldName = AuthType == "EntraMfa" ? "Email Address" : "Username";
+            await TriggerToast($"{fieldName} is required.", "warning", "bi-exclamation-triangle-fill");
+            return;
+        }
         IsFetchingDatabases = true;
         ErrorMsg = "";
         try {
@@ -634,6 +640,7 @@
         Database = "";
         DatabaseSearch = "";
         ConnString = c.ConnectionString;
+        ErrorMsg = "";
         AvailableDatabases.Clear();
         IsDetailsVisible = true;
     }
@@ -673,6 +680,7 @@
         Database = "";
         DatabaseSearch = "";
         ConnString = "";
+        ErrorMsg = "";
         AvailableDatabases.Clear();
         IsDetailsVisible = true;
     }
@@ -728,6 +736,13 @@
         if (string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database))
         {
             await TriggerToast("Please enter valid inputs.", "danger", "bi-exclamation-circle-fill");
+            return;
+        }
+
+        if (AuthType != "Windows" && string.IsNullOrWhiteSpace(Username))
+        {
+            string fieldName = AuthType == "EntraMfa" ? "Email Address" : "Username";
+            await TriggerToast($"{fieldName} is required.", "danger", "bi-exclamation-circle-fill");
             return;
         }
 
