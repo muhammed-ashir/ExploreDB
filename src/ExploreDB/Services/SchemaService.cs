@@ -102,8 +102,10 @@ public class SpInfo
     public DateTime? CreatedDate { get; set; }
     public DateTime? ModifiedDate { get; set; }
     public List<SpParameter> Parameters { get; set; } = new();
-    // Tables and Views this SP references
+    // Tables, Views, and SPs this SP references
     public List<Dependency> Dependencies { get; set; } = new();
+    // Stored Procedures that reference this SP
+    public List<Dependency> ReferencedBySPs { get; set; } = new();
 
     public override string ToString() => FullName;
 }
@@ -414,7 +416,12 @@ public class SchemaService
                 else if (viewDict.TryGetValue(targetFull, out var depView))
                 {
                     sourceSp.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "View" });
-                    depView.ReferencedBySPs.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "SP" });
+                    depView.ReferencedBySPs.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "Procedure" });
+                }
+                else if (spDict.TryGetValue(targetFull, out var depSp))
+                {
+                    sourceSp.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Procedure" });
+                    depSp.ReferencedBySPs.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "Procedure" });
                 }
             }
 

@@ -83,9 +83,15 @@
         <div class="tab-content pb-5">
             @if (ActiveTab == "Parameters")
             {
-                <div class="card glass-card text-white">
-                    <div class="card-body">
-                        <div class="mb-4">
+                @if (Sp.Parameters == null || Sp.Parameters.Count == 0)
+                {
+                    <div class="text-muted mt-2">This stored procedure has no parameters.</div>
+                }
+                else
+                {
+                    <div class="card glass-card text-white">
+                        <div class="card-body">
+                            <div class="mb-4">
                             <div class="input-group shadow-sm w-100">
                                 <input type="text"
                                        class="form-control bg-dark text-white border-secondary shadow-none"
@@ -156,9 +162,10 @@
                                     }
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     </div>
-                </div>
+                }
             }
             else if (ActiveTab == "Dependencies")
             {
@@ -181,43 +188,112 @@
                             </button>
                         </div>
                     </div>
-                    @if (Sp.Dependencies.Count == 0)
-                    {
-                        <div class="card glass-card border-secondary text-center py-5">
-                            <div class="text-muted small fst-italic">No resolvable dependencies found.</div>
-                            <div class="mt-2">
-                                <small class="text-secondary">This can happen with cross-database references, dynamic SQL, or system procedures.</small>
-                            </div>
-                        </div>
-                    }
-                    else if (!FilteredDependencies.Any())
-                    {
-                        <div class="text-muted p-4 text-center">No matching dependencies found.</div>
-                    }
-                    else
-                    {
-                        <div class="mt-2 mb-4">
-                            <div class="row g-3">
-                                @foreach (var dep in FilteredDependencies)
-                                {
-                                    <div class="col-md-6 col-12">
-                                        <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid rgba(255, 255, 255, 0.1);"
-                                           data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
-                                            <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
-                                                <div class="@(dep.Type == "Table" ? "text-primary" : "text-success") fw-bold fs-4 flex-shrink-0">
-                                                    <i class="bi @(dep.Type == "Table" ? "bi-table" : "bi-layout-text-window")"></i>
-                                                </div>
-                                                <div class="overflow-hidden" style="min-width: 0;">
-                                                    <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@dep.Name</div>
-                                                    <div class="text-muted text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
-                                                </div>
-                                            </div>
-                                        </a>
+                    <div class="accordion schema-accordion" id="dependenciesAccordion">
+                        <div class="accordion-item glass-card mb-3 border-secondary">
+                            <h2 class="accordion-header" id="headingDependsOn">
+                                <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDependsOn" aria-expanded="true" aria-controls="collapseDependsOn">
+                                    <div class="d-flex align-items-baseline gap-2">
+                                        <span>Depends On</span>
+                                        <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="objects executed or queried by this procedure" data-bs-placement="top" style="font-size: 0.85em;"></i>
                                     </div>
-                                }
+                                </button>
+                            </h2>
+                            <div id="collapseDependsOn" class="accordion-collapse collapse show" aria-labelledby="headingDependsOn" data-bs-parent="#dependenciesAccordion">
+                                <div class="accordion-body text-white">
+                                    @if (Sp.Dependencies.Count == 0)
+                                    {
+                                        <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                            <div class="text-muted">This procedure does not depend on any objects.</div>
+                                        </div>
+                                    }
+                                    else if (!FilteredDependsOn.Any())
+                                    {
+                                        <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                            <div class="text-muted">No matching dependencies found.</div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="row g-3">
+                                            @foreach (var dep in FilteredDependsOn)
+                                            {
+                                                var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
+                                                var iconClass = isProc ? "text-warning font-monospace" : (dep.Type == "Table" ? "text-primary" : "text-success");
+                                                <div class="col-md-6 col-12">
+                                                    <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
+                                                        <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                            <div class="@iconClass fw-bold fs-4 flex-shrink-0">
+                                                                @if (isProc)
+                                                                {
+                                                                    @("{}")
+                                                                }
+                                                                else
+                                                                {
+                                                                    <i class="bi @(dep.Type == "Table" ? "bi-table" : "bi-layout-text-window")"></i>
+                                                                }
+                                                            </div>
+                                                            <div class="overflow-hidden" style="min-width: 0;">
+                                                                <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@dep.Name</div>
+                                                                <div class="text-muted text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
                             </div>
                         </div>
-                    }
+
+                        <div class="accordion-item glass-card mb-3 border-secondary">
+                            <h2 class="accordion-header" id="headingUsedBy">
+                                <button class="accordion-button fw-bold collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseUsedBy" aria-expanded="false" aria-controls="collapseUsedBy">
+                                    <div class="d-flex align-items-baseline gap-2">
+                                        <span>Used By</span>
+                                        <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="procedures that execute this procedure" data-bs-placement="top" style="font-size: 0.85em;"></i>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="collapseUsedBy" class="accordion-collapse collapse" aria-labelledby="headingUsedBy" data-bs-parent="#dependenciesAccordion">
+                                <div class="accordion-body text-white">
+                                    @if (Sp.ReferencedBySPs.Count == 0)
+                                    {
+                                        <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                            <div class="text-muted">No stored procedures execute this one.</div>
+                                        </div>
+                                    }
+                                    else if (!FilteredUsedBy.Any())
+                                    {
+                                        <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                            <div class="text-muted">No matching dependent procedures found.</div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="row g-3">
+                                            @foreach (var dep in FilteredUsedBy)
+                                            {
+                                                <div class="col-md-6 col-12">
+                                                    <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
+                                                        <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                            <div class="text-warning font-monospace fw-bold fs-4 flex-shrink-0">{}</div>
+                                                            <div class="overflow-hidden" style="min-width: 0;">
+                                                                <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@dep.Name</div>
+                                                                <div class="text-muted text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             }
             else if (ActiveTab == "Execution")
@@ -303,13 +379,39 @@
     private bool DependencySearchMatchWholeWord = false;
     private bool DependencySearchExactMatch = false;
 
-    private IEnumerable<Dependency> FilteredDependencies
+    private IEnumerable<Dependency> FilteredDependsOn
     {
         get
         {
             if (Sp == null) return Array.Empty<Dependency>();
             
             var deps = Sp.Dependencies.OrderBy(d => d.Type).ThenBy(d => d.Name);
+            if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return deps;
+            
+            var searchStr = DependencySearchCaseSensitive ? DependencySearchTerm : DependencySearchTerm.ToLowerInvariant();
+            
+            return deps.Where(d => 
+            {
+                var nameVal = DependencySearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
+                var schemaVal = DependencySearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
+                
+                if (DependencySearchExactMatch) 
+                    return nameVal == searchStr || schemaVal == searchStr;
+                if (DependencySearchMatchWholeWord) 
+                    return nameVal.Split('_', '-', '.').Contains(searchStr) || schemaVal.Split('_', '-', '.').Contains(searchStr);
+                    
+                return nameVal.Contains(searchStr) || schemaVal.Contains(searchStr);
+            });
+        }
+    }
+
+    private IEnumerable<Dependency> FilteredUsedBy
+    {
+        get
+        {
+            if (Sp == null) return Array.Empty<Dependency>();
+            
+            var deps = Sp.ReferencedBySPs.OrderBy(d => d.Type).ThenBy(d => d.Name);
             if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return deps;
             
             var searchStr = DependencySearchCaseSensitive ? DependencySearchTerm : DependencySearchTerm.ToLowerInvariant();
@@ -390,7 +492,8 @@
 
     private string BuildDependencyLink(Dependency dependency)
     {
-        var prefix = dependency.Type == "View" ? "/view" : "/table";
+        var isProc = dependency.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dependency.Type == "SP";
+        var prefix = isProc ? "/proc" : (dependency.Type == "View" ? "/view" : "/table");
         var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
         var baseLink = $"{prefix}/{Uri.EscapeDataString(dependency.FullName)}";
 

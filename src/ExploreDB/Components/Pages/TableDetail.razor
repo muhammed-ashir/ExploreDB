@@ -74,9 +74,9 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "SPs" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("SPs")' style="cursor:pointer">
-                    Procedures
+                <a class="nav-link @(ActiveTab == "UsedBy" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("UsedBy")' style="cursor:pointer">
+                    Used By
                 </a>
             </li>
             <li class="nav-item">
@@ -176,7 +176,15 @@
             else if (ActiveTab == "Relationships")
             {
                 <!-- Relationships Tab -->
-                <div class="mb-4 d-flex justify-content-start">
+                @if (Table.OutgoingKeys.Count == 0 && Table.IncomingKeys.Count == 0)
+                {
+                    <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                        <div class="text-muted">No foreign key relationships to display.</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-4 d-flex justify-content-start">
                     <div class="input-group shadow-sm w-50">
                         <input type="text"
                                class="form-control bg-dark text-white border-secondary shadow-none"
@@ -198,18 +206,25 @@
                     <div class="accordion-item glass-card mb-3 border-secondary">
                         <h2 class="accordion-header" id="headingParents">
                             <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseParents" aria-expanded="true" aria-controls="collapseParents">
-                                Parents
+                                <div class="d-flex align-items-baseline gap-2">
+                                    <span>Parents</span>
+                                    <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="tables that this table references" data-bs-placement="top" style="font-size: 0.85em;"></i>
+                                </div>
                             </button>
                         </h2>
                         <div id="collapseParents" class="accordion-collapse collapse show" aria-labelledby="headingParents" data-bs-parent="#relationshipsAccordion">
                             <div class="accordion-body text-white">
                                 @if (Table.OutgoingKeys.Count == 0)
                                 {
-                                    <div class="text-muted small fst-italic">No parent tables.</div>
+                                    <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                        <div class="text-muted">No parent tables.</div>
+                                    </div>
                                 }
                                 else if (!FilteredOutgoingKeys.Any())
                                 {
-                                    <div class="text-muted small fst-italic">No matching parent tables found.</div>
+                                    <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                        <div class="text-muted">No matching parent tables found.</div>
+                                    </div>
                                 }
                                 else
                                 {
@@ -240,18 +255,25 @@
                     <div class="accordion-item glass-card mb-3 border-secondary">
                         <h2 class="accordion-header" id="headingChildren">
                             <button class="accordion-button fw-bold collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseChildren" aria-expanded="false" aria-controls="collapseChildren">
-                                Children
+                                <div class="d-flex align-items-baseline gap-2">
+                                    <span>Children</span>
+                                    <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="tables that reference this table" data-bs-placement="top" style="font-size: 0.85em;"></i>
+                                </div>
                             </button>
                         </h2>
                         <div id="collapseChildren" class="accordion-collapse collapse" aria-labelledby="headingChildren" data-bs-parent="#relationshipsAccordion">
                             <div class="accordion-body text-white">
                                 @if (Table.IncomingKeys.Count == 0)
                                 {
-                                    <div class="text-muted small fst-italic">No child tables.</div>
+                                    <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                        <div class="text-muted">No child tables.</div>
+                                    </div>
                                 }
                                 else if (!FilteredIncomingKeys.Any())
                                 {
-                                    <div class="text-muted small fst-italic">No matching child tables found.</div>
+                                    <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                        <div class="text-muted">No matching child tables found.</div>
+                                    </div>
                                 }
                                 else
                                 {
@@ -279,60 +301,79 @@
                         </div>
                     </div>
                 </div>
+                }
             }
-            else if (ActiveTab == "SPs")
+            else if (ActiveTab == "UsedBy")
             {
-                <!-- SPs Tab -->
+                <!-- Used By Tab -->
                 <div class="text-white mt-1">
-                    <div class="mb-4 d-flex justify-content-start">
-                        <div class="input-group shadow-sm w-50">
-                            <input type="text"
-                                   class="form-control bg-dark text-white border-secondary shadow-none"
-                                   placeholder="Search procedures..."
-                                   @bind="ProcedureSearchTerm"
-                                   @bind:event="oninput" />
-                            <button class="btn @(ProcedureSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ProcedureSearchCaseSensitive = !ProcedureSearchCaseSensitive">
-                                <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
-                            </button>
-                            <button class="btn @(ProcedureSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { ProcedureSearchMatchWholeWord = !ProcedureSearchMatchWholeWord; if (ProcedureSearchMatchWholeWord) ProcedureSearchExactMatch = false; }">
-                                <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
-                            </button>
-                            <button class="btn @(ProcedureSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ProcedureSearchExactMatch = !ProcedureSearchExactMatch; if (ProcedureSearchExactMatch) ProcedureSearchMatchWholeWord = false; }">
-                                <i class="bi bi-bullseye fs-6"></i>
-                            </button>
+                    @if ((Table.ReferencedByViews.Count + Table.ReferencedBySPs.Count) == 0)
+                    {
+                        <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                            <div class="text-muted">No views or procedures reference this table.</div>
                         </div>
-                    </div>
-                    <div>
-                        @if (Table.ReferencedBySPs.Count == 0)
-                        {
-                            <div class="text-muted p-4 text-center">No stored procedures reference this table.</div>
-                        }
-                        else if (!FilteredProcedures.Any())
-                        {
-                            <div class="text-muted p-4 text-center">No matching stored procedures found.</div>
-                        }
-                        else
-                        {
-                            <div class="row g-3">
-                                @foreach (var dep in FilteredProcedures)
-                                {
-                                    var spFull = $"[{dep.Schema}].[{dep.Name}]";
-                                    <div class="col-md-6 col-12">
-                                        <a href="@BuildProcLink(spFull)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid #3d444b; border-radius: 6px;"
-                                           data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Stored Procedure<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
-                                            <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
-                                                <div class="text-warning fw-bold fs-4 font-monospace flex-shrink-0">{}</div>
-                                                <div class="overflow-hidden" style="min-width: 0;">
-                                                    <div class="fw-bold text-light mb-1 text-truncate" style="font-size: 1.1rem;">@dep.Name</div>
-                                                    <div class="text-muted fw-bold text-truncate" style="font-size: 0.7rem; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
-                                }
+                    }
+                    else
+                    {
+                        <div class="mb-4 d-flex justify-content-start">
+                            <div class="input-group shadow-sm w-50">
+                                <input type="text"
+                                       class="form-control bg-dark text-white border-secondary shadow-none"
+                                       placeholder="Search dependent views & procedures..."
+                                       @bind="UsedBySearchTerm"
+                                       @bind:event="oninput" />
+                                <button class="btn @(UsedBySearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => UsedBySearchCaseSensitive = !UsedBySearchCaseSensitive">
+                                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                </button>
+                                <button class="btn @(UsedBySearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { UsedBySearchMatchWholeWord = !UsedBySearchMatchWholeWord; if (UsedBySearchMatchWholeWord) UsedBySearchExactMatch = false; }">
+                                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                </button>
+                                <button class="btn @(UsedBySearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { UsedBySearchExactMatch = !UsedBySearchExactMatch; if (UsedBySearchExactMatch) UsedBySearchMatchWholeWord = false; }">
+                                    <i class="bi bi-bullseye fs-6"></i>
+                                </button>
                             </div>
-                        }
-                    </div>
+                        </div>
+                        <div>
+                            @if (!FilteredUsedBy.Any())
+                            {
+                                <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                    <div class="text-muted">No matching dependent objects found.</div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="row g-3">
+                                    @foreach (var dep in FilteredUsedBy)
+                                    {
+                                        var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
+                                        var link = isProc ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName);
+                                        var iconClass = isProc ? "text-warning font-monospace" : "text-success";
+                                        <div class="col-md-6 col-12">
+                                            <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                               data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
+                                                <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                    <div class="@iconClass fw-bold fs-4 flex-shrink-0">
+                                                        @if (isProc)
+                                                        {
+                                                            @("{}")
+                                                        }
+                                                        else
+                                                        {
+                                                            <i class="bi bi-layout-text-window"></i>
+                                                        }
+                                                    </div>
+                                                    <div class="overflow-hidden" style="min-width: 0;">
+                                                        <div class="fw-bold text-light mb-1 text-truncate" style="font-size: 1.1rem;">@dep.Name</div>
+                                                        <div class="text-muted fw-bold text-truncate" style="font-size: 0.7rem; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
             }
             else if (ActiveTab == "ERDTree")
@@ -369,6 +410,14 @@
                                             }
                                             else
                                             {
+                                                <style>
+                                                    .mermaid svg .entityBox,
+                                                    .mermaid svg .entityLabel,
+                                                    .mermaid svg text,
+                                                    .mermaid svg rect {
+                                                        cursor: pointer !important;
+                                                    }
+                                                </style>
                                                 <div class="mermaid w-100 h-100" style="background: transparent;">
                                                     @MermaidDefinition
                                                 </div>
@@ -428,25 +477,34 @@
                                             }
                                         </style>
 
-                                        <div class="tree-root ms-2">
+                                        @if (!Table.OutgoingKeys.Any() && !Table.IncomingKeys.Any())
+                                        {
+                                            <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                                <div class="text-muted">No foreign key relationships to display.</div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="tree-root ms-2">
 
 
-                                            @if (Table.OutgoingKeys.Any())
-                                            {
-                                                <div class="fw-bold ms-2 mb-1 text-muted">Parents</div>
-                                                <div class="ms-2 mb-3">
-                                                    @RenderUpstream(Table, new HashSet<string>())
-                                                </div>
-                                            }
+                                                @if (Table.OutgoingKeys.Any())
+                                                {
+                                                    <div class="fw-bold ms-2 mb-1 text-muted">Parents <i class="bi bi-info-circle ms-1" data-bs-tooltip="true" data-bs-title="tables that this table references" data-bs-placement="top" style="font-size: 0.85em;"></i></div>
+                                                    <div class="ms-2 mb-3">
+                                                        @RenderUpstream(Table, new HashSet<string>())
+                                                    </div>
+                                                }
 
-                                            @if (Table.IncomingKeys.Any())
-                                            {
-                                                <div class="fw-bold ms-2 mb-1 text-muted">Children</div>
-                                                <div class="ms-2">
-                                                    @RenderDownstream(Table, new HashSet<string>())
-                                                </div>
-                                            }
-                                        </div>
+                                                @if (Table.IncomingKeys.Any())
+                                                {
+                                                    <div class="fw-bold ms-2 mb-1 text-muted">Children <i class="bi bi-info-circle ms-1" data-bs-tooltip="true" data-bs-title="tables that reference this table" data-bs-placement="top" style="font-size: 0.85em;"></i></div>
+                                                    <div class="ms-2">
+                                                        @RenderDownstream(Table, new HashSet<string>())
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
                             </div>
                         </div>
                     </div>
@@ -616,10 +674,10 @@
     private bool RelationshipSearchMatchWholeWord = false;
     private bool RelationshipSearchExactMatch = false;
 
-    private string ProcedureSearchTerm = string.Empty;
-    private bool ProcedureSearchCaseSensitive = false;
-    private bool ProcedureSearchMatchWholeWord = false;
-    private bool ProcedureSearchExactMatch = false;
+    private string UsedBySearchTerm = string.Empty;
+    private bool UsedBySearchCaseSensitive = false;
+    private bool UsedBySearchMatchWholeWord = false;
+    private bool UsedBySearchExactMatch = false;
 
     private IEnumerable<Relationship> FilteredOutgoingKeys
     {
@@ -659,23 +717,25 @@
         }
     }
 
-    private IEnumerable<Dependency> FilteredProcedures
+    private IEnumerable<Dependency> FilteredUsedBy
     {
         get
         {
             if (Table == null) return Array.Empty<Dependency>();
-            if (string.IsNullOrWhiteSpace(ProcedureSearchTerm)) return Table.ReferencedBySPs;
+            var allUsedBy = Table.ReferencedByViews.Concat(Table.ReferencedBySPs);
             
-            var searchStr = ProcedureSearchCaseSensitive ? ProcedureSearchTerm : ProcedureSearchTerm.ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(UsedBySearchTerm)) return allUsedBy;
             
-            return Table.ReferencedBySPs.Where(d => 
+            var searchStr = UsedBySearchCaseSensitive ? UsedBySearchTerm : UsedBySearchTerm.ToLowerInvariant();
+            
+            return allUsedBy.Where(d => 
             {
-                var nameVal = ProcedureSearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
-                var schemaVal = ProcedureSearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
+                var nameVal = UsedBySearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
+                var schemaVal = UsedBySearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
                 
-                if (ProcedureSearchExactMatch) 
+                if (UsedBySearchExactMatch) 
                     return nameVal == searchStr || schemaVal == searchStr;
-                if (ProcedureSearchMatchWholeWord) 
+                if (UsedBySearchMatchWholeWord) 
                     return nameVal.Split('_', '-', '.').Contains(searchStr) || schemaVal.Split('_', '-', '.').Contains(searchStr);
                     
                 return nameVal.Contains(searchStr) || schemaVal.Contains(searchStr);
@@ -702,7 +762,7 @@
         TableColumnSearchTerm = string.Empty;
         UpdateColumnSearchTerm = string.Empty;
         RelationshipSearchTerm = string.Empty;
-        ProcedureSearchTerm = string.Empty;
+        UsedBySearchTerm = string.Empty;
         GenerateMermaidERD();
     }
 
@@ -795,6 +855,16 @@
             return baseLink;
         }
 
+        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
+    }
+
+    private string BuildObjectLink(string targetFullName)
+    {
+        var isView = SchemaService.Views.Any(v => v.FullName.Equals(targetFullName, StringComparison.OrdinalIgnoreCase));
+        var prefix = isView ? "/view" : "/table";
+        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var baseLink = $"{prefix}/{Uri.EscapeDataString(targetFullName)}";
+        if (string.IsNullOrWhiteSpace(currentRoute)) return baseLink;
         return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
     }
 
