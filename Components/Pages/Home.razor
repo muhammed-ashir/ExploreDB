@@ -69,7 +69,17 @@
                                         <label class="small text-warning fw-bold mb-1">Target Table (To @CurrentMode)</label>
                                         <div class="position-relative w-100">
                                             <div class="form-control form-control-sm bg-black text-white border-warning position-relative cursor-pointer" @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
-                                                <div class="text-truncate" style="padding-right: 20px;" title="@(string.IsNullOrEmpty(TargetTable) ? "" : TargetTable)">@(string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable)</div>
+                                                @{
+                                                    var targetTableNameOnly = string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault();
+                                                    var targetTooltipHtml = string.IsNullOrEmpty(TargetTable) ? null : GetTooltipHtml(TargetTable);
+                                                }
+                                                <div class="text-truncate" style="padding-right: 20px;"
+                                                     data-bs-tooltip="@(!string.IsNullOrEmpty(TargetTable) ? "true" : null)" 
+                                                     data-bs-html="@(!string.IsNullOrEmpty(TargetTable) ? "true" : null)" 
+                                                     data-bs-title="@targetTooltipHtml" 
+                                                     data-bs-placement="bottom">
+                                                    @targetTableNameOnly
+                                                </div>
                                                 <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
                                                     <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
                                                 </div>
@@ -259,17 +269,18 @@
                 @if (CurrentMode == QueryMode.Update && !string.IsNullOrEmpty(TargetTable))
                 {
                     <div class="card bg-dark border-secondary shadow-sm">
-                        <div class="card-header border-secondary fw-bold text-warning d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-sliders pe-1"></i> Update Column Mapping</span>
-                            <button class="btn btn-sm btn-outline-secondary" @onclick="ClearMappings">Reset Mappings</button>
+                        <div class="card-header border-secondary fw-bold text-warning d-flex justify-content-between align-items-center cursor-pointer" @onclick="() => IsColumnMappingOpen = !IsColumnMappingOpen">
+                            <span><i class="bi @(IsColumnMappingOpen ? "bi-chevron-down" : "bi-chevron-right") pe-1"></i> Update Column Mapping</span>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ShowResetModal = true" @onclick:stopPropagation="true">Reset</button>
                         </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive custom-scrollbar-light" style="max-height: 400px;">
+                        @if (IsColumnMappingOpen)
+                        {
+                            <div class="card-body p-0">
+                            <div class="table-responsive custom-scrollbar-light" style="max-height: 65vh; overflow-y: auto; overflow-x: visible;">
                                 <table class="table table-dark table-hover mb-0 align-middle">
                                     <colgroup>
                                         <col style="width: 40%;">
-                                        <col style="width: 10%;">
-                                        <col style="width: 50%;">
+                                        <col style="width: 60%;">
                                     </colgroup>
                                     <tbody>
                                         @foreach (var col in SchemaService.Tables.FirstOrDefault(t => t.FullName == TargetTable)?.Columns ?? new List<ColumnInfo>())
@@ -277,26 +288,21 @@
                                             var targetColName = col.Name;
                                             UpdateMappings.TryGetValue(targetColName, out var mappedValue);
                                             <tr>
-                                                <td class="border-secondary font-monospace small">@targetColName</td>
-                                                <td class="border-secondary text-center text-muted"><i class="bi bi-arrow-right"></i></td>
+                                                <td class="border-secondary font-monospace small">
+                                                    <div class="form-check form-check-inline mb-0 d-flex align-items-center">
+                                                        <input class="form-check-input bg-dark border-secondary cursor-pointer mt-0" type="checkbox" id="chk_@targetColName"
+                                                               checked="@(!string.IsNullOrEmpty(mappedValue))" 
+                                                               @onchange="(e) => ToggleColumnMapping(targetColName, (bool)(e.Value ?? false))" />
+                                                        <label class="form-check-label text-white cursor-pointer ms-2" for="chk_@targetColName">
+                                                            @targetColName
+                                                        </label>
+                                                    </div>
+                                                </td>
                                                 <td class="border-secondary">
-                                                    <select class="form-select form-select-sm bg-black text-white border-secondary" 
-                                                            value="@mappedValue" 
-                                                            @onchange="(e) => MapColumn(targetColName, e.Value?.ToString())">
-                                                        <option value="">-- Leave Unchanged --</option>
-                                                        <optgroup label="Custom Value">
-                                                            <option value="@($"@set_{targetColName}")">Parameter (@($"@set_{targetColName}"))</option>
-                                                        </optgroup>
-                                                        @if (SelectedColumns.Count > 0)
-                                                        {
-                                                            <optgroup label="Source Columns (From Selection)">
-                                                                @foreach (var sc in SelectedColumns)
-                                                                {
-                                                                    <option value="@sc">@sc</option>
-                                                                }
-                                                            </optgroup>
-                                                        }
-                                                    </select>
+                                                    <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" 
+                                                           value="@(mappedValue == $"@set_{targetColName}" ? "" : mappedValue)" 
+                                                           placeholder="@($"@set_{targetColName}")"
+                                                           @oninput="(e) => UpdateColumnMappingText(targetColName, e.Value?.ToString())" />
                                                 </td>
                                             </tr>
                                         }
@@ -304,6 +310,7 @@
                                 </table>
                             </div>
                         </div>
+                        }
                     </div>
                 }
 
@@ -469,6 +476,25 @@
     </div>
 }
 
+@if (ShowResetModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark border-secondary shadow-lg">
+                <div class="modal-body p-4 pb-2">
+                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                        Are you sure you want to reset all column mappings?
+                    </p>
+                </div>
+                <div class="modal-footer border-0 p-4 pt-2">
+                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowResetModal = false">Cancel</button>
+                    <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm text-dark" @onclick="ConfirmResetMappings">Reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private string GetTooltipHtml(string fullName)
     {
@@ -491,6 +517,7 @@
     }
 
     private bool ShowDeleteModal = false;
+    private bool ShowResetModal = false;
     private string TableToDelete = "";
     private bool ShowWarningModal { get; set; } = false;
     private string ActiveBuilderTab = "Available";
@@ -505,6 +532,7 @@
     private Dictionary<string, string?> UpdateMappings = new();
     private bool IsTargetTableDropdownOpen = false;
     private string TargetTableSearch = "";
+    private bool IsColumnMappingOpen = true;
     
     private bool IsScopeDropdownOpen = false;
     
@@ -719,6 +747,36 @@
     {
         UpdateMappings.Clear();
         Generate();
+    }
+
+    private void ConfirmResetMappings()
+    {
+        ClearMappings();
+        ShowResetModal = false;
+    }
+
+    private void ToggleColumnMapping(string targetCol, bool isChecked)
+    {
+        if (isChecked)
+        {
+            MapColumn(targetCol, $"@set_{targetCol}");
+        }
+        else
+        {
+            MapColumn(targetCol, string.Empty);
+        }
+    }
+
+    private void UpdateColumnMappingText(string targetCol, string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            MapColumn(targetCol, $"@set_{targetCol}");
+        }
+        else
+        {
+            MapColumn(targetCol, text);
+        }
     }
 
     private void MapColumn(string targetCol, string? sourceCol)

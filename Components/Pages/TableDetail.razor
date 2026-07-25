@@ -1012,10 +1012,10 @@
                 bool isCycle = path.Contains(parentTable.FullName);
 
                 <li>
-                    <a href="@BuildTableLink(parentTable.FullName)" class="text-decoration-none">
+                    <a href="@BuildTableLink(parentTable.FullName)" class="text-decoration-none"
+                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @parentTable.Name<br/><b>Schema:</b> @parentTable.Schema.ToLower()<br/><b>Join:</b> ON @(GetShortName(currentTable.Name)).@(rel.FromColumn) = @(GetShortName(parentTable.Name)).@(rel.ToColumn)" data-bs-placement="right">
                         <span style="color: #00e676; font-weight: bold;">@GetShortName(parentTable.Name)</span>
                     </a>
-                    <span class="tree-conn"> (ON @(GetShortName(currentTable.Name)).@(rel.FromColumn) = @(GetShortName(parentTable.Name)).@(rel.ToColumn))</span>
                     @if (isCycle)
                     {
                         <span class="text-danger ms-2 small">[Cycle detected]</span>
@@ -1044,10 +1044,10 @@
                 bool isCycle = path.Contains(childTable.FullName);
 
                 <li>
-                    <a href="@BuildTableLink(childTable.FullName)" class="text-decoration-none">
+                    <a href="@BuildTableLink(childTable.FullName)" class="text-decoration-none"
+                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @childTable.Name<br/><b>Schema:</b> @childTable.Schema.ToLower()<br/><b>Join:</b> ON @(GetShortName(currentTable.Name)).@(rel.ToColumn) = @(GetShortName(childTable.Name)).@(rel.FromColumn)" data-bs-placement="right">
                         <span style="color: #ff9800; font-weight: bold;">@GetShortName(childTable.Name)</span>
                     </a>
-                    <span class="tree-conn"> (ON @(GetShortName(currentTable.Name)).@(rel.ToColumn) = @(GetShortName(childTable.Name)).@(rel.FromColumn))</span>
                     @if (isCycle)
                     {
                         <span class="text-danger ms-2 small">[Cycle detected]</span>
