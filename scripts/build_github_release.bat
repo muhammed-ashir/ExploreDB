@@ -5,11 +5,11 @@ echo   Building GitHub Release
 echo ====================================================
 
 echo 1. Setting up GitHub Manifest...
-copy /Y Platforms\Windows\Package.GitHub.appxmanifest Platforms\Windows\Package.appxmanifest
+copy /Y src\ExploreDB\Platforms\Windows\Package.GitHub.appxmanifest src\ExploreDB\Platforms\Windows\Package.appxmanifest
 
 echo 2. Cleaning previous builds (Hard Clean)...
-if exist bin rmdir /s /q bin
-if exist obj rmdir /s /q obj
+if exist src\ExploreDB\bin rmdir /s /q src\ExploreDB\bin
+if exist src\ExploreDB\obj rmdir /s /q src\ExploreDB\obj
 dotnet clean
 
 echo 3. Building and Signing Package...
@@ -17,7 +17,7 @@ dotnet publish -f net8.0-windows10.0.19041.0 -c Release -r win-x64 /p:Platform=x
 
 echo 4. Copying to GitHubRelease folder...
 if not exist GitHubRelease mkdir GitHubRelease
-for /d %%D in (bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_*) do (
+for /d %%D in (src\ExploreDB\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_*) do (
     copy /Y "%%D\*.msix" GitHubRelease\
 )
 

@@ -2,8 +2,8 @@ $ErrorActionPreference = "Stop"
 
 try {
     # Read current version from GitHub AppxManifest (as the source of truth)
-    $manifestGithub = "Platforms\Windows\Package.GitHub.appxmanifest"
-    $manifestStore = "Platforms\Windows\Package.Store.appxmanifest"
+    $manifestGithub = "src\ExploreDB\Platforms\Windows\Package.GitHub.appxmanifest"
+    $manifestStore = "src\ExploreDB\Platforms\Windows\Package.Store.appxmanifest"
     
     $contentGithub = Get-Content $manifestGithub -Raw
     $contentStore = Get-Content $manifestStore -Raw
@@ -36,7 +36,7 @@ try {
     Write-Host "Bumping versions to $NewVersion..."
 
     # 1. Update ExploreDB.csproj
-    $csproj = "ExploreDB.csproj"
+    $csproj = "src\ExploreDB\ExploreDB.csproj"
     $csprojContent = Get-Content $csproj -Raw
     $csprojContent = $csprojContent -replace '(<Version>)[^<]+(</Version>)', "`${1}$NewVersion`${2}"
     $csprojContent = $csprojContent -replace '(<ApplicationDisplayVersion>)[^<]+(</ApplicationDisplayVersion>)', "`${1}$NewVersion`${2}"
