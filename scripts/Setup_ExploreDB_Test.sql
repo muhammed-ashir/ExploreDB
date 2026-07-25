@@ -1,5 +1,5 @@
 -- =======================================================================================
--- Create Database
+-- Create Database (Ultimate Enterprise Edition)
 -- =======================================================================================
 USE master;
 GO
@@ -22,52 +22,167 @@ GO
 -- =======================================================================================
 CREATE TYPE dbo.NameType FROM NVARCHAR(100) NOT NULL;
 CREATE TYPE dbo.EmailType FROM NVARCHAR(255) NOT NULL;
+CREATE TYPE dbo.PhoneType FROM NVARCHAR(50) NULL;
 CREATE TYPE dbo.MoneyType FROM DECIMAL(19,4) NOT NULL;
 CREATE TYPE dbo.AddressType FROM NVARCHAR(500) NULL;
+CREATE TYPE dbo.SKUType FROM NVARCHAR(50) NOT NULL;
+CREATE TYPE dbo.ZipCodeType FROM NVARCHAR(20) NOT NULL;
+CREATE TYPE dbo.IPAddressType FROM NVARCHAR(45) NULL;
 GO
 
 -- =======================================================================================
--- Create Tables
+-- PART 1: SYSTEM & CONFIGURATION
 -- =======================================================================================
 
--- 1. Users Table
+CREATE TABLE dbo.SystemSettings (
+    SettingKey NVARCHAR(100) PRIMARY KEY,
+    SettingValue NVARCHAR(MAX) NULL,
+    Description NVARCHAR(500) NULL,
+    LastUpdated DATETIME2 DEFAULT GETDATE()
+);
+GO
+
+CREATE TABLE dbo.Languages (
+    LanguageID INT IDENTITY(1,1) PRIMARY KEY,
+    LanguageCode NVARCHAR(10) NOT NULL UNIQUE, -- e.g., 'en-US'
+    LanguageName NVARCHAR(100) NOT NULL,
+    IsActive BIT DEFAULT 1
+);
+GO
+
+CREATE TABLE dbo.Translations (
+    TranslationID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    LanguageID INT NOT NULL,
+    EntityName NVARCHAR(100) NOT NULL,
+    EntityKey NVARCHAR(100) NOT NULL,
+    TranslatedText NVARCHAR(MAX) NOT NULL,
+    CONSTRAINT FK_Trans_Lang FOREIGN KEY (LanguageID) REFERENCES dbo.Languages(LanguageID)
+);
+GO
+
+CREATE TABLE dbo.Currencies (
+    CurrencyID INT IDENTITY(1,1) PRIMARY KEY,
+    CurrencyCode NVARCHAR(3) NOT NULL UNIQUE, -- USD, EUR
+    CurrencyName NVARCHAR(100) NOT NULL,
+    Symbol NVARCHAR(10) NOT NULL
+);
+GO
+
+CREATE TABLE dbo.ExchangeRates (
+    RateID INT IDENTITY(1,1) PRIMARY KEY,
+    FromCurrencyID INT NOT NULL,
+    ToCurrencyID INT NOT NULL,
+    ExchangeRate DECIMAL(18,6) NOT NULL,
+    EffectiveDate DATETIME2 DEFAULT GETDATE(),
+    CONSTRAINT FK_Exch_From FOREIGN KEY (FromCurrencyID) REFERENCES dbo.Currencies(CurrencyID),
+    CONSTRAINT FK_Exch_To FOREIGN KEY (ToCurrencyID) REFERENCES dbo.Currencies(CurrencyID)
+);
+GO
+
+-- =======================================================================================
+-- PART 2: IDENTITY, RBAC & USERS
+-- =======================================================================================
+
+CREATE TABLE dbo.Roles (
+    RoleID INT IDENTITY(1,1) PRIMARY KEY,
+    RoleName NVARCHAR(50) NOT NULL UNIQUE,
+    Description NVARCHAR(255) NULL
+);
+GO
+
 CREATE TABLE dbo.Users (
     UserID INT IDENTITY(1,1) PRIMARY KEY,
     FirstName dbo.NameType,
     LastName dbo.NameType,
     Email dbo.EmailType UNIQUE,
+    Phone dbo.PhoneType,
+    PasswordHash NVARCHAR(255) NULL,
+    PreferredLanguageID INT NULL,
+    PreferredCurrencyID INT NULL,
     CreatedAt DATETIME2 DEFAULT GETDATE(),
+    LastLogin DATETIME2 NULL,
     IsActive BIT DEFAULT 1,
-    ProfilePicture VARBINARY(MAX) NULL
+    ProfilePicture VARBINARY(MAX) NULL,
+    CONSTRAINT FK_Users_Lang FOREIGN KEY (PreferredLanguageID) REFERENCES dbo.Languages(LanguageID),
+    CONSTRAINT FK_Users_Curr FOREIGN KEY (PreferredCurrencyID) REFERENCES dbo.Currencies(CurrencyID)
 );
 GO
 
--- 2. UserAddresses Table
+CREATE TABLE dbo.UserRoles (
+    UserID INT NOT NULL,
+    RoleID INT NOT NULL,
+    AssignedAt DATETIME2 DEFAULT GETDATE(),
+    PRIMARY KEY (UserID, RoleID),
+    CONSTRAINT FK_UserRoles_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID) ON DELETE CASCADE,
+    CONSTRAINT FK_UserRoles_Roles FOREIGN KEY (RoleID) REFERENCES dbo.Roles(RoleID) ON DELETE CASCADE
+);
+GO
+
 CREATE TABLE dbo.UserAddresses (
     AddressID INT IDENTITY(1,1) PRIMARY KEY,
     UserID INT NOT NULL,
+    AddressType NVARCHAR(20) DEFAULT 'Shipping',
     AddressLine1 dbo.AddressType,
     AddressLine2 dbo.AddressType,
     City NVARCHAR(100) NOT NULL,
     StateProvince NVARCHAR(100) NOT NULL,
-    PostalCode NVARCHAR(20) NOT NULL,
+    PostalCode dbo.ZipCodeType,
     Country NVARCHAR(100) NOT NULL,
     IsPrimary BIT DEFAULT 0,
     CONSTRAINT FK_UserAddresses_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID) ON DELETE CASCADE
 );
 GO
 
--- 3. Categories Table
-CREATE TABLE dbo.Categories (
-    CategoryID INT IDENTITY(1,1) PRIMARY KEY,
-    ParentCategoryID INT NULL,
-    CategoryName NVARCHAR(100) NOT NULL,
-    Description NVARCHAR(MAX) NULL,
-    CONSTRAINT FK_Categories_Self FOREIGN KEY (ParentCategoryID) REFERENCES dbo.Categories(CategoryID)
+-- =======================================================================================
+-- PART 3: HUMAN RESOURCES (HR)
+-- =======================================================================================
+
+CREATE TABLE dbo.Departments (
+    DepartmentID INT IDENTITY(1,1) PRIMARY KEY,
+    DepartmentName NVARCHAR(100) NOT NULL UNIQUE,
+    ManagerUserID INT NULL,
+    CONSTRAINT FK_Dept_Manager FOREIGN KEY (ManagerUserID) REFERENCES dbo.Users(UserID)
 );
 GO
 
--- 4. Brands Table
+CREATE TABLE dbo.Employees (
+    EmployeeID INT IDENTITY(1,1) PRIMARY KEY,
+    UserID INT NOT NULL UNIQUE,
+    DepartmentID INT NOT NULL,
+    JobTitle NVARCHAR(100) NOT NULL,
+    HireDate DATE NOT NULL,
+    TerminationDate DATE NULL,
+    BaseSalary dbo.MoneyType NOT NULL,
+    CONSTRAINT FK_Emp_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID),
+    CONSTRAINT FK_Emp_Dept FOREIGN KEY (DepartmentID) REFERENCES dbo.Departments(DepartmentID)
+);
+GO
+
+CREATE TABLE dbo.Timesheets (
+    TimesheetID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    EmployeeID INT NOT NULL,
+    WorkDate DATE NOT NULL,
+    HoursWorked DECIMAL(4,2) NOT NULL,
+    IsOvertime BIT DEFAULT 0,
+    CONSTRAINT FK_Timesheet_Emp FOREIGN KEY (EmployeeID) REFERENCES dbo.Employees(EmployeeID)
+);
+GO
+
+CREATE TABLE dbo.LeaveRequests (
+    LeaveID INT IDENTITY(1,1) PRIMARY KEY,
+    EmployeeID INT NOT NULL,
+    LeaveType NVARCHAR(50) NOT NULL, -- Sick, Vacation, Personal
+    StartDate DATE NOT NULL,
+    EndDate DATE NOT NULL,
+    Status NVARCHAR(50) DEFAULT 'Pending', -- Pending, Approved, Rejected
+    CONSTRAINT FK_Leave_Emp FOREIGN KEY (EmployeeID) REFERENCES dbo.Employees(EmployeeID)
+);
+GO
+
+-- =======================================================================================
+-- PART 4: CATALOG & MANUFACTURING
+-- =======================================================================================
+
 CREATE TABLE dbo.Brands (
     BrandID INT IDENTITY(1,1) PRIMARY KEY,
     BrandName NVARCHAR(100) NOT NULL UNIQUE,
@@ -75,442 +190,493 @@ CREATE TABLE dbo.Brands (
 );
 GO
 
--- 5. Products Table
+CREATE TABLE dbo.Categories (
+    CategoryID INT IDENTITY(1,1) PRIMARY KEY,
+    ParentCategoryID INT NULL,
+    CategoryName NVARCHAR(100) NOT NULL,
+    CONSTRAINT FK_Categories_Self FOREIGN KEY (ParentCategoryID) REFERENCES dbo.Categories(CategoryID)
+);
+GO
+
 CREATE TABLE dbo.Products (
     ProductID INT IDENTITY(1,1) PRIMARY KEY,
     CategoryID INT NOT NULL,
     BrandID INT NOT NULL,
     ProductName NVARCHAR(200) NOT NULL,
-    SKU NVARCHAR(50) NOT NULL UNIQUE,
-    Price dbo.MoneyType,
-    StockQuantity INT NOT NULL DEFAULT 0,
+    SKU dbo.SKUType UNIQUE,
+    BasePrice dbo.MoneyType,
+    Weight DECIMAL(10,2) NULL,
+    Dimensions NVARCHAR(100) NULL,
     IsPublished BIT DEFAULT 1,
-    AttributesJson NVARCHAR(MAX) NULL, -- JSON Data
+    AttributesJson NVARCHAR(MAX) NULL,
     RowVersion ROWVERSION,
     CONSTRAINT FK_Products_Categories FOREIGN KEY (CategoryID) REFERENCES dbo.Categories(CategoryID),
-    CONSTRAINT FK_Products_Brands FOREIGN KEY (BrandID) REFERENCES dbo.Brands(BrandID),
-    CONSTRAINT CHK_Price_Positive CHECK (Price >= 0)
+    CONSTRAINT FK_Products_Brands FOREIGN KEY (BrandID) REFERENCES dbo.Brands(BrandID)
 );
 GO
 
--- 6. ProductReviews Table
-CREATE TABLE dbo.ProductReviews (
-    ReviewID BIGINT IDENTITY(1,1) PRIMARY KEY,
+CREATE TABLE dbo.RawMaterials (
+    MaterialID INT IDENTITY(1,1) PRIMARY KEY,
+    MaterialName NVARCHAR(100) NOT NULL UNIQUE,
+    UnitOfMeasure NVARCHAR(20) NOT NULL,
+    CostPerUnit dbo.MoneyType NOT NULL
+);
+GO
+
+CREATE TABLE dbo.BillOfMaterials (
+    BOM_ID INT IDENTITY(1,1) PRIMARY KEY,
     ProductID INT NOT NULL,
-    UserID INT NOT NULL,
-    Rating TINYINT NOT NULL CHECK (Rating BETWEEN 1 AND 5),
-    ReviewText NVARCHAR(1000) NULL,
-    ReviewDate DATETIME2 DEFAULT GETDATE(),
-    CONSTRAINT FK_ProductReviews_Products FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
-    CONSTRAINT FK_ProductReviews_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID)
+    MaterialID INT NOT NULL,
+    QuantityRequired DECIMAL(10,4) NOT NULL,
+    CONSTRAINT FK_BOM_Prod FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+    CONSTRAINT FK_BOM_Mat FOREIGN KEY (MaterialID) REFERENCES dbo.RawMaterials(MaterialID)
 );
 GO
 
--- 7. Orders Table
+CREATE TABLE dbo.AssemblyLines (
+    AssemblyLineID INT IDENTITY(1,1) PRIMARY KEY,
+    LineName NVARCHAR(100) NOT NULL,
+    Status NVARCHAR(50) DEFAULT 'Active'
+);
+GO
+
+CREATE TABLE dbo.QualityInspections (
+    InspectionID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    ProductID INT NOT NULL,
+    AssemblyLineID INT NOT NULL,
+    InspectorEmployeeID INT NOT NULL,
+    InspectionDate DATETIME2 DEFAULT GETDATE(),
+    Passed BIT NOT NULL,
+    DefectReason NVARCHAR(MAX) NULL,
+    CONSTRAINT FK_QI_Prod FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID),
+    CONSTRAINT FK_QI_Line FOREIGN KEY (AssemblyLineID) REFERENCES dbo.AssemblyLines(AssemblyLineID),
+    CONSTRAINT FK_QI_Emp FOREIGN KEY (InspectorEmployeeID) REFERENCES dbo.Employees(EmployeeID)
+);
+GO
+
+-- =======================================================================================
+-- PART 5: WAREHOUSING, INVENTORY & B2B SUPPLY CHAIN
+-- =======================================================================================
+
+CREATE TABLE dbo.Warehouses (
+    WarehouseID INT IDENTITY(1,1) PRIMARY KEY,
+    WarehouseCode NVARCHAR(20) UNIQUE NOT NULL,
+    LocationName NVARCHAR(100) NOT NULL,
+    City NVARCHAR(100),
+    Country NVARCHAR(100)
+);
+GO
+
+CREATE TABLE dbo.WarehouseInventory (
+    InventoryID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    WarehouseID INT NOT NULL,
+    ProductID INT NOT NULL,
+    StockQuantity INT NOT NULL DEFAULT 0,
+    ReorderLevel INT NOT NULL DEFAULT 10,
+    CONSTRAINT FK_Inv_Warehouses FOREIGN KEY (WarehouseID) REFERENCES dbo.Warehouses(WarehouseID),
+    CONSTRAINT FK_Inv_Products FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID)
+);
+GO
+
+CREATE TABLE dbo.Suppliers (
+    SupplierID INT IDENTITY(1,1) PRIMARY KEY,
+    SupplierName NVARCHAR(150) NOT NULL,
+    ContactEmail dbo.EmailType,
+    Phone dbo.PhoneType
+);
+GO
+
+CREATE TABLE dbo.PurchaseOrders (
+    PO_ID INT IDENTITY(1,1) PRIMARY KEY,
+    SupplierID INT NOT NULL,
+    WarehouseID INT NOT NULL,
+    OrderDate DATETIME2 DEFAULT GETDATE(),
+    Status NVARCHAR(50) DEFAULT 'Draft',
+    TotalCost dbo.MoneyType DEFAULT 0,
+    CONSTRAINT FK_PO_Suppliers FOREIGN KEY (SupplierID) REFERENCES dbo.Suppliers(SupplierID),
+    CONSTRAINT FK_PO_Warehouses FOREIGN KEY (WarehouseID) REFERENCES dbo.Warehouses(WarehouseID)
+);
+GO
+
+CREATE TABLE dbo.PurchaseOrderDetails (
+    PODetailID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    PO_ID INT NOT NULL,
+    ProductID INT NOT NULL,
+    QuantityOrdered INT NOT NULL,
+    QuantityReceived INT DEFAULT 0,
+    UnitCost dbo.MoneyType,
+    CONSTRAINT FK_POD_PO FOREIGN KEY (PO_ID) REFERENCES dbo.PurchaseOrders(PO_ID) ON DELETE CASCADE,
+    CONSTRAINT FK_POD_Products FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID)
+);
+GO
+
+-- =======================================================================================
+-- PART 6: MARKETING, ANALYTICS & AFFILIATES
+-- =======================================================================================
+
+CREATE TABLE dbo.Discounts (
+    DiscountID INT IDENTITY(1,1) PRIMARY KEY,
+    DiscountName NVARCHAR(100) NOT NULL,
+    DiscountType NVARCHAR(20) NOT NULL,
+    DiscountValue DECIMAL(18,2) NOT NULL,
+    IsActive BIT DEFAULT 1
+);
+GO
+
+CREATE TABLE dbo.CouponCodes (
+    CouponID INT IDENTITY(1,1) PRIMARY KEY,
+    DiscountID INT NOT NULL,
+    Code NVARCHAR(50) UNIQUE NOT NULL,
+    TimesUsed INT DEFAULT 0,
+    CONSTRAINT FK_Coupons_Discounts FOREIGN KEY (DiscountID) REFERENCES dbo.Discounts(DiscountID)
+);
+GO
+
+CREATE TABLE dbo.Affiliates (
+    AffiliateID INT IDENTITY(1,1) PRIMARY KEY,
+    UserID INT NOT NULL UNIQUE,
+    AffiliateCode NVARCHAR(50) UNIQUE NOT NULL,
+    CommissionRate DECIMAL(5,4) DEFAULT 0.05,
+    CONSTRAINT FK_Affil_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID)
+);
+GO
+
+CREATE TABLE dbo.AdCampaigns (
+    CampaignID INT IDENTITY(1,1) PRIMARY KEY,
+    CampaignName NVARCHAR(200) NOT NULL,
+    Platform NVARCHAR(100) NOT NULL, -- Google, Facebook, etc.
+    Budget dbo.MoneyType NOT NULL,
+    Spend dbo.MoneyType DEFAULT 0
+);
+GO
+
+CREATE TABLE dbo.PageViews (
+    ViewID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    SessionID NVARCHAR(100) NOT NULL,
+    UserID INT NULL,
+    PageURL NVARCHAR(1000) NOT NULL,
+    IPAddress dbo.IPAddressType,
+    UserAgent NVARCHAR(500) NULL,
+    ViewedAt DATETIME2 DEFAULT GETDATE()
+);
+GO
+
+-- =======================================================================================
+-- PART 7: E-COMMERCE CORE (ORDERS, CART, PAYMENTS)
+-- =======================================================================================
+
+CREATE TABLE dbo.ShoppingCart (
+    CartID UNIQUEIDENTIFIER DEFAULT NEWID() PRIMARY KEY,
+    UserID INT NULL,
+    SessionID NVARCHAR(100) NULL,
+    CreatedAt DATETIME2 DEFAULT GETDATE()
+);
+GO
+
+CREATE TABLE dbo.CartItems (
+    CartItemID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    CartID UNIQUEIDENTIFIER NOT NULL,
+    ProductID INT NOT NULL,
+    Quantity INT NOT NULL DEFAULT 1,
+    CONSTRAINT FK_CartItems_Cart FOREIGN KEY (CartID) REFERENCES dbo.ShoppingCart(CartID) ON DELETE CASCADE,
+    CONSTRAINT FK_CartItems_Products FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID)
+);
+GO
+
 CREATE TABLE dbo.Orders (
     OrderID UNIQUEIDENTIFIER DEFAULT NEWID() PRIMARY KEY,
     UserID INT NOT NULL,
     OrderDate DATETIME2 DEFAULT GETDATE(),
+    SubTotal dbo.MoneyType DEFAULT 0,
     TotalAmount dbo.MoneyType DEFAULT 0,
+    CouponID INT NULL,
+    AffiliateID INT NULL,
     Status VARCHAR(50) DEFAULT 'Pending',
     ShippingAddressID INT NULL,
     CONSTRAINT FK_Orders_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID),
-    CONSTRAINT FK_Orders_Addresses FOREIGN KEY (ShippingAddressID) REFERENCES dbo.UserAddresses(AddressID)
+    CONSTRAINT FK_Orders_Coupons FOREIGN KEY (CouponID) REFERENCES dbo.CouponCodes(CouponID),
+    CONSTRAINT FK_Orders_Affil FOREIGN KEY (AffiliateID) REFERENCES dbo.Affiliates(AffiliateID)
 );
 GO
 
--- 8. OrderDetails Table
 CREATE TABLE dbo.OrderDetails (
     OrderDetailID BIGINT IDENTITY(1,1) PRIMARY KEY,
     OrderID UNIQUEIDENTIFIER NOT NULL,
     ProductID INT NOT NULL,
+    WarehouseID INT NULL,
     Quantity INT NOT NULL CHECK (Quantity > 0),
     UnitPrice dbo.MoneyType,
-    LineTotal AS (Quantity * UnitPrice) PERSISTED, -- Computed Column
+    LineTotal AS (Quantity * UnitPrice) PERSISTED,
     CONSTRAINT FK_OrderDetails_Orders FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID) ON DELETE CASCADE,
     CONSTRAINT FK_OrderDetails_Products FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID)
 );
 GO
 
--- 9. Invoices Table
 CREATE TABLE dbo.Invoices (
     InvoiceID INT IDENTITY(1000, 1) PRIMARY KEY,
     OrderID UNIQUEIDENTIFIER NOT NULL,
     InvoiceDate DATETIME2 DEFAULT GETDATE(),
-    DueDate DATETIME2 NOT NULL,
-    TaxAmount dbo.MoneyType DEFAULT 0,
     TotalAmount dbo.MoneyType NOT NULL,
     IsPaid BIT DEFAULT 0,
     CONSTRAINT FK_Invoices_Orders FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID)
 );
 GO
 
--- 10. Payments Table
 CREATE TABLE dbo.Payments (
     PaymentID UNIQUEIDENTIFIER DEFAULT NEWID() PRIMARY KEY,
     InvoiceID INT NOT NULL,
     PaymentMethod VARCHAR(50) NOT NULL,
     AmountPaid dbo.MoneyType NOT NULL,
     PaymentDate DATETIME2 DEFAULT GETDATE(),
-    TransactionID NVARCHAR(100) NULL,
     CONSTRAINT FK_Payments_Invoices FOREIGN KEY (InvoiceID) REFERENCES dbo.Invoices(InvoiceID)
 );
 GO
 
--- 11. Shipping Table
-CREATE TABLE dbo.Shipping (
-    ShippingID BIGINT IDENTITY(1,1) PRIMARY KEY,
+-- =======================================================================================
+-- PART 8: LOGISTICS, FLEET & SHIPPING
+-- =======================================================================================
+
+CREATE TABLE dbo.ShippingCarriers (
+    CarrierID INT IDENTITY(1,1) PRIMARY KEY,
+    CarrierName NVARCHAR(100) NOT NULL UNIQUE,
+    APIEndpoint NVARCHAR(500) NULL
+);
+GO
+
+CREATE TABLE dbo.ShippingMethods (
+    MethodID INT IDENTITY(1,1) PRIMARY KEY,
+    CarrierID INT NOT NULL,
+    MethodName NVARCHAR(100) NOT NULL,
+    BaseCost dbo.MoneyType NOT NULL,
+    EstimatedDays INT NOT NULL,
+    CONSTRAINT FK_ShipMethod_Carrier FOREIGN KEY (CarrierID) REFERENCES dbo.ShippingCarriers(CarrierID)
+);
+GO
+
+CREATE TABLE dbo.VehicleFleet (
+    VehicleID INT IDENTITY(1,1) PRIMARY KEY,
+    LicensePlate NVARCHAR(20) NOT NULL UNIQUE,
+    VehicleType NVARCHAR(50) NOT NULL, -- Truck, Van, Bike
+    CapacityWeight DECIMAL(10,2) NULL,
+    Status NVARCHAR(50) DEFAULT 'Active'
+);
+GO
+
+CREATE TABLE dbo.Shipments (
+    ShipmentID BIGINT IDENTITY(1,1) PRIMARY KEY,
     OrderID UNIQUEIDENTIFIER NOT NULL,
+    MethodID INT NOT NULL,
+    VehicleID INT NULL,
     TrackingNumber NVARCHAR(100) NULL,
-    Carrier NVARCHAR(100) NULL,
-    EstimatedDelivery DATETIME2 NULL,
-    ActualDelivery DATETIME2 NULL,
+    DispatchedAt DATETIME2 NULL,
+    DeliveredAt DATETIME2 NULL,
     Status NVARCHAR(50) DEFAULT 'Processing',
-    CONSTRAINT FK_Shipping_Orders FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID)
+    CONSTRAINT FK_Ship_Orders FOREIGN KEY (OrderID) REFERENCES dbo.Orders(OrderID),
+    CONSTRAINT FK_Ship_Method FOREIGN KEY (MethodID) REFERENCES dbo.ShippingMethods(MethodID),
+    CONSTRAINT FK_Ship_Vehicle FOREIGN KEY (VehicleID) REFERENCES dbo.VehicleFleet(VehicleID)
 );
 GO
 
--- 12. AuditLog Table (For Tracking system events)
-CREATE TABLE dbo.AuditLog (
-    LogID BIGINT IDENTITY(1,1) PRIMARY KEY,
-    TableName NVARCHAR(128) NOT NULL,
-    Action NVARCHAR(50) NOT NULL,
-    RecordID NVARCHAR(100) NOT NULL,
-    OldData NVARCHAR(MAX) NULL,
-    NewData NVARCHAR(MAX) NULL,
-    ChangedBy NVARCHAR(128) DEFAULT SUSER_SNAME(),
-    ChangedAt DATETIME2 DEFAULT GETDATE()
+-- =======================================================================================
+-- PART 9: COMMUNITY & FORUMS
+-- =======================================================================================
+
+CREATE TABLE dbo.Forums (
+    ForumID INT IDENTITY(1,1) PRIMARY KEY,
+    ForumName NVARCHAR(100) NOT NULL,
+    Description NVARCHAR(500) NULL,
+    DisplayOrder INT DEFAULT 0
 );
 GO
 
--- 13. Wishlists Table
-CREATE TABLE dbo.Wishlists (
-    WishlistID INT IDENTITY(1,1) PRIMARY KEY,
+CREATE TABLE dbo.ForumTopics (
+    TopicID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    ForumID INT NOT NULL,
     UserID INT NOT NULL,
-    ListName NVARCHAR(100) NOT NULL,
+    Title NVARCHAR(255) NOT NULL,
     CreatedAt DATETIME2 DEFAULT GETDATE(),
-    CONSTRAINT FK_Wishlists_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID)
+    IsPinned BIT DEFAULT 0,
+    IsLocked BIT DEFAULT 0,
+    CONSTRAINT FK_Topic_Forum FOREIGN KEY (ForumID) REFERENCES dbo.Forums(ForumID),
+    CONSTRAINT FK_Topic_User FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID)
 );
 GO
 
--- 14. WishlistItems Table
-CREATE TABLE dbo.WishlistItems (
-    WishlistItemID BIGINT IDENTITY(1,1) PRIMARY KEY,
-    WishlistID INT NOT NULL,
-    ProductID INT NOT NULL,
-    AddedAt DATETIME2 DEFAULT GETDATE(),
-    CONSTRAINT FK_WishlistItems_Wishlists FOREIGN KEY (WishlistID) REFERENCES dbo.Wishlists(WishlistID) ON DELETE CASCADE,
-    CONSTRAINT FK_WishlistItems_Products FOREIGN KEY (ProductID) REFERENCES dbo.Products(ProductID)
+CREATE TABLE dbo.ForumPosts (
+    PostID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    TopicID BIGINT NOT NULL,
+    UserID INT NOT NULL,
+    PostBody NVARCHAR(MAX) NOT NULL,
+    CreatedAt DATETIME2 DEFAULT GETDATE(),
+    CONSTRAINT FK_Post_Topic FOREIGN KEY (TopicID) REFERENCES dbo.ForumTopics(TopicID),
+    CONSTRAINT FK_Post_User FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID)
+);
+GO
+
+CREATE TABLE dbo.Badges (
+    BadgeID INT IDENTITY(1,1) PRIMARY KEY,
+    BadgeName NVARCHAR(100) NOT NULL,
+    IconURL NVARCHAR(500) NULL
+);
+GO
+
+CREATE TABLE dbo.UserBadges (
+    UserBadgeID BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserID INT NOT NULL,
+    BadgeID INT NOT NULL,
+    AwardedAt DATETIME2 DEFAULT GETDATE(),
+    CONSTRAINT FK_UB_Users FOREIGN KEY (UserID) REFERENCES dbo.Users(UserID),
+    CONSTRAINT FK_UB_Badges FOREIGN KEY (BadgeID) REFERENCES dbo.Badges(BadgeID)
 );
 GO
 
 -- =======================================================================================
--- Create Views
+-- VIEWS (Complex Analytics)
 -- =======================================================================================
 
--- View: Active Users List
-CREATE VIEW dbo.vw_ActiveUsers AS
-SELECT UserID, FirstName + ' ' + LastName AS FullName, Email, CreatedAt
-FROM dbo.Users WHERE IsActive = 1;
+CREATE VIEW dbo.vw_EmployeeTurnover AS
+SELECT d.DepartmentName, 
+       COUNT(e.EmployeeID) AS TotalEmployees,
+       SUM(CASE WHEN e.TerminationDate IS NOT NULL THEN 1 ELSE 0 END) AS TerminatedEmployees
+FROM dbo.Employees e
+JOIN dbo.Departments d ON e.DepartmentID = d.DepartmentID
+GROUP BY d.DepartmentName;
 GO
 
--- View: Order Summary
-CREATE VIEW dbo.vw_OrderSummary AS
-SELECT o.OrderID, u.FirstName + ' ' + u.LastName AS CustomerName, o.OrderDate, o.Status,
-       COUNT(od.ProductID) AS TotalItems, SUM(od.LineTotal) AS CalculatedTotal
-FROM dbo.Orders o
-JOIN dbo.Users u ON o.UserID = u.UserID
-JOIN dbo.OrderDetails od ON o.OrderID = od.OrderID
-GROUP BY o.OrderID, u.FirstName, u.LastName, o.OrderDate, o.Status;
+CREATE VIEW dbo.vw_ManufacturingDefects AS
+SELECT p.ProductName, al.LineName,
+       COUNT(qi.InspectionID) AS TotalInspections,
+       SUM(CASE WHEN qi.Passed = 0 THEN 1 ELSE 0 END) AS FailedInspections,
+       CAST(SUM(CASE WHEN qi.Passed = 0 THEN 1 ELSE 0 END) AS FLOAT) / COUNT(qi.InspectionID) AS DefectRate
+FROM dbo.QualityInspections qi
+JOIN dbo.Products p ON qi.ProductID = p.ProductID
+JOIN dbo.AssemblyLines al ON qi.AssemblyLineID = al.AssemblyLineID
+GROUP BY p.ProductName, al.LineName;
 GO
 
--- View: Product Details with Brand and Category
-CREATE VIEW dbo.vw_ProductDetails AS
-SELECT p.ProductID, p.SKU, p.ProductName, b.BrandName, c.CategoryName, p.Price, p.StockQuantity, p.IsPublished
-FROM dbo.Products p
-JOIN dbo.Brands b ON p.BrandID = b.BrandID
-JOIN dbo.Categories c ON p.CategoryID = c.CategoryID;
-GO
-
--- View: Unpaid Invoices
-CREATE VIEW dbo.vw_UnpaidInvoices AS
-SELECT i.InvoiceID, o.OrderID, u.FirstName + ' ' + u.LastName AS CustomerName, 
-       i.InvoiceDate, i.DueDate, i.TotalAmount, DATEDIFF(DAY, i.DueDate, GETDATE()) AS DaysOverdue
-FROM dbo.Invoices i
-JOIN dbo.Orders o ON i.OrderID = o.OrderID
-JOIN dbo.Users u ON o.UserID = u.UserID
-WHERE i.IsPaid = 0;
-GO
-
--- View: High Value Customers
-CREATE VIEW dbo.vw_HighValueCustomers AS
-SELECT u.UserID, u.FirstName + ' ' + u.LastName AS CustomerName, u.Email, SUM(o.TotalAmount) AS TotalSpent
-FROM dbo.Users u
-JOIN dbo.Orders o ON u.UserID = o.UserID
-WHERE o.Status = 'Completed'
-GROUP BY u.UserID, u.FirstName, u.LastName, u.Email
-HAVING SUM(o.TotalAmount) > 1000; -- Threshold for high value
-GO
-
--- View: Recent Reviews
-CREATE VIEW dbo.vw_RecentReviews AS
-SELECT TOP 100 r.ReviewID, p.ProductName, u.FirstName, r.Rating, r.ReviewText, r.ReviewDate
-FROM dbo.ProductReviews r
-JOIN dbo.Products p ON r.ProductID = p.ProductID
-JOIN dbo.Users u ON r.UserID = u.UserID
-ORDER BY r.ReviewDate DESC;
+CREATE VIEW dbo.vw_TrafficSources AS
+SELECT UserAgent, COUNT(ViewID) AS TotalHits, 
+       COUNT(DISTINCT SessionID) AS UniqueSessions
+FROM dbo.PageViews
+GROUP BY UserAgent;
 GO
 
 -- =======================================================================================
--- Create Functions
+-- STORED PROCEDURES & FUNCTIONS
 -- =======================================================================================
 
--- Scalar: Calculate Tax
-CREATE FUNCTION dbo.fn_CalculateTax (@Amount dbo.MoneyType, @TaxRate DECIMAL(5,4))
+CREATE FUNCTION dbo.fn_ConvertCurrency (@Amount dbo.MoneyType, @FromCode NVARCHAR(3), @ToCode NVARCHAR(3))
 RETURNS dbo.MoneyType
 AS
 BEGIN
-    RETURN @Amount * @TaxRate;
+    IF @FromCode = @ToCode RETURN @Amount;
+    
+    DECLARE @Rate DECIMAL(18,6);
+    SELECT TOP 1 @Rate = ExchangeRate
+    FROM dbo.ExchangeRates er
+    JOIN dbo.Currencies c1 ON er.FromCurrencyID = c1.CurrencyID
+    JOIN dbo.Currencies c2 ON er.ToCurrencyID = c2.CurrencyID
+    WHERE c1.CurrencyCode = @FromCode AND c2.CurrencyCode = @ToCode
+    ORDER BY EffectiveDate DESC;
+    
+    RETURN ISNULL(@Amount * @Rate, @Amount);
 END
 GO
 
--- Scalar: Get Average Product Rating
-CREATE FUNCTION dbo.fn_GetProductRating (@ProductID INT)
-RETURNS DECIMAL(3,2)
+CREATE PROCEDURE dbo.sp_LogPageView
+    @SessionID NVARCHAR(100), @UserID INT = NULL, @PageURL NVARCHAR(1000), @IPAddress dbo.IPAddressType = NULL
 AS
 BEGIN
-    DECLARE @AvgRating DECIMAL(3,2);
-    SELECT @AvgRating = AVG(CAST(Rating AS DECIMAL(3,2)))
-    FROM dbo.ProductReviews WHERE ProductID = @ProductID;
-    RETURN ISNULL(@AvgRating, 0);
+    SET NOCOUNT ON;
+    INSERT INTO dbo.PageViews (SessionID, UserID, PageURL, IPAddress)
+    VALUES (@SessionID, @UserID, @PageURL, @IPAddress);
 END
-GO
-
--- TVF: Get Orders By Date Range
-CREATE FUNCTION dbo.fn_GetOrdersByDateRange (@StartDate DATETIME2, @EndDate DATETIME2)
-RETURNS TABLE
-AS
-RETURN (
-    SELECT OrderID, UserID, OrderDate, TotalAmount, Status
-    FROM dbo.Orders
-    WHERE OrderDate BETWEEN @StartDate AND @EndDate
-);
-GO
-
--- TVF: Get User Wishlist details
-CREATE FUNCTION dbo.fn_GetUserWishlist (@UserID INT)
-RETURNS TABLE
-AS
-RETURN (
-    SELECT w.ListName, p.ProductName, p.Price, wi.AddedAt
-    FROM dbo.Wishlists w
-    JOIN dbo.WishlistItems wi ON w.WishlistID = wi.WishlistID
-    JOIN dbo.Products p ON wi.ProductID = p.ProductID
-    WHERE w.UserID = @UserID
-);
 GO
 
 -- =======================================================================================
--- Create Stored Procedures
+-- THE ULTIMATE MASSIVE DATA GENERATOR (100k+ Records)
 -- =======================================================================================
-
--- SP: Add Product Review
-CREATE PROCEDURE dbo.sp_AddProductReview
-    @ProductID INT, @UserID INT, @Rating TINYINT, @ReviewText NVARCHAR(1000)
+CREATE PROCEDURE dbo.sp_GenerateUltimateDummyData
 AS
 BEGIN
     SET NOCOUNT ON;
-    INSERT INTO dbo.ProductReviews (ProductID, UserID, Rating, ReviewText)
-    VALUES (@ProductID, @UserID, @Rating, @ReviewText);
-END
-GO
+    PRINT 'Initiating Ultimate Bulk Data Generation (This will generate 100k+ records)...';
 
--- SP: Generate Invoice
-CREATE PROCEDURE dbo.sp_GenerateInvoice
-    @OrderID UNIQUEIDENTIFIER, @TaxRate DECIMAL(5,4) = 0.08
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @TotalAmount dbo.MoneyType, @TaxAmount dbo.MoneyType;
-    
-    SELECT @TotalAmount = SUM(LineTotal) FROM dbo.OrderDetails WHERE OrderID = @OrderID;
-    SET @TaxAmount = dbo.fn_CalculateTax(@TotalAmount, @TaxRate);
-    
-    INSERT INTO dbo.Invoices (OrderID, DueDate, TaxAmount, TotalAmount, IsPaid)
-    VALUES (@OrderID, DATEADD(DAY, 30, GETDATE()), @TaxAmount, @TotalAmount + @TaxAmount, 0);
-END
-GO
+    -- Base config
+    INSERT INTO dbo.Currencies (CurrencyCode, CurrencyName, Symbol) VALUES ('USD', 'US Dollar', '$'), ('EUR', 'Euro', '€'), ('GBP', 'British Pound', '£');
+    INSERT INTO dbo.Languages (LanguageCode, LanguageName) VALUES ('en-US', 'English'), ('es-ES', 'Spanish'), ('fr-FR', 'French');
+    INSERT INTO dbo.Roles (RoleName) VALUES ('Admin'), ('Customer'), ('Support'), ('Employee'), ('Affiliate');
 
--- SP: Process Payment
-CREATE PROCEDURE dbo.sp_ProcessPayment
-    @InvoiceID INT, @PaymentMethod VARCHAR(50), @AmountPaid dbo.MoneyType, @TransactionID NVARCHAR(100)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    BEGIN TRY
-        BEGIN TRANSACTION;
-        
-        INSERT INTO dbo.Payments (InvoiceID, PaymentMethod, AmountPaid, TransactionID)
-        VALUES (@InvoiceID, @PaymentMethod, @AmountPaid, @TransactionID);
-        
-        DECLARE @TotalPaid dbo.MoneyType, @InvoiceTotal dbo.MoneyType;
-        SELECT @TotalPaid = SUM(AmountPaid) FROM dbo.Payments WHERE InvoiceID = @InvoiceID;
-        SELECT @InvoiceTotal = TotalAmount FROM dbo.Invoices WHERE InvoiceID = @InvoiceID;
-        
-        IF @TotalPaid >= @InvoiceTotal
-        BEGIN
-            UPDATE dbo.Invoices SET IsPaid = 1 WHERE InvoiceID = @InvoiceID;
+    -- Departments & Assembly Lines
+    INSERT INTO dbo.Departments (DepartmentName) VALUES ('HR'), ('Engineering'), ('Sales'), ('Marketing'), ('Logistics'), ('Manufacturing');
+    INSERT INTO dbo.AssemblyLines (LineName) VALUES ('Alpha Line'), ('Beta Line'), ('Gamma Line');
+    INSERT INTO dbo.ShippingCarriers (CarrierName) VALUES ('FedEx'), ('UPS'), ('USPS'), ('DHL');
+
+    -- Warehouses
+    DECLARE @w INT = 1; WHILE @w <= 10 BEGIN INSERT INTO dbo.Warehouses (WarehouseCode, LocationName, City, Country) VALUES ('WH' + CAST(@w AS VARCHAR), 'Mega Warehouse ' + CAST(@w AS VARCHAR), 'Metropolis', 'USA'); SET @w = @w + 1; END
+
+    -- Vehicles
+    DECLARE @v INT = 1; WHILE @v <= 100 BEGIN INSERT INTO dbo.VehicleFleet (LicensePlate, VehicleType) VALUES ('TRK-' + LEFT(CAST(NEWID() AS VARCHAR(36)), 8), CASE WHEN @v%2=0 THEN 'Truck' ELSE 'Van' END); SET @v = @v + 1; END
+
+    -- Brands & Categories
+    DECLARE @b INT = 1; WHILE @b <= 200 BEGIN INSERT INTO dbo.Brands (BrandName) VALUES ('Global Brand ' + CAST(NEWID() AS VARCHAR(36))); INSERT INTO dbo.Categories (CategoryName) VALUES ('Global Category ' + CAST(NEWID() AS VARCHAR(36))); SET @b = @b + 1; END
+
+    -- Products (20,000)
+    PRINT 'Generating 20,000 Products & Inventory...';
+    DECLARE @p INT = 1; WHILE @p <= 20000 BEGIN 
+        INSERT INTO dbo.Products (CategoryID, BrandID, ProductName, SKU, BasePrice) VALUES ((CAST(RAND() * 199 AS INT) + 1), (CAST(RAND() * 199 AS INT) + 1), 'Ultimate Item ' + CAST(@p AS VARCHAR), 'SKU-' + CAST(NEWID() AS VARCHAR(36)), ROUND(RAND() * 1000, 2) + 10);
+        SET @p = @p + 1; 
+    END
+
+    -- Inventory Distribution (100,000 records)
+    PRINT 'Distributing Inventory across Warehouses (100,000 records)...';
+    INSERT INTO dbo.WarehouseInventory (WarehouseID, ProductID, StockQuantity) SELECT (ProductID % 10) + 1, ProductID, CAST(RAND(ProductID) * 5000 AS INT) + 100 FROM dbo.Products;
+    INSERT INTO dbo.WarehouseInventory (WarehouseID, ProductID, StockQuantity) SELECT ((ProductID+1) % 10) + 1, ProductID, CAST(RAND(ProductID) * 2000 AS INT) + 50 FROM dbo.Products;
+
+    -- Raw Materials & BOM
+    DECLARE @rm INT = 1; WHILE @rm <= 500 BEGIN INSERT INTO dbo.RawMaterials (MaterialName, UnitOfMeasure, CostPerUnit) VALUES ('Material ' + CAST(@rm AS VARCHAR), 'kg', RAND() * 10); SET @rm = @rm + 1; END
+    INSERT INTO dbo.BillOfMaterials (ProductID, MaterialID, QuantityRequired) SELECT TOP 10000 ProductID, (ProductID % 500) + 1, RAND() * 5 FROM dbo.Products;
+
+    -- Users (20,000)
+    PRINT 'Generating 20,000 Users...';
+    DECLARE @u INT = 1; WHILE @u <= 20000 BEGIN INSERT INTO dbo.Users (FirstName, LastName, Email, PreferredLanguageID, PreferredCurrencyID) VALUES ('MegaUserFn_' + CAST(@u AS VARCHAR), 'MegaUserLn_' + CAST(@u AS VARCHAR), 'user' + CAST(@u AS VARCHAR) + '@mega.com', (CAST(RAND() * 2 AS INT) + 1), (CAST(RAND() * 2 AS INT) + 1)); SET @u = @u + 1; END
+
+    -- Employees (1,000)
+    INSERT INTO dbo.Employees (UserID, DepartmentID, JobTitle, HireDate, BaseSalary) SELECT TOP 1000 UserID, (UserID % 6) + 1, 'Enterprise Staff', DATEADD(DAY, -CAST(RAND()*1000 AS INT), GETDATE()), 50000 + (RAND()*50000) FROM dbo.Users ORDER BY NEWID();
+
+    -- Affiliates (500)
+    INSERT INTO dbo.Affiliates (UserID, AffiliateCode) SELECT TOP 500 UserID, 'AFF-' + CAST(UserID AS VARCHAR) FROM dbo.Users WHERE UserID NOT IN (SELECT UserID FROM dbo.Employees);
+
+    -- Quality Inspections (10,000)
+    INSERT INTO dbo.QualityInspections (ProductID, AssemblyLineID, InspectorEmployeeID, Passed, DefectReason) SELECT TOP 10000 ProductID, (ProductID % 3) + 1, (SELECT TOP 1 EmployeeID FROM dbo.Employees), CASE WHEN (ProductID % 15) = 0 THEN 0 ELSE 1 END, CASE WHEN (ProductID % 15) = 0 THEN 'Failed Tolerance Test' ELSE NULL END FROM dbo.Products;
+
+    -- Orders (50,000)
+    PRINT 'Generating 50,000 Orders (This may take a moment)...';
+    DECLARE @o INT = 1, @OrderID UNIQUEIDENTIFIER, @UserID INT;
+    WHILE @o <= 50000 BEGIN
+        SET @OrderID = NEWID(); SET @UserID = CAST(RAND() * 19999 AS INT) + 1;
+        INSERT INTO dbo.Orders (OrderID, UserID, OrderDate, Status) VALUES (@OrderID, @UserID, DATEADD(DAY, -CAST(RAND() * 1000 AS INT), GETDATE()), CASE WHEN @o % 10 = 0 THEN 'Pending' ELSE 'Completed' END);
+        -- Order details (1-3 items)
+        DECLARE @i INT = 1, @items INT = CAST(RAND() * 3 AS INT) + 1;
+        WHILE @i <= @items BEGIN
+            DECLARE @ProdID INT = CAST(RAND() * 19999 AS INT) + 1;
+            INSERT INTO dbo.OrderDetails (OrderID, ProductID, Quantity, UnitPrice) VALUES (@OrderID, @ProdID, CAST(RAND() * 4 AS INT) + 1, (SELECT BasePrice FROM dbo.Products WHERE ProductID = @ProdID));
+            SET @i = @i + 1;
         END
-        
-        COMMIT TRANSACTION;
-    END TRY
-    BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-        THROW;
-    END CATCH
-END
-GO
-
--- SP: Bulk Insert Products
-CREATE PROCEDURE dbo.sp_BulkInsertProducts
-    @BatchSize INT = 1000
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @i INT = 1;
-    WHILE @i <= @BatchSize
-    BEGIN
-        INSERT INTO dbo.Products (CategoryID, BrandID, ProductName, SKU, Price, StockQuantity)
-        VALUES (
-            (SELECT TOP 1 CategoryID FROM dbo.Categories ORDER BY NEWID()),
-            (SELECT TOP 1 BrandID FROM dbo.Brands ORDER BY NEWID()),
-            'Product_' + CAST(NEWID() AS VARCHAR(36)),
-            'SKU_' + CAST(NEWID() AS VARCHAR(36)),
-            ROUND(RAND() * 1000, 2) + 1,
-            CAST(RAND() * 500 AS INT)
-        );
-        SET @i = @i + 1;
+        UPDATE dbo.Orders SET TotalAmount = (SELECT ISNULL(SUM(LineTotal),0) FROM dbo.OrderDetails WHERE OrderID = @OrderID) WHERE OrderID = @OrderID;
+        SET @o = @o + 1;
     END
+
+    -- Page Views (100,000 analytics hits)
+    PRINT 'Generating 100,000 PageViews (Analytics)...';
+    DECLARE @pv INT = 1; WHILE @pv <= 100000 BEGIN INSERT INTO dbo.PageViews (SessionID, PageURL, UserAgent) VALUES ('SESSION_' + CAST(CAST(RAND()*1000 AS INT) AS VARCHAR), '/products/item-' + CAST(CAST(RAND()*20000 AS INT) AS VARCHAR), CASE WHEN @pv%3=0 THEN 'Mozilla/5.0 (iPhone)' ELSE 'Mozilla/5.0 (Windows NT 10.0)' END); SET @pv = @pv + 1; END
+
+    PRINT 'Ultimate Data Generation Complete! DB is now heavily populated.';
 END
 GO
 
 -- =======================================================================================
--- Bulk Data Generation (Populate Tables)
+-- Execute the Ultimate Generation SP
 -- =======================================================================================
-SET NOCOUNT ON;
-
--- 1. Insert 50 Brands
-DECLARE @b INT = 1;
-WHILE @b <= 50
-BEGIN
-    INSERT INTO dbo.Brands (BrandName, WebsiteURL)
-    VALUES ('Brand_' + CAST(@b AS VARCHAR(10)), 'https://www.brand' + CAST(@b AS VARCHAR(10)) + '.com');
-    SET @b = @b + 1;
-END
-
--- 2. Insert 50 Categories
-DECLARE @c INT = 1;
-WHILE @c <= 50
-BEGIN
-    INSERT INTO dbo.Categories (CategoryName, Description)
-    VALUES ('Category_' + CAST(@c AS VARCHAR(10)), 'Description for category ' + CAST(@c AS VARCHAR(10)));
-    SET @c = @c + 1;
-END
-
--- 3. Insert 2,000 Products using our new SP
-EXEC dbo.sp_BulkInsertProducts @BatchSize = 2000;
-
--- 4. Insert 1,000 Users
-DECLARE @u INT = 1;
-WHILE @u <= 1000
-BEGIN
-    INSERT INTO dbo.Users (FirstName, LastName, Email, IsActive)
-    VALUES (
-        'FirstName_' + CAST(@u AS VARCHAR(10)), 
-        'LastName_' + CAST(@u AS VARCHAR(10)), 
-        'user' + CAST(@u AS VARCHAR(10)) + '@example.com', 
-        CASE WHEN @u % 10 = 0 THEN 0 ELSE 1 END -- 10% inactive
-    );
-    SET @u = @u + 1;
-END
-
--- 5. Insert Addresses for Users (1 address per user)
-INSERT INTO dbo.UserAddresses (UserID, AddressLine1, City, StateProvince, PostalCode, Country, IsPrimary)
-SELECT UserID, '123 Main St Apt ' + CAST(UserID AS VARCHAR(10)), 'City_' + CAST(UserID % 50 AS VARCHAR(10)), 
-       'State_' + CAST(UserID % 10 AS VARCHAR(10)), '100' + CAST(UserID % 99 AS VARCHAR(2)), 'CountryName', 1
-FROM dbo.Users;
-
--- 6. Insert 5,000 Orders
-DECLARE @o INT = 1;
-DECLARE @RandomUserID INT, @NewOrderID UNIQUEIDENTIFIER;
-WHILE @o <= 5000
-BEGIN
-    SET @NewOrderID = NEWID();
-    SET @RandomUserID = (CAST(RAND() * 999 AS INT) + 1); -- Random user 1 to 1000
-    
-    INSERT INTO dbo.Orders (OrderID, UserID, OrderDate, Status, ShippingAddressID)
-    VALUES (
-        @NewOrderID, 
-        @RandomUserID, 
-        DATEADD(DAY, -CAST(RAND() * 365 AS INT), GETDATE()), -- Random date in past year
-        CASE WHEN @o % 5 = 0 THEN 'Pending' ELSE 'Completed' END,
-        (SELECT TOP 1 AddressID FROM dbo.UserAddresses WHERE UserID = @RandomUserID)
-    );
-    
-    -- Insert 1 to 5 OrderDetails for each order
-    DECLARE @NumItems INT = CAST(RAND() * 5 AS INT) + 1;
-    DECLARE @od INT = 1;
-    WHILE @od <= @NumItems
-    BEGIN
-        DECLARE @RandomProductID INT = CAST(RAND() * 1999 AS INT) + 1;
-        DECLARE @ProductPrice dbo.MoneyType = (SELECT Price FROM dbo.Products WHERE ProductID = @RandomProductID);
-        
-        INSERT INTO dbo.OrderDetails (OrderID, ProductID, Quantity, UnitPrice)
-        VALUES (@NewOrderID, @RandomProductID, CAST(RAND() * 5 AS INT) + 1, @ProductPrice);
-        
-        SET @od = @od + 1;
-    END
-
-    -- Update Order TotalAmount
-    UPDATE dbo.Orders
-    SET TotalAmount = (SELECT ISNULL(SUM(LineTotal), 0) FROM dbo.OrderDetails WHERE OrderID = @NewOrderID)
-    WHERE OrderID = @NewOrderID;
-
-    -- If completed, Generate Invoice
-    IF (CASE WHEN @o % 5 = 0 THEN 'Pending' ELSE 'Completed' END) = 'Completed'
-    BEGIN
-        EXEC dbo.sp_GenerateInvoice @OrderID = @NewOrderID;
-    END
-
-    SET @o = @o + 1;
-END
-
--- 7. Insert 2,000 Product Reviews
-DECLARE @pr INT = 1;
-WHILE @pr <= 2000
-BEGIN
-    INSERT INTO dbo.ProductReviews (ProductID, UserID, Rating, ReviewText, ReviewDate)
-    VALUES (
-        CAST(RAND() * 1999 AS INT) + 1, -- Random Product
-        CAST(RAND() * 999 AS INT) + 1,  -- Random User
-        CAST(RAND() * 4 AS TINYINT) + 1, -- Rating 1 to 5
-        'This is a generated review text for testing bulk scenarios. Item ' + CAST(@pr AS VARCHAR(10)),
-        DATEADD(DAY, -CAST(RAND() * 365 AS INT), GETDATE())
-    );
-    SET @pr = @pr + 1;
-END
-
--- 8. Add some payments to invoices
-INSERT INTO dbo.Payments (InvoiceID, PaymentMethod, AmountPaid, PaymentDate, TransactionID)
-SELECT TOP 2000 InvoiceID, 'Credit Card', TotalAmount, GETDATE(), 'TXN_' + CAST(NEWID() AS VARCHAR(36))
-FROM dbo.Invoices
-WHERE IsPaid = 0;
-
--- Update Invoices that were paid
-UPDATE i
-SET i.IsPaid = 1
-FROM dbo.Invoices i
-JOIN dbo.Payments p ON i.InvoiceID = p.InvoiceID;
-
-PRINT 'Bulk Data Generation Complete!';
+EXEC dbo.sp_GenerateUltimateDummyData;
 GO
