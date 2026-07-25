@@ -165,7 +165,7 @@
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content glass-card border-secondary text-white shadow-lg" style="background-color: #2b3035;">
                         <div class="modal-header border-bottom border-secondary">
-                            <h6 class="modal-title fw-bold text-info mb-0">Connection Details</h6>
+                            <h6 class="modal-title fw-bold text-info mb-0">@(string.IsNullOrEmpty(ActiveConnId) ? "New Connection" : "Edit Connection")</h6>
                             <button type="button" class="btn-close btn-close-white" @onclick="() => IsDetailsVisible = false" style="font-size: 0.8rem;"></button>
                         </div>
                         <div class="modal-body p-4">
@@ -194,7 +194,7 @@
                                         @if (IsAuthDropdownOpen)
                                         {
                                             <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsAuthDropdownOpen = false"></div>
-                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
+                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
                                                 <button class="dropdown-item text-white @(AuthType == "Windows" ? "bg-primary" : "") py-2" type="button" @onclick='() => SetAuthType("Windows")'>Windows Authentication</button>
                                                 <button class="dropdown-item text-white @(AuthType == "SqlServer" ? "bg-primary" : "") py-2" type="button" @onclick='() => SetAuthType("SqlServer")'>SQL Server Authentication</button>
                                                 <button class="dropdown-item text-white @(AuthType == "EntraMfa" ? "bg-primary" : "") py-2" type="button" @onclick='() => SetAuthType("EntraMfa")'>Microsoft Entra MFA</button>
@@ -232,7 +232,7 @@
                                         @if (IsDatabaseDropdownOpen)
                                         {
                                             <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseDatabaseDropdown"></div>
-                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
+                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
                                                 @if (IsFetchingDatabases)
                                                 {
                                                     <div class="p-4 text-center text-info">

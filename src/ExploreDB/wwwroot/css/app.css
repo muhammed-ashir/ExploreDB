@@ -324,6 +324,10 @@ body {
     background: rgba(255, 255, 255, 0.05);
     border-radius: 4px;
 }
+.custom-scrollbar-solid-track::-webkit-scrollbar-track {
+    background: #212529 !important;
+    border-radius: 0px 4px 4px 0px;
+}
 *::-webkit-scrollbar-thumb,
 .custom-scrollbar-light::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
