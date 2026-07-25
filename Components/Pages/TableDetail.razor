@@ -217,14 +217,15 @@
                                         @foreach (var rel in FilteredOutgoingKeys)
                                         {
                                             <div class="col-12 col-md-6">
-                                                <a href="@BuildTableLink(rel.ToTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
+                                                <a href="@BuildTableLink(rel.ToTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                   data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @(rel.ToTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault())<br/><b>Schema:</b> @(rel.ToTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault()?.ToLower())" data-bs-placement="bottom">
                                                     <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
-                                                        <div class="text-primary fw-bold fs-4">
+                                                        <div class="text-primary fw-bold fs-4 flex-shrink-0">
                                                             <i class="bi bi-table"></i>
                                                         </div>
                                                         <div class="overflow-hidden" style="min-width: 0;">
                                                             <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@(rel.ToTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault())</div>
-                                                            <div class="text-muted mt-1" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@(rel.ToTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault())</span></div>
+                                                            <div class="text-muted mt-1 text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@(rel.ToTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault())</span></div>
                                                         </div>
                                                     </div>
                                                 </a>
@@ -258,14 +259,15 @@
                                         @foreach (var rel in FilteredIncomingKeys)
                                         {
                                             <div class="col-12 col-md-6">
-                                                <a href="@BuildTableLink(rel.FromTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);">
+                                                <a href="@BuildTableLink(rel.FromTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                   data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @(rel.FromTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault())<br/><b>Schema:</b> @(rel.FromTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault()?.ToLower())" data-bs-placement="bottom">
                                                     <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
-                                                        <div class="text-primary fw-bold fs-4">
+                                                        <div class="text-primary fw-bold fs-4 flex-shrink-0">
                                                             <i class="bi bi-table"></i>
                                                         </div>
                                                         <div class="overflow-hidden" style="min-width: 0;">
                                                             <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@(rel.FromTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault())</div>
-                                                            <div class="text-muted mt-1" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@(rel.FromTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault())</span></div>
+                                                            <div class="text-muted mt-1 text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@(rel.FromTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault())</span></div>
                                                         </div>
                                                     </div>
                                                 </a>
@@ -316,12 +318,13 @@
                                 {
                                     var spFull = $"[{dep.Schema}].[{dep.Name}]";
                                     <div class="col-md-6 col-12">
-                                        <a href="@BuildProcLink(spFull)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid #3d444b; border-radius: 6px;">
+                                        <a href="@BuildProcLink(spFull)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid #3d444b; border-radius: 6px;"
+                                           data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Stored Procedure<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                             <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
-                                                <div class="text-warning fw-bold fs-4 font-monospace">{}</div>
+                                                <div class="text-warning fw-bold fs-4 font-monospace flex-shrink-0">{}</div>
                                                 <div class="overflow-hidden" style="min-width: 0;">
-                                                    <div class="fw-bold text-light mb-1 text-wrap" style="font-size: 1.1rem; word-break: break-word;">@dep.Name</div>
-                                                    <div class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                    <div class="fw-bold text-light mb-1 text-truncate" style="font-size: 1.1rem;">@dep.Name</div>
+                                                    <div class="text-muted fw-bold text-truncate" style="font-size: 0.7rem; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
                                                 </div>
                                             </div>
                                         </a>

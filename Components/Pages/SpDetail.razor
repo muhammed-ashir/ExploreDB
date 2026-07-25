@@ -201,14 +201,15 @@
                                 @foreach (var dep in FilteredDependencies)
                                 {
                                     <div class="col-md-6 col-12">
-                                        <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid rgba(255, 255, 255, 0.1);">
+                                        <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: #2b3035; border: 1px solid rgba(255, 255, 255, 0.1);"
+                                           data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                             <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
-                                                <div class="@(dep.Type == "Table" ? "text-primary" : "text-success") fw-bold fs-4">
+                                                <div class="@(dep.Type == "Table" ? "text-primary" : "text-success") fw-bold fs-4 flex-shrink-0">
                                                     <i class="bi @(dep.Type == "Table" ? "bi-table" : "bi-layout-text-window")"></i>
                                                 </div>
                                                 <div class="overflow-hidden" style="min-width: 0;">
                                                     <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@dep.Name</div>
-                                                    <div class="text-muted" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                    <div class="text-muted text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
                                                 </div>
                                             </div>
                                         </a>
