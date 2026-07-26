@@ -186,7 +186,7 @@
                                         <div class="form-control bg-dark text-white border-secondary pe-5 cursor-pointer d-flex align-items-center" 
                                              style="cursor: pointer; min-height: 38px;"
                                              @onclick="() => IsAuthDropdownOpen = !IsAuthDropdownOpen">
-                                            @(AuthType == "Windows" ? "Windows Authentication" : AuthType == "SqlServer" ? "SQL Server Authentication" : "Microsoft Entra MFA")
+                                            <span style="pointer-events: none;">@(AuthType == "Windows" ? "Windows Authentication" : AuthType == "SqlServer" ? "SQL Server Authentication" : "Microsoft Entra MFA")</span>
                                             <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
                                                 <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
                                             </div>
@@ -346,7 +346,7 @@
                         <span style="font-size: 1.2rem; line-height: 1;">☰</span>
                     </button>
                     <div class="ms-auto d-flex align-items-center gap-3">
-                        <span class="fw-bold text-muted small">@GetWorkspaceTitle()</span>
+                        <span class="text-muted small">@GetWorkspaceTitle()</span>
                         <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="PromptDisconnect">
                             <i class="bi bi-power" style="font-size: 1.2rem;"></i>
                         </button>
@@ -585,7 +585,13 @@
 
     private void SetAuthType(string type)
     {
-        AuthType = type;
+        if (AuthType != type)
+        {
+            AuthType = type;
+            AvailableDatabases.Clear();
+            Database = "";
+            DatabaseSearch = "";
+        }
         IsAuthDropdownOpen = false;
     }
 

@@ -85,7 +85,9 @@
             {
                 @if (Sp.Parameters == null || Sp.Parameters.Count == 0)
                 {
-                    <div class="text-muted mt-2">This stored procedure has no parameters.</div>
+                    <div class="mt-4 d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                        <div class="text-muted">This stored procedure has no parameters.</div>
+                    </div>
                 }
                 else
                 {
@@ -442,6 +444,14 @@
         if (Sp != null)
         {
             FilterParams();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try { await JS.InvokeVoidAsync("scrollToMainTop"); } catch { }
         }
     }
 

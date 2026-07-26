@@ -744,6 +744,10 @@ BEGIN
     INSERT INTO dbo.Departments (DepartmentName) VALUES ('HR'), ('Engineering'), ('Sales'), ('Marketing'), ('Logistics'), ('Manufacturing');
     INSERT INTO dbo.AssemblyLines (LineName) VALUES ('Alpha Line'), ('Beta Line'), ('Gamma Line');
     INSERT INTO dbo.ShippingCarriers (CarrierName) VALUES ('FedEx'), ('UPS'), ('USPS'), ('DHL');
+    INSERT INTO dbo.ShippingMethods (CarrierID, MethodName, BaseCost, EstimatedDays) 
+    SELECT CarrierID, 'Standard Ground', 5.99, 5 FROM dbo.ShippingCarriers UNION ALL
+    SELECT CarrierID, '2-Day Express', 15.99, 2 FROM dbo.ShippingCarriers UNION ALL
+    SELECT CarrierID, 'Overnight Priority', 29.99, 1 FROM dbo.ShippingCarriers;
 
     -- Warehouses
     DECLARE @w INT = 1; WHILE @w <= 10 BEGIN INSERT INTO dbo.Warehouses (WarehouseCode, LocationName, City, Country) VALUES ('WH' + CAST(@w AS VARCHAR), 'Mega Warehouse ' + CAST(@w AS VARCHAR), 'Metropolis', 'USA'); SET @w = @w + 1; END

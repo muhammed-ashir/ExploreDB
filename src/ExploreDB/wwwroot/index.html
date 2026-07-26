@@ -77,6 +77,12 @@
             }
         });
         
+        window.scrollToMainTop = () => {
+            const main = document.querySelector('main.app-shell-main');
+            if (main) main.scrollTo(0, 0);
+            else window.scrollTo(0, 0);
+        };
+
         // Fix for ghost tooltips on SPA navigation
         document.body.addEventListener('click', function(e) {
             let target = e.target.closest('[data-bs-tooltip="true"]');

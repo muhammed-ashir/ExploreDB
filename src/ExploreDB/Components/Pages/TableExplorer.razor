@@ -64,16 +64,16 @@
         @if (SchemaService.Tables.Count == 0)
         {
             <div class="col-12">
-                <div class="alert alert-warning">
-                    <strong>⚠️ No tables found.</strong> Make sure you're connected to a database.
+                <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                    <div class="text-muted">No tables found.</div>
                 </div>
             </div>
         }
         else if (!FilteredTables.Any())
         {
             <div class="col-12">
-                <div class="alert alert-info">
-                    <strong>🔍 No matches.</strong> Try a different search term.
+                <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                    <div class="text-muted">No matching tables found. Try a different search term.</div>
                 </div>
             </div>
         }
@@ -90,7 +90,7 @@
                                     <i class="bi bi-table"></i>
                                 </div>
                                 <div class="overflow-hidden" style="min-width: 0;">
-                                    <h5 class="mb-0 fw-bold text-white text-truncate" style="letter-spacing: 0.5px;">@table.Name</h5>
+                                    <h5 class="mb-1 fw-bold text-white text-truncate" style="letter-spacing: 0.5px;">@table.Name</h5>
                                     <small class="text-muted fw-bold text-truncate d-block" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@table.Schema</span></small>
                                 </div>
                             </div>

@@ -331,9 +331,13 @@
                      <span class="fw-bold">Generated SQL</span>
                      <div class="d-flex gap-2">
                          <button class="btn btn-sm btn-outline-warning" @onclick="ClearAll" title="Clear all selections">
-                             Clear
+                             <i class="bi bi-eraser-fill"></i> Clear
                          </button>
                          <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
+                             @if (CopyLabel == "Copy")
+                             {
+                                 <i class="bi bi-clipboard me-1"></i>
+                             }
                              @CopyLabel
                          </button>
                          <button class="btn btn-sm btn-primary" @onclick="RunInRunner" disabled="@(SelectedColumns.Count == 0)">
@@ -351,7 +355,7 @@
                      <textarea class="form-control bg-black text-success border-0 font-monospace p-3" 
                                style="resize: vertical; min-height: 400px;" readonly>@GeneratedSql</textarea>
                  </div>
-                 @if ((LastJoinPlan != null && LastJoinPlan.Steps.Count > 0) || IgnoredRoutingTables.Count > 0)
+                 @if ((LastJoinPlan != null && LastJoinPlan.Steps.Count > 0) || IgnoredRoutingTables.Count > 0 || WaypointTables.Count > 0)
                  {
                      <div class="card-footer bg-dark border-secondary p-3 border-top-0 border-top mt-2">
                          @if (LastJoinPlan != null && LastJoinPlan.Steps.Count > 0)
@@ -363,14 +367,14 @@
                                  {
                                      <span class="text-secondary fw-bold fs-5">➔</span>
                                      var isIgnored = IgnoredRoutingTables.Contains(step.FullName);
-                                     <div class="btn-group btn-group-sm shadow-sm">
+                                     <div class="btn-group btn-group-sm shadow-sm @(!step.IsSelectedTable ? "dropdown" : "")">
                                          <span class="btn btn-dark border-secondary py-1 text-light fw-bold cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(step.FullName)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(step.FullName)">
                                              @step.FullName.Split('.').Last().Replace("[", "").Replace("]", "")
                                          </span>
                                          @if (!step.IsSelectedTable)
                                          {
-                                             <button type="button" class="btn py-1 btn-outline-danger border-secondary" title="Block routing through this table" @onclick="() => ToggleIgnoreRoutingTable(step.FullName)">
-                                                 <i class="bi bi-slash-circle"></i>
+                                             <button type="button" class="btn py-1 btn-warning border-warning text-dark" style="background-color: #ffc107;" data-bs-tooltip="true" data-bs-title="View alternative routes" @onclick="() => ActiveOffcanvasTable = step.FullName" @onclick:stopPropagation>
+                                                 <i class="bi bi-diagram-3"></i>
                                              </button>
                                          }
                                      </div>
@@ -378,19 +382,39 @@
                              </div>
                          }
 
-                         @if (IgnoredRoutingTables.Count > 0)
+                         @if (IgnoredRoutingTables.Count > 0 || WaypointTables.Count > 0)
                          {
-                             <div class="p-2 rounded @(LastJoinPlan != null && LastJoinPlan.Steps.Count > 0 ? "mt-3" : "")" style="background-color: rgba(220, 53, 69, 0.1); border: 1px solid rgba(220, 53, 69, 0.3);">
-                                 <div class="text-danger small fw-bold mb-2">Blocked Hubs:</div>
-                                 <div class="d-flex flex-wrap gap-2">
-                                     @foreach(var ignored in IgnoredRoutingTables)
-                                     {
-                                         <span class="badge d-flex align-items-center gap-2 px-2 py-1 border border-danger text-white text-wrap text-start shadow-sm cursor-pointer" style="background-color: #a71d2a; font-size: 0.85rem; max-width: 100%;" title="@ignored">
-                                             <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(ignored)">@ignored.Split('.').Last().Replace("[", "").Replace("]", "")</span>
-                                             <i class="bi bi-x-lg text-white" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleIgnoreRoutingTable(ignored)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
-                                         </span>
-                                     }
-                                 </div>
+                             <div class="@(LastJoinPlan != null && LastJoinPlan.Steps.Count > 0 ? "mt-3" : "") d-flex flex-column gap-3">
+                                 @if (WaypointTables.Count > 0)
+                                 {
+                                     <div>
+                                         <div class="text-primary small fw-bold mb-2">Waypoints:</div>
+                                         <div class="d-flex flex-wrap gap-2">
+                                             @foreach(var wp in WaypointTables)
+                                             {
+                                                 <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start cursor-pointer" style="background-color: rgba(13, 110, 253, 0.15); border: 1px solid rgba(13, 110, 253, 0.4); color: #8bb9fe; font-size: 0.85rem; max-width: 100%;" title="@wp">
+                                                     <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(wp)">@wp.Split('.').Last().Replace("[", "").Replace("]", "")</span>
+                                                     <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #8bb9fe; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleWaypointTable(wp)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
+                                                 </span>
+                                             }
+                                         </div>
+                                     </div>
+                                 }
+                                 @if (IgnoredRoutingTables.Count > 0)
+                                 {
+                                     <div>
+                                         <div class="text-danger small fw-bold mb-2">Blocked Hubs:</div>
+                                         <div class="d-flex flex-wrap gap-2">
+                                             @foreach(var ignored in IgnoredRoutingTables)
+                                             {
+                                                 <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start cursor-pointer" style="background-color: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.4); color: #ff98a3; font-size: 0.85rem; max-width: 100%;" title="@ignored">
+                                                     <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(ignored)">@ignored.Split('.').Last().Replace("[", "").Replace("]", "")</span>
+                                                     <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #ff98a3; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleIgnoreRoutingTable(ignored)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
+                                                 </span>
+                                             }
+                                         </div>
+                                     </div>
+                                 }
                              </div>
                          }
                      </div>
@@ -506,7 +530,68 @@
     </div>
 }
 
+@if (ActiveOffcanvasTable != null)
+{
+    <style>
+        @@keyframes slideInLeftRouting {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
+        }
+    </style>
+    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040; background: rgba(0,0,0,0.5);" @onclick="() => ActiveOffcanvasTable = null"></div>
+    <div class="position-fixed top-0 start-0 h-100 bg-dark shadow-lg d-flex flex-column" style="z-index: 1050; width: 400px; border-right: 1px solid #444; animation: slideInLeftRouting 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+        <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background-color: rgba(0,0,0,0.2);">
+            <h5 class="mb-0 text-white fw-bold d-flex align-items-center">Routing Options</h5>
+            <button class="btn-close btn-close-white shadow-none" @onclick="() => ActiveOffcanvasTable = null"></button>
+        </div>
+        <div class="p-4 flex-grow-1 d-flex flex-column overflow-hidden">
+            <div class="mb-4 flex-shrink-0">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <h6 class="text-info fw-bold mb-0 text-truncate" style="max-width: 250px; cursor: help; font-size: 1.1rem;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(ActiveOffcanvasTable)">
+                        @ActiveOffcanvasTable.Split('.').Last().Replace("[", "").Replace("]", "")
+                    </h6>
+                    <button type="button" class="btn btn-sm btn-outline-danger fw-bold d-flex align-items-center gap-1" data-bs-tooltip="true" data-bs-title="Block this hub completely from any routing paths." @onclick="() => { ToggleIgnoreRoutingTable(ActiveOffcanvasTable); ActiveOffcanvasTable = null; }">
+                        <i class="bi bi-slash-circle"></i> Block
+                    </button>
+                </div>
+            </div>
+            
+            <div class="d-flex flex-column flex-grow-1 overflow-hidden">
+                <h6 class="text-light border-bottom pb-2 mb-3 flex-shrink-0" style="border-color: rgba(255, 255, 255, 0.1) !important;">Alternative Routes</h6>
+                <div class="overflow-auto custom-scrollbar-light pe-2 pb-3">
+                    @if (AlternativeRoutes.TryGetValue(ActiveOffcanvasTable, out var routes) && routes.Count > 0)
+                    {
+                        <div class="small text-muted mb-3">Select a route to bypass this hub:</div>
+                        <div class="d-flex flex-column gap-2">
+                            @foreach(var route in routes)
+                            {
+                                <div class="card bg-dark border-secondary hover-bg-secondary" style="cursor: pointer; transition: all 0.2s;" onmouseover="this.classList.add('bg-secondary', 'border-primary')" onmouseout="this.classList.remove('bg-secondary', 'border-primary')" @onclick="() => { SelectAlternativeRoute(route.NewTables.First(), ActiveOffcanvasTable); ActiveOffcanvasTable = null; }">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="text-info fw-bold" style="font-size: 0.8rem;">
+                                                @string.Join(" ➔ ", route.NewTables.Select(t => t.Split('.').Last().Replace("[", "").Replace("]", "")))
+                                            </div>
+                                            <i class="bi bi-chevron-right text-muted fs-5 ms-3 flex-shrink-0"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert border-secondary p-3 small text-muted mb-0 d-flex align-items-start" style="background-color: rgba(255, 255, 255, 0.02);">
+                            <div style="font-size: 0.9em; line-height: 1.5;">No alternative routes exist that bypass this table. You can manually block it using the button above.</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
+    private string? ActiveOffcanvasTable = null;
     private string GetTooltipHtml(string fullName)
     {
         var tableInfo = SchemaService.Tables.FirstOrDefault(t => t.FullName == fullName);
@@ -519,11 +604,11 @@
     {
         if (SchemaService.Tables.Any(t => t.FullName == fullName))
         {
-            Navigation.NavigateTo($"/table/{Uri.EscapeDataString(fullName)}");
+            Navigation.NavigateTo($"/table/{Uri.EscapeDataString(fullName)}?returnUrl=%2Fbuilder");
         }
         else if (SchemaService.Views.Any(v => v.FullName == fullName))
         {
-            Navigation.NavigateTo($"/view/{Uri.EscapeDataString(fullName)}");
+            Navigation.NavigateTo($"/view/{Uri.EscapeDataString(fullName)}?returnUrl=%2Fbuilder");
         }
     }
 
@@ -531,16 +616,15 @@
     private bool ShowResetModal = false;
     private string TableToDelete = "";
     private bool ShowWarningModal { get; set; } = false;
-    private string ActiveBuilderTab = "Available";
+    private string ActiveBuilderTab { get => QueryStateService.ActiveBuilderTab; set => QueryStateService.ActiveBuilderTab = value; }
     private string SearchCol = "";
     private string SearchFilter = "All";
     private bool ExactMatch = false;
     private bool MatchWholeWord = false;
     private bool CaseSensitive = false;
-    public enum QueryMode { Select, Update, Delete }
-    private QueryMode CurrentMode = QueryMode.Select;
-    private string? TargetTable;
-    private Dictionary<string, string?> UpdateMappings = new();
+    private ExploreDB.Services.QueryMode CurrentMode { get => QueryStateService.CurrentMode; set => QueryStateService.CurrentMode = value; }
+    private string? TargetTable { get => QueryStateService.TargetTable; set => QueryStateService.TargetTable = value ?? ""; }
+    private Dictionary<string, string?> UpdateMappings => QueryStateService.UpdateMappings;
     private bool IsTargetTableDropdownOpen = false;
     private string TargetTableSearch = "";
     private bool IsColumnMappingOpen = true;
@@ -548,11 +632,19 @@
     private bool IsScopeDropdownOpen = false;
     
     // List (not HashSet) preserves insertion order — first selected table becomes the JOIN root
-    private List<string> SelectedColumns = new();
+    private List<string> SelectedColumns { get => QueryStateService.SelectedColumns; set => QueryStateService.SelectedColumns = value; }
     private string GeneratedSql = "-- Select columns on the left to generate a query.";
     private bool HasOneToMany = false;
     private List<string>? OptimalTableOrder = null;
-    private HashSet<string> IgnoredRoutingTables = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> IgnoredRoutingTables => QueryStateService.IgnoredRoutingTables;
+    private HashSet<string> WaypointTables => QueryStateService.WaypointTables;
+    private Dictionary<string, List<AlternativeRoute>> AlternativeRoutes = new(StringComparer.OrdinalIgnoreCase);
+
+    public class AlternativeRoute
+    {
+        public string TargetHub { get; set; } = "";
+        public List<string> NewTables { get; set; } = new();
+    }
     private PathfinderJoinPlan? LastJoinPlan;
 
     private IEnumerable<TableInfo> FilteredTables => SchemaService.Tables; // We filter columns inside
@@ -560,6 +652,11 @@
     protected override void OnInitialized()
     {
         SchemaService.OnSchemaLoaded += Refresh;
+        
+        if (SelectedColumns.Count > 0 || !string.IsNullOrEmpty(TargetTable) || WaypointTables.Count > 0)
+        {
+            Generate();
+        }
     }
 
     private void Refresh()
@@ -686,6 +783,11 @@
             .Distinct()
             .ToList();
 
+        foreach (var wp in WaypointTables)
+        {
+            if (!tables.Contains(wp)) tables.Add(wp);
+        }
+
         if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable))
         {
             if (!tables.Contains(TargetTable))
@@ -739,6 +841,8 @@
             HasOneToMany = result.HasOneToMany;
             LastJoinPlan = plan;
         }
+        
+        CalculateAlternativeRoutes();
     }
 
     private void SetMode(QueryMode mode)
@@ -840,6 +944,11 @@
     private void ClearAll()
     {
         SelectedColumns.Clear();
+        WaypointTables.Clear();
+        IgnoredRoutingTables.Clear();
+        AlternativeRoutes.Clear();
+        UpdateMappings.Clear();
+        TargetTable = "";
         GeneratedSql = "-- Select columns on the left to generate a query.";
         HasOneToMany = false;
         LastJoinPlan = null;
@@ -853,6 +962,54 @@
             IgnoredRoutingTables.Remove(tableName);
         }
         Generate();
+    }
+
+    private void ToggleWaypointTable(string tableName)
+    {
+        if (!WaypointTables.Add(tableName))
+        {
+            WaypointTables.Remove(tableName);
+        }
+        Generate();
+    }
+
+    private void SelectAlternativeRoute(string waypoint, string hubToBlock)
+    {
+        WaypointTables.Add(waypoint);
+        IgnoredRoutingTables.Add(hubToBlock);
+        Generate();
+    }
+
+    private void CalculateAlternativeRoutes()
+    {
+        AlternativeRoutes.Clear();
+        if (LastJoinPlan == null) return;
+        
+        var currentSelected = SelectedColumns.Select(c => c.Substring(0, c.LastIndexOf('.'))).Distinct().ToList();
+        foreach(var wp in WaypointTables) if (!currentSelected.Contains(wp)) currentSelected.Add(wp);
+        
+        if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable) && !currentSelected.Contains(TargetTable))
+        {
+            currentSelected.Add(TargetTable);
+        }
+
+        foreach (var step in LastJoinPlan.Steps.Where(s => !s.IsSelectedTable))
+        {
+            var tempIgnored = IgnoredRoutingTables.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            tempIgnored.Add(step.FullName);
+            
+            var altPlan = PathfinderService.GenerateJoinPlan(currentSelected, CurrentMode != QueryMode.Select ? TargetTable : null, ignoredRoutingTables: tempIgnored);
+            
+            if (altPlan != null && string.IsNullOrEmpty(altPlan.ErrorMessage) && altPlan.UnreachableTables.Count == 0)
+            {
+                var newTables = altPlan.Steps.Select(s => s.FullName).Except(LastJoinPlan.Steps.Select(s => s.FullName)).Except(new[] { altPlan.RootTable }).ToList();
+                if (newTables.Count > 0)
+                {
+                    if (!AlternativeRoutes.ContainsKey(step.FullName)) AlternativeRoutes[step.FullName] = new();
+                    AlternativeRoutes[step.FullName].Add(new AlternativeRoute { TargetHub = step.FullName, NewTables = newTables });
+                }
+            }
+        }
     }
 
     private string CopyLabel = "Copy";

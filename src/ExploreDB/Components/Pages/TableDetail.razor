@@ -74,9 +74,10 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "UsedBy" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                <a class="nav-link d-inline-flex align-items-baseline gap-2 @(ActiveTab == "UsedBy" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
                    @onclick='() => SetActiveTab("UsedBy")' style="cursor:pointer">
-                    Used By
+                    <span>Used By</span>
+                    <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="views and procedures that query this table" data-bs-placement="top" style="font-size: 0.85em; opacity: 0.8;"></i>
                 </a>
             </li>
             <li class="nav-item">
@@ -768,10 +769,15 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && ActiveTab == "ERDTree" && !string.IsNullOrEmpty(MermaidDefinition))
+        if (firstRender)
         {
-            await Task.Delay(100);
-            try { await JS.InvokeVoidAsync("renderMermaid"); } catch { }
+            try { await JS.InvokeVoidAsync("scrollToMainTop"); } catch { }
+            
+            if (ActiveTab == "ERDTree" && !string.IsNullOrEmpty(MermaidDefinition))
+            {
+                await Task.Delay(100);
+                try { await JS.InvokeVoidAsync("renderMermaid"); } catch { }
+            }
         }
     }
 

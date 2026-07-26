@@ -400,6 +400,14 @@
         ColumnSearchTerm = string.Empty;
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try { await JS.InvokeVoidAsync("scrollToMainTop"); } catch { }
+        }
+    }
+
     private void SetActiveTab(string tab)
     {
         ActiveTab = tab;
