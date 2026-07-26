@@ -333,6 +333,20 @@
                                     <i class="bi bi-bullseye fs-6"></i>
                                 </button>
                             </div>
+                            <div class="d-flex align-items-center ms-4 gap-4 text-light">
+                                <div class="form-check m-0">
+                                    <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowSPs" @bind="UsedByShowSPs">
+                                    <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowSPs">
+                                        SP
+                                    </label>
+                                </div>
+                                <div class="form-check m-0">
+                                    <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowViews" @bind="UsedByShowViews">
+                                    <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowViews">
+                                        View
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                         <div>
                             @if (!FilteredUsedBy.Any())
@@ -677,6 +691,8 @@
 
     private string UsedBySearchTerm = string.Empty;
     private bool UsedBySearchCaseSensitive = false;
+    private bool UsedByShowSPs = true;
+    private bool UsedByShowViews = true;
     private bool UsedBySearchMatchWholeWord = false;
     private bool UsedBySearchExactMatch = false;
 
@@ -723,7 +739,10 @@
         get
         {
             if (Table == null) return Array.Empty<Dependency>();
-            var allUsedBy = Table.ReferencedByViews.Concat(Table.ReferencedBySPs);
+            
+            var allUsedBy = Enumerable.Empty<Dependency>();
+            if (UsedByShowViews) allUsedBy = allUsedBy.Concat(Table.ReferencedByViews);
+            if (UsedByShowSPs) allUsedBy = allUsedBy.Concat(Table.ReferencedBySPs);
             
             if (string.IsNullOrWhiteSpace(UsedBySearchTerm)) return allUsedBy;
             

@@ -189,6 +189,26 @@
                                 <i class="bi bi-bullseye fs-6"></i>
                             </button>
                         </div>
+                        <div class="d-flex align-items-center ms-4 gap-4 text-light">
+                            <div class="form-check m-0">
+                                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowTables" @bind="DependencyShowTables">
+                                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowTables">
+                                    Table
+                                </label>
+                            </div>
+                            <div class="form-check m-0">
+                                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowSPs" @bind="DependencyShowSPs">
+                                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowSPs">
+                                    SP
+                                </label>
+                            </div>
+                            <div class="form-check m-0">
+                                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowViews" @bind="DependencyShowViews">
+                                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowViews">
+                                    View
+                                </label>
+                            </div>
+                        </div>
                     </div>
                     <div class="accordion schema-accordion" id="dependenciesAccordion">
                         <div class="accordion-item glass-card mb-3 border-secondary">
@@ -378,6 +398,9 @@
 
     private string DependencySearchTerm = string.Empty;
     private bool DependencySearchCaseSensitive = false;
+    private bool DependencyShowTables = true;
+    private bool DependencyShowSPs = true;
+    private bool DependencyShowViews = true;
     private bool DependencySearchMatchWholeWord = false;
     private bool DependencySearchExactMatch = false;
 
@@ -387,7 +410,16 @@
         {
             if (Sp == null) return Array.Empty<Dependency>();
             
-            var deps = Sp.Dependencies.OrderBy(d => d.Type).ThenBy(d => d.Name);
+            var deps = Enumerable.Empty<Dependency>();
+            var tables = Sp.Dependencies.Where(p => !p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) && p.Type != "V" && !p.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) && p.Type != "SP");
+            var views = Sp.Dependencies.Where(p => p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) || p.Type == "V");
+            var sps = Sp.Dependencies.Where(p => p.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || p.Type == "SP");
+            
+            if (DependencyShowTables) deps = deps.Concat(tables);
+            if (DependencyShowViews) deps = deps.Concat(views);
+            if (DependencyShowSPs) deps = deps.Concat(sps);
+            
+            deps = deps.OrderBy(d => d.Type).ThenBy(d => d.Name);
             if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return deps;
             
             var searchStr = DependencySearchCaseSensitive ? DependencySearchTerm : DependencySearchTerm.ToLowerInvariant();
@@ -413,7 +445,10 @@
         {
             if (Sp == null) return Array.Empty<Dependency>();
             
-            var deps = Sp.ReferencedBySPs.OrderBy(d => d.Type).ThenBy(d => d.Name);
+            var deps = Enumerable.Empty<Dependency>();
+            if (DependencyShowSPs) deps = deps.Concat(Sp.ReferencedBySPs);
+            
+            deps = deps.OrderBy(d => d.Type).ThenBy(d => d.Name);
             if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return deps;
             
             var searchStr = DependencySearchCaseSensitive ? DependencySearchTerm : DependencySearchTerm.ToLowerInvariant();
