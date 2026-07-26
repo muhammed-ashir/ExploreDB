@@ -5,7 +5,11 @@
 @inject IJSRuntime JS
 
 <div class="container-fluid">
-    @if (View == null)
+    @if (IsLoading)
+    {
+        <LoadingSpinner />
+    }
+    else if (View == null)
     {
         <div class="alert alert-warning">View not found: @FullName</div>
     }
@@ -344,6 +348,7 @@
     [SupplyParameterFromQuery]
     public string? ReturnUrl { get; set; }
 
+    private bool IsLoading = true;
     private ViewInfo? View;
     private string ActiveTab = "Columns";
 
@@ -426,11 +431,16 @@
     private List<ColumnInfo> VisibleColumns => FilterColumns(ColumnSearchTerm, ColumnSearchCaseSensitive, ColumnSearchMatchWholeWord, ColumnSearchExactMatch);
     private string SelectQuery => $"SELECT TOP 100 * FROM {QuotedViewName(View!)};";
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
+        IsLoading = true;
+        await Task.Yield();
+        
         var decoded = Uri.UnescapeDataString(FullName);
         View = SchemaService.Views.FirstOrDefault(t => t.FullName == decoded);
         ColumnSearchTerm = string.Empty;
+        
+        IsLoading = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

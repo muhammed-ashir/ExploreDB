@@ -6,7 +6,11 @@
 @inject NavigationManager Navigation
 
 <div class="container-fluid">
-    @if (Table == null)
+    @if (IsLoading)
+    {
+        <LoadingSpinner />
+    }
+    else if (Table == null)
     {
         <div class="alert alert-warning">Table not found: @FullName</div>
     }
@@ -668,6 +672,7 @@
     [SupplyParameterFromQuery]
     public string? ReturnUrl { get; set; }
 
+    private bool IsLoading = true;
     private TableInfo? Table;
     private HashSet<string> SelectedUpdateColumns = new(StringComparer.OrdinalIgnoreCase);
     private string TableColumnSearchTerm = string.Empty;
@@ -769,8 +774,11 @@
     private string InsertQuery => BuildInsertQuery();
     private string UpdateQuery => BuildUpdateQuery();
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
+        IsLoading = true;
+        await Task.Yield();
+        
         var decoded = Uri.UnescapeDataString(FullName);
         Table = SchemaService.Tables.FirstOrDefault(t => t.FullName == decoded);
 
@@ -784,6 +792,8 @@
         RelationshipSearchTerm = string.Empty;
         UsedBySearchTerm = string.Empty;
         GenerateMermaidERD();
+        
+        IsLoading = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

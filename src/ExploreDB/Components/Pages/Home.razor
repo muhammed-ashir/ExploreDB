@@ -16,6 +16,12 @@
 
 </style>
 
+@if (IsLoading)
+{
+    <LoadingSpinner />
+}
+else
+{
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col d-flex justify-content-between align-items-center">
@@ -590,6 +596,8 @@
     </div>
 }
 
+}
+
 @code {
     private string? ActiveOffcanvasTable = null;
     private string GetTooltipHtml(string fullName)
@@ -649,14 +657,21 @@
 
     private IEnumerable<TableInfo> FilteredTables => SchemaService.Tables; // We filter columns inside
 
-    protected override void OnInitialized()
+    private bool IsLoading = true;
+    
+    protected override async Task OnInitializedAsync()
     {
+        IsLoading = true;
+        await Task.Yield();
+
         SchemaService.OnSchemaLoaded += Refresh;
         
         if (SelectedColumns.Count > 0 || !string.IsNullOrEmpty(TargetTable) || WaypointTables.Count > 0)
         {
             Generate();
         }
+        
+        IsLoading = false;
     }
 
     private void Refresh()

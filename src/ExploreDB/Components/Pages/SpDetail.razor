@@ -10,7 +10,11 @@
 @inject NavigationManager Navigation
 
 <div class="container-fluid">
-    @if (Sp == null)
+    @if (IsLoading)
+    {
+        <LoadingSpinner />
+    }
+    else if (Sp == null)
     {
         <div class="alert alert-warning">Stored procedure not found: @FullName</div>
     }
@@ -354,6 +358,7 @@
     [SupplyParameterFromQuery]
     public string? ReturnUrl { get; set; }
 
+    private bool IsLoading = true;
     private SpInfo? Sp;
     private bool Copied = false;
     private string ActiveTab = "Parameters";
@@ -468,11 +473,16 @@
         }
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
+        IsLoading = true;
+        await Task.Yield();
+        
         var decoded = Uri.UnescapeDataString(FullName);
         Sp = SchemaService.StoredProcedures.FirstOrDefault(s => s.FullName == decoded);
-        Copied = false;
+        DependencySearchTerm = string.Empty;
+        
+        IsLoading = false;
         
         ActiveTab = "Parameters";
 
