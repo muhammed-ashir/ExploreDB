@@ -187,6 +187,7 @@ BundleArtifacts/
 !scripts/build_store_release.bat
 !scripts/build_github_release.bat
 !scripts/publish_new_release.bat
+!scripts/Extract_Logs.bat
 
 # Local settings
 settings.json

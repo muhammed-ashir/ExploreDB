@@ -41,6 +41,18 @@ public static class MauiProgram
             builder.Logging.ClearProviders();
             builder.Logging.AddSerilog(dispose: true);
 
+            // Catch any unhandled crashes at the global app level
+            AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
+            {
+                Log.Fatal(args.ExceptionObject as Exception, "FATAL: Unhandled Application Crash");
+                Log.CloseAndFlush();
+            };
+
+            TaskScheduler.UnobservedTaskException += (sender, args) =>
+            {
+                Log.Fatal(args.Exception, "FATAL: Unobserved Background Task Crash");
+            };
+
 			builder
 				.UseMauiApp<App>()
 			.ConfigureFonts(fonts =>
