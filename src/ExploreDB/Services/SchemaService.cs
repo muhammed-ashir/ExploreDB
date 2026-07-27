@@ -1,5 +1,6 @@
 using Dapper;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 
 namespace ExploreDB.Services;
 
@@ -176,9 +177,12 @@ public class SchemaService
     public List<TypeInfo> Types { get; private set; } = new();
     public event Action? OnSchemaLoaded;
 
-    public SchemaService(ConnectionService connectionService)
+    private readonly ILogger<SchemaService> _logger;
+
+    public SchemaService(ConnectionService connectionService, ILogger<SchemaService> logger)
     {
         _connectionService = connectionService;
+        _logger = logger;
     }
 
     public async Task<string?> GetStoredProcedureDefinitionAsync(string fullName)
@@ -193,7 +197,7 @@ public class SchemaService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error fetching SP definition for {fullName}: {ex.Message}");
+            _logger.LogError(ex, "Error fetching SP definition for {FullName}", fullName);
             return null;
         }
     }
@@ -210,7 +214,7 @@ public class SchemaService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error fetching Function definition for {fullName}: {ex.Message}");
+            _logger.LogError(ex, "Error fetching Function definition for {FullName}", fullName);
             return null;
         }
     }
@@ -224,7 +228,7 @@ public class SchemaService
             using var conn = new SqlConnection(_connectionService.ConnectionString);
             await conn.OpenAsync();
 
-            Console.WriteLine("Fetching Tables...");
+            _logger.LogInformation("Fetching Tables...");
             // 1. Get Tables
             var tableSql = "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'";
             var rawTables = await conn.QueryAsync<(string Schema, string Name)>(tableSql, commandTimeout: 300);
@@ -232,7 +236,7 @@ public class SchemaService
             Tables = rawTables.Select(t => new TableInfo { Schema = t.Schema, Name = t.Name }).OrderBy(t => t.FullName).ToList();
             var tableDict = Tables.ToDictionary(t => t.FullName);
 
-            Console.WriteLine("Fetching Views...");
+            _logger.LogInformation("Fetching Views...");
             // 2. Get Views
             var viewSql = "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='VIEW'";
             var rawViews = await conn.QueryAsync<(string Schema, string Name)>(viewSql, commandTimeout: 300);
@@ -240,7 +244,7 @@ public class SchemaService
             Views = rawViews.Select(v => new ViewInfo { Schema = v.Schema, Name = v.Name }).OrderBy(v => v.FullName).ToList();
             var viewDict = Views.ToDictionary(v => v.FullName);
 
-            Console.WriteLine("Fetching Columns...");
+            _logger.LogInformation("Fetching Columns...");
             // 3. Get Columns
             var colSql = "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS";
             var rawCols = await conn.QueryAsync<(string Schema, string Table, string Column, string Type)>(colSql, commandTimeout: 300);
@@ -346,7 +350,7 @@ public class SchemaService
             // 6. Get Column Lineage for Views (Best Effort)
             // This can be slow for many views, so we'll do it sequentially or parrallel? 
             // Let's do it simply for now.
-            Console.WriteLine("Fetching View Column Lineage...");
+            _logger.LogInformation("Fetching View Column Lineage...");
             foreach (var view in Views)
             {
                 try 
@@ -381,12 +385,12 @@ public class SchemaService
                 catch (Exception ex)
                 {
                     // View might be invalid or permissions issue
-                    Console.WriteLine($"Error fetching lineage for {view.FullName}: {ex.Message}");
+                    _logger.LogError(ex, "Error fetching lineage for {ViewFullName}", view.FullName);
                 }
             }
 
             // 7. Get Stored Procedures
-            Console.WriteLine("Fetching Stored Procedures...");
+            _logger.LogInformation("Fetching Stored Procedures...");
             var spSql = @"
                 SELECT 
                     s.name AS SchemaName,
@@ -409,7 +413,7 @@ public class SchemaService
             var spDict = StoredProcedures.ToDictionary(sp => sp.FullName);
 
             // 8. Get SP Parameters
-            Console.WriteLine("Fetching SP Parameters...");
+            _logger.LogInformation("Fetching SP Parameters...");
             var paramSql = @"
                 SELECT 
                     s.name AS SchemaName,
@@ -457,7 +461,7 @@ public class SchemaService
             }
 
             // 9. Get SP Dependencies
-            Console.WriteLine("Fetching SP Dependencies...");
+            _logger.LogInformation("Fetching SP Dependencies...");
             var spDepSql = @"
                 SELECT 
                     OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
@@ -504,7 +508,7 @@ public class SchemaService
             }
 
             // 10. Get Functions
-            Console.WriteLine("Fetching Functions...");
+            _logger.LogInformation("Fetching Functions...");
             var fnSql = @"
                 SELECT 
                     s.name AS SchemaName,
@@ -534,7 +538,7 @@ public class SchemaService
             var fnDict = Functions.ToDictionary(f => f.FullName);
 
             // 11. Get Function Parameters
-            Console.WriteLine("Fetching Function Parameters...");
+            _logger.LogInformation("Fetching Function Parameters...");
             var fnParamSql = @"
                 SELECT 
                     s.name AS SchemaName,
@@ -595,7 +599,7 @@ public class SchemaService
             }
 
             // 12. Get Function Dependencies
-            Console.WriteLine("Fetching Function Dependencies...");
+            _logger.LogInformation("Fetching Function Dependencies...");
             var fnDepSql = @"
                 SELECT 
                     OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
@@ -668,7 +672,7 @@ public class SchemaService
             }
 
             // 13. Get User-Defined Types
-            Console.WriteLine("Fetching Types...");
+            _logger.LogInformation("Fetching Types...");
             var typeSql = @"
                 SELECT 
                     s.name AS SchemaName,
@@ -715,7 +719,7 @@ public class SchemaService
             // 14. Get Columns for Table Types
             if (typeTableMap.Count > 0)
             {
-                Console.WriteLine("Fetching Table Type Columns...");
+                _logger.LogInformation("Fetching Table Type Columns...");
                 var typeColSql = @"
                     SELECT 
                         c.object_id AS ObjectId,
@@ -744,7 +748,7 @@ public class SchemaService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Schema Load Error: {ex.Message}");
+            _logger.LogError(ex, "Schema Load Error");
             // Handle error (maybe invoke an error event)
         }
     }

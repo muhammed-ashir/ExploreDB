@@ -109,6 +109,7 @@
 <h3>🔍 <strong>Table, View, & SP Explorers</strong></h3><ul><li>Browse all database tables, views, and stored procedures in a searchable grid.</li><li>View table schemas, column data types, and row counts.</li><li>Visualize parent (upstream) and child (downstream) relationships.</li><li>Understand foreign key dependencies at a glance.</li></ul>
 <h3>🎨 <strong>Modern UI</strong></h3><ul><li>Dark-themed glassmorphic design.</li><li>Smooth animations and transitions.</li><li>Clean, emoji-based iconography.</li></ul>
 <hr>
+
 <h2>📦 Installation Guide</h2>
 <h3><strong>Method 1: Microsoft Store (Recommended)</strong></h3>
 <p>ExploreDB is officially available on the Microsoft Store for seamless installation and completely silent background updates!<ol><li>Open the <strong>Microsoft Store</strong> app on Windows.</li><li>Search for <strong>ExploreDB</strong> and click <strong>Install</strong>.</li></ol></p>
@@ -360,6 +361,29 @@
   <li>Upload the modified <code>.appinstaller</code> to the new repo.</li>
   <li><strong>Crucial Step</strong>: Because the old link is broken, automatic updates will fail. You must tell all your teammates to manually download and run the new <code>.appinstaller</code> file one time. This will permanently repoint their computers to your new repository!</li>
 </ol>
+<hr>
+<h2>📝 Application Logs</h2>
+<p>ExploreDB is designed for high reliability and uses asynchronous background logging to ensure the UI never freezes when tracking errors.</p>
+<h3><strong>Log Location</strong></h3>
+<p>Logs are written to your local Application Data folder. Because ExploreDB is a secure packaged Windows app, Windows automatically sandboxes this folder here:</p>
+<div class="code-container"><div class="code-header"><span class="lang">path</span><button class="copy-btn">Copy</button></div><pre><code>%LOCALAPPDATA%\Packages\ExploreDB.App_60vbweyrgtvd0\LocalCache\Local\ExploreDB\logs</code></pre></div>
+<p><em>(e.g., <code>C:\Users\[YourUsername]\AppData\Local\Packages\ExploreDB.App_60vbweyrgtvd0\LocalCache\Local\ExploreDB\logs</code>)</em></p>
+<p>A new log file is automatically generated for each day you use the app (e.g., <code>log-2026-07-27.txt</code>).</p>
+<h3><strong>Configuring Logs (Retention & Level)</strong></h3>
+<p>To prevent your hard drive from filling up over time, ExploreDB automatically deletes old log files. By default, files older than <strong>30 days</strong> are deleted.</p>
+<p>By default, the app logs both milestones (Information) and crashes (Error). You can change this behavior by editing the <code>appsettings.json</code> file located in the application's root directory:</p>
+<div class="code-container"><div class="code-header"><span class="lang">json</span><button class="copy-btn">Copy</button></div><pre><code>{
+  "Logging": {
+    "LogRetentionDays": 30,
+    "LogLevel": "Information"
+  }
+}</code></pre></div>
+<p>Set <code>"LogLevel": "Error"</code> if you only want to log hard crashes, or set <code>"LogRetentionDays": 7</code> to only keep the last 7 days of logs.</p>
+<h3><strong>Automatic Log Extraction (Tool)</strong></h3>
+<p>If you or one of your users is experiencing issues, the fastest way to get the log files without manually digging through hidden Windows folders is to use the provided extraction script.</p>
+<p>Simply double-click the following file:</p>
+<div class="code-container"><div class="code-header"><span class="lang">path</span><button class="copy-btn">Copy</button></div><pre><code>scripts\Extract_Logs.bat</code></pre></div>
+<p>It will automatically search the system, bypass any security sandboxing, copy all ExploreDB logs to a folder on your Desktop, and open the folder for you instantly!</p>
 <hr>
 <h2>🤝 Contributing</h2>
 <p>Contributions are welcome! Please feel freSe to submit a Pull Request.</p>

@@ -3,6 +3,8 @@ using ExploreDB.Services;
 using Microsoft.Extensions.Configuration;
 using System.IO;
 using Microsoft.Maui.LifecycleEvents;
+using Serilog;
+using System;
 
 namespace ExploreDB;
 
@@ -12,6 +14,33 @@ public static class MauiProgram
 	{
 		try {
 			var builder = MauiApp.CreateBuilder();
+
+            var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+            if (File.Exists(configPath))
+            {
+                builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: true);
+            }
+
+            // Setup Serilog
+            int retentionDays = builder.Configuration.GetValue<int>("Logging:LogRetentionDays", 30);
+            string logLevelStr = builder.Configuration.GetValue<string>("Logging:LogLevel", "Information");
+            Serilog.Events.LogEventLevel logLevel = Enum.TryParse<Serilog.Events.LogEventLevel>(logLevelStr, true, out var level) ? level : Serilog.Events.LogEventLevel.Information;
+
+            string appDataFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string logFilePath = Path.Combine(appDataFolder, "ExploreDB", "logs", "log-.txt");
+
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Is(logLevel)
+                .WriteTo.File(
+                    path: logFilePath,
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: retentionDays
+                )
+                .CreateLogger();
+
+            builder.Logging.ClearProviders();
+            builder.Logging.AddSerilog(dispose: true);
+
 			builder
 				.UseMauiApp<App>()
 			.ConfigureFonts(fonts =>
@@ -44,14 +73,7 @@ public static class MauiProgram
 
 #if DEBUG
 		builder.Services.AddBlazorWebViewDeveloperTools();
-		builder.Logging.AddDebug();
 #endif
-
-        var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
-        if (File.Exists(configPath))
-        {
-            builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: true);
-        }
 
         builder.Services.AddSingleton<ConnectionService>();
         builder.Services.AddSingleton<SchemaService>();
@@ -61,6 +83,7 @@ public static class MauiProgram
 
 			return builder.Build();
 		} catch (Exception ex) {
+            // Log catastrophic startup failures to Desktop as a last resort
 			File.WriteAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ExploreDBCrash.txt"), ex.ToString());
 			throw;
 		}
