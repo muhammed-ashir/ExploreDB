@@ -1,11 +1,14 @@
 @page "/"
 @page "/runner"
+@using BlazorMonaco.Editor
+@using BlazorMonaco
 @using ExploreDB.Services
 @using Dapper
 @using Microsoft.Data.SqlClient
 @using System.Data
 @using Microsoft.Extensions.Configuration
 @inject ConnectionService ConnectionService
+@inject SchemaService SchemaService
 @inject QueryStateService QueryStateService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject IJSRuntime JS
@@ -14,18 +17,25 @@
     <div class="row mb-4">
         <div class="col d-flex justify-content-between align-items-center">
             <h2 class="text-white mb-0 fw-bold">Query Runner</h2>
-        <button class="btn btn-primary px-4 fw-bold shadow" @onclick="ExecuteAsync" disabled="@IsExecuting">
-            @if (IsExecuting) { <span class="spinner-border spinner-border-sm me-2"></span><span>Executing...</span> }
-            else { <i class="bi bi-play-fill me-1"></i><span>Execute</span> }
-        </button>
-    </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-info fw-bold shadow" @onclick="FormatSqlAsync">
+                    <i class="bi bi-magic me-1"></i> Format
+                </button>
+                <button class="btn btn-primary fw-bold shadow" @onclick="ExecuteAsync" disabled="@IsExecuting">
+                    @if (IsExecuting) { <span class="spinner-border spinner-border-sm me-2"></span><span>Executing...</span> }
+                    else { <i class="bi bi-play-fill me-1"></i><span>Execute</span> }
+                </button>
+            </div>
+        </div>
     </div>
     <!-- Execution Harness Area -->
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card glass-card text-white shadow-sm border-secondary">
                 <div class="card-body p-0">
-                    <textarea class="form-control bg-dark text-success border-0 font-monospace p-3 rounded" style="resize: vertical; min-height: 250px;" @bind="QueryStateService.CustomQuery" placeholder="Enter SQL query here..."></textarea>
+                    <div style="height: 350px; width: 100%; display: block; resize: vertical; overflow: hidden; min-height: 150px; padding-bottom: 2px;">
+                        <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" />
+                    </div>
                 </div>
             </div>
         </div>
@@ -113,12 +123,52 @@
     
     private List<IEnumerable<dynamic>> ResultSets = new();
     private List<string> Messages = new();
+    private StandaloneCodeEditor _editor = default!;
 
-    protected override void OnParametersSet()
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "sql",
+            Theme = "vs-dark",
+            Value = QueryStateService.CustomQuery ?? "",
+            AutomaticLayout = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            LineNumbers = "on",
+            OverviewRulerBorder = false,
+            HideCursorInOverviewRuler = true,
+            ScrollBeyondLastLine = false,
+            FontSize = 14,
+            Scrollbar = new EditorScrollbarOptions { UseShadows = false }
+        };
+    }
+
+    private async Task EditorOnDidInit()
+    {
+        var tables = SchemaService.Tables.Select(t => t.Name).ToList();
+        var views = SchemaService.Views.Select(v => v.Name).ToList();
+        await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views);
+    }
+
+    private async Task FormatSqlAsync()
+    {
+        var currentQuery = await _editor.GetValue();
+        if (!string.IsNullOrWhiteSpace(currentQuery))
+        {
+            var formatted = await JS.InvokeAsync<string>("formatSql", currentQuery);
+            await _editor.SetValue(formatted);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         if (!string.IsNullOrWhiteSpace(InitialQuery))
         {
             QueryStateService.CustomQuery = InitialQuery;
+            if (_editor != null)
+            {
+                await _editor.SetValue(InitialQuery);
+            }
         }
     }
 
@@ -135,6 +185,7 @@
 
         try
         {
+            QueryStateService.CustomQuery = await _editor.GetValue();
             using var conn = new SqlConnection(ConnectionService.ConnectionString);
             conn.InfoMessage += (sender, args) =>
             {

@@ -41,6 +41,25 @@ CREATE TYPE dbo.TimestampType FROM DATETIME2(7) NOT NULL;
 GO
 
 -- =======================================================================================
+-- Create User-Defined Table Types
+-- =======================================================================================
+CREATE TYPE dbo.IntListType AS TABLE (
+    Id INT PRIMARY KEY
+);
+
+CREATE TYPE dbo.StringListType AS TABLE (
+    Item NVARCHAR(255)
+);
+
+CREATE TYPE dbo.EmployeeRecordType AS TABLE (
+    EmployeeId INT PRIMARY KEY,
+    FirstName NVARCHAR(50) NOT NULL,
+    LastName NVARCHAR(50) NOT NULL,
+    HireDate DATE
+);
+GO
+
+-- =======================================================================================
 -- PART 1: SYSTEM & CONFIGURATION
 -- =======================================================================================
 
