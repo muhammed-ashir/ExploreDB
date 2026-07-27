@@ -53,8 +53,16 @@
                     @foreach (var col in Columns)
                     {
                         <th class="text-info bg-black border-secondary p-0 align-middle">
-                            <div style="resize: horizontal; overflow: auto; min-width: 120px; max-width: 800px; padding: 0.5rem;">
-                                @col
+                            <div class="d-flex justify-content-between align-items-center" style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px; padding: 0.5rem; cursor: pointer;" @onclick="() => SortBy(col)">
+                                <span class="text-truncate" style="flex-grow: 1; user-select: none;">@col</span>
+                                @if (SortColumn == col)
+                                {
+                                    <i class="bi @(SortAscending ? "bi-sort-up" : "bi-sort-down") ms-2 text-warning"></i>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-arrow-down-up ms-2 text-muted" style="opacity: 0.3;"></i>
+                                }
                             </div>
                         </th>
                     }
@@ -248,14 +256,70 @@ else
 
     private int TotalPages => PageSize == -1 ? 1 : (int)Math.Ceiling(FilteredRows.Count / (double)PageSize);
 
-    private List<IDictionary<string, object>> PagedRows
+    private List<IDictionary<string, object>> SortedRows
     {
         get
         {
             var filtered = FilteredRows;
-            if (PageSize == -1) return filtered;
+            if (string.IsNullOrEmpty(SortColumn)) return filtered;
+
+            try 
+            {
+                if (SortAscending)
+                    return filtered.OrderBy(r => GetSortValue(r, SortColumn)).ToList();
+                else
+                    return filtered.OrderByDescending(r => GetSortValue(r, SortColumn)).ToList();
+            }
+            catch
+            {
+                // Fallback to string sort if types are mixed
+                if (SortAscending)
+                    return filtered.OrderBy(r => GetColumnValue(r, SortColumn)).ToList();
+                else
+                    return filtered.OrderByDescending(r => GetColumnValue(r, SortColumn)).ToList();
+            }
+        }
+    }
+
+    private object? GetSortValue(IDictionary<string, object> row, string column)
+    {
+        if (row.TryGetValue(column, out var val) && val != null)
+        {
+            if (val is string s) return s;
+            if (val is IComparable) return val;
+            return val.ToString();
+        }
+        return null;
+    }
+
+    private string? SortColumn = null;
+    private bool SortAscending = true;
+
+    private void SortBy(string column)
+    {
+        if (SortColumn == column)
+        {
+            if (SortAscending)
+                SortAscending = false;
+            else
+                SortColumn = null;
+        }
+        else
+        {
+            SortColumn = column;
+            SortAscending = true;
+        }
+        CurrentPage = 1;
+    }
+
+    private List<IDictionary<string, object>> PagedRows
+    {
+        get
+        {
+            var sorted = SortedRows;
+            if (PageSize == -1) return sorted;
             
-            return filtered.Skip((CurrentPage - 1) * PageSize).Take(PageSize).ToList();
+            return sorted.Skip((CurrentPage - 1) * PageSize).Take(PageSize).ToList();
         }
     }
 
