@@ -9,7 +9,8 @@ window.formatSql = (code) => {
     });
 };
 
-window.registerSqlAutocomplete = (tables, views) => {
+window.registerSqlAutocomplete = (tables, views, dotNetHelper) => {
+    window.sqlDotNetHelper = dotNetHelper;
     if (window.sqlAutocompleteRegistered) return;
     window.sqlAutocompleteRegistered = true;
 
@@ -48,6 +49,36 @@ window.registerSqlAutocomplete = (tables, views) => {
             }
 
             return { suggestions: suggestions };
+        },
+        resolveCompletionItem: async function(item, token) {
+            if (item.detail === 'Table' || item.detail === 'View') {
+                try {
+                    let doc = await window.sqlDotNetHelper.invokeMethodAsync('GetSchemaDocumentation', item.label);
+                    if (doc) {
+                        // Pass documentation as a direct markdown string object
+                        item.documentation = { value: doc };
+                    }
+                } catch (e) { 
+                    console.error("ResolveCompletionItem error:", e); 
+                }
+            }
+            return item;
+        }
+    });
+
+    monaco.languages.registerHoverProvider('sql', {
+        provideHover: async function(model, position) {
+            var word = model.getWordAtPosition(position);
+            if (!word) return null;
+            try {
+                let doc = await window.sqlDotNetHelper.invokeMethodAsync('GetSchemaDocumentation', word.word);
+                if (doc) {
+                    return { contents: [ { value: doc } ] };
+                }
+            } catch (e) { 
+                console.error("HoverProvider error:", e); 
+            }
+            return null;
         }
     });
 };

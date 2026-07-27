@@ -12,6 +12,8 @@
 @inject QueryStateService QueryStateService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject IJSRuntime JS
+@inject NavigationManager Nav
+@implements IDisposable
 
 <div class="container-fluid">
     <div class="row mb-4">
@@ -40,7 +42,7 @@
     <!-- Execution Harness Area -->
     <div class="row g-4 mb-4">
         <div class="col-12">
-            <div class="card glass-card text-white shadow-sm border-secondary">
+            <div class="card bg-dark text-white shadow-sm border-secondary">
                 <div class="card-body p-0">
                     <div style="height: 350px; width: 100%; display: block; resize: vertical; overflow: hidden; min-height: 150px; padding-bottom: 2px;">
                         <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" />
@@ -134,6 +136,12 @@
     private List<string> Messages = new();
     private string? FormatError = null;
     private StandaloneCodeEditor _editor = default!;
+    private DotNetObjectReference<QueryRunner>? _objRef;
+
+    public void Dispose()
+    {
+        _objRef?.Dispose();
+    }
 
     private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
     {
@@ -149,15 +157,17 @@
             HideCursorInOverviewRuler = true,
             ScrollBeyondLastLine = false,
             FontSize = 14,
+            FixedOverflowWidgets = true,
             Scrollbar = new EditorScrollbarOptions { UseShadows = false }
         };
     }
 
     private async Task EditorOnDidInit()
     {
+        _objRef = DotNetObjectReference.Create(this);
         var tables = SchemaService.Tables.Select(t => t.Name).ToList();
         var views = SchemaService.Views.Select(v => v.Name).ToList();
-        await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views);
+        await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views, _objRef);
     }
 
     private async Task FormatSqlAsync()
@@ -178,6 +188,40 @@
                 FormatError = "Syntax error near: " + ex.Message.Split('\n').FirstOrDefault()?.Replace("Error:", "").Trim();
             }
         }
+    }
+
+    [JSInvokable]
+    public string? GetSchemaDocumentation(string objectName)
+    {
+        var table = SchemaService.Tables.FirstOrDefault(t => string.Equals(t.Name, objectName, StringComparison.OrdinalIgnoreCase) || string.Equals(t.FullName, objectName, StringComparison.OrdinalIgnoreCase));
+        if (table != null)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"**Table:** `{table.FullName}`\n");
+            sb.AppendLine("| Column | Data Type |");
+            sb.AppendLine("|---|---|");
+            foreach(var col in table.Columns)
+            {
+                sb.AppendLine($"| {col.Name} | {col.DataType} |");
+            }
+            return sb.ToString();
+        }
+
+        var view = SchemaService.Views.FirstOrDefault(v => string.Equals(v.Name, objectName, StringComparison.OrdinalIgnoreCase) || string.Equals(v.FullName, objectName, StringComparison.OrdinalIgnoreCase));
+        if (view != null)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"**View:** `{view.FullName}`\n");
+            sb.AppendLine("| Column | Data Type |");
+            sb.AppendLine("|---|---|");
+            foreach(var col in view.Columns)
+            {
+                sb.AppendLine($"| {col.Name} | {col.DataType} |");
+            }
+            return sb.ToString();
+        }
+
+        return null;
     }
 
     protected override async Task OnParametersSetAsync()
