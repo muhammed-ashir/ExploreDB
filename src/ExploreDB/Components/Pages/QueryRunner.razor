@@ -32,23 +32,28 @@
     </div>
 
     <!-- Results Area --> 
-    <div class="row">
-        <div class="col-12">
-            <div class="card glass-card text-white d-flex flex-column" style="min-height: 400px;">
-                <div class="card-header border-secondary p-0">
-                    <ul class="nav nav-tabs border-secondary">
+    <div class="@(IsFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-4" : "row")" style="@(IsFullScreen ? "background-color: rgba(15, 15, 20, 0.95); z-index: 9999; padding-top: 60px !important;" : "")">
+        <div class="@(IsFullScreen ? "w-100 h-100" : "col-12")">
+            <div class="card glass-card text-white d-flex flex-column" style="@(IsFullScreen ? "height: 100%;" : "min-height: 400px;")">
+                <div class="card-header border-secondary p-0 d-flex justify-content-between align-items-center">
+                    <ul class="nav nav-tabs border-secondary flex-grow-1 border-bottom-0">
                         <li class="nav-item">
-                            <a class="nav-link @(ResultTab == "Results" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
+                            <a class="nav-link @(ResultTab == "Results" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted border-transparent")"
                                @onclick='() => ResultTab = "Results"' style="cursor:pointer">Results</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link @(ResultTab == "Messages" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted")"
+                            <a class="nav-link @(ResultTab == "Messages" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted border-transparent")"
                                @onclick='() => ResultTab = "Messages"' style="cursor:pointer">
                                 Messages
                                 @if (Messages.Count > 0) { <span class="badge bg-secondary ms-1">@Messages.Count</span> }
                             </a>
                         </li>
                     </ul>
+                    <div class="pe-2">
+                        <button class="btn btn-sm btn-outline-secondary border-0 text-white" @onclick="() => IsFullScreen = !IsFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
+                            <i class="bi @(IsFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body overflow-auto flex-grow-1">
                     @if (ResultTab == "Results")
@@ -104,6 +109,7 @@
     private string ResultTab = "Results";
     private bool IsExecuting = false;
     private bool HasExecuted = false;
+    private bool IsFullScreen = false;
     
     private List<IEnumerable<dynamic>> ResultSets = new();
     private List<string> Messages = new();
@@ -167,7 +173,7 @@
                 }
             }
 
-            var rs = await conn.QueryAsync<dynamic>(QueryStateService.CustomQuery);
+            var rs = await conn.QueryAsync<dynamic>(QueryStateService.CustomQuery, commandTimeout: 0);
             ResultSets.Add(rs);
             Messages.Add("Executed custom query.");
             Messages.Add($"Rows returned: {rs.Count()}");

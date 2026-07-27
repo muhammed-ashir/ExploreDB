@@ -52,7 +52,11 @@
                 <tr>
                     @foreach (var col in Columns)
                     {
-                        <th class="text-secondary bg-black">@col</th>
+                        <th class="text-info bg-black border-secondary p-0 align-middle">
+                            <div style="resize: horizontal; overflow: auto; min-width: 120px; max-width: 800px; padding: 0.5rem;">
+                                @col
+                            </div>
+                        </th>
                     }
                 </tr>
             </thead>
@@ -63,7 +67,7 @@
                         @foreach (var col in Columns)
                         {
                             var val = GetColumnValue(row, col);
-                            <td style="white-space: nowrap; max-width: 300px; overflow: hidden; text-overflow: ellipsis;" title="@val">
+                            <td style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis;" title="@val">
                                 @if (val == null)
                                 {
                                     <span class="text-muted fst-italic">NULL</span>
