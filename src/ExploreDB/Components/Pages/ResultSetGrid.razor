@@ -52,16 +52,16 @@
                 <tr>
                     @foreach (var col in Columns)
                     {
-                        <th class="text-info bg-black border-secondary p-0 align-middle">
-                            <div class="d-flex justify-content-between align-items-center" style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px; padding: 0.5rem; cursor: pointer;" @onclick="() => SortBy(col)">
-                                <span class="text-truncate" style="flex-grow: 1; user-select: none;">@col</span>
+                        <th class="text-info bg-black border-secondary p-0 align-middle" style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px;">
+                            <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2" style="cursor: pointer; user-select: none;" @onclick="() => SortBy(col)">
+                                <span class="text-truncate">@col</span>
                                 @if (SortColumn == col)
                                 {
-                                    <i class="bi @(SortAscending ? "bi-sort-up" : "bi-sort-down") ms-2 text-warning"></i>
+                                    <i class="bi @(SortAscending ? "bi-sort-up" : "bi-sort-down") ms-2 text-warning flex-shrink-0"></i>
                                 }
                                 else
                                 {
-                                    <i class="bi bi-arrow-down-up ms-2 text-muted" style="opacity: 0.3;"></i>
+                                    <i class="bi bi-arrow-down-up ms-2 text-muted flex-shrink-0" style="opacity: 0.3;"></i>
                                 }
                             </div>
                         </th>
