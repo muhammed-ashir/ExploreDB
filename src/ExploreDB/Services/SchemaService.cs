@@ -227,7 +227,7 @@ public class SchemaService
             Console.WriteLine("Fetching Tables...");
             // 1. Get Tables
             var tableSql = "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'";
-            var rawTables = await conn.QueryAsync<(string Schema, string Name)>(tableSql);
+            var rawTables = await conn.QueryAsync<(string Schema, string Name)>(tableSql, commandTimeout: 300);
             
             Tables = rawTables.Select(t => new TableInfo { Schema = t.Schema, Name = t.Name }).OrderBy(t => t.FullName).ToList();
             var tableDict = Tables.ToDictionary(t => t.FullName);
@@ -235,7 +235,7 @@ public class SchemaService
             Console.WriteLine("Fetching Views...");
             // 2. Get Views
             var viewSql = "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='VIEW'";
-            var rawViews = await conn.QueryAsync<(string Schema, string Name)>(viewSql);
+            var rawViews = await conn.QueryAsync<(string Schema, string Name)>(viewSql, commandTimeout: 300);
             
             Views = rawViews.Select(v => new ViewInfo { Schema = v.Schema, Name = v.Name }).OrderBy(v => v.FullName).ToList();
             var viewDict = Views.ToDictionary(v => v.FullName);
@@ -243,7 +243,7 @@ public class SchemaService
             Console.WriteLine("Fetching Columns...");
             // 3. Get Columns
             var colSql = "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS";
-            var rawCols = await conn.QueryAsync<(string Schema, string Table, string Column, string Type)>(colSql);
+            var rawCols = await conn.QueryAsync<(string Schema, string Table, string Column, string Type)>(colSql, commandTimeout: 300);
 
             foreach(var col in rawCols)
             {
@@ -271,9 +271,10 @@ public class SchemaService
                 INNER JOIN sys.schemas sr ON tr.schema_id = sr.schema_id
                 INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
                 INNER JOIN sys.columns cp ON fkc.parent_object_id = cp.object_id AND fkc.parent_column_id = cp.column_id
-                INNER JOIN sys.columns cr ON fkc.referenced_object_id = cr.object_id AND fkc.referenced_column_id = cr.column_id";
+                INNER JOIN sys.columns cr ON fkc.referenced_object_id = cr.object_id AND fkc.referenced_column_id = cr.column_id
+                OPTION (FORCE ORDER)";
 
-            var fks = await conn.QueryAsync<dynamic>(fkSql);
+            var fks = await conn.QueryAsync<dynamic>(fkSql, commandTimeout: 300);
 
             foreach(var fk in fks)
             {
@@ -308,7 +309,7 @@ public class SchemaService
                 JOIN sys.objects o ON d.referencing_id = o.object_id
                 WHERE o.type = 'V'";
 
-            var deps = await conn.QueryAsync<dynamic>(depSql);
+            var deps = await conn.QueryAsync<dynamic>(depSql, commandTimeout: 300);
             
             foreach(var dep in deps)
             {
@@ -358,7 +359,7 @@ public class SchemaService
                         FROM sys.dm_sql_referenced_entities('{view.FullName}', 'OBJECT') d
                         WHERE d.referenced_minor_name IS NOT NULL";
 
-                    var lineage = await conn.QueryAsync<dynamic>(lineageSql);
+                    var lineage = await conn.QueryAsync<dynamic>(lineageSql, commandTimeout: 300);
                     
                     var colDict = view.Columns.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
                     
@@ -394,9 +395,10 @@ public class SchemaService
                     p.modify_date AS ModifiedDate
                 FROM sys.procedures p
                 JOIN sys.schemas s ON p.schema_id = s.schema_id
+                WHERE p.is_ms_shipped = 0
                 ORDER BY s.name, p.name";
 
-            var rawSps = await conn.QueryAsync<dynamic>(spSql);
+            var rawSps = await conn.QueryAsync<dynamic>(spSql, commandTimeout: 300);
             StoredProcedures = rawSps.Select(r => new SpInfo
             {
                 Schema = (string)r.SchemaName,
@@ -424,9 +426,10 @@ public class SchemaService
                 JOIN sys.schemas s ON p.schema_id = s.schema_id
                 JOIN sys.parameters pm ON pm.object_id = p.object_id
                 JOIN sys.types t ON pm.user_type_id = t.user_type_id
+                WHERE p.is_ms_shipped = 0
                 ORDER BY s.name, p.name, pm.parameter_id";
 
-            var rawParams = await conn.QueryAsync<dynamic>(paramSql);
+            var rawParams = await conn.QueryAsync<dynamic>(paramSql, commandTimeout: 300);
             foreach (var param in rawParams)
             {
                 var spFull = $"[{(string)param.SchemaName}].[{(string)param.ProcName}]";
@@ -465,7 +468,7 @@ public class SchemaService
                 JOIN sys.objects o ON d.referencing_id = o.object_id
                 WHERE o.type = 'P'";
 
-            var spDeps = await conn.QueryAsync<dynamic>(spDepSql);
+            var spDeps = await conn.QueryAsync<dynamic>(spDepSql, commandTimeout: 300);
             foreach (var dep in spDeps)
             {
                 var sourceSchema = (string)dep.SourceSchema;
@@ -511,10 +514,10 @@ public class SchemaService
                     o.modify_date AS ModifiedDate
                 FROM sys.objects o
                 JOIN sys.schemas s ON o.schema_id = s.schema_id
-                WHERE o.type IN ('FN', 'IF', 'TF')
+                WHERE o.type IN ('FN', 'IF', 'TF') AND o.is_ms_shipped = 0
                 ORDER BY s.name, o.name";
             
-            var rawFns = await conn.QueryAsync<dynamic>(fnSql);
+            var rawFns = await conn.QueryAsync<dynamic>(fnSql, commandTimeout: 300);
             Functions = rawFns.Select(r => new FunctionInfo
             {
                 Schema = (string)r.SchemaName,
@@ -547,10 +550,10 @@ public class SchemaService
                 JOIN sys.schemas s ON o.schema_id = s.schema_id
                 JOIN sys.parameters pm ON pm.object_id = o.object_id
                 JOIN sys.types t ON pm.user_type_id = t.user_type_id
-                WHERE o.type IN ('FN', 'IF', 'TF')
+                WHERE o.type IN ('FN', 'IF', 'TF') AND o.is_ms_shipped = 0
                 ORDER BY s.name, o.name, pm.parameter_id";
 
-            var rawFnParams = await conn.QueryAsync<dynamic>(fnParamSql);
+            var rawFnParams = await conn.QueryAsync<dynamic>(fnParamSql, commandTimeout: 300);
             foreach (var param in rawFnParams)
             {
                 var fnFull = $"[{(string)param.SchemaName}].[{(string)param.FuncName}]";
@@ -603,7 +606,7 @@ public class SchemaService
                 JOIN sys.objects o ON d.referencing_id = o.object_id
                 WHERE o.type IN ('FN', 'IF', 'TF')";
                 
-            var fnDeps = await conn.QueryAsync<dynamic>(fnDepSql);
+            var fnDeps = await conn.QueryAsync<dynamic>(fnDepSql, commandTimeout: 300);
             foreach (var dep in fnDeps)
             {
                 var sourceSchema = (string)dep.SourceSchema;
@@ -649,7 +652,7 @@ public class SchemaService
                 JOIN sys.objects o ON d.referencing_id = o.object_id
                 LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
                 WHERE ro.type IN ('FN', 'IF', 'TF') AND o.type IN ('V', 'P')";
-            var refs = await conn.QueryAsync<dynamic>(refSql);
+            var refs = await conn.QueryAsync<dynamic>(refSql, commandTimeout: 300);
             foreach(var r in refs)
             {
                 var srcType = (string)r.SourceObjType == "V" ? "View" : "Procedure";
@@ -675,14 +678,15 @@ public class SchemaService
                     t.max_length AS MaxLength,
                     t.precision AS Precision,
                     t.scale AS Scale,
-                    t.type_table_object_id AS TypeTableObjId
+                    tt.type_table_object_id AS TypeTableObjId
                 FROM sys.types t
                 JOIN sys.schemas s ON t.schema_id = s.schema_id
                 LEFT JOIN sys.types bt ON t.system_type_id = bt.user_type_id AND bt.is_user_defined = 0
+                LEFT JOIN sys.table_types tt ON t.user_type_id = tt.user_type_id
                 WHERE t.is_user_defined = 1
                 ORDER BY s.name, t.name";
                 
-            var rawTypes = await conn.QueryAsync<dynamic>(typeSql);
+            var rawTypes = await conn.QueryAsync<dynamic>(typeSql, commandTimeout: 300);
             var typeTableMap = new Dictionary<int, TypeInfo>();
             
             Types = new List<TypeInfo>();
@@ -721,7 +725,7 @@ public class SchemaService
                     JOIN sys.types t ON c.user_type_id = t.user_type_id
                     WHERE c.object_id IN (" + string.Join(",", typeTableMap.Keys) + ")";
                 
-                var typeCols = await conn.QueryAsync<dynamic>(typeColSql);
+                var typeCols = await conn.QueryAsync<dynamic>(typeColSql, commandTimeout: 300);
                 foreach (var col in typeCols)
                 {
                     int objId = (int)col.ObjectId;
