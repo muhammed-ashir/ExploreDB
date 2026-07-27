@@ -398,8 +398,12 @@ else
                                          <div class="d-flex flex-wrap gap-2">
                                              @foreach(var wp in WaypointTables)
                                              {
-                                                 <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start cursor-pointer" style="background-color: rgba(13, 110, 253, 0.15); border: 1px solid rgba(13, 110, 253, 0.4); color: #8bb9fe; font-size: 0.85rem; max-width: 100%;" title="@wp">
-                                                     <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(wp)">@wp.Split('.').Last().Replace("[", "").Replace("]", "")</span>
+                                                 var parts = wp.Replace("[", "").Replace("]", "").Split('.');
+                                                 var schemaName = parts.Length > 1 ? parts[0] : "dbo";
+                                                 var cleanName = parts.Length > 1 ? parts[1] : parts[0];
+                                                 <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start cursor-pointer" style="background-color: rgba(13, 110, 253, 0.15); border: 1px solid rgba(13, 110, 253, 0.4); color: #8bb9fe; font-size: 0.85rem; max-width: 100%;" 
+                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @cleanName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom">
+                                                     <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(wp)">@cleanName</span>
                                                      <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #8bb9fe; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleWaypointTable(wp)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
                                                  </span>
                                              }
@@ -413,8 +417,12 @@ else
                                          <div class="d-flex flex-wrap gap-2">
                                              @foreach(var ignored in IgnoredRoutingTables)
                                              {
-                                                 <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start cursor-pointer" style="background-color: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.4); color: #ff98a3; font-size: 0.85rem; max-width: 100%;" title="@ignored">
-                                                     <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(ignored)">@ignored.Split('.').Last().Replace("[", "").Replace("]", "")</span>
+                                                 var parts = ignored.Replace("[", "").Replace("]", "").Split('.');
+                                                 var schemaName = parts.Length > 1 ? parts[0] : "dbo";
+                                                 var cleanName = parts.Length > 1 ? parts[1] : parts[0];
+                                                 <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start cursor-pointer" style="background-color: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.4); color: #ff98a3; font-size: 0.85rem; max-width: 100%;" 
+                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @cleanName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom">
+                                                     <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(ignored)">@cleanName</span>
                                                      <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #ff98a3; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleIgnoreRoutingTable(ignored)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
                                                  </span>
                                              }
@@ -464,8 +472,12 @@ else
                                             @for (int i = 0; i < OptimalTableOrder.Count; i++)
                                             {
                                                 var table = OptimalTableOrder[i];
-                                                var cleanName = table.Split('.').Last().Replace("[", "").Replace("]", "");
-                                                <span class="badge bg-dark border border-secondary px-2 py-1 fs-6 text-light cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" title="@table" @onclick="() => NavigateToDetails(table)">@cleanName</span>
+                                                var parts = table.Replace("[", "").Replace("]", "").Split('.');
+                                                var schemaName = parts.Length > 1 ? parts[0] : "dbo";
+                                                var cleanName = parts.Length > 1 ? parts[1] : parts[0];
+                                                <span class="badge bg-dark border border-secondary px-2 py-1 fs-6 text-light cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" 
+                                                      data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @cleanName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom" 
+                                                      @onclick="() => NavigateToDetails(table)">@cleanName</span>
                                                 
                                                 @if (i < OptimalTableOrder.Count - 1)
                                                 {
