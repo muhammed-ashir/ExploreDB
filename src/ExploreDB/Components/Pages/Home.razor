@@ -351,14 +351,14 @@ else
                          </button>
                      </div>
                  </div>
-                 <div class="card-body p-0 bg-black position-relative">
+                 <div class="card-body p-0 position-relative d-flex flex-column">
                      @if (HasOneToMany)
                      {
                          <button class="btn btn-sm btn-dark text-warning border-warning position-absolute top-0 end-0 m-3 shadow" style="z-index: 10;" @onclick="() => ShowWarningModal = true" title="View Join Warning">
                              <i class="bi bi-exclamation-triangle-fill"></i>
                          </button>
                      }
-                     <textarea class="form-control bg-black text-success border-0 font-monospace p-3" 
+                     <textarea class="form-control bg-black text-success border-0 font-monospace p-3 d-block flex-grow-1" 
                                style="resize: vertical; min-height: 400px;" readonly>@GeneratedSql</textarea>
                  </div>
                  @if ((LastJoinPlan != null && LastJoinPlan.Steps.Count > 0) || IgnoredRoutingTables.Count > 0 || WaypointTables.Count > 0)
