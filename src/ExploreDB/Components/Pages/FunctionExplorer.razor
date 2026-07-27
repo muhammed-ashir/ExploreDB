@@ -1,4 +1,4 @@
-@page "/views"
+@page "/functions"
 @using ExploreDB.Services
 @inject SchemaService SchemaService
 @inject NavigationManager Nav
@@ -7,7 +7,7 @@
 <div class="container-fluid">
     <div class="row mb-4 align-items-center">
         <div class="col">
-            <h2 class="fw-bold mb-0">View Explorer</h2>
+            <h2 class="fw-bold mb-0">Function Explorer</h2>
         </div>
         <div class="col-auto text-end">
             <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
@@ -33,7 +33,7 @@
                 <label class="text-muted small mb-0">per page</label>
             </div>
             <div class="text-muted small">
-                Showing @PagedViews.Count() of @FilteredViews.Count() views
+                Showing @PagedFunctions.Count() of @FilteredFunctions.Count() functions
             </div>
         </div>
     </div>
@@ -43,7 +43,7 @@
             <div class="input-group shadow-sm flex-nowrap">
                 <input type="text" 
                        class="form-control bg-dark text-white border-secondary" style="min-width: 200px;" 
-                       placeholder="Search views..." 
+                       placeholder="Search functions..." 
                        @bind="SearchTerm" 
                        @bind:event="oninput" />
                 <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
@@ -57,44 +57,42 @@
                 </button>
             </div>
         </div>
-
     </div>
 
     <div class="row">
-        @if (SchemaService.Views.Count == 0)
+        @if (SchemaService.Functions.Count == 0)
         {
             <div class="col-12">
                 <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                    <div class="text-muted">No views found.</div>
+                    <div class="text-muted">No functions found.</div>
                 </div>
             </div>
         }
-        else if (!FilteredViews.Any())
+        else if (!FilteredFunctions.Any())
         {
             <div class="col-12">
                 <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                    <div class="text-muted">No matching views found. Try a different search term.</div>
+                    <div class="text-muted">No matching functions found. Try a different search term.</div>
                 </div>
             </div>
         }
         else
         {
-            @foreach (var view in PagedViews)
+            @foreach (var fn in PagedFunctions)
             {
                 <div class="col-12 col-xl-6 mb-3">
-                    <a href="view/@Uri.EscapeDataString(view.FullName)" class="text-decoration-none"
-                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> View<br/><b>Name:</b> @view.Name<br/><b>Schema:</b> @view.Schema.ToLower()" data-bs-placement="bottom">
+                    <a href="function/@Uri.EscapeDataString(fn.FullName)" class="text-decoration-none"
+                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @fn.FunctionType Function<br/><b>Name:</b> @fn.Name<br/><b>Schema:</b> @fn.Schema.ToLower()" data-bs-placement="bottom">
                         <div class="card glass-card text-white node-card h-100 py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale">
                             <div class="d-flex align-items-center gap-3 overflow-hidden w-100">
-                                <div class="text-success fs-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px;">
-                                    <i class="bi bi-layout-text-window"></i>
+                                <div class="text-primary fs-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px;">
+                                    <i class="bi bi-code"></i>
                                 </div>
                                 <div class="overflow-hidden" style="min-width: 0;">
-                                    <h5 class="mb-1 fw-bold text-white text-truncate" style="letter-spacing: 0.5px;">@view.Name</h5>
-                                    <small class="text-muted fw-bold text-truncate d-block" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@view.Schema</span></small>
+                                    <h5 class="mb-1 fw-bold text-white text-truncate" style="letter-spacing: 0.5px;">@fn.Name</h5>
+                                    <small class="text-muted fw-bold text-truncate d-block" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@fn.Schema</span> | TYPE: @fn.FunctionType.ToUpper()</small>
                                 </div>
                             </div>
-
                         </div>
                     </a>
                 </div>
@@ -159,37 +157,31 @@
         CurrentPage = 1;
     }
 
-    private int TotalPages => (int)Math.Ceiling(FilteredViews.Count() / (double)_pageSize);
-    private IEnumerable<ViewInfo> PagedViews => FilteredViews.Skip((CurrentPage - 1) * _pageSize).Take(_pageSize);
+    private int TotalPages => (int)Math.Ceiling(FilteredFunctions.Count() / (double)_pageSize);
+    private IEnumerable<FunctionInfo> PagedFunctions => FilteredFunctions.Skip((CurrentPage - 1) * _pageSize).Take(_pageSize);
 
-    private IEnumerable<ViewInfo> FilteredViews
+    private IEnumerable<FunctionInfo> FilteredFunctions
     {
         get
         {
             if (string.IsNullOrWhiteSpace(SearchTerm))
-                return SchemaService.Views;
+                return SchemaService.Functions;
 
             var searchTerm = CaseSensitive ? SearchTerm : SearchTerm.ToLower();
 
-            return SchemaService.Views.Where(t =>
+            return SchemaService.Functions.Where(fn =>
             {
-                var viewName = CaseSensitive ? t.Name : t.Name.ToLower();
-                var schemaName = CaseSensitive ? t.Schema : t.Schema.ToLower();
+                var fnName   = CaseSensitive ? fn.Name   : fn.Name.ToLower();
+                var schema   = CaseSensitive ? fn.Schema : fn.Schema.ToLower();
 
                 if (ExactMatch)
-                {
-                    // Exact match: entire name must match search term
-                    return viewName == searchTerm || schemaName == searchTerm;
-                }
-                else if (MatchWholeWord)
-                {
-                    return viewName.Split(' ', '.', '_').Contains(searchTerm) ||
-                           schemaName.Split(' ', '.', '_').Contains(searchTerm);
-                }
-                else
-                {
-                    return viewName.Contains(searchTerm) || schemaName.Contains(searchTerm);
-                }
+                    return fnName == searchTerm || schema == searchTerm;
+
+                if (MatchWholeWord)
+                    return fnName.Split(' ', '.', '_').Contains(searchTerm) ||
+                           schema.Split(' ', '.', '_').Contains(searchTerm);
+
+                return fnName.Contains(searchTerm) || schema.Contains(searchTerm);
             });
         }
     }

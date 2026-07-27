@@ -1,0 +1,272 @@
+@page "/type/{FullName}"
+@using ExploreDB.Services
+@using System.Text.RegularExpressions
+@inject SchemaService SchemaService
+@inject ConnectionService ConnectionService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<div class="container-fluid">
+    @if (IsLoading)
+    {
+        <LoadingSpinner />
+    }
+    else if (Type == null)
+    {
+        <div class="alert alert-warning">Type not found: @FullName</div>
+    }
+    else
+    {
+        <!-- Header -->
+        <div class="row mb-4 align-items-center">
+            <div class="col">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex flex-column overflow-hidden justify-content-center" style="min-width: 0;">
+                        <h5 class="text-white mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="letter-spacing: 0.5px; word-break: break-word;">
+                            @Type.Name
+                            @if (Type.IsTableType)
+                            {
+                                <span class="badge fw-normal align-middle" style="background-color: rgba(25, 135, 84, 0.15); color: #75b798; border: 1px solid rgba(25, 135, 84, 0.4); font-size: 0.45em; padding: 0.35em 0.6em;">TABLE TYPE</span>
+                            }
+                            else
+                            {
+                                <span class="badge fw-normal align-middle" style="background-color: rgba(13, 202, 240, 0.15); color: #0dcaf0; border: 1px solid rgba(13, 202, 240, 0.4); font-size: 0.45em; padding: 0.35em 0.6em;">ALIAS TYPE</span>
+                            }
+                        </h5>
+                        <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">
+                            SCHEMA: <span class="text-lowercase">@Type.Schema</span>
+                            @if (!Type.IsTableType)
+                            {
+                                <span>| BASE TYPE: @Type.BaseType?.ToUpper()</span>
+                            }
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm border-secondary text-light">
+                    <i class="bi bi-arrow-left"></i> Back
+                </a>
+            </div> 
+        </div>
+
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs border-secondary mb-4">
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Columns" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Columns")' style="cursor:pointer">
+                    @(Type.IsTableType ? "Columns" : "Details")
+                </a>
+            </li>
+        </ul>
+
+        <div class="tab-content pb-5">
+            @if (ActiveTab == "Columns")
+            {
+                if (Type.IsTableType)
+                {
+                    <div class="card glass-card text-white">
+                        <div class="card-body">
+                            <div class="mb-4">
+                                <div class="input-group shadow-sm w-100 flex-nowrap">
+                                    <input type="text"
+                                           class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
+                                           placeholder="Search columns..."
+                                           @bind="ColumnSearchTerm"
+                                           @bind:event="oninput" />
+                                    <button class="btn @(ColumnSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ColumnSearchCaseSensitive = !ColumnSearchCaseSensitive">
+                                        <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                    </button>
+                                    <button class="btn @(ColumnSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { ColumnSearchMatchWholeWord = !ColumnSearchMatchWholeWord; if (ColumnSearchMatchWholeWord) ColumnSearchExactMatch = false; }">
+                                        <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                    </button>
+                                    <button class="btn @(ColumnSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ColumnSearchExactMatch = !ColumnSearchExactMatch; if (ColumnSearchExactMatch) ColumnSearchMatchWholeWord = false; }">
+                                        <i class="bi bi-bullseye fs-6"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="table-responsive custom-scrollbar-light">
+                                <table class="table table-dark table-hover align-middle border-secondary mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th class="border-secondary text-muted fw-normal">Column Name</th>
+                                            <th class="border-secondary text-muted fw-normal text-end">Data Type</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (VisibleColumns.Count == 0)
+                                        {
+                                            <tr>
+                                                <td colspan="2" class="text-center py-4 text-muted">No matching columns found.</td>
+                                            </tr>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var col in VisibleColumns)
+                                            {
+                                                <tr>
+                                                    <td class="border-secondary fw-medium">
+                                                        @col.Name
+                                                    </td>
+                                                    <td class="border-secondary text-end"><span class="badge bg-dark text-muted border border-secondary font-monospace">@col.DataType</span></td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="card glass-card text-white">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3 text-muted fw-bold">Base Type</div>
+                                <div class="col-md-9 font-monospace">@Type.BaseType</div>
+                            </div>
+                            <hr class="border-secondary" />
+                            <div class="row">
+                                <div class="col-md-3 text-muted fw-bold">Max Length</div>
+                                <div class="col-md-9">@(Type.MaxLength == -1 ? "MAX" : Type.MaxLength.ToString())</div>
+                            </div>
+                            <hr class="border-secondary" />
+                            <div class="row">
+                                <div class="col-md-3 text-muted fw-bold">Precision</div>
+                                <div class="col-md-9">@Type.Precision</div>
+                            </div>
+                            <hr class="border-secondary" />
+                            <div class="row">
+                                <div class="col-md-3 text-muted fw-bold">Scale</div>
+                                <div class="col-md-9">@Type.Scale</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string FullName { get; set; } = string.Empty;
+
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    private bool IsLoading = true;
+    private TypeInfo? Type;
+    private string ActiveTab = "Columns";
+    
+    // Column Search State
+    private string _columnSearchTerm = "";
+    private string ColumnSearchTerm
+    {
+        get => _columnSearchTerm;
+        set
+        {
+            if (_columnSearchTerm != value)
+            {
+                _columnSearchTerm = value;
+                FilterColumns();
+            }
+        }
+    }
+
+    private bool _columnSearchCaseSensitive = false;
+    private bool ColumnSearchCaseSensitive
+    {
+        get => _columnSearchCaseSensitive;
+        set { _columnSearchCaseSensitive = value; FilterColumns(); }
+    }
+
+    private bool _columnSearchMatchWholeWord = false;
+    private bool ColumnSearchMatchWholeWord
+    {
+        get => _columnSearchMatchWholeWord;
+        set { _columnSearchMatchWholeWord = value; FilterColumns(); }
+    }
+
+    private bool _columnSearchExactMatch = false;
+    private bool ColumnSearchExactMatch
+    {
+        get => _columnSearchExactMatch;
+        set { _columnSearchExactMatch = value; FilterColumns(); }
+    }
+
+    private List<ColumnInfo> VisibleColumns = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        IsLoading = true;
+        await Task.Yield();
+        
+        var decoded = Uri.UnescapeDataString(FullName);
+        Type = SchemaService.Types.FirstOrDefault(s => s.FullName == decoded);
+        
+        IsLoading = false;
+        
+        ActiveTab = "Columns";
+
+        if (Type != null && Type.IsTableType)
+        {
+            FilterColumns();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try { await JS.InvokeVoidAsync("scrollToMainTop"); } catch { }
+        }
+    }
+
+    private void FilterColumns()
+    {
+        if (Type == null || !Type.IsTableType) return;
+        
+        if (string.IsNullOrWhiteSpace(ColumnSearchTerm))
+        {
+            VisibleColumns = Type.Columns.ToList();
+            return;
+        }
+
+        var comparison = ColumnSearchCaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var query = ColumnSearchTerm.Trim();
+
+        VisibleColumns = Type.Columns.Where(p =>
+        {
+            if (ColumnSearchExactMatch)
+            {
+                return p.Name.Equals(query, comparison);
+            }
+            if (ColumnSearchMatchWholeWord)
+            {
+                var regexOpts = ColumnSearchCaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
+                return Regex.IsMatch(p.Name, $@"\b{Regex.Escape(query)}\b", regexOpts);
+            }
+
+            return p.Name.Contains(query, comparison);
+        }).ToList();
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        ActiveTab = tab;
+    }
+
+    private void NavigateBack()
+    {
+        if (!string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            Navigation.NavigateTo(ReturnUrl);
+            return;
+        }
+
+        Navigation.NavigateTo("/types");
+    }
+}

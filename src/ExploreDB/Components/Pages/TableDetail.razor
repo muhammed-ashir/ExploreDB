@@ -105,9 +105,9 @@
                 <div class="card glass-card text-white">
                     <div class="card-body">
                         <div class="mb-4">
-                            <div class="input-group shadow-sm w-100">
+                            <div class="input-group shadow-sm w-100 flex-nowrap">
                                 <input type="text"
-                                       class="form-control bg-dark text-white border-secondary shadow-none"
+                                       class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
                                        placeholder="Search columns..."
                                        @bind="TableColumnSearchTerm"
                                        @bind:event="oninput" />
@@ -190,9 +190,9 @@
                 else
                 {
                     <div class="mb-4 d-flex justify-content-start">
-                    <div class="input-group shadow-sm w-50">
+                    <div class="input-group shadow-sm w-50 flex-nowrap">
                         <input type="text"
-                               class="form-control bg-dark text-white border-secondary shadow-none"
+                               class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
                                placeholder="Search relationships..."
                                @bind="RelationshipSearchTerm"
                                @bind:event="oninput" />
@@ -320,10 +320,11 @@
                     }
                     else
                     {
-                        <div class="mb-4 d-flex justify-content-start">
-                            <div class="input-group shadow-sm w-50">
+                        <div class="mb-4 d-flex flex-wrap align-items-center gap-3">
+                            <div class="flex-grow-1" style="min-width: 300px; max-width: 500px;">
+                                <div class="input-group shadow-sm flex-nowrap">
                                 <input type="text"
-                                       class="form-control bg-dark text-white border-secondary shadow-none"
+                                       class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
                                        placeholder="Search dependent views & procedures..."
                                        @bind="UsedBySearchTerm"
                                        @bind:event="oninput" />
@@ -337,7 +338,8 @@
                                     <i class="bi bi-bullseye fs-6"></i>
                                 </button>
                             </div>
-                            <div class="d-flex align-items-center ms-4 gap-4 text-light">
+                            </div>
+                            <div class="d-flex flex-wrap align-items-center gap-4 text-light ms-auto mt-2 mt-md-0">
                                 <div class="form-check m-0">
                                     <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowSPs" @bind="UsedByShowSPs">
                                     <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowSPs">
@@ -609,7 +611,7 @@
                                     <div class="d-flex gap-2 mb-3">
                                         <div class="input-group input-group-sm flex-grow-1" style="min-width: 0;">
                                             <input type="text"
-                                                   class="form-control bg-dark text-white border-secondary shadow-none"
+                                                   class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
                                                    placeholder="Search update columns..."
                                                    @bind="UpdateColumnSearchTerm"
                                                    @bind:event="oninput" />

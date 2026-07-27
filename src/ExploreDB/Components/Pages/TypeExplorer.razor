@@ -1,4 +1,4 @@
-@page "/views"
+@page "/types"
 @using ExploreDB.Services
 @inject SchemaService SchemaService
 @inject NavigationManager Nav
@@ -7,7 +7,7 @@
 <div class="container-fluid">
     <div class="row mb-4 align-items-center">
         <div class="col">
-            <h2 class="fw-bold mb-0">View Explorer</h2>
+            <h2 class="fw-bold mb-0">Type Explorer</h2>
         </div>
         <div class="col-auto text-end">
             <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
@@ -33,7 +33,7 @@
                 <label class="text-muted small mb-0">per page</label>
             </div>
             <div class="text-muted small">
-                Showing @PagedViews.Count() of @FilteredViews.Count() views
+                Showing @PagedTypes.Count() of @FilteredTypes.Count() types
             </div>
         </div>
     </div>
@@ -43,7 +43,7 @@
             <div class="input-group shadow-sm flex-nowrap">
                 <input type="text" 
                        class="form-control bg-dark text-white border-secondary" style="min-width: 200px;" 
-                       placeholder="Search views..." 
+                       placeholder="Search types..." 
                        @bind="SearchTerm" 
                        @bind:event="oninput" />
                 <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
@@ -57,44 +57,42 @@
                 </button>
             </div>
         </div>
-
     </div>
 
     <div class="row">
-        @if (SchemaService.Views.Count == 0)
+        @if (SchemaService.Types.Count == 0)
         {
             <div class="col-12">
                 <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                    <div class="text-muted">No views found.</div>
+                    <div class="text-muted">No custom types found.</div>
                 </div>
             </div>
         }
-        else if (!FilteredViews.Any())
+        else if (!FilteredTypes.Any())
         {
             <div class="col-12">
                 <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                    <div class="text-muted">No matching views found. Try a different search term.</div>
+                    <div class="text-muted">No matching types found. Try a different search term.</div>
                 </div>
             </div>
         }
         else
         {
-            @foreach (var view in PagedViews)
+            @foreach (var type in PagedTypes)
             {
                 <div class="col-12 col-xl-6 mb-3">
-                    <a href="view/@Uri.EscapeDataString(view.FullName)" class="text-decoration-none"
-                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> View<br/><b>Name:</b> @view.Name<br/><b>Schema:</b> @view.Schema.ToLower()" data-bs-placement="bottom">
+                    <a href="type/@Uri.EscapeDataString(type.FullName)" class="text-decoration-none"
+                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(type.IsTableType ? "Table Type" : "Alias Type")<br/><b>Name:</b> @type.Name<br/><b>Schema:</b> @type.Schema.ToLower()" data-bs-placement="bottom">
                         <div class="card glass-card text-white node-card h-100 py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale">
                             <div class="d-flex align-items-center gap-3 overflow-hidden w-100">
-                                <div class="text-success fs-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px;">
-                                    <i class="bi bi-layout-text-window"></i>
+                                <div class="fs-3 d-flex align-items-center justify-content-center flex-shrink-0 @(type.IsTableType ? "text-success" : "text-info")" style="width: 40px;">
+                                    <i class="bi @(type.IsTableType ? "bi-table" : "bi-box")"></i>
                                 </div>
                                 <div class="overflow-hidden" style="min-width: 0;">
-                                    <h5 class="mb-1 fw-bold text-white text-truncate" style="letter-spacing: 0.5px;">@view.Name</h5>
-                                    <small class="text-muted fw-bold text-truncate d-block" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@view.Schema</span></small>
+                                    <h5 class="mb-1 fw-bold text-white text-truncate" style="letter-spacing: 0.5px;">@type.Name</h5>
+                                    <small class="text-muted fw-bold text-truncate d-block" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@type.Schema</span> | CLASS: @(type.IsTableType ? "TABLE TYPE" : $"ALIAS ({type.BaseType?.ToUpper()})")</small>
                                 </div>
                             </div>
-
                         </div>
                     </a>
                 </div>
@@ -159,37 +157,31 @@
         CurrentPage = 1;
     }
 
-    private int TotalPages => (int)Math.Ceiling(FilteredViews.Count() / (double)_pageSize);
-    private IEnumerable<ViewInfo> PagedViews => FilteredViews.Skip((CurrentPage - 1) * _pageSize).Take(_pageSize);
+    private int TotalPages => (int)Math.Ceiling(FilteredTypes.Count() / (double)_pageSize);
+    private IEnumerable<TypeInfo> PagedTypes => FilteredTypes.Skip((CurrentPage - 1) * _pageSize).Take(_pageSize);
 
-    private IEnumerable<ViewInfo> FilteredViews
+    private IEnumerable<TypeInfo> FilteredTypes
     {
         get
         {
             if (string.IsNullOrWhiteSpace(SearchTerm))
-                return SchemaService.Views;
+                return SchemaService.Types;
 
             var searchTerm = CaseSensitive ? SearchTerm : SearchTerm.ToLower();
 
-            return SchemaService.Views.Where(t =>
+            return SchemaService.Types.Where(t =>
             {
-                var viewName = CaseSensitive ? t.Name : t.Name.ToLower();
-                var schemaName = CaseSensitive ? t.Schema : t.Schema.ToLower();
+                var typeName = CaseSensitive ? t.Name   : t.Name.ToLower();
+                var schema   = CaseSensitive ? t.Schema : t.Schema.ToLower();
 
                 if (ExactMatch)
-                {
-                    // Exact match: entire name must match search term
-                    return viewName == searchTerm || schemaName == searchTerm;
-                }
-                else if (MatchWholeWord)
-                {
-                    return viewName.Split(' ', '.', '_').Contains(searchTerm) ||
-                           schemaName.Split(' ', '.', '_').Contains(searchTerm);
-                }
-                else
-                {
-                    return viewName.Contains(searchTerm) || schemaName.Contains(searchTerm);
-                }
+                    return typeName == searchTerm || schema == searchTerm;
+
+                if (MatchWholeWord)
+                    return typeName.Split(' ', '.', '_').Contains(searchTerm) ||
+                           schema.Split(' ', '.', '_').Contains(searchTerm);
+
+                return typeName.Contains(searchTerm) || schema.Contains(searchTerm);
             });
         }
     }

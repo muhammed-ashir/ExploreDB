@@ -1,17 +1,19 @@
-@page "/view/{FullName}"
+@page "/function/{FullName}"
 @using ExploreDB.Services
+@using System.Text.RegularExpressions
 @inject SchemaService SchemaService
-@inject NavigationManager Navigation
+@inject ConnectionService ConnectionService
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <div class="container-fluid">
     @if (IsLoading)
     {
         <LoadingSpinner />
     }
-    else if (View == null)
+    else if (Fn == null)
     {
-        <div class="alert alert-warning">View not found: @FullName</div>
+        <div class="alert alert-warning">Function not found: @FullName</div>
     }
     else
     {
@@ -21,10 +23,16 @@
                 <div class="d-flex align-items-center gap-3">
                     <div class="d-flex flex-column overflow-hidden justify-content-center" style="min-width: 0;">
                         <h5 class="text-white mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="letter-spacing: 0.5px; word-break: break-word;">
-                            @View.Name
-                            <span class="badge bg-info text-dark fw-normal align-middle" style="font-size: 0.45em; padding: 0.35em 0.6em;">VIEW</span>
+                            @Fn.Name
+                            <span class="badge bg-primary text-white fw-normal align-middle" style="font-size: 0.45em; padding: 0.35em 0.6em;">FUNCTION</span>
                         </h5>
-                        <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">SCHEMA: <span class="text-lowercase">@View.Schema</span></small>
+                        <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">
+                            SCHEMA: <span class="text-lowercase">@Fn.Schema</span>
+                            @if(!string.IsNullOrEmpty(Fn.ReturnType))
+                            {
+                                <span>| RETURNS: @Fn.ReturnType</span>
+                            }
+                        </small>
                     </div>
                 </div>
             </div>
@@ -33,7 +41,6 @@
                     <i class="bi bi-arrow-left"></i> Back
                 </a>
             </div>
-
         </div>
 
         <style>
@@ -61,9 +68,9 @@
         <!-- Tabs Navigation -->
         <ul class="nav nav-tabs border-secondary mb-4">
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Columns" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("Columns")' style="cursor:pointer">
-                    Columns
+                <a class="nav-link @(ActiveTab == "Parameters" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Parameters")' style="cursor:pointer">
+                    Parameters
                 </a>
             </li>
             <li class="nav-item">
@@ -73,71 +80,71 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Queries" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("Queries")' style="cursor:pointer">
-                    Query
+                <a class="nav-link @(ActiveTab == "Execution" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Execution")' style="cursor:pointer">
+                    Execution
                 </a>
             </li>
         </ul>
 
         <div class="tab-content pb-5">
-            @if (ActiveTab == "Columns")
+            @if (ActiveTab == "Parameters")
             {
-                <!-- Columns Tab -->
-                <div class="card glass-card text-white">
-                    <div class="card-body">
-                        <div class="mb-4">
+                @if (Fn.Parameters == null || Fn.Parameters.Count == 0)
+                {
+                    <div class="mt-4 d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                        <div class="text-muted">This function has no parameters.</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="card glass-card text-white">
+                        <div class="card-body">
+                            <div class="mb-4">
                             <div class="input-group shadow-sm w-100 flex-nowrap">
                                 <input type="text"
                                        class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
-                                       placeholder="Search columns..."
-                                       @bind="ColumnSearchTerm"
+                                       placeholder="Search parameters..."
+                                       @bind="ParamSearchTerm"
                                        @bind:event="oninput" />
-                                <button class="btn @(ColumnSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ColumnSearchCaseSensitive = !ColumnSearchCaseSensitive">
+                                <button class="btn @(ParamCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ParamCaseSensitive = !ParamCaseSensitive">
                                     <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                 </button>
-                                <button class="btn @(ColumnSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { ColumnSearchMatchWholeWord = !ColumnSearchMatchWholeWord; if (ColumnSearchMatchWholeWord) ColumnSearchExactMatch = false; }">
+                                <button class="btn @(ParamMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { ParamMatchWholeWord = !ParamMatchWholeWord; if (ParamMatchWholeWord) ParamExactMatch = false; }">
                                     <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
                                 </button>
-                                <button class="btn @(ColumnSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ColumnSearchExactMatch = !ColumnSearchExactMatch; if (ColumnSearchExactMatch) ColumnSearchMatchWholeWord = false; }">
+                                <button class="btn @(ParamExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ParamExactMatch = !ParamExactMatch; if (ParamExactMatch) ParamMatchWholeWord = false; }">
                                     <i class="bi bi-bullseye fs-6"></i>
                                 </button>
                             </div>
                         </div>
-                        
+
                         <div class="table-responsive custom-scrollbar-light">
                             <table class="table table-dark table-hover align-middle border-secondary mb-0">
                                 <thead>
                                     <tr>
-                                        <th class="border-secondary text-muted fw-normal">Column Name</th>
+                                        <th class="border-secondary text-muted fw-normal">Parameter Name</th>
                                         <th class="border-secondary text-muted fw-normal text-end">Data Type</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @if (VisibleColumns.Count == 0)
+                                    @if (VisibleParams.Count == 0)
                                     {
                                         <tr>
-                                            <td colspan="2" class="text-center py-4 text-muted">No matching columns found.</td>
+                                            <td colspan="2" class="text-center py-4 text-muted">No matching parameters found.</td>
                                         </tr>
                                     }
                                     else
                                     {
-                                        @foreach (var col in VisibleColumns)
+                                        @foreach (var p in VisibleParams)
                                         {
                                             <tr>
-                                                <td class="border-secondary fw-medium">
-                                                    @col.Name
-                                                    @if (!string.IsNullOrEmpty(col.SourceTable))
-                                                    {
-                                                        var sourceFullName = $"[{col.SourceSchema}].[{col.SourceTable}]";
-                                                        <a href="@BuildObjectLink(sourceFullName)" class="badge bg-dark border border-secondary text-decoration-none text-light ms-2 hover-scale transition-transform" title="Source: @sourceFullName">
-                                                            <i class="bi bi-link-45deg text-muted"></i> @col.SourceSchema<span class="text-secondary">.</span>@col.SourceTable
-                                                        </a>
-                                                    }
+                                                <td class="border-secondary fw-medium align-middle">
+                                                    @p.Name
                                                 </td>
                                                 <td class="border-secondary text-end">
                                                     <span class="badge bg-dark text-muted border border-secondary font-monospace" style="font-size: 0.85em;">
-                                                        @col.DataType
+                                                        @p.DisplayType
                                                     </span>
                                                 </td>
                                             </tr>
@@ -145,13 +152,13 @@
                                     }
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     </div>
-                </div>
+                }
             }
             else if (ActiveTab == "Dependencies")
             {
-                <!-- Dependencies Tab -->
                 <div class="text-white mt-1">
                     <div class="mb-4 d-flex flex-wrap align-items-center gap-3">
                         <div class="flex-grow-1" style="min-width: 300px; max-width: 500px;">
@@ -191,6 +198,12 @@
                                     View
                                 </label>
                             </div>
+                            <div class="form-check m-0">
+                                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowFuncs" @bind="DependencyShowFuncs">
+                                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowFuncs">
+                                    Function
+                                </label>
+                            </div>
                         </div>
                     </div>
                     <div class="accordion schema-accordion" id="dependenciesAccordion">
@@ -199,22 +212,22 @@
                                 <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDependsOn" aria-expanded="true" aria-controls="collapseDependsOn">
                                     <div class="d-flex align-items-baseline gap-2">
                                         <span>Depends On</span>
-                                        <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="tables and views queried by this view" data-bs-placement="top" style="font-size: 0.85em;"></i>
+                                        <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="objects queried by this function" data-bs-placement="top" style="font-size: 0.85em;"></i>
                                     </div>
                                 </button>
                             </h2>
                             <div id="collapseDependsOn" class="accordion-collapse collapse show" aria-labelledby="headingDependsOn" data-bs-parent="#dependenciesAccordion">
                                 <div class="accordion-body text-white">
-                                    @if (View.Parents.Count == 0)
+                                    @if (Fn.Dependencies.Count == 0)
                                     {
                                         <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                                            <div class="text-muted">This view does not depend on any other objects.</div>
+                                            <div class="text-muted">This function does not depend on any objects.</div>
                                         </div>
                                     }
                                     else if (!FilteredDependsOn.Any())
                                     {
                                         <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                                            <div class="text-muted">No matching upstream dependencies found.</div>
+                                            <div class="text-muted">No matching dependencies found.</div>
                                         </div>
                                     }
                                     else
@@ -222,16 +235,30 @@
                                         <div class="row g-3">
                                             @foreach (var dep in FilteredDependsOn)
                                             {
-                                                <div class="col-12 col-md-6">
-                                                    <a href="@BuildObjectLink(dep.FullName)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
-                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @GetShortName(dep.Name)<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
+                                                var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
+                                                var isFunc = dep.Type == "Function";
+                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (dep.Type == "Table" ? "text-primary" : "text-success"));
+                                                <div class="col-md-6 col-12">
+                                                    <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                                         <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
-                                                            <div class="@(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success") fw-bold fs-4 flex-shrink-0">
-                                                                <i class="bi @(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-layout-text-window")"></i>
+                                                            <div class="@iconClass fw-bold fs-4 flex-shrink-0">
+                                                                @if (isProc)
+                                                                {
+                                                                    @("{}")
+                                                                }
+                                                                else if (isFunc)
+                                                                {
+                                                                    <i class="bi bi-code"></i>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <i class="bi @(dep.Type == "Table" ? "bi-table" : "bi-layout-text-window")"></i>
+                                                                }
                                                             </div>
                                                             <div class="overflow-hidden" style="min-width: 0;">
-                                                                <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@GetShortName(dep.Name)</div>
-                                                                <div class="text-muted mt-1 text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                                <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@dep.Name</div>
+                                                                <div class="text-muted text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
                                                             </div>
                                                         </div>
                                                     </a>
@@ -248,22 +275,22 @@
                                 <button class="accordion-button fw-bold collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseUsedBy" aria-expanded="false" aria-controls="collapseUsedBy">
                                     <div class="d-flex align-items-baseline gap-2">
                                         <span>Used By</span>
-                                        <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="views and procedures that query this view" data-bs-placement="top" style="font-size: 0.85em;"></i>
+                                        <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="objects that execute this function" data-bs-placement="top" style="font-size: 0.85em;"></i>
                                     </div>
                                 </button>
                             </h2>
                             <div id="collapseUsedBy" class="accordion-collapse collapse" aria-labelledby="headingUsedBy" data-bs-parent="#dependenciesAccordion">
                                 <div class="accordion-body text-white">
-                                    @if ((View.Children.Count + View.ReferencedBySPs.Count) == 0)
+                                    @if (Fn.ReferencedBy.Count == 0)
                                     {
                                         <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                                            <div class="text-muted">This view is not used by any other objects.</div>
+                                            <div class="text-muted">No objects execute this one.</div>
                                         </div>
                                     }
                                     else if (!FilteredUsedBy.Any())
                                     {
                                         <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                                            <div class="text-muted">No matching downstream dependencies found.</div>
+                                            <div class="text-muted">No matching dependent objects found.</div>
                                         </div>
                                     }
                                     else
@@ -271,28 +298,30 @@
                                         <div class="row g-3">
                                             @foreach (var dep in FilteredUsedBy)
                                             {
-                                                <div class="col-12 col-md-6">
-                                                    @{
-                                                        var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
-                                                        var link = isProc ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName);
-                                                        var iconClass = isProc ? "text-warning font-monospace" : (dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success");
-                                                    }
-                                                    <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
-                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @GetShortName(dep.Name)<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
+                                                var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
+                                                var isFunc = dep.Type == "Function";
+                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (dep.Type == "Table" ? "text-primary" : "text-success"));
+                                                <div class="col-md-6 col-12">
+                                                    <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                                         <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
                                                             <div class="@iconClass fw-bold fs-4 flex-shrink-0">
                                                                 @if (isProc)
                                                                 {
                                                                     @("{}")
                                                                 }
+                                                                else if (isFunc)
+                                                                {
+                                                                    <i class="bi bi-code"></i>
+                                                                }
                                                                 else
                                                                 {
-                                                                    <i class="bi @(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-layout-text-window")"></i>
+                                                                    <i class="bi @(dep.Type == "Table" ? "bi-table" : "bi-layout-text-window")"></i>
                                                                 }
                                                             </div>
                                                             <div class="overflow-hidden" style="min-width: 0;">
-                                                                <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@GetShortName(dep.Name)</div>
-                                                                <div class="text-muted mt-1 text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                                <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@dep.Name</div>
+                                                                <div class="text-muted text-truncate" style="font-size: 0.7em; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
                                                             </div>
                                                         </div>
                                                     </a>
@@ -306,35 +335,27 @@
                     </div>
                 </div>
             }
-            else if (ActiveTab == "Queries")
+            else if (ActiveTab == "Execution")
             {
-                <!-- Query Tab -->
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card glass-card text-white mb-4">
-                            <div class="card-header border-secondary fw-bold d-flex justify-content-between align-items-center py-3">
-                                <div>
-                                    SELECT Query
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <button class="btn btn-sm btn-outline-light d-flex align-items-center gap-2" @onclick="CopySelectQuery">
-                                        @if (SelectCopied)
-                                        {
-                                            <i class="bi bi-check2 text-success"></i> <span>Copied!</span>
-                                        }
-                                        else
-                                        {
-                                            <i class="bi bi-clipboard"></i> <span>Copy</span>
-                                        }
-                                    </button>
-                                    <a href="/runner?type=view&name=@Uri.EscapeDataString(View.FullName)&query=@Uri.EscapeDataString(SelectQuery)" class="btn btn-sm btn-primary d-flex align-items-center gap-2">
-                                        <i class="bi bi-play-fill"></i> Run
-                                    </a>
-                                </div>
+                <div class="card glass-card text-white">
+                    <div class="card-body p-0 position-relative">
+                        <div class="p-3 d-flex justify-content-between align-items-center border-bottom border-secondary bg-dark bg-opacity-50">
+                            <div>
+                                <span class="fw-bold">Execution Statement</span>
                             </div>
-                            <div class="card-body">
-                                <pre class="query-preview mb-0">@SelectQuery</pre>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm @(Copied ? "btn-success" : "btn-outline-light")"
+                                        @onclick="CopyExecStatement"
+                                        title="Copy to clipboard">
+                                    <i class="bi @(Copied ? "bi-check2" : "bi-clipboard")"></i> @(Copied ? "Copied" : "Copy")
+                                </button>
+                                <a href="/runner?type=function&name=@Uri.EscapeDataString(Fn.FullName)&query=@Uri.EscapeDataString(ExecStatement)" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1">
+                                    <i class="bi bi-play-fill"></i> Run
+                                </a>
                             </div>
+                        </div>
+                        <div class="p-4" style="background: rgba(0, 0, 0, 0.3);">
+                            <pre class="m-0 text-success query-preview" style="background: transparent; border: none; font-size: 0.85em;">@ExecStatement</pre>
                         </div>
                     </div>
                 </div>
@@ -351,42 +372,81 @@
     public string? ReturnUrl { get; set; }
 
     private bool IsLoading = true;
-    private ViewInfo? View;
-    private string ActiveTab = "Columns";
+    private FunctionInfo? Fn;
+    private bool Copied = false;
 
-    private string ColumnSearchTerm = string.Empty;
-    private bool ColumnSearchCaseSensitive = false;
-    private bool ColumnSearchMatchWholeWord = false;
-    private bool ColumnSearchExactMatch = false;
+    private string ActiveTab = "Parameters";
+    
+    // Parameter Search State
+    private string _paramSearchTerm = "";
+    private string ParamSearchTerm
+    {
+        get => _paramSearchTerm;
+        set
+        {
+            if (_paramSearchTerm != value)
+            {
+                _paramSearchTerm = value;
+                FilterParams();
+            }
+        }
+    }
+
+    private bool _paramCaseSensitive = false;
+    private bool ParamCaseSensitive
+    {
+        get => _paramCaseSensitive;
+        set { _paramCaseSensitive = value; FilterParams(); }
+    }
+
+    private bool _paramMatchWholeWord = false;
+    private bool ParamMatchWholeWord
+    {
+        get => _paramMatchWholeWord;
+        set { _paramMatchWholeWord = value; FilterParams(); }
+    }
+
+    private bool _paramExactMatch = false;
+    private bool ParamExactMatch
+    {
+        get => _paramExactMatch;
+        set { _paramExactMatch = value; FilterParams(); }
+    }
+
+    private List<FunctionParameter> VisibleParams = new();
 
     private string DependencySearchTerm = string.Empty;
     private bool DependencySearchCaseSensitive = false;
     private bool DependencyShowTables = true;
     private bool DependencyShowSPs = true;
     private bool DependencyShowViews = true;
+    private bool DependencyShowFuncs = true;
     private bool DependencySearchMatchWholeWord = false;
     private bool DependencySearchExactMatch = false;
-
-    private bool SelectCopied;
 
     private IEnumerable<Dependency> FilteredDependsOn
     {
         get
         {
-            if (View == null) return Array.Empty<Dependency>();
+            if (Fn == null) return Array.Empty<Dependency>();
             
-            var allDependsOn = Enumerable.Empty<Dependency>();
-            var tables = View.Parents.Where(p => !p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) && p.Type != "V");
-            var views = View.Parents.Where(p => p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) || p.Type == "V");
+            var deps = Enumerable.Empty<Dependency>();
+            var tables = Fn.Dependencies.Where(p => !p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) && p.Type != "V" && !p.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) && p.Type != "SP" && p.Type != "Function");
+            var views = Fn.Dependencies.Where(p => p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) || p.Type == "V");
+            var sps = Fn.Dependencies.Where(p => p.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || p.Type == "SP");
+            var funcs = Fn.Dependencies.Where(p => p.Type == "Function");
             
-            if (DependencyShowTables) allDependsOn = allDependsOn.Concat(tables);
-            if (DependencyShowViews) allDependsOn = allDependsOn.Concat(views);
+            if (DependencyShowTables) deps = deps.Concat(tables);
+            if (DependencyShowViews) deps = deps.Concat(views);
+            if (DependencyShowSPs) deps = deps.Concat(sps);
+            if (DependencyShowFuncs) deps = deps.Concat(funcs);
             
-            if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return allDependsOn;
+            deps = deps.OrderBy(d => d.Type).ThenBy(d => d.Name);
+            if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return deps;
             
             var searchStr = DependencySearchCaseSensitive ? DependencySearchTerm : DependencySearchTerm.ToLowerInvariant();
             
-            return allDependsOn.Where(d => 
+            return deps.Where(d => 
             {
                 var nameVal = DependencySearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
                 var schemaVal = DependencySearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
@@ -405,17 +465,23 @@
     {
         get
         {
-            if (View == null) return Array.Empty<Dependency>();
+            if (Fn == null) return Array.Empty<Dependency>();
             
-            var allUsedBy = Enumerable.Empty<Dependency>();
-            if (DependencyShowViews) allUsedBy = allUsedBy.Concat(View.Children);
-            if (DependencyShowSPs) allUsedBy = allUsedBy.Concat(View.ReferencedBySPs);
+            var deps = Enumerable.Empty<Dependency>();
+            var views = Fn.ReferencedBy.Where(p => p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) || p.Type == "V");
+            var sps = Fn.ReferencedBy.Where(p => p.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || p.Type == "SP");
+            var funcs = Fn.ReferencedBy.Where(p => p.Type == "Function");
             
-            if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return allUsedBy;
+            if (DependencyShowViews) deps = deps.Concat(views);
+            if (DependencyShowSPs) deps = deps.Concat(sps);
+            if (DependencyShowFuncs) deps = deps.Concat(funcs);
+            
+            deps = deps.OrderBy(d => d.Type).ThenBy(d => d.Name);
+            if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return deps;
             
             var searchStr = DependencySearchCaseSensitive ? DependencySearchTerm : DependencySearchTerm.ToLowerInvariant();
             
-            return allUsedBy.Where(d => 
+            return deps.Where(d => 
             {
                 var nameVal = DependencySearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
                 var schemaVal = DependencySearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
@@ -430,19 +496,25 @@
         }
     }
 
-    private List<ColumnInfo> VisibleColumns => FilterColumns(ColumnSearchTerm, ColumnSearchCaseSensitive, ColumnSearchMatchWholeWord, ColumnSearchExactMatch);
-    private string SelectQuery => $"SELECT TOP 100 * FROM {QuotedViewName(View!)};";
-
     protected override async Task OnParametersSetAsync()
     {
         IsLoading = true;
         await Task.Yield();
         
         var decoded = Uri.UnescapeDataString(FullName);
-        View = SchemaService.Views.FirstOrDefault(t => t.FullName == decoded);
-        ColumnSearchTerm = string.Empty;
+        Fn = SchemaService.Functions.FirstOrDefault(s => s.FullName == decoded);
+        DependencySearchTerm = string.Empty;
         
+
+
         IsLoading = false;
+        
+        ActiveTab = "Parameters";
+
+        if (Fn != null)
+        {
+            FilterParams();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -451,6 +523,35 @@
         {
             try { await JS.InvokeVoidAsync("scrollToMainTop"); } catch { }
         }
+    }
+
+    private void FilterParams()
+    {
+        if (Fn == null) return;
+        
+        if (string.IsNullOrWhiteSpace(ParamSearchTerm))
+        {
+            VisibleParams = Fn.Parameters.ToList();
+            return;
+        }
+
+        var comparison = ParamCaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var query = ParamSearchTerm.Trim();
+
+        VisibleParams = Fn.Parameters.Where(p =>
+        {
+            if (ParamExactMatch)
+            {
+                return p.Name.Equals(query, comparison);
+            }
+            if (ParamMatchWholeWord)
+            {
+                var regexOpts = ParamCaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
+                return Regex.IsMatch(p.Name, $@"\b{Regex.Escape(query)}\b", regexOpts);
+            }
+
+            return p.Name.Contains(query, comparison);
+        }).ToList();
     }
 
     private void SetActiveTab(string tab)
@@ -466,14 +567,16 @@
             return;
         }
 
-        Navigation.NavigateTo("/views");
+        Navigation.NavigateTo("/functions");
     }
 
-    private string BuildObjectLink(string fullName)
+    private string BuildDependencyLink(Dependency dependency)
     {
-        var prefix = IsView(fullName) ? "/view" : "/table";
+        var isProc = dependency.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dependency.Type == "SP";
+        var isFunc = dependency.Type == "Function";
+        var prefix = isProc ? "/proc" : (isFunc ? "/function" : (dependency.Type == "View" ? "/view" : "/table"));
         var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
-        var baseLink = $"{prefix}/{Uri.EscapeDataString(fullName)}";
+        var baseLink = $"{prefix}/{Uri.EscapeDataString(dependency.FullName)}";
 
         if (string.IsNullOrWhiteSpace(currentRoute))
         {
@@ -483,73 +586,51 @@
         return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
     }
 
-    private string BuildProcLink(string procFullName)
+    private async Task CopyExecStatement()
     {
-        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
-        var baseLink = $"/proc/{Uri.EscapeDataString(procFullName)}";
-
-        if (string.IsNullOrWhiteSpace(currentRoute))
+        try
         {
-            return baseLink;
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", ExecStatement);
+            Copied = true;
+            StateHasChanged();
+            await Task.Delay(2000);
+            Copied = false;
+            StateHasChanged();
         }
-
-        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
+        catch { }
     }
 
-    private string GetShortName(string fullName)
+    private string ExecStatement
     {
-        if (string.IsNullOrWhiteSpace(fullName)) return string.Empty;
-        var parts = fullName.Split('.');
-        if (parts.Length == 2)
+        get
         {
-            return parts[1].Trim('[', ']');
-        }
-        return fullName.Trim('[', ']');
-    }
+            if (Fn == null) return string.Empty;
 
-    private bool IsView(string fullName)
-    {
-        return SchemaService.Views.Any(v => v.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
-    }
+            var isScalar = Fn.FunctionType.Contains("Scalar", StringComparison.OrdinalIgnoreCase);
+            var sb = new System.Text.StringBuilder();
 
-    private string QuotedViewName(ViewInfo view)
-    {
-        return $"[{view.Schema}].[{view.Name}]";
-    }
-
-    private List<ColumnInfo> FilterColumns(string searchTerm, bool caseSensitive, bool matchWholeWord, bool exactMatch)
-    {
-        if (View == null) return new List<ColumnInfo>();
-        if (string.IsNullOrWhiteSpace(searchTerm)) return View.Columns.ToList();
-
-        var searchStr = caseSensitive ? searchTerm : searchTerm.ToLower();
-
-        return View.Columns.Where(c =>
-        {
-            var colName = caseSensitive ? c.Name : c.Name.ToLower();
-            var dataType = caseSensitive ? c.DataType : c.DataType.ToLower();
-
-            if (exactMatch)
+            if (isScalar)
             {
-                return colName == searchStr || dataType == searchStr;
+                sb.Append($"SELECT {Fn.FullName}(");
             }
-            if (matchWholeWord)
+            else
             {
-                return colName.Split(' ', '.', '_').Contains(searchStr) || 
-                       dataType.Split(' ', '.', '_').Contains(searchStr);
+                sb.Append($"SELECT * FROM {Fn.FullName}(");
+            }
+
+            var allParams = Fn.Parameters.ToList();
+            for (int i = 0; i < allParams.Count; i++)
+            {
+                var p = allParams[i];
+                var isLast = i == allParams.Count - 1;
+                var comma = isLast ? "" : ", ";
+
+                string placeholder = $"/* {p.Name} ({p.DisplayType}) */";
+                sb.Append($"{placeholder}{comma}");
             }
             
-            return colName.Contains(searchStr) || dataType.Contains(searchStr);
-        }).ToList();
-    }
-
-    private async Task CopySelectQuery()
-    {
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", SelectQuery);
-        SelectCopied = true;
-        StateHasChanged();
-        await Task.Delay(2000);
-        SelectCopied = false;
-        StateHasChanged();
+            sb.Append(");");
+            return sb.ToString();
+        }
     }
 }

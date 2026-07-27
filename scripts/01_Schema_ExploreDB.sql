@@ -28,6 +28,16 @@ CREATE TYPE dbo.AddressType FROM NVARCHAR(500) NULL;
 CREATE TYPE dbo.SKUType FROM NVARCHAR(50) NOT NULL;
 CREATE TYPE dbo.ZipCodeType FROM NVARCHAR(20) NOT NULL;
 CREATE TYPE dbo.IPAddressType FROM NVARCHAR(45) NULL;
+CREATE TYPE dbo.AgeType FROM TINYINT NOT NULL;
+CREATE TYPE dbo.TemperatureType FROM FLOAT NULL;
+CREATE TYPE dbo.CoordinatesType FROM DECIMAL(9,6) NULL;
+CREATE TYPE dbo.JSONDataType FROM NVARCHAR(MAX) NULL;
+CREATE TYPE dbo.StatusType FROM VARCHAR(20) NOT NULL;
+CREATE TYPE dbo.FlagType FROM BIT NOT NULL;
+CREATE TYPE dbo.HashType FROM VARBINARY(64) NULL;
+CREATE TYPE dbo.UUIDType FROM UNIQUEIDENTIFIER NOT NULL;
+CREATE TYPE dbo.DateOfBirthType FROM DATE NULL;
+CREATE TYPE dbo.TimestampType FROM DATETIME2(7) NOT NULL;
 GO
 
 -- =======================================================================================
@@ -594,6 +604,62 @@ BEGIN
 END
 GO
 
+-- 1. Scalar Function returning INT from DATETIME2
+CREATE FUNCTION dbo.fn_CalculateAge (@DOB DATE)
+RETURNS INT
+AS
+BEGIN
+    IF @DOB IS NULL RETURN NULL;
+    RETURN DATEDIFF(YEAR, @DOB, GETDATE()) - 
+           CASE WHEN DATEADD(YEAR, DATEDIFF(YEAR, @DOB, GETDATE()), @DOB) > GETDATE() THEN 1 ELSE 0 END;
+END
+GO
+
+-- 2. Multi-Statement Table Valued Function (MSTVF)
+CREATE FUNCTION dbo.fn_GetTopEmployeesBySalary (@Limit INT)
+RETURNS @TopEmployees TABLE
+(
+    EmployeeID INT,
+    FullName NVARCHAR(200),
+    Salary dbo.MoneyType
+)
+AS
+BEGIN
+    INSERT INTO @TopEmployees (EmployeeID, FullName, Salary)
+    SELECT TOP (@Limit)
+        e.EmployeeID,
+        u.FirstName + ' ' + u.LastName,
+        e.BaseSalary
+    FROM dbo.Employees e
+    JOIN dbo.Users u ON e.UserID = u.UserID
+    ORDER BY e.BaseSalary DESC;
+
+    RETURN;
+END
+GO
+
+-- 3. String Formatting Scalar Function
+CREATE FUNCTION dbo.fn_FormatPhone (@Phone dbo.PhoneType)
+RETURNS dbo.PhoneType
+AS
+BEGIN
+    IF LEN(@Phone) = 10
+        RETURN '(' + SUBSTRING(@Phone, 1, 3) + ') ' + SUBSTRING(@Phone, 4, 3) + '-' + SUBSTRING(@Phone, 7, 4);
+    RETURN @Phone;
+END
+GO
+
+-- 4. Simple Table Valued Function (Inline TVF)
+CREATE FUNCTION dbo.fn_GetActiveUsers ()
+RETURNS TABLE
+AS
+RETURN (
+    SELECT UserID, Email, CreatedAt
+    FROM dbo.Users
+    WHERE IsActive = 1
+);
+GO
+
 CREATE PROCEDURE dbo.sp_LogPageView
     @SessionID NVARCHAR(100), @UserID INT = NULL, @PageURL NVARCHAR(1000), @IPAddress dbo.IPAddressType = NULL
 AS
@@ -726,94 +792,224 @@ BEGIN
 END
 GO
 
+
+
 -- =======================================================================================
--- THE ULTIMATE MASSIVE DATA GENERATOR (100k+ Records)
+-- OPTIONAL STRESS TEST: GENERATE 5 MILLION ROWS
 -- =======================================================================================
-CREATE PROCEDURE dbo.sp_GenerateUltimateDummyData
+CREATE PROCEDURE dbo.sp_GenerateMassiveDataVolume
 AS
 BEGIN
     SET NOCOUNT ON;
-    PRINT 'Initiating Ultimate Bulk Data Generation (This will generate 100k+ records)...';
+    PRINT 'Creating dbo.MassiveDataTest table...';
 
-    -- Base config
-    INSERT INTO dbo.Currencies (CurrencyCode, CurrencyName, Symbol) VALUES ('USD', 'US Dollar', '$'), ('EUR', 'Euro', '€'), ('GBP', 'British Pound', '£');
-    INSERT INTO dbo.Languages (LanguageCode, LanguageName) VALUES ('en-US', 'English'), ('es-ES', 'Spanish'), ('fr-FR', 'French');
-    INSERT INTO dbo.Roles (RoleName) VALUES ('Admin'), ('Customer'), ('Support'), ('Employee'), ('Affiliate');
+    IF OBJECT_ID('dbo.MassiveDataTest', 'U') IS NOT NULL 
+        DROP TABLE dbo.MassiveDataTest;
 
-    -- Departments & Assembly Lines
-    INSERT INTO dbo.Departments (DepartmentName) VALUES ('HR'), ('Engineering'), ('Sales'), ('Marketing'), ('Logistics'), ('Manufacturing');
-    INSERT INTO dbo.AssemblyLines (LineName) VALUES ('Alpha Line'), ('Beta Line'), ('Gamma Line');
-    INSERT INTO dbo.ShippingCarriers (CarrierName) VALUES ('FedEx'), ('UPS'), ('USPS'), ('DHL');
-    INSERT INTO dbo.ShippingMethods (CarrierID, MethodName, BaseCost, EstimatedDays) 
-    SELECT CarrierID, 'Standard Ground', 5.99, 5 FROM dbo.ShippingCarriers UNION ALL
-    SELECT CarrierID, '2-Day Express', 15.99, 2 FROM dbo.ShippingCarriers UNION ALL
-    SELECT CarrierID, 'Overnight Priority', 29.99, 1 FROM dbo.ShippingCarriers;
+    CREATE TABLE dbo.MassiveDataTest (
+        RowID BIGINT IDENTITY(1,1) PRIMARY KEY CLUSTERED,
+        Category NVARCHAR(50),
+        RandomValue DECIMAL(18,4),
+        DateLogged DATETIME2,
+        StatusFlag BIT,
+        LargeTextField NVARCHAR(MAX)
+    );
 
-    -- Warehouses
-    DECLARE @w INT = 1; WHILE @w <= 10 BEGIN INSERT INTO dbo.Warehouses (WarehouseCode, LocationName, City, Country) VALUES ('WH' + CAST(@w AS VARCHAR), 'Mega Warehouse ' + CAST(@w AS VARCHAR), 'Metropolis', 'USA'); SET @w = @w + 1; END
+    PRINT 'Generating 5 Million Rows...';
+    
+    WITH 
+      L0   AS (SELECT c FROM (VALUES(1),(1)) AS D(c)),
+      L1   AS (SELECT 1 AS c FROM L0 AS A CROSS JOIN L0 AS B),
+      L2   AS (SELECT 1 AS c FROM L1 AS A CROSS JOIN L1 AS B),
+      L3   AS (SELECT 1 AS c FROM L2 AS A CROSS JOIN L2 AS B),
+      L4   AS (SELECT 1 AS c FROM L3 AS A CROSS JOIN L3 AS B),
+      L5   AS (SELECT 1 AS c FROM L4 AS A CROSS JOIN L4 AS B),
+      Nums AS (SELECT ROW_NUMBER() OVER(ORDER BY (SELECT NULL)) AS N FROM L5)
 
-    -- Vehicles
-    DECLARE @v INT = 1; WHILE @v <= 100 BEGIN INSERT INTO dbo.VehicleFleet (LicensePlate, VehicleType) VALUES ('TRK-' + LEFT(CAST(NEWID() AS VARCHAR(36)), 8), CASE WHEN @v%2=0 THEN 'Truck' ELSE 'Van' END); SET @v = @v + 1; END
-
-    -- Brands & Categories
-    DECLARE @b INT = 1; WHILE @b <= 200 BEGIN INSERT INTO dbo.Brands (BrandName) VALUES ('Global Brand ' + CAST(NEWID() AS VARCHAR(36))); INSERT INTO dbo.Categories (CategoryName) VALUES ('Global Category ' + CAST(NEWID() AS VARCHAR(36))); SET @b = @b + 1; END
-
-    -- Products (20,000)
-    PRINT 'Generating 20,000 Products & Inventory...';
-    DECLARE @p INT = 1; WHILE @p <= 20000 BEGIN 
-        INSERT INTO dbo.Products (CategoryID, BrandID, ProductName, SKU, BasePrice) VALUES ((CAST(RAND() * 199 AS INT) + 1), (CAST(RAND() * 199 AS INT) + 1), 'Ultimate Item ' + CAST(@p AS VARCHAR), 'SKU-' + CAST(NEWID() AS VARCHAR(36)), ROUND(RAND() * 1000, 2) + 10);
-        SET @p = @p + 1; 
-    END
-
-    -- Inventory Distribution (100,000 records)
-    PRINT 'Distributing Inventory across Warehouses (100,000 records)...';
-    INSERT INTO dbo.WarehouseInventory (WarehouseID, ProductID, StockQuantity) SELECT (ProductID % 10) + 1, ProductID, CAST(RAND(ProductID) * 5000 AS INT) + 100 FROM dbo.Products;
-    INSERT INTO dbo.WarehouseInventory (WarehouseID, ProductID, StockQuantity) SELECT ((ProductID+1) % 10) + 1, ProductID, CAST(RAND(ProductID) * 2000 AS INT) + 50 FROM dbo.Products;
-
-    -- Raw Materials & BOM
-    DECLARE @rm INT = 1; WHILE @rm <= 500 BEGIN INSERT INTO dbo.RawMaterials (MaterialName, UnitOfMeasure, CostPerUnit) VALUES ('Material ' + CAST(@rm AS VARCHAR), 'kg', RAND() * 10); SET @rm = @rm + 1; END
-    INSERT INTO dbo.BillOfMaterials (ProductID, MaterialID, QuantityRequired) SELECT TOP 10000 ProductID, (ProductID % 500) + 1, RAND() * 5 FROM dbo.Products;
-
-    -- Users (20,000)
-    PRINT 'Generating 20,000 Users...';
-    DECLARE @u INT = 1; WHILE @u <= 20000 BEGIN INSERT INTO dbo.Users (FirstName, LastName, Email, PreferredLanguageID, PreferredCurrencyID) VALUES ('MegaUserFn_' + CAST(@u AS VARCHAR), 'MegaUserLn_' + CAST(@u AS VARCHAR), 'user' + CAST(@u AS VARCHAR) + '@mega.com', (CAST(RAND() * 2 AS INT) + 1), (CAST(RAND() * 2 AS INT) + 1)); SET @u = @u + 1; END
-
-    -- Employees (1,000)
-    INSERT INTO dbo.Employees (UserID, DepartmentID, JobTitle, HireDate, BaseSalary) SELECT TOP 1000 UserID, (UserID % 6) + 1, 'Enterprise Staff', DATEADD(DAY, -CAST(RAND()*1000 AS INT), GETDATE()), 50000 + (RAND()*50000) FROM dbo.Users ORDER BY NEWID();
-
-    -- Affiliates (500)
-    INSERT INTO dbo.Affiliates (UserID, AffiliateCode) SELECT TOP 500 UserID, 'AFF-' + CAST(UserID AS VARCHAR) FROM dbo.Users WHERE UserID NOT IN (SELECT UserID FROM dbo.Employees);
-
-    -- Quality Inspections (10,000)
-    INSERT INTO dbo.QualityInspections (ProductID, AssemblyLineID, InspectorEmployeeID, Passed, DefectReason) SELECT TOP 10000 ProductID, (ProductID % 3) + 1, (SELECT TOP 1 EmployeeID FROM dbo.Employees), CASE WHEN (ProductID % 15) = 0 THEN 0 ELSE 1 END, CASE WHEN (ProductID % 15) = 0 THEN 'Failed Tolerance Test' ELSE NULL END FROM dbo.Products;
-
-    -- Orders (50,000)
-    PRINT 'Generating 50,000 Orders (This may take a moment)...';
-    DECLARE @o INT = 1, @OrderID UNIQUEIDENTIFIER, @UserID INT;
-    WHILE @o <= 50000 BEGIN
-        SET @OrderID = NEWID(); SET @UserID = CAST(RAND() * 19999 AS INT) + 1;
-        INSERT INTO dbo.Orders (OrderID, UserID, OrderDate, Status) VALUES (@OrderID, @UserID, DATEADD(DAY, -CAST(RAND() * 1000 AS INT), GETDATE()), CASE WHEN @o % 10 = 0 THEN 'Pending' ELSE 'Completed' END);
-        -- Order details (1-3 items)
-        DECLARE @i INT = 1, @items INT = CAST(RAND() * 3 AS INT) + 1;
-        WHILE @i <= @items BEGIN
-            DECLARE @ProdID INT = CAST(RAND() * 19999 AS INT) + 1;
-            INSERT INTO dbo.OrderDetails (OrderID, ProductID, Quantity, UnitPrice) VALUES (@OrderID, @ProdID, CAST(RAND() * 4 AS INT) + 1, (SELECT BasePrice FROM dbo.Products WHERE ProductID = @ProdID));
-            SET @i = @i + 1;
-        END
-        UPDATE dbo.Orders SET TotalAmount = (SELECT ISNULL(SUM(LineTotal),0) FROM dbo.OrderDetails WHERE OrderID = @OrderID) WHERE OrderID = @OrderID;
-        SET @o = @o + 1;
-    END
-
-    -- Page Views (100,000 analytics hits)
-    PRINT 'Generating 100,000 PageViews (Analytics)...';
-    DECLARE @pv INT = 1; WHILE @pv <= 100000 BEGIN INSERT INTO dbo.PageViews (SessionID, PageURL, UserAgent) VALUES ('SESSION_' + CAST(CAST(RAND()*1000 AS INT) AS VARCHAR), '/products/item-' + CAST(CAST(RAND()*20000 AS INT) AS VARCHAR), CASE WHEN @pv%3=0 THEN 'Mozilla/5.0 (iPhone)' ELSE 'Mozilla/5.0 (Windows NT 10.0)' END); SET @pv = @pv + 1; END
-
-    PRINT 'Ultimate Data Generation Complete! DB is now heavily populated.';
+    INSERT INTO dbo.MassiveDataTest WITH (TABLOCK) 
+    (Category, RandomValue, DateLogged, StatusFlag, LargeTextField)
+    SELECT TOP (5000000)
+        CHOOSE((N % 5) + 1, 'Analytics', 'System', 'Audit', 'Error', 'Transaction'),
+        CAST((N * 3.14159) % 1000 AS DECIMAL(18,4)),
+        DATEADD(SECOND, -(N % 31536000), GETDATE()),
+        (N % 2),
+        REPLICATE('Data_Volume_Test_Block_', (N % 5) + 1)
+    FROM Nums;
+    
+    PRINT 'Data generation complete! Run: SELECT COUNT(*) FROM dbo.MassiveDataTest; to verify.';
 END
 GO
 
+
 -- =======================================================================================
--- Execute the Ultimate Generation SP
+-- OPTIONAL STRESS TEST: GENERATE MASSIVE SCHEMA (1,500 Tables, 5,000 SPs)
 -- =======================================================================================
-EXEC dbo.sp_GenerateUltimateDummyData;
+CREATE PROCEDURE dbo.sp_GenerateStressTestSchema
+AS
+BEGIN
+    SET NOCOUNT ON;
+    PRINT 'Initializing Mass Schema Generation... This will take a few minutes.';
+
+    IF OBJECT_ID('tempdb..#Entities') IS NOT NULL DROP TABLE #Entities;
+    IF OBJECT_ID('tempdb..#Suffixes') IS NOT NULL DROP TABLE #Suffixes;
+    IF OBJECT_ID('tempdb..#GeneratedTables') IS NOT NULL DROP TABLE #GeneratedTables;
+    IF OBJECT_ID('tempdb..#GeneratedSPs') IS NOT NULL DROP TABLE #GeneratedSPs;
+
+    CREATE TABLE #Entities (Name NVARCHAR(50));
+    INSERT INTO #Entities (Name) VALUES 
+    ('User'), ('Account'), ('Order'), ('Product'), ('Invoice'), ('Payment'), ('Shipment'), ('Department'), ('Employee'), ('Customer'), 
+    ('Vendor'), ('Supplier'), ('Contract'), ('Ticket'), ('Note'), ('Attachment'), ('Tag'), ('Category'), ('Profile'), ('Setting'), 
+    ('Log'), ('Event'), ('Device'), ('Session'), ('Token'), ('Campaign'), ('Lead'), ('Opportunity'), ('Quote'), ('Cart'), 
+    ('Item'), ('Review'), ('Rating'), ('Subscription'), ('Plan'), ('Address'), ('Route'), ('Vehicle'), ('Warehouse'), ('Location'), 
+    ('Bin'), ('Zone'), ('Rule'), ('Policy'), ('Discount'), ('Tax'), ('Rate'), ('Currency'), ('Language'), ('Module');
+
+    CREATE TABLE #Suffixes (Name NVARCHAR(50));
+    INSERT INTO #Suffixes (Name) VALUES 
+    (''), ('History'), ('Log'), ('Mapping'), ('Stats'), ('Metrics'), ('Archive'), ('Rules'), ('Cache'), ('Queue'), 
+    ('Details'), ('Info'), ('Data'), ('Config'), ('Audit'), ('Base'), ('Core'), ('Ext'), ('Link'), ('Ref');
+
+    CREATE TABLE #GeneratedTables (TableID INT IDENTITY(1,1), TableName NVARCHAR(128));
+
+    INSERT INTO #GeneratedTables (TableName)
+    SELECT TOP 1500 e1.Name + e2.Name + s.Name
+    FROM #Entities e1
+    CROSS JOIN #Entities e2
+    CROSS JOIN #Suffixes s
+    ORDER BY NEWID();
+
+    PRINT 'Creating 1,500 Tables with Custom Types...';
+    DECLARE @i INT = 1;
+    DECLARE @TableName NVARCHAR(128);
+    DECLARE @sql NVARCHAR(MAX);
+    DECLARE @RandomType NVARCHAR(50);
+
+    WHILE @i <= 1500
+    BEGIN
+        SELECT @TableName = TableName FROM #GeneratedTables WHERE TableID = @i;
+        SELECT @RandomType = CHOOSE(CAST(RAND()*10 AS INT)+1, 'dbo.NameType', 'dbo.MoneyType', 'dbo.PhoneType', 'dbo.IPAddressType', 'dbo.DateOfBirthType', 'dbo.AgeType', 'dbo.StatusType', 'dbo.FlagType', 'dbo.HashType', 'dbo.UUIDType');
+        
+        SET @sql = 'CREATE TABLE dbo.' + @TableName + ' (
+            ID INT IDENTITY(1,1) PRIMARY KEY,
+            DynamicColumn ' + ISNULL(@RandomType, 'NVARCHAR(100)') + ' NULL,
+            GenericData NVARCHAR(500) NULL,
+            CreatedAt DATETIME2 DEFAULT GETDATE(),
+            IsActive BIT DEFAULT 1
+        );';
+        EXEC sp_executesql @sql;
+        SET @i = @i + 1;
+    END
+
+    PRINT 'Weaving Foreign Key Graph (Randomly linking tables together for Routing App)...';
+    SET @i = 2;
+    WHILE @i <= 1500
+    BEGIN
+        SELECT @TableName = TableName FROM #GeneratedTables WHERE TableID = @i;
+        
+        DECLARE @ParentTable NVARCHAR(128);
+        DECLARE @ParentID INT = CAST(RAND() * (@i - 1) AS INT) + 1;
+        SELECT @ParentTable = TableName FROM #GeneratedTables WHERE TableID = @ParentID;
+        
+        SET @sql = 'ALTER TABLE dbo.' + @TableName + ' ADD Parent' + @ParentTable + 'ID INT NULL; 
+                    ALTER TABLE dbo.' + @TableName + ' ADD CONSTRAINT FK_' + @TableName + '_' + @ParentTable + ' FOREIGN KEY (Parent' + @ParentTable + 'ID) REFERENCES dbo.' + @ParentTable + '(ID);';
+        EXEC sp_executesql @sql;
+        
+        IF RAND() > 0.6 AND @i > 5
+        BEGIN
+            DECLARE @ParentID2 INT = CAST(RAND() * (@i - 1) AS INT) + 1;
+            IF @ParentID2 <> @ParentID
+            BEGIN
+                DECLARE @ParentTable2 NVARCHAR(128);
+                SELECT @ParentTable2 = TableName FROM #GeneratedTables WHERE TableID = @ParentID2;
+                
+                SET @sql = 'ALTER TABLE dbo.' + @TableName + ' ADD Linked' + @ParentTable2 + 'ID INT NULL; 
+                            ALTER TABLE dbo.' + @TableName + ' ADD CONSTRAINT FK2_' + @TableName + '_' + @ParentTable2 + ' FOREIGN KEY (Linked' + @ParentTable2 + 'ID) REFERENCES dbo.' + @ParentTable2 + '(ID);';
+                EXEC sp_executesql @sql;
+            END
+        END
+        
+        SET @i = @i + 1;
+    END
+
+    PRINT 'Creating 50 Complex Views...';
+    SET @i = 1;
+    WHILE @i <= 50
+    BEGIN
+        DECLARE @T1 NVARCHAR(128), @T2 NVARCHAR(128), @T3 NVARCHAR(128);
+        SELECT TOP 1 @T1 = TableName FROM #GeneratedTables ORDER BY NEWID();
+        SELECT TOP 1 @T2 = TableName FROM #GeneratedTables ORDER BY NEWID();
+        SELECT TOP 1 @T3 = TableName FROM #GeneratedTables ORDER BY NEWID();
+
+        SET @sql = 'CREATE VIEW dbo.vw_StressAnalysis_' + CAST(@i AS NVARCHAR) + ' AS 
+                    SELECT t1.ID AS T1_ID, t2.ID AS T2_ID, t3.ID AS T3_ID, t1.CreatedAt
+                    FROM dbo.' + @T1 + ' t1 
+                    CROSS JOIN dbo.' + @T2 + ' t2 
+                    CROSS JOIN dbo.' + @T3 + ' t3;';
+        EXEC sp_executesql @sql;
+        SET @i = @i + 1;
+    END
+
+    PRINT 'Creating 50 Functions...';
+    SET @i = 1;
+    WHILE @i <= 50
+    BEGIN
+        DECLARE @FuncType INT = CAST(RAND() * 3 AS INT);
+        SELECT TOP 1 @T1 = TableName FROM #GeneratedTables ORDER BY NEWID();
+
+        IF @FuncType = 0
+            SET @sql = 'CREATE FUNCTION dbo.fn_StressScalar_' + CAST(@i AS NVARCHAR) + ' (@Input dbo.MoneyType) RETURNS dbo.MoneyType AS BEGIN RETURN @Input * 1.05; END;';
+        ELSE IF @FuncType = 1
+            SET @sql = 'CREATE FUNCTION dbo.fn_StressInlineTVF_' + CAST(@i AS NVARCHAR) + ' (@ID INT) RETURNS TABLE AS RETURN (SELECT TOP 10 * FROM dbo.' + @T1 + ' WHERE ID > @ID);';
+        ELSE
+            SET @sql = 'CREATE FUNCTION dbo.fn_StressMSTVF_' + CAST(@i AS NVARCHAR) + ' (@Filter BIT) RETURNS @Ret TABLE (ID INT, Name NVARCHAR(100)) AS BEGIN INSERT INTO @Ret (ID, Name) SELECT TOP 5 ID, GenericData FROM dbo.' + @T1 + '; RETURN; END;';
+
+        EXEC sp_executesql @sql;
+        SET @i = @i + 1;
+    END
+
+    PRINT 'Generating 5,000 Stored Procedures with Custom Data Types...';
+    CREATE TABLE #GeneratedSPs (SpID INT IDENTITY(1,1), SpName NVARCHAR(128));
+
+    INSERT INTO #GeneratedSPs (SpName)
+    SELECT TOP 5000 v.Verb + t.TableName
+    FROM (VALUES ('sp_Get'),('sp_Insert'),('sp_Update'),('sp_Delete'),('sp_Process'),('sp_Sync'),('sp_Archive')) v(Verb)
+    CROSS JOIN #GeneratedTables t
+    ORDER BY NEWID();
+
+    SET @i = 1;
+    WHILE @i <= 5000
+    BEGIN
+        DECLARE @SpName NVARCHAR(128);
+        SELECT @SpName = SpName FROM #GeneratedSPs WHERE SpID = @i;
+        
+        DECLARE @RandomParam1 NVARCHAR(50), @RandomParam2 NVARCHAR(50);
+        SELECT @RandomParam1 = CHOOSE(CAST(RAND()*8 AS INT)+1, 'dbo.NameType', 'dbo.MoneyType', 'dbo.PhoneType', 'INT', 'NVARCHAR(255)', 'dbo.IPAddressType', 'UNIQUEIDENTIFIER', 'dbo.StatusType');
+        SELECT @RandomParam2 = CHOOSE(CAST(RAND()*8 AS INT)+1, 'dbo.AgeType', 'dbo.DateOfBirthType', 'BIT', 'FLOAT', 'dbo.HashType', 'DATETIME2', 'dbo.FlagType', 'dbo.TimestampType');
+        
+        SET @sql = 'CREATE PROCEDURE dbo.' + @SpName + ' 
+            @Param1 ' + ISNULL(@RandomParam1, 'INT') + ',
+            @Param2 ' + ISNULL(@RandomParam2, 'BIT') + ' = NULL OUTPUT
+        AS 
+        BEGIN
+            SET NOCOUNT ON;
+            SELECT @Param1 AS InParam, @Param2 AS OutParam;
+        END';
+        
+        EXEC sp_executesql @sql;
+        SET @i = @i + 1;
+    END
+
+    PRINT '==================================================';
+    PRINT 'MASS SCHEMA GENERATION COMPLETE!';
+    PRINT 'Total Tables: 1,500';
+    PRINT 'Total Stored Procedures: 5,000';
+    PRINT '==================================================';
+END
 GO
+
+
+-- =======================================================================================
+-- EXECUTE OPTIONAL STRESS TEST SCHEMA GENERATION (Comment out if not needed)
+-- =======================================================================================
+EXEC dbo.sp_GenerateStressTestSchema;
+GO
+

@@ -91,6 +91,15 @@
                 <span>SP Explorer</span>
             </a>
 
+            <a href="functions"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsFunctionExplorerActive ? "active" : "")">
+                <span>Function Explorer</span>
+            </a>
+
+            <a href="types"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsTypeExplorerActive ? "active" : "")">
+                <span>Type Explorer</span>
+            </a>
 
             <a href="learning"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsLearningActive ? "active" : "")">
@@ -119,6 +128,8 @@
     private bool IsExplorerActive => CurrentUrl.Contains("/explorer");
     private bool IsViewExplorerActive => CurrentUrl.Contains("/views") && !CurrentUrl.Contains("/view/");
     private bool IsSpExplorerActive => CurrentUrl.Contains("/procs") || CurrentUrl.Contains("/proc/");
+    private bool IsFunctionExplorerActive => CurrentUrl.Contains("/functions") || CurrentUrl.Contains("/function/");
+    private bool IsTypeExplorerActive => CurrentUrl.Contains("/types") || CurrentUrl.Contains("/type/");
 
     protected override async Task OnInitializedAsync()
     {

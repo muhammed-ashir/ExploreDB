@@ -110,12 +110,70 @@ public class SpInfo
     public override string ToString() => FullName;
 }
 
+public class FunctionParameter
+{
+    public string Name { get; set; } = string.Empty;
+    public string DataType { get; set; } = string.Empty;
+    public bool IsOutput { get; set; } = false;
+    public int MaxLength { get; set; } = -1;
+    public int Precision { get; set; } = 0;
+    public int Scale { get; set; } = 0;
+
+    public string DisplayType
+    {
+        get
+        {
+            var type = DataType.ToUpper();
+            if (type is "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR")
+                return MaxLength == -1 ? $"{DataType}(MAX)" : $"{DataType}({MaxLength})";
+            if (type is "DECIMAL" or "NUMERIC")
+                return $"{DataType}({Precision},{Scale})";
+            return DataType;
+        }
+    }
+}
+
+public class FunctionInfo
+{
+    public string Schema { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string FullName => $"[{Schema}].[{Name}]";
+    public string FunctionType { get; set; } = string.Empty; // e.g. Scalar, Inline Table, Multi-Statement Table
+    public DateTime? CreatedDate { get; set; }
+    public DateTime? ModifiedDate { get; set; }
+    public List<FunctionParameter> Parameters { get; set; } = new();
+    public string? ReturnType { get; set; } // Only for Scalar functions
+    public List<Dependency> Dependencies { get; set; } = new();
+    public List<Dependency> ReferencedBy { get; set; } = new();
+
+    public override string ToString() => FullName;
+}
+
+public class TypeInfo
+{
+    public string Schema { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string FullName => $"[{Schema}].[{Name}]";
+    public bool IsTableType { get; set; } = false;
+    public string? BaseType { get; set; } // For alias types
+    public int MaxLength { get; set; } = -1;
+    public int Precision { get; set; } = 0;
+    public int Scale { get; set; } = 0;
+    
+    // For Table Types
+    public List<ColumnInfo> Columns { get; set; } = new();
+
+    public override string ToString() => FullName;
+}
+
 public class SchemaService
 {
     private readonly ConnectionService _connectionService;
     public List<TableInfo> Tables { get; private set; } = new();
     public List<ViewInfo> Views { get; private set; } = new();
     public List<SpInfo> StoredProcedures { get; private set; } = new();
+    public List<FunctionInfo> Functions { get; private set; } = new();
+    public List<TypeInfo> Types { get; private set; } = new();
     public event Action? OnSchemaLoaded;
 
     public SchemaService(ConnectionService connectionService)
@@ -136,6 +194,23 @@ public class SchemaService
         catch (Exception ex)
         {
             Console.WriteLine($"Error fetching SP definition for {fullName}: {ex.Message}");
+            return null;
+        }
+    }
+
+    public async Task<string?> GetFunctionDefinitionAsync(string fullName)
+    {
+        if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return null;
+
+        try 
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            var sql = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName))";
+            return await conn.QuerySingleOrDefaultAsync<string>(sql, new { FullName = fullName });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching Function definition for {fullName}: {ex.Message}");
             return null;
         }
     }
@@ -422,6 +497,242 @@ public class SchemaService
                 {
                     sourceSp.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Procedure" });
                     depSp.ReferencedBySPs.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "Procedure" });
+                }
+            }
+
+            // 10. Get Functions
+            Console.WriteLine("Fetching Functions...");
+            var fnSql = @"
+                SELECT 
+                    s.name AS SchemaName,
+                    o.name AS FuncName,
+                    o.type AS FuncType,
+                    o.create_date AS CreatedDate,
+                    o.modify_date AS ModifiedDate
+                FROM sys.objects o
+                JOIN sys.schemas s ON o.schema_id = s.schema_id
+                WHERE o.type IN ('FN', 'IF', 'TF')
+                ORDER BY s.name, o.name";
+            
+            var rawFns = await conn.QueryAsync<dynamic>(fnSql);
+            Functions = rawFns.Select(r => new FunctionInfo
+            {
+                Schema = (string)r.SchemaName,
+                Name = (string)r.FuncName,
+                FunctionType = (string)r.FuncType switch {
+                    "FN" => "Scalar",
+                    "IF" => "Inline Table",
+                    "TF" => "Multi-Statement Table",
+                    _ => (string)r.FuncType
+                },
+                CreatedDate = (DateTime?)r.CreatedDate,
+                ModifiedDate = (DateTime?)r.ModifiedDate
+            }).ToList();
+            var fnDict = Functions.ToDictionary(f => f.FullName);
+
+            // 11. Get Function Parameters
+            Console.WriteLine("Fetching Function Parameters...");
+            var fnParamSql = @"
+                SELECT 
+                    s.name AS SchemaName,
+                    o.name AS FuncName,
+                    pm.name AS ParamName,
+                    t.name AS DataType,
+                    pm.is_output AS IsOutput,
+                    pm.max_length AS MaxLength,
+                    pm.precision AS Precision,
+                    pm.scale AS Scale,
+                    pm.parameter_id AS ParamId
+                FROM sys.objects o
+                JOIN sys.schemas s ON o.schema_id = s.schema_id
+                JOIN sys.parameters pm ON pm.object_id = o.object_id
+                JOIN sys.types t ON pm.user_type_id = t.user_type_id
+                WHERE o.type IN ('FN', 'IF', 'TF')
+                ORDER BY s.name, o.name, pm.parameter_id";
+
+            var rawFnParams = await conn.QueryAsync<dynamic>(fnParamSql);
+            foreach (var param in rawFnParams)
+            {
+                var fnFull = $"[{(string)param.SchemaName}].[{(string)param.FuncName}]";
+                if (fnDict.TryGetValue(fnFull, out var fn))
+                {
+                    var rawLen = (short)param.MaxLength;
+                    var dataType = ((string)param.DataType).ToUpper();
+                    int displayLen = rawLen;
+                    if (dataType is "NVARCHAR" or "NCHAR")
+                        displayLen = rawLen == -1 ? -1 : rawLen / 2;
+                    
+                    var paramId = (int)param.ParamId;
+                    var isOutput = (bool)param.IsOutput;
+                    
+                    // parameter_id = 0 is the return type for scalar functions
+                    if (paramId == 0)
+                    {
+                        var displayType = dataType;
+                        if (displayType is "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR")
+                            displayType = displayLen == -1 ? $"{dataType}(MAX)" : $"{dataType}({displayLen})";
+                        else if (displayType is "DECIMAL" or "NUMERIC")
+                            displayType = $"{dataType}({(byte)param.Precision},{(byte)param.Scale})";
+                            
+                        fn.ReturnType = displayType;
+                    }
+                    else
+                    {
+                        fn.Parameters.Add(new FunctionParameter
+                        {
+                            Name = string.IsNullOrEmpty((string)param.ParamName) ? $"@param{paramId}" : (string)param.ParamName,
+                            DataType = (string)param.DataType,
+                            IsOutput = isOutput,
+                            MaxLength = displayLen,
+                            Precision = (byte)param.Precision,
+                            Scale = (byte)param.Scale
+                        });
+                    }
+                }
+            }
+
+            // 12. Get Function Dependencies
+            Console.WriteLine("Fetching Function Dependencies...");
+            var fnDepSql = @"
+                SELECT 
+                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
+                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(o.schema_id)) AS TargetSchema,
+                    d.referenced_entity_name AS TargetName
+                FROM sys.sql_expression_dependencies d
+                JOIN sys.objects o ON d.referencing_id = o.object_id
+                WHERE o.type IN ('FN', 'IF', 'TF')";
+                
+            var fnDeps = await conn.QueryAsync<dynamic>(fnDepSql);
+            foreach (var dep in fnDeps)
+            {
+                var sourceSchema = (string)dep.SourceSchema;
+                var sourceName = (string)dep.SourceName;
+                var targetSchema = dep.TargetSchema as string;
+                var targetName = (string)dep.TargetName;
+
+                if (string.IsNullOrEmpty(targetSchema)) continue;
+                var sourceFull = $"[{sourceSchema}].[{sourceName}]";
+                var targetFull = $"[{targetSchema}].[{targetName}]";
+
+                if (!fnDict.TryGetValue(sourceFull, out var sourceFn)) continue;
+                if (sourceFn.Dependencies.Any(d => d.FullName == targetFull)) continue;
+
+                if (tableDict.TryGetValue(targetFull, out var depTable))
+                {
+                    sourceFn.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Table" });
+                }
+                else if (viewDict.TryGetValue(targetFull, out var depView))
+                {
+                    sourceFn.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "View" });
+                }
+                else if (spDict.TryGetValue(targetFull, out var depSp))
+                {
+                    sourceFn.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Procedure" });
+                }
+                else if (fnDict.TryGetValue(targetFull, out var depFn))
+                {
+                    sourceFn.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Function" });
+                    depFn.ReferencedBy.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "Function" });
+                }
+            }
+            
+            // Link views/SPs that reference functions
+            var refSql = @"
+                SELECT 
+                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
+                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    o.type AS SourceObjType,
+                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(ro.schema_id)) AS TargetSchema,
+                    d.referenced_entity_name AS TargetName
+                FROM sys.sql_expression_dependencies d
+                JOIN sys.objects o ON d.referencing_id = o.object_id
+                LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
+                WHERE ro.type IN ('FN', 'IF', 'TF') AND o.type IN ('V', 'P')";
+            var refs = await conn.QueryAsync<dynamic>(refSql);
+            foreach(var r in refs)
+            {
+                var srcType = (string)r.SourceObjType == "V" ? "View" : "Procedure";
+                var tFull = $"[{(string)r.TargetSchema}].[{(string)r.TargetName}]";
+                if(fnDict.TryGetValue(tFull, out var targetFn))
+                {
+                    var sourceFullName = $"[{(string)r.SourceSchema}].[{(string)r.SourceName}]";
+                    if(!targetFn.ReferencedBy.Any(d => d.FullName == sourceFullName))
+                    {
+                        targetFn.ReferencedBy.Add(new Dependency { Schema = (string)r.SourceSchema, Name = (string)r.SourceName, Type = srcType });
+                    }
+                }
+            }
+
+            // 13. Get User-Defined Types
+            Console.WriteLine("Fetching Types...");
+            var typeSql = @"
+                SELECT 
+                    s.name AS SchemaName,
+                    t.name AS TypeName,
+                    t.is_table_type AS IsTableType,
+                    bt.name AS BaseTypeName,
+                    t.max_length AS MaxLength,
+                    t.precision AS Precision,
+                    t.scale AS Scale,
+                    t.type_table_object_id AS TypeTableObjId
+                FROM sys.types t
+                JOIN sys.schemas s ON t.schema_id = s.schema_id
+                LEFT JOIN sys.types bt ON t.system_type_id = bt.user_type_id AND bt.is_user_defined = 0
+                WHERE t.is_user_defined = 1
+                ORDER BY s.name, t.name";
+                
+            var rawTypes = await conn.QueryAsync<dynamic>(typeSql);
+            var typeTableMap = new Dictionary<int, TypeInfo>();
+            
+            Types = new List<TypeInfo>();
+            foreach (var r in rawTypes)
+            {
+                var t = new TypeInfo
+                {
+                    Schema = (string)r.SchemaName,
+                    Name = (string)r.TypeName,
+                    IsTableType = (bool)r.IsTableType,
+                    BaseType = r.BaseTypeName as string,
+                    MaxLength = (short)r.MaxLength,
+                    Precision = (byte)r.Precision,
+                    Scale = (byte)r.Scale
+                };
+                
+                if (t.IsTableType)
+                {
+                    int typeObjId = (int)r.TypeTableObjId;
+                    typeTableMap[typeObjId] = t;
+                }
+                
+                Types.Add(t);
+            }
+            
+            // 14. Get Columns for Table Types
+            if (typeTableMap.Count > 0)
+            {
+                Console.WriteLine("Fetching Table Type Columns...");
+                var typeColSql = @"
+                    SELECT 
+                        c.object_id AS ObjectId,
+                        c.name AS ColumnName,
+                        t.name AS DataType
+                    FROM sys.columns c
+                    JOIN sys.types t ON c.user_type_id = t.user_type_id
+                    WHERE c.object_id IN (" + string.Join(",", typeTableMap.Keys) + ")";
+                
+                var typeCols = await conn.QueryAsync<dynamic>(typeColSql);
+                foreach (var col in typeCols)
+                {
+                    int objId = (int)col.ObjectId;
+                    if (typeTableMap.TryGetValue(objId, out var typeInfo))
+                    {
+                        typeInfo.Columns.Add(new ColumnInfo
+                        {
+                            Name = (string)col.ColumnName,
+                            DataType = (string)col.DataType
+                        });
+                    }
                 }
             }
 
