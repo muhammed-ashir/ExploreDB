@@ -1,18 +1,12 @@
 window.formatSql = (code) => {
     if (!window.sqlFormatter) {
-        console.error("sqlFormatter is not loaded");
-        return code;
+        throw new Error("SQL Formatter is not loaded correctly.");
     }
-    try {
-        return window.sqlFormatter.format(code, {
-            language: 'tsql',
-            keywordCase: 'upper',
-            linesBetweenQueries: 2
-        });
-    } catch (e) {
-        console.error("Error formatting SQL:", e);
-        return code;
-    }
+    return window.sqlFormatter.format(code, {
+        language: 'tsql',
+        keywordCase: 'upper',
+        linesBetweenQueries: 2
+    });
 };
 
 window.registerSqlAutocomplete = (tables, views) => {

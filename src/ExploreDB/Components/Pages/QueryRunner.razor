@@ -28,6 +28,15 @@
             </div>
         </div>
     </div>
+    
+    @if (!string.IsNullOrEmpty(FormatError))
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Format Error:</strong> @FormatError
+            <button type="button" class="btn-close" @onclick="() => FormatError = null" aria-label="Close"></button>
+        </div>
+    }
+
     <!-- Execution Harness Area -->
     <div class="row g-4 mb-4">
         <div class="col-12">
@@ -123,6 +132,7 @@
     
     private List<IEnumerable<dynamic>> ResultSets = new();
     private List<string> Messages = new();
+    private string? FormatError = null;
     private StandaloneCodeEditor _editor = default!;
 
     private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
@@ -152,11 +162,21 @@
 
     private async Task FormatSqlAsync()
     {
+        FormatError = null;
         var currentQuery = await _editor.GetValue();
         if (!string.IsNullOrWhiteSpace(currentQuery))
         {
-            var formatted = await JS.InvokeAsync<string>("formatSql", currentQuery);
-            await _editor.SetValue(formatted);
+            try
+            {
+                var formatted = await JS.InvokeAsync<string>("formatSql", currentQuery);
+                await _editor.SetValue(formatted);
+            }
+            catch (Exception ex)
+            {
+                // The JS interop throws a detailed JS exception string which can be a bit noisy.
+                // We extract just the relevant message if possible, or show a friendly message.
+                FormatError = "Syntax error near: " + ex.Message.Split('\n').FirstOrDefault()?.Replace("Error:", "").Trim();
+            }
         }
     }
 
