@@ -783,6 +783,11 @@
         
         var decoded = Uri.UnescapeDataString(FullName);
         Table = SchemaService.Tables.FirstOrDefault(t => t.FullName == decoded);
+        
+        if (Table != null && !Table.AreDependenciesLoaded)
+        {
+            await SchemaService.LoadTableDependenciesAsync(Table.FullName);
+        }
 
         InsertCopied = false;
         UpdateCopied = false;

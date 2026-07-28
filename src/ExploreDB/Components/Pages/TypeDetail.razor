@@ -204,8 +204,14 @@
         IsLoading = true;
         await Task.Yield();
         
+        if (!SchemaService.AreTypesLoaded)
+        {
+            await SchemaService.LoadTypesAsync();
+        }
+        
         var decoded = Uri.UnescapeDataString(FullName);
         Type = SchemaService.Types.FirstOrDefault(s => s.FullName == decoded);
+        ColumnSearchTerm = string.Empty;
         
         IsLoading = false;
         

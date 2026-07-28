@@ -20,6 +20,8 @@ public class TableInfo
     // Stored Procedures that reference this table
     public List<Dependency> ReferencedBySPs { get; set; } = new();
 
+    public bool AreDependenciesLoaded { get; set; } = false;
+
     public override string ToString() => FullName;
 }
 
@@ -67,6 +69,8 @@ public class ViewInfo
     // Stored Procedures that reference this view
     public List<Dependency> ReferencedBySPs { get; set; } = new();
     
+    public bool AreDependenciesLoaded { get; set; } = false;
+
     public override string ToString() => FullName;
 }
 
@@ -108,6 +112,8 @@ public class SpInfo
     // Stored Procedures that reference this SP
     public List<Dependency> ReferencedBySPs { get; set; } = new();
 
+    public bool AreDependenciesLoaded { get; set; } = false;
+
     public override string ToString() => FullName;
 }
 
@@ -147,6 +153,8 @@ public class FunctionInfo
     public List<Dependency> Dependencies { get; set; } = new();
     public List<Dependency> ReferencedBy { get; set; } = new();
 
+    public bool AreDependenciesLoaded { get; set; } = false;
+
     public override string ToString() => FullName;
 }
 
@@ -176,6 +184,9 @@ public class SchemaService
     public List<FunctionInfo> Functions { get; private set; } = new();
     public List<TypeInfo> Types { get; private set; } = new();
     public event Action? OnSchemaLoaded;
+
+    public bool AreStoredProceduresLoaded { get; private set; } = false;
+    public bool AreTypesLoaded { get; private set; } = false;
 
     private readonly ILogger<SchemaService> _logger;
 
@@ -228,7 +239,7 @@ public class SchemaService
             using var conn = new SqlConnection(_connectionService.ConnectionString);
             await conn.OpenAsync();
 
-            _logger.LogInformation("Executing Batch Schema Query...");
+            _logger.LogInformation("Executing Initial Batch Schema Query (Perfect Compromise Architecture)...");
             
             var batchSql = @"
                 -- 1. Tables
@@ -237,7 +248,7 @@ public class SchemaService
                 -- 2. Views
                 SELECT TABLE_SCHEMA AS SchemaName, TABLE_NAME AS Name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='VIEW';
 
-                -- 3. Columns
+                -- 3. Columns (For both Tables and Views)
                 SELECT TABLE_SCHEMA AS SchemaName, TABLE_NAME AS TableName, COLUMN_NAME AS ColumnName, DATA_TYPE AS DataType FROM INFORMATION_SCHEMA.COLUMNS;
 
                 -- 4. Foreign Keys
@@ -255,48 +266,7 @@ public class SchemaService
                 INNER JOIN sys.columns cr ON fkc.referenced_object_id = cr.object_id AND fkc.referenced_column_id = cr.column_id
                 OPTION (FORCE ORDER);
 
-                -- 5. View Dependencies
-                SELECT 
-                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
-                    OBJECT_NAME(d.referencing_id) AS SourceName,
-                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(o.schema_id)) AS TargetSchema,
-                    d.referenced_entity_name AS TargetName
-                FROM sys.sql_expression_dependencies d
-                JOIN sys.objects o ON d.referencing_id = o.object_id
-                WHERE o.type = 'V';
-
-                -- 6. Stored Procedures
-                SELECT 
-                    s.name AS SchemaName, p.name AS ProcName, p.create_date AS CreatedDate, p.modify_date AS ModifiedDate
-                FROM sys.procedures p
-                JOIN sys.schemas s ON p.schema_id = s.schema_id
-                WHERE p.is_ms_shipped = 0
-                ORDER BY s.name, p.name;
-
-                -- 7. SP Parameters
-                SELECT 
-                    s.name AS SchemaName, p.name AS ProcName, pm.name AS ParamName, t.name AS DataType,
-                    pm.is_output AS IsOutput, pm.has_default_value AS HasDefault,
-                    CAST(pm.default_value AS NVARCHAR(256)) AS DefaultValue,
-                    pm.max_length AS MaxLength, pm.precision AS Precision, pm.scale AS Scale
-                FROM sys.procedures p
-                JOIN sys.schemas s ON p.schema_id = s.schema_id
-                JOIN sys.parameters pm ON pm.object_id = p.object_id
-                JOIN sys.types t ON pm.user_type_id = t.user_type_id
-                WHERE p.is_ms_shipped = 0
-                ORDER BY s.name, p.name, pm.parameter_id;
-
-                -- 8. SP Dependencies
-                SELECT 
-                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
-                    OBJECT_NAME(d.referencing_id) AS SourceName,
-                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(o.schema_id)) AS TargetSchema,
-                    d.referenced_entity_name AS TargetName
-                FROM sys.sql_expression_dependencies d
-                JOIN sys.objects o ON d.referencing_id = o.object_id
-                WHERE o.type = 'P';
-
-                -- 9. Functions
+                -- 5. Functions
                 SELECT 
                     s.name AS SchemaName, o.name AS FuncName, o.type AS FuncType, o.create_date AS CreatedDate, o.modify_date AS ModifiedDate
                 FROM sys.objects o
@@ -304,7 +274,7 @@ public class SchemaService
                 WHERE o.type IN ('FN', 'IF', 'TF') AND o.is_ms_shipped = 0
                 ORDER BY s.name, o.name;
 
-                -- 10. Function Parameters
+                -- 6. Function Parameters
                 SELECT 
                     s.name AS SchemaName, o.name AS FuncName, pm.name AS ParamName, t.name AS DataType,
                     pm.is_output AS IsOutput, pm.max_length AS MaxLength, pm.precision AS Precision, pm.scale AS Scale, pm.parameter_id AS ParamId
@@ -314,46 +284,6 @@ public class SchemaService
                 JOIN sys.types t ON pm.user_type_id = t.user_type_id
                 WHERE o.type IN ('FN', 'IF', 'TF') AND o.is_ms_shipped = 0
                 ORDER BY s.name, o.name, pm.parameter_id;
-
-                -- 11. Function Dependencies
-                SELECT 
-                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
-                    OBJECT_NAME(d.referencing_id) AS SourceName,
-                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(o.schema_id)) AS TargetSchema,
-                    d.referenced_entity_name AS TargetName
-                FROM sys.sql_expression_dependencies d
-                JOIN sys.objects o ON d.referencing_id = o.object_id
-                WHERE o.type IN ('FN', 'IF', 'TF');
-
-                -- 12. View/SP to Function Refs
-                SELECT 
-                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
-                    OBJECT_NAME(d.referencing_id) AS SourceName,
-                    o.type AS SourceObjType,
-                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(ro.schema_id)) AS TargetSchema,
-                    d.referenced_entity_name AS TargetName
-                FROM sys.sql_expression_dependencies d
-                JOIN sys.objects o ON d.referencing_id = o.object_id
-                LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
-                WHERE ro.type IN ('FN', 'IF', 'TF') AND o.type IN ('V', 'P');
-
-                -- 13. Types
-                SELECT 
-                    s.name AS SchemaName, t.name AS TypeName, t.is_table_type AS IsTableType,
-                    bt.name AS BaseTypeName, t.max_length AS MaxLength, t.precision AS Precision, t.scale AS Scale, tt.type_table_object_id AS TypeTableObjId
-                FROM sys.types t
-                JOIN sys.schemas s ON t.schema_id = s.schema_id
-                LEFT JOIN sys.types bt ON t.system_type_id = bt.user_type_id AND bt.is_user_defined = 0
-                LEFT JOIN sys.table_types tt ON t.user_type_id = tt.user_type_id
-                WHERE t.is_user_defined = 1
-                ORDER BY s.name, t.name;
-
-                -- 14. Type Columns
-                SELECT 
-                    c.object_id AS ObjectId, c.name AS ColumnName, t.name AS DataType
-                FROM sys.columns c
-                JOIN sys.types t ON c.user_type_id = t.user_type_id
-                JOIN sys.table_types tt ON c.object_id = tt.type_table_object_id;
             ";
 
             using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
@@ -405,108 +335,7 @@ public class SchemaService
                 }
             }
 
-            // 5. View Dependencies
-            var viewDeps = await multi.ReadAsync<dynamic>();
-            foreach(var dep in viewDeps)
-            {
-                var sourceSchema = (string)dep.SourceSchema;
-                var sourceName = (string)dep.SourceName;
-                var targetSchema = (string)dep.TargetSchema;
-                var targetName = (string)dep.TargetName;
-
-                if (string.IsNullOrEmpty(targetSchema)) continue; 
-
-                var sourceFull = $"[{sourceSchema}].[{sourceName}]";
-                var targetFull = $"[{targetSchema}].[{targetName}]";
-
-                if (viewDict.TryGetValue(sourceFull, out var sourceView))
-                {
-                    if (tableDict.TryGetValue(targetFull, out var targetTable))
-                    {
-                        sourceView.Parents.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Table" });
-                        targetTable.ReferencedByViews.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "View" }); 
-                    }
-                    else if (viewDict.TryGetValue(targetFull, out var targetView))
-                    {
-                        sourceView.Parents.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "View" });
-                        targetView.Children.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "View" });
-                    }
-                }
-            }
-
-            // 6. Stored Procedures
-            var rawSps = await multi.ReadAsync<dynamic>();
-            StoredProcedures = rawSps.Select(r => new SpInfo
-            {
-                Schema = (string)r.SchemaName,
-                Name = (string)r.ProcName,
-                CreatedDate = (DateTime?)r.CreatedDate,
-                ModifiedDate = (DateTime?)r.ModifiedDate
-            }).ToList();
-            var spDict = StoredProcedures.ToDictionary(sp => sp.FullName);
-
-            // 7. SP Parameters
-            var rawParams = await multi.ReadAsync<dynamic>();
-            foreach (var param in rawParams)
-            {
-                var spFull = $"[{(string)param.SchemaName}].[{(string)param.ProcName}]";
-                if (spDict.TryGetValue(spFull, out var sp))
-                {
-                    var rawLen = (short)param.MaxLength;
-                    var dataType = ((string)param.DataType).ToUpper();
-                    int displayLen = rawLen;
-                    if (dataType is "NVARCHAR" or "NCHAR")
-                        displayLen = rawLen == -1 ? -1 : rawLen / 2;
-
-                    sp.Parameters.Add(new SpParameter
-                    {
-                        Name = (string)param.ParamName,
-                        DataType = (string)param.DataType,
-                        IsOutput = (bool)param.IsOutput,
-                        HasDefault = (bool)param.HasDefault,
-                        DefaultValue = param.DefaultValue as string,
-                        MaxLength = displayLen,
-                        Precision = (byte)param.Precision,
-                        Scale = (byte)param.Scale
-                    });
-                }
-            }
-
-            // 8. SP Dependencies
-            var spDeps = await multi.ReadAsync<dynamic>();
-            foreach (var dep in spDeps)
-            {
-                var sourceSchema = (string)dep.SourceSchema;
-                var sourceName = (string)dep.SourceName;
-                var targetSchema = dep.TargetSchema as string;
-                var targetName = (string)dep.TargetName;
-
-                if (string.IsNullOrEmpty(targetSchema)) continue;
-
-                var sourceFull = $"[{sourceSchema}].[{sourceName}]";
-                var targetFull = $"[{targetSchema}].[{targetName}]";
-
-                if (!spDict.TryGetValue(sourceFull, out var sourceSp)) continue;
-                if (sourceSp.Dependencies.Any(d => d.FullName == targetFull)) continue;
-
-                if (tableDict.TryGetValue(targetFull, out var depTable))
-                {
-                    sourceSp.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Table" });
-                    depTable.ReferencedBySPs.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "SP" });
-                }
-                else if (viewDict.TryGetValue(targetFull, out var depView))
-                {
-                    sourceSp.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "View" });
-                    depView.ReferencedBySPs.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "Procedure" });
-                }
-                else if (spDict.TryGetValue(targetFull, out var depSp))
-                {
-                    sourceSp.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Procedure" });
-                    depSp.ReferencedBySPs.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "Procedure" });
-                }
-            }
-
-            // 9. Functions
+            // 5. Functions
             var rawFns = await multi.ReadAsync<dynamic>();
             Functions = rawFns.Select(r => new FunctionInfo
             {
@@ -523,7 +352,7 @@ public class SchemaService
             }).ToList();
             var fnDict = Functions.ToDictionary(f => f.FullName);
 
-            // 10. Function Parameters
+            // 6. Function Parameters
             var rawFnParams = await multi.ReadAsync<dynamic>();
             foreach (var param in rawFnParams)
             {
@@ -564,52 +393,129 @@ public class SchemaService
                 }
             }
 
-            // 11. Function Dependencies
-            var fnDeps = await multi.ReadAsync<dynamic>();
-            foreach (var dep in fnDeps)
+            // Reset lazy loading flags
+            StoredProcedures.Clear();
+            Types.Clear();
+            AreStoredProceduresLoaded = false;
+            AreTypesLoaded = false;
+
+            OnSchemaLoaded?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Schema Load Error"); 
+        }
+    }
+
+    public async Task LoadStoredProceduresAsync()
+    {
+        if (AreStoredProceduresLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+
+        try
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            await conn.OpenAsync();
+            
+            var batchSql = @"
+                -- 1. Stored Procedures
+                SELECT 
+                    s.name AS SchemaName, p.name AS ProcName, p.create_date AS CreatedDate, p.modify_date AS ModifiedDate
+                FROM sys.procedures p
+                JOIN sys.schemas s ON p.schema_id = s.schema_id
+                WHERE p.is_ms_shipped = 0
+                ORDER BY s.name, p.name;
+
+                -- 2. SP Parameters
+                SELECT 
+                    s.name AS SchemaName, p.name AS ProcName, pm.name AS ParamName, t.name AS DataType,
+                    pm.is_output AS IsOutput, pm.has_default_value AS HasDefault,
+                    CAST(pm.default_value AS NVARCHAR(256)) AS DefaultValue,
+                    pm.max_length AS MaxLength, pm.precision AS Precision, pm.scale AS Scale
+                FROM sys.procedures p
+                JOIN sys.schemas s ON p.schema_id = s.schema_id
+                JOIN sys.parameters pm ON pm.object_id = p.object_id
+                JOIN sys.types t ON pm.user_type_id = t.user_type_id
+                WHERE p.is_ms_shipped = 0
+                ORDER BY s.name, p.name, pm.parameter_id;
+            ";
+
+            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 300);
+
+            var rawSps = await multi.ReadAsync<dynamic>();
+            StoredProcedures = rawSps.Select(r => new SpInfo
             {
-                var sourceSchema = (string)dep.SourceSchema;
-                var sourceName = (string)dep.SourceName;
-                var targetSchema = dep.TargetSchema as string;
-                var targetName = (string)dep.TargetName;
+                Schema = (string)r.SchemaName,
+                Name = (string)r.ProcName,
+                CreatedDate = (DateTime?)r.CreatedDate,
+                ModifiedDate = (DateTime?)r.ModifiedDate
+            }).ToList();
+            var spDict = StoredProcedures.ToDictionary(sp => sp.FullName);
 
-                if (string.IsNullOrEmpty(targetSchema)) continue;
-                var sourceFull = $"[{sourceSchema}].[{sourceName}]";
-                var targetFull = $"[{targetSchema}].[{targetName}]";
-
-                if (!fnDict.TryGetValue(sourceFull, out var sourceFn)) continue;
-                if (sourceFn.Dependencies.Any(d => d.FullName == targetFull)) continue;
-
-                if (tableDict.TryGetValue(targetFull, out var depTable))
-                    sourceFn.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Table" });
-                else if (viewDict.TryGetValue(targetFull, out var depView))
-                    sourceFn.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "View" });
-                else if (spDict.TryGetValue(targetFull, out var depSp))
-                    sourceFn.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Procedure" });
-                else if (fnDict.TryGetValue(targetFull, out var depFn))
-                {
-                    sourceFn.Dependencies.Add(new Dependency { Schema = targetSchema, Name = targetName, Type = "Function" });
-                    depFn.ReferencedBy.Add(new Dependency { Schema = sourceSchema, Name = sourceName, Type = "Function" });
-                }
-            }
-
-            // 12. View/SP to Function Refs
-            var refs = await multi.ReadAsync<dynamic>();
-            foreach(var r in refs)
+            var rawParams = await multi.ReadAsync<dynamic>();
+            foreach (var param in rawParams)
             {
-                var srcType = (string)r.SourceObjType == "V" ? "View" : "Procedure";
-                var tFull = $"[{(string)r.TargetSchema}].[{(string)r.TargetName}]";
-                if(fnDict.TryGetValue(tFull, out var targetFn))
+                var spFull = $"[{(string)param.SchemaName}].[{(string)param.ProcName}]";
+                if (spDict.TryGetValue(spFull, out var sp))
                 {
-                    var sourceFullName = $"[{(string)r.SourceSchema}].[{(string)r.SourceName}]";
-                    if(!targetFn.ReferencedBy.Any(d => d.FullName == sourceFullName))
+                    var rawLen = (short)param.MaxLength;
+                    var dataType = ((string)param.DataType).ToUpper();
+                    int displayLen = rawLen;
+                    if (dataType is "NVARCHAR" or "NCHAR")
+                        displayLen = rawLen == -1 ? -1 : rawLen / 2;
+
+                    sp.Parameters.Add(new SpParameter
                     {
-                        targetFn.ReferencedBy.Add(new Dependency { Schema = (string)r.SourceSchema, Name = (string)r.SourceName, Type = srcType });
-                    }
+                        Name = (string)param.ParamName,
+                        DataType = (string)param.DataType,
+                        IsOutput = (bool)param.IsOutput,
+                        HasDefault = (bool)param.HasDefault,
+                        DefaultValue = param.DefaultValue as string,
+                        MaxLength = displayLen,
+                        Precision = (byte)param.Precision,
+                        Scale = (byte)param.Scale
+                    });
                 }
             }
 
-            // 13. Types
+            AreStoredProceduresLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading stored procedures lazily");
+        }
+    }
+
+    public async Task LoadTypesAsync()
+    {
+        if (AreTypesLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+
+        try
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            await conn.OpenAsync();
+            
+            var batchSql = @"
+                -- 1. Types
+                SELECT 
+                    s.name AS SchemaName, t.name AS TypeName, t.is_table_type AS IsTableType,
+                    bt.name AS BaseTypeName, t.max_length AS MaxLength, t.precision AS Precision, t.scale AS Scale, tt.type_table_object_id AS TypeTableObjId
+                FROM sys.types t
+                JOIN sys.schemas s ON t.schema_id = s.schema_id
+                LEFT JOIN sys.types bt ON t.system_type_id = bt.user_type_id AND bt.is_user_defined = 0
+                LEFT JOIN sys.table_types tt ON t.user_type_id = tt.user_type_id
+                WHERE t.is_user_defined = 1
+                ORDER BY s.name, t.name;
+
+                -- 2. Type Columns
+                SELECT 
+                    c.object_id AS ObjectId, c.name AS ColumnName, t.name AS DataType
+                FROM sys.columns c
+                JOIN sys.types t ON c.user_type_id = t.user_type_id
+                JOIN sys.table_types tt ON c.object_id = tt.type_table_object_id;
+            ";
+
+            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 300);
+
             var rawTypes = await multi.ReadAsync<dynamic>();
             var typeTableMap = new Dictionary<int, TypeInfo>();
             
@@ -636,7 +542,6 @@ public class SchemaService
                 Types.Add(t);
             }
 
-            // 14. Type Columns
             var typeCols = await multi.ReadAsync<dynamic>();
             foreach (var col in typeCols)
             {
@@ -651,56 +556,268 @@ public class SchemaService
                 }
             }
 
-            // Parallel View Lineage Fetching
-            _logger.LogInformation("Fetching View Column Lineage in Parallel...");
-            
-            // Limit concurrency so we don't overwhelm the DB pool
-            var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = 10 };
-            
-            await Parallel.ForEachAsync(Views, parallelOptions, async (view, cancellationToken) =>
-            {
-                try 
-                {
-                    // Need a separate connection for each concurrent task
-                    using var viewConn = new SqlConnection(_connectionService.ConnectionString);
-                    
-                    var lineageSql = $@"
-                        SELECT 
-                            ISNULL(d.referenced_schema_name, 'dbo') AS SourceSchema,
-                            d.referenced_entity_name AS SourceTable,
-                            d.referenced_minor_name AS SourceColumn
-                        FROM sys.dm_sql_referenced_entities('{view.FullName}', 'OBJECT') d
-                        WHERE d.referenced_minor_name IS NOT NULL";
-
-                    var lineage = await viewConn.QueryAsync<dynamic>(lineageSql, commandTimeout: 300);
-                    
-                    var colDict = view.Columns.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
-                    
-                    foreach(var item in lineage)
-                    {
-                        var sourceColName = (string)item.SourceColumn;
-                        if (colDict.TryGetValue(sourceColName, out var col))
-                        {
-                            if (string.IsNullOrEmpty(col.SourceTable))
-                            {
-                                col.SourceSchema = item.SourceSchema;
-                                col.SourceTable = item.SourceTable;
-                                col.SourceColumn = item.SourceColumn;
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Error fetching lineage for {ViewFullName}", view.FullName);
-                }
-            });
-
-            OnSchemaLoaded?.Invoke();
+            AreTypesLoaded = true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Schema Load Error"); 
+            _logger.LogError(ex, "Error loading types lazily");
+        }
+    }
+
+    public async Task LoadTableDependenciesAsync(string fullName)
+    {
+        var table = Tables.FirstOrDefault(t => t.FullName == fullName);
+        if (table == null || table.AreDependenciesLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+
+        try
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            
+            var sql = @"
+                SELECT 
+                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
+                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    o.type AS SourceType
+                FROM sys.sql_expression_dependencies d
+                JOIN sys.objects o ON d.referencing_id = o.object_id
+                WHERE d.referenced_id = OBJECT_ID(@FullName)";
+
+            var deps = await conn.QueryAsync<dynamic>(sql, new { FullName = fullName });
+            
+            foreach(var dep in deps)
+            {
+                var schema = (string)dep.SourceSchema;
+                var name = (string)dep.SourceName;
+                var type = (string)dep.SourceType;
+
+                if (type == "V")
+                    table.ReferencedByViews.Add(new Dependency { Schema = schema, Name = name, Type = "View" });
+                else if (type == "P")
+                    table.ReferencedBySPs.Add(new Dependency { Schema = schema, Name = name, Type = "Procedure" });
+                else if (type is "FN" or "IF" or "TF")
+                    table.ReferencedBySPs.Add(new Dependency { Schema = schema, Name = name, Type = "Function" }); // Put in SPs array or create new
+            }
+
+            table.AreDependenciesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching dependencies for table {FullName}", fullName);
+        }
+    }
+
+    public async Task LoadViewLineageAndDependenciesAsync(string fullName)
+    {
+        var view = Views.FirstOrDefault(v => v.FullName == fullName);
+        if (view == null || view.AreDependenciesLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+
+        try
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            
+            // 1. Column Lineage
+            var lineageSql = $@"
+                SELECT 
+                    ISNULL(d.referenced_schema_name, 'dbo') AS SourceSchema,
+                    d.referenced_entity_name AS SourceTable,
+                    d.referenced_minor_name AS SourceColumn
+                FROM sys.dm_sql_referenced_entities('{view.FullName}', 'OBJECT') d
+                WHERE d.referenced_minor_name IS NOT NULL";
+
+            var lineage = await conn.QueryAsync<dynamic>(lineageSql);
+            var colDict = view.Columns.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
+            
+            foreach(var item in lineage)
+            {
+                var sourceColName = (string)item.SourceColumn;
+                if (colDict.TryGetValue(sourceColName, out var col) && string.IsNullOrEmpty(col.SourceTable))
+                {
+                    col.SourceSchema = item.SourceSchema;
+                    col.SourceTable = item.SourceTable;
+                    col.SourceColumn = item.SourceColumn;
+                }
+            }
+
+            // 2. Dependencies (What this view references, and what references this view)
+            var depsSql = @"
+                -- What it references (Parents)
+                SELECT 
+                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(ro.schema_id)) AS TargetSchema,
+                    d.referenced_entity_name AS TargetName,
+                    ro.type AS TargetType
+                FROM sys.sql_expression_dependencies d
+                LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
+                WHERE d.referencing_id = OBJECT_ID(@FullName);
+
+                -- What references it (Children/ReferencedBySPs)
+                SELECT 
+                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
+                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    o.type AS SourceType
+                FROM sys.sql_expression_dependencies d
+                JOIN sys.objects o ON d.referencing_id = o.object_id
+                WHERE d.referenced_id = OBJECT_ID(@FullName);
+            ";
+
+            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName });
+            
+            var parents = await multi.ReadAsync<dynamic>();
+            foreach(var p in parents)
+            {
+                var tSchema = p.TargetSchema as string;
+                var tName = (string)p.TargetName;
+                var tType = (string)p.TargetType;
+                if (!string.IsNullOrEmpty(tSchema))
+                {
+                    string depType = tType == "V" ? "View" : (tType == "U" ? "Table" : "Function");
+                    view.Parents.Add(new Dependency { Schema = tSchema, Name = tName, Type = depType });
+                }
+            }
+
+            var children = await multi.ReadAsync<dynamic>();
+            foreach(var c in children)
+            {
+                var sSchema = (string)c.SourceSchema;
+                var sName = (string)c.SourceName;
+                var sType = (string)c.SourceType;
+
+                if (sType == "V")
+                    view.Children.Add(new Dependency { Schema = sSchema, Name = sName, Type = "View" });
+                else if (sType == "P")
+                    view.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
+            }
+
+            view.AreDependenciesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching lineage and dependencies for view {FullName}", fullName);
+        }
+    }
+
+    public async Task LoadSpDependenciesAsync(string fullName)
+    {
+        var sp = StoredProcedures.FirstOrDefault(s => s.FullName == fullName);
+        if (sp == null || sp.AreDependenciesLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+
+        try
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            
+            var depsSql = @"
+                -- What it references (Dependencies)
+                SELECT 
+                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(ro.schema_id)) AS TargetSchema,
+                    d.referenced_entity_name AS TargetName,
+                    ro.type AS TargetType
+                FROM sys.sql_expression_dependencies d
+                LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
+                WHERE d.referencing_id = OBJECT_ID(@FullName);
+
+                -- What references it (ReferencedBySPs)
+                SELECT 
+                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
+                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    o.type AS SourceType
+                FROM sys.sql_expression_dependencies d
+                JOIN sys.objects o ON d.referencing_id = o.object_id
+                WHERE d.referenced_id = OBJECT_ID(@FullName);
+            ";
+
+            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName });
+            
+            var deps = await multi.ReadAsync<dynamic>();
+            foreach(var p in deps)
+            {
+                var tSchema = p.TargetSchema as string;
+                var tName = (string)p.TargetName;
+                var tType = (string)p.TargetType;
+                if (!string.IsNullOrEmpty(tSchema))
+                {
+                    string depType = tType == "V" ? "View" : (tType == "U" ? "Table" : (tType == "P" ? "Procedure" : "Function"));
+                    sp.Dependencies.Add(new Dependency { Schema = tSchema, Name = tName, Type = depType });
+                }
+            }
+
+            var refs = await multi.ReadAsync<dynamic>();
+            foreach(var c in refs)
+            {
+                var sSchema = (string)c.SourceSchema;
+                var sName = (string)c.SourceName;
+                var sType = (string)c.SourceType;
+
+                if (sType == "P")
+                    sp.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
+            }
+
+            sp.AreDependenciesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching dependencies for SP {FullName}", fullName);
+        }
+    }
+
+    public async Task LoadFunctionDependenciesAsync(string fullName)
+    {
+        var fn = Functions.FirstOrDefault(f => f.FullName == fullName);
+        if (fn == null || fn.AreDependenciesLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+
+        try
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            
+            var depsSql = @"
+                -- What it references (Dependencies)
+                SELECT 
+                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(ro.schema_id)) AS TargetSchema,
+                    d.referenced_entity_name AS TargetName,
+                    ro.type AS TargetType
+                FROM sys.sql_expression_dependencies d
+                LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
+                WHERE d.referencing_id = OBJECT_ID(@FullName);
+
+                -- What references it (ReferencedBy)
+                SELECT 
+                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
+                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    o.type AS SourceType
+                FROM sys.sql_expression_dependencies d
+                JOIN sys.objects o ON d.referencing_id = o.object_id
+                WHERE d.referenced_id = OBJECT_ID(@FullName);
+            ";
+
+            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName });
+            
+            var deps = await multi.ReadAsync<dynamic>();
+            foreach(var p in deps)
+            {
+                var tSchema = p.TargetSchema as string;
+                var tName = (string)p.TargetName;
+                var tType = (string)p.TargetType;
+                if (!string.IsNullOrEmpty(tSchema))
+                {
+                    string depType = tType == "V" ? "View" : (tType == "U" ? "Table" : (tType == "P" ? "Procedure" : "Function"));
+                    fn.Dependencies.Add(new Dependency { Schema = tSchema, Name = tName, Type = depType });
+                }
+            }
+
+            var refs = await multi.ReadAsync<dynamic>();
+            foreach(var c in refs)
+            {
+                var sSchema = (string)c.SourceSchema;
+                var sName = (string)c.SourceName;
+                var sType = (string)c.SourceType;
+
+                string depType = sType == "V" ? "View" : (sType == "P" ? "Procedure" : "Function");
+                fn.ReferencedBy.Add(new Dependency { Schema = sSchema, Name = sName, Type = depType });
+            }
+
+            fn.AreDependenciesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching dependencies for Function {FullName}", fullName);
         }
     }
 }

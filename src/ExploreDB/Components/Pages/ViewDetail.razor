@@ -440,6 +440,12 @@
         
         var decoded = Uri.UnescapeDataString(FullName);
         View = SchemaService.Views.FirstOrDefault(t => t.FullName == decoded);
+        
+        if (View != null && !View.AreDependenciesLoaded)
+        {
+            await SchemaService.LoadViewLineageAndDependenciesAsync(View.FullName);
+        }
+
         ColumnSearchTerm = string.Empty;
         
         IsLoading = false;

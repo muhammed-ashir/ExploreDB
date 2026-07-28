@@ -60,7 +60,18 @@
     </div>
 
     <div class="row">
-        @if (SchemaService.Types.Count == 0)
+        @if (_isLoading)
+        {
+            <div class="col-12">
+                <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="text-muted ms-3">Loading custom types...</div>
+                </div>
+            </div>
+        }
+        else if (SchemaService.Types.Count == 0)
         {
             <div class="col-12">
                 <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
@@ -186,9 +197,17 @@
         }
     }
 
-    protected override void OnInitialized()
+    private bool _isLoading = false;
+
+    protected override async Task OnInitializedAsync()
     {
         SchemaService.OnSchemaLoaded += Refresh;
+        if (!SchemaService.AreTypesLoaded)
+        {
+            _isLoading = true;
+            await SchemaService.LoadTypesAsync();
+            _isLoading = false;
+        }
     }
 
     private void Refresh()

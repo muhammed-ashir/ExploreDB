@@ -480,8 +480,19 @@
         IsLoading = true;
         await Task.Yield();
         
+        if (!SchemaService.AreStoredProceduresLoaded)
+        {
+            await SchemaService.LoadStoredProceduresAsync();
+        }
+
         var decoded = Uri.UnescapeDataString(FullName);
         Sp = SchemaService.StoredProcedures.FirstOrDefault(s => s.FullName == decoded);
+        
+        if (Sp != null && !Sp.AreDependenciesLoaded)
+        {
+            await SchemaService.LoadSpDependenciesAsync(Sp.FullName);
+        }
+
         DependencySearchTerm = string.Empty;
         
         IsLoading = false;

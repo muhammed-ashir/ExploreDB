@@ -503,6 +503,12 @@
         
         var decoded = Uri.UnescapeDataString(FullName);
         Fn = SchemaService.Functions.FirstOrDefault(s => s.FullName == decoded);
+        
+        if (Fn != null && !Fn.AreDependenciesLoaded)
+        {
+            await SchemaService.LoadFunctionDependenciesAsync(Fn.FullName);
+        }
+
         DependencySearchTerm = string.Empty;
         
 
