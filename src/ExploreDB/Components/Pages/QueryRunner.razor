@@ -17,17 +17,58 @@
 @implements IDisposable
 
 <div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col d-flex justify-content-between align-items-center">
-            <h2 class="text-white mb-0 fw-bold">Query Runner</h2>
-            <div class="d-flex gap-2">
-                <button class="btn btn-outline-info fw-bold shadow" @onclick="FormatSqlAsync">
-                    <i class="bi bi-magic me-1"></i> Format
+    <div class="row mb-3">
+        <div class="col d-flex justify-content-between align-items-center flex-nowrap">
+            <div class="position-relative me-5" style="min-width: 0;">
+                <div class="d-flex align-items-center cursor-pointer text-white w-100" @onclick="() => IsTabDropdownOpen = !IsTabDropdownOpen">
+                    <span class="me-2 fs-6 text-truncate" title="@ActiveTabName">@ActiveTabName</span>
+                    <i class="bi bi-chevron-down flex-shrink-0" style="font-size: 0.85rem;"></i>
+                </div>
+                @if (IsTabDropdownOpen)
+                {
+                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTabDropdownOpen = false"></div>
+                    <div class="dropdown-menu show bg-dark border-secondary shadow-lg p-1 mt-2" style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 250px; max-width: 350px; overflow-x: hidden;">
+                        <div class="p-1 mb-1">
+                            <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" placeholder="Search tabs..." @bind="TabSearchTerm" @bind:event="oninput" @onclick:stopPropagation />
+                        </div>
+                        <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 300px; overflow-y: auto;">
+                            @foreach (var tab in QueryStateService.Tabs.Where(t => string.IsNullOrEmpty(TabSearchTerm) || t.Name.Contains(TabSearchTerm, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <div class="dropdown-item d-flex justify-content-between align-items-center text-white @(tab.Id == QueryStateService.ActiveTabId ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" style="cursor: pointer; min-width: 0;" @onclick="async () => { await SwitchTabAsync(tab.Id); IsTabDropdownOpen = false; }">
+                                <span class="text-truncate me-3" title="@tab.Name" style="flex: 1; min-width: 0;">@tab.Name</span>
+                                @if (QueryStateService.Tabs.Count > 1)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger border-0 flex-shrink-0 px-1 py-0 rounded" @onclick="async () => { await CloseTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation>
+                                        <i class="bi bi-x fs-5"></i>
+                                    </button>
+                                }
+                            </div>
+                        }
+                        </div>
+                        <hr class="dropdown-divider border-secondary my-2">
+                        <button class="dropdown-item text-info text-center py-1 mb-2 mt-1 rounded-2" style="border: 1px dashed var(--bs-info); margin-left: 10px; margin-right: 10px; width: calc(100% - 20px);" @onclick="async () => { await NewTabAsync(); IsTabDropdownOpen = false; }">
+                            <i class="bi bi-plus-lg me-1"></i> New Query
+                        </button>
+                    </div>
+                }
+            </div>
+            <div class="d-flex gap-2 flex-shrink-0">
+                <button class="btn btn-sm btn-outline-light shadow-sm" title="Open File" @onclick="OpenFileAsync">
+                    <i class="bi bi-folder2-open"></i>
                 </button>
-                <button class="btn btn-outline-secondary fw-bold shadow" @onclick='() => Nav.NavigateTo("/history")'>
-                    <i class="bi bi-clock-history me-1"></i> History
+                <button class="btn btn-sm btn-outline-light shadow-sm" title="Save Query" @onclick="SaveQueryAsync">
+                    <i class="bi bi-floppy"></i>
                 </button>
-                <button class="btn btn-primary fw-bold shadow" @onclick="ExecuteAsync" disabled="@IsExecuting">
+                <button class="btn btn-sm btn-outline-light shadow-sm" title="Save As..." @onclick="SaveAsQueryAsync">
+                    <i class="bi bi-file-earmark-plus"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-info shadow-sm" title="Format SQL" @onclick="FormatSqlAsync">
+                    <i class="bi bi-magic"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary shadow-sm" title="View History" @onclick='() => Nav.NavigateTo("/history")'>
+                    <i class="bi bi-clock-history"></i>
+                </button>
+                <button class="btn btn-sm btn-primary shadow-sm" @onclick="ExecuteAsync" disabled="@IsExecuting">
                     @if (IsExecuting) { <span class="spinner-border spinner-border-sm me-2"></span><span>Executing...</span> }
                     else { <i class="bi bi-play-fill me-1"></i><span>Execute</span> }
                 </button>
@@ -125,6 +166,47 @@
     </div>
 </div>
 
+@if (ShowLimitAlert)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowLimitAlert = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
+                    <p class="text-muted small mt-2 mb-0">Please close some existing tabs before opening new ones.</p>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-primary px-4" @onclick="() => ShowLimitAlert = false">Got it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (ShowRestoreSessionPrompt)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">Restore Session?</h5>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">Do you want to restore your previous query tabs?</p>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-primary px-4" @onclick="() => HandleRestoreSessionAsync(true)">Yes</button>
+                    <button type="button" class="btn btn-outline-secondary px-4 text-white" @onclick="() => HandleRestoreSessionAsync(false)">No, clear them</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [SupplyParameterFromQuery(Name = "type")]
     public string? ObjectType { get; set; }
@@ -147,10 +229,169 @@
     private string? FormatError = null;
     private StandaloneCodeEditor _editor = default!;
     private DotNetObjectReference<QueryRunner>? _objRef;
+    
+    private bool IsTabDropdownOpen = false;
+    private string TabSearchTerm = "";
+    private bool ShowLimitAlert = false;
+    private bool ShowRestoreSessionPrompt = false;
 
     public void Dispose()
     {
         _objRef?.Dispose();
+    }
+
+    private string ActiveTabName => QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId)?.Name ?? "Query Runner";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!QueryStateService.Initialized)
+        {
+            if (QueryStateService.HasSavedTabs())
+            {
+                ShowRestoreSessionPrompt = true;
+                return;
+            }
+            else
+            {
+                await QueryStateService.LoadTabsAsync();
+            }
+            QueryStateService.Initialized = true;
+        }
+    }
+
+    private async Task HandleRestoreSessionAsync(bool restore)
+    {
+        ShowRestoreSessionPrompt = false;
+        if (restore)
+        {
+            await QueryStateService.LoadTabsAsync();
+        }
+        else
+        {
+            QueryStateService.ClearSavedState();
+            await QueryStateService.LoadTabsAsync();
+        }
+        QueryStateService.Initialized = true;
+        
+        var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+        if (currentTab != null && _editor != null)
+        {
+            await _editor.SetValue(currentTab.Content);
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task SwitchTabAsync(Guid tabId)
+    {
+        if (QueryStateService.ActiveTabId == tabId) return;
+        
+        var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+        if (currentTab != null && _editor != null)
+        {
+            currentTab.Content = await _editor.GetValue();
+        }
+
+        QueryStateService.ActiveTabId = tabId;
+        var newTab = QueryStateService.Tabs.First(t => t.Id == tabId);
+        
+        if (_editor != null)
+        {
+            await _editor.SetValue(newTab.Content);
+        }
+        await QueryStateService.SaveTabsAsync();
+    }
+
+    private async Task NewTabAsync()
+    {
+        var maxTabs = Config.GetValue<int>("MaxOpenTabs", 20);
+        if (QueryStateService.Tabs.Count >= maxTabs)
+        {
+            ShowLimitAlert = true;
+            return;
+        }
+
+        var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+        if (currentTab != null && _editor != null)
+        {
+            currentTab.Content = await _editor.GetValue();
+        }
+
+        var newCount = QueryStateService.Tabs.Count + 1;
+        var newTab = new ExploreDB.Services.QueryTab { Name = $"SQLQuery{newCount}.sql" };
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+
+        if (_editor != null)
+        {
+            await _editor.SetValue(newTab.Content);
+        }
+        await QueryStateService.SaveTabsAsync();
+    }
+
+    private async Task OpenFileAsync()
+    {
+        try
+        {
+            var result = await Microsoft.Maui.Storage.FilePicker.Default.PickAsync(new Microsoft.Maui.Storage.PickOptions
+            {
+                PickerTitle = "Select a SQL file",
+            });
+
+            if (result != null)
+            {
+                var maxTabs = Config.GetValue<int>("MaxOpenTabs", 20);
+                if (QueryStateService.Tabs.Count >= maxTabs)
+                {
+                    ShowLimitAlert = true;
+                    return;
+                }
+
+                var text = await File.ReadAllTextAsync(result.FullPath);
+                
+                var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+                if (currentTab != null && _editor != null)
+                {
+                    currentTab.Content = await _editor.GetValue();
+                }
+
+                var newTab = new ExploreDB.Services.QueryTab
+                {
+                    Name = result.FileName,
+                    Content = text
+                };
+                QueryStateService.Tabs.Add(newTab);
+                QueryStateService.ActiveTabId = newTab.Id;
+                await QueryStateService.SaveTabsAsync();
+                
+                if (_editor != null)
+                {
+                    await _editor.SetValue(text);
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task CloseTabAsync(Guid tabId)
+    {
+        if (QueryStateService.Tabs.Count <= 1) return;
+        
+        var tabToRemove = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabId);
+        if (tabToRemove == null) return;
+
+        QueryStateService.Tabs.Remove(tabToRemove);
+
+        if (QueryStateService.ActiveTabId == tabId)
+        {
+            QueryStateService.ActiveTabId = QueryStateService.Tabs.First().Id;
+            var newTab = QueryStateService.Tabs.First();
+            if (_editor != null)
+            {
+                await _editor.SetValue(newTab.Content);
+            }
+        }
+        await QueryStateService.SaveTabsAsync();
     }
 
     private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
@@ -159,7 +400,7 @@
         {
             Language = "sql",
             Theme = "vs-dark",
-            Value = QueryStateService.CustomQuery ?? "",
+            Value = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId)?.Content ?? "",
             AutomaticLayout = true,
             Minimap = new EditorMinimapOptions { Enabled = false },
             LineNumbers = "on",
@@ -175,8 +416,8 @@
     private async Task EditorOnDidInit()
     {
         _objRef = DotNetObjectReference.Create(this);
-        var tables = SchemaService.Tables.Select(t => t.Name).ToList();
-        var views = SchemaService.Views.Select(v => v.Name).ToList();
+        var tables = SchemaService.Tables.Select(t => new { name = t.Name, fullName = t.FullName }).ToList();
+        var views = SchemaService.Views.Select(v => new { name = v.Name, fullName = v.FullName }).ToList();
         await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views, _objRef);
     }
 
@@ -197,6 +438,89 @@
                 // We extract just the relevant message if possible, or show a friendly message.
                 FormatError = "Syntax error near: " + ex.Message.Split('\n').FirstOrDefault()?.Replace("Error:", "").Trim();
             }
+        }
+    }
+
+    private async Task SaveQueryAsync()
+    {
+        try
+        {
+            var queryText = await _editor.GetValue();
+            var activeTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+            if (activeTab == null) return;
+            activeTab.Content = queryText;
+
+            if (!string.IsNullOrEmpty(activeTab.FilePath))
+            {
+                await Windows.Storage.FileIO.WriteTextAsync(await Windows.Storage.StorageFile.GetFileFromPathAsync(activeTab.FilePath), queryText);
+                await QueryStateService.SaveTabsAsync();
+                return;
+            }
+
+            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
+            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
+            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
+            savePicker.SuggestedFileName = activeTab.Name;
+
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            {
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
+            }
+
+            var file = await savePicker.PickSaveFileAsync();
+            if (file != null)
+            {
+                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
+                activeTab.FilePath = file.Path;
+                activeTab.Name = file.Name;
+                await QueryStateService.SaveTabsAsync();
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private async Task SaveAsQueryAsync()
+    {
+        try
+        {
+            var queryText = await _editor.GetValue();
+            var activeTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+            if (activeTab == null) return;
+            activeTab.Content = queryText;
+
+            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
+            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
+            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
+            savePicker.SuggestedFileName = activeTab.Name;
+
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            {
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
+            }
+
+            var file = await savePicker.PickSaveFileAsync();
+            if (file != null)
+            {
+                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
+                activeTab.FilePath = file.Path;
+                activeTab.Name = file.Name;
+                await QueryStateService.SaveTabsAsync();
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
         }
     }
 

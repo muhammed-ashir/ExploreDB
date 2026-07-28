@@ -16,6 +16,31 @@ window.registerSqlAutocomplete = (tables, views, dotNetHelper) => {
 
     monaco.languages.registerCompletionItemProvider('sql', {
         provideCompletionItems: function(model, position) {
+            var word = model.getWordUntilPosition(position);
+            var replaceRange = {
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn: word.startColumn,
+                endColumn: word.endColumn
+            };
+
+            var textUntilPosition = model.getValueInRange({
+                startLineNumber: position.lineNumber,
+                startColumn: 1,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column
+            });
+
+            var match = textUntilPosition.match(/(?:\[?[a-zA-Z0-9_]+\]?\.)\[?[a-zA-Z0-9_]*$/);
+            if (match) {
+                replaceRange = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: position.column - match[0].length,
+                    endColumn: position.column
+                };
+            }
+
             var suggestions = [];
             
             suggestions.push({
@@ -29,9 +54,11 @@ window.registerSqlAutocomplete = (tables, views, dotNetHelper) => {
             if (tables) {
                 tables.forEach(t => {
                     suggestions.push({
-                        label: t,
+                        label: t.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
-                        insertText: t,
+                        insertText: t.fullName,
+                        filterText: t.fullName,
+                        range: replaceRange,
                         detail: 'Table'
                     });
                 });
@@ -40,9 +67,11 @@ window.registerSqlAutocomplete = (tables, views, dotNetHelper) => {
             if (views) {
                 views.forEach(v => {
                     suggestions.push({
-                        label: v,
+                        label: v.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
-                        insertText: v,
+                        insertText: v.fullName,
+                        filterText: v.fullName,
+                        range: replaceRange,
                         detail: 'View'
                     });
                 });

@@ -3,10 +3,12 @@
 @using BlazorMonaco.Editor
 @using BlazorMonaco
 @using Microsoft.JSInterop
+@using Microsoft.Extensions.Configuration
 @inject HistoryService HistoryService
 @inject NavigationManager Nav
 @inject QueryStateService QueryStateService
 @inject IJSRuntime JS
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 
 <div class="container-fluid d-flex flex-column" style="height: calc(100vh - 140px); padding-bottom: 20px;">
     <div class="row mb-3 align-items-center">
@@ -130,11 +132,33 @@
     </div>
 </div>
 
+@if (ShowLimitAlert)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowLimitAlert = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
+                    <p class="text-muted small mt-2 mb-0">Please close some existing tabs before opening new ones.</p>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-primary px-4" @onclick="() => ShowLimitAlert = false">Got it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<QueryHistoryItem>? _historyItems;
     private QueryHistoryItem? _selectedItem;
     private StandaloneCodeEditor _editor = default!;
     private bool IsFullScreen = false;
+    private bool ShowLimitAlert = false;
     private DateTime? _filterDate = null;
     private IEnumerable<QueryHistoryItem>? FilteredHistoryItems => 
         _filterDate.HasValue && _historyItems != null
@@ -175,11 +199,26 @@
         }
     }
 
-    private void LoadAndRunQuery()
+    private async Task LoadAndRunQuery()
     {
+        if (QueryStateService.Tabs.Count >= Config.GetValue<int>("MaxOpenTabs", 20))
+        {
+            ShowLimitAlert = true;
+            return;
+        }
+
         if (_selectedItem != null)
         {
-            QueryStateService.CustomQuery = _selectedItem.QueryText;
+            var newCount = QueryStateService.Tabs.Count + 1;
+            var newTab = new ExploreDB.Services.QueryTab 
+            { 
+                Name = $"History_{newCount}.sql",
+                Content = _selectedItem.QueryText
+            };
+            QueryStateService.Tabs.Add(newTab);
+            QueryStateService.ActiveTabId = newTab.Id;
+            await QueryStateService.SaveTabsAsync();
+            
             Nav.NavigateTo("/runner");
         }
     }

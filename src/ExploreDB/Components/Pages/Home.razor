@@ -99,7 +99,7 @@ else
                                                     </div>
                                                     @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
                                                     {
-                                                        <button class="dropdown-item text-white py-1 text-truncate @(TargetTable == table.FullName ? "bg-primary" : "")" type="button" 
+                                                        <button class="dropdown-item text-white py-1 text-truncate @(TargetTable == table.FullName ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" type="button" 
                                                                 data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(table.FullName)" data-bs-placement="right" 
                                                                 @onclick="() => SelectTargetTable(table.FullName)">
                                                             @table.Name
