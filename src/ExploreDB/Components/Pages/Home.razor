@@ -23,24 +23,15 @@
 else
 {
 <div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col d-flex justify-content-between align-items-center">
-            <div>
-                <h2 class="fw-bold text-white mb-0">Query Builder</h2>
-
-            </div>
-            <div class="btn-group shadow-sm">
+    <div class="row">
+        <!-- Column Picker -->
+        <!-- Builder Panel -->
+        <div class="col-md-4 d-flex flex-column gap-3" style="position: sticky; top: 20px; height: calc(100vh - 60px);">
+            <div class="btn-group shadow-sm w-100 flex-shrink-0">
                 <button class="btn @(CurrentMode == QueryMode.Select ? "btn-primary" : "btn-dark border-secondary text-light")" @onclick="() => SetMode(QueryMode.Select)">SELECT</button>
                 <button class="btn @(CurrentMode == QueryMode.Update ? "btn-primary" : "btn-dark border-secondary text-light")" @onclick="() => SetMode(QueryMode.Update)">UPDATE</button>
                 <button class="btn @(CurrentMode == QueryMode.Delete ? "btn-primary" : "btn-dark border-secondary text-light")" @onclick="() => SetMode(QueryMode.Delete)">DELETE</button>
             </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <!-- Column Picker -->
-        <!-- Builder Panel -->
-        <div class="col-md-4 d-flex flex-column gap-4" style="position: sticky; top: 20px; height: calc(100vh - 120px);">
             <div class="card bg-dark border-secondary shadow-sm d-flex flex-column" style="flex: 1; min-height: 0;">
                 <!-- Tab Header -->
                 <div class="card-header border-secondary p-0" style="position: sticky; top: 0; z-index: 30; background: #1a1d20; border-bottom: 1px solid #343a40 !important;">
@@ -368,7 +359,11 @@ else
                          {
                              <h6 class="text-info fw-bold mb-3">Join Path Routing</h6>
                              <div class="d-flex flex-wrap gap-2 align-items-center small mb-3">
-                                 <span class="badge bg-dark border border-secondary px-2 py-1 fs-6 text-light cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(LastJoinPlan.RootTable)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(LastJoinPlan.RootTable)">@LastJoinPlan.RootTable.Split('.').Last().Replace("[", "").Replace("]", "")</span>
+                                 <div class="btn-group btn-group-sm shadow-sm">
+                                     <span class="btn btn-dark border-secondary py-1 text-light fw-bold cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(LastJoinPlan.RootTable)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(LastJoinPlan.RootTable)">
+                                         @LastJoinPlan.RootTable.Split('.').Last().Replace("[", "").Replace("]", "")
+                                     </span>
+                                 </div>
                                  @foreach (var step in LastJoinPlan.Steps)
                                  {
                                      <span class="text-secondary fw-bold fs-5">➔</span>
