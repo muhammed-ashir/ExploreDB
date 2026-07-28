@@ -92,6 +92,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<PathfinderService>();
         builder.Services.AddSingleton<QueryStateService>();
         builder.Services.AddSingleton<GitHubUpdateService>();
+        builder.Services.AddSingleton<HistoryService>();
 
 			return builder.Build();
 		} catch (Exception ex) {

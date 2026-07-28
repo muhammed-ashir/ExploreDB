@@ -1,0 +1,204 @@
+@page "/history"
+@using ExploreDB.Services
+@using BlazorMonaco.Editor
+@using BlazorMonaco
+@using Microsoft.JSInterop
+@inject HistoryService HistoryService
+@inject NavigationManager Nav
+@inject QueryStateService QueryStateService
+@inject IJSRuntime JS
+
+<div class="container-fluid d-flex flex-column" style="height: calc(100vh - 140px); padding-bottom: 20px;">
+    <div class="row mb-3 align-items-center">
+        <div class="col">
+            <h4 class="m-0 text-light">Query History</h4>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-secondary shadow-sm" @onclick='() => Nav.NavigateTo("/runner")'>
+                <i class="bi bi-arrow-left me-1"></i> Back
+            </button>
+        </div>
+    </div>
+
+    <div class="row flex-grow-1 overflow-hidden" style="min-height: 500px;">
+        <!-- Left Pane: List -->
+        <div class="col-md-4 d-flex flex-column h-100">
+            <div class="card bg-dark text-white shadow-sm border-secondary h-100">
+                <div class="card-header bg-secondary bg-opacity-25 border-bottom border-secondary py-2">
+                    <h6 class="m-0 mb-2">Past Executions</h6>
+                    <div class="d-flex align-items-center w-100">
+                        <CustomDatePicker @bind-Value="_filterDate" />
+                    </div>
+                </div>
+                <div class="card-body p-0 overflow-auto">
+                    <div class="list-group list-group-flush">
+                        @if (FilteredHistoryItems == null)
+                        {
+                            <div class="p-4 text-center text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary mb-2"></div><br/>
+                                Loading...
+                            </div>
+                        }
+                        else if (!FilteredHistoryItems.Any())
+                        {
+                            <div class="p-4 text-center text-muted">
+                                @if (!_filterDate.HasValue)
+                                {
+                                    <i class="bi bi-inbox fs-2 mb-2 d-block text-secondary"></i>
+                                }
+                                @if (_filterDate.HasValue) { <span>No history for this date.</span> } else { <span>No history found.</span> }
+                            </div>
+                        }
+                        else
+                        {
+                            foreach (var item in FilteredHistoryItems)
+                            {
+                                <button type="button" class="list-group-item list-group-item-action bg-transparent text-light border-secondary border-opacity-25 py-3 @(_selectedItem?.Id == item.Id ? "active bg-primary bg-opacity-25 border-primary" : "")" @onclick="() => SelectItem(item)">
+                                    <div class="d-flex align-items-center mb-1">
+                                        @if (item.IsSuccess)
+                                        {
+                                            <i class="bi bi-check-circle-fill text-success me-2" title="Success"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-x-circle-fill text-danger me-2" title="Failed"></i>
+                                        }
+                                        <span class="fw-bold" style="font-size: 0.95rem;">@item.ExecutedAt.ToString("MMM dd, yyyy")</span>
+                                    </div>
+                                    <div class="text-muted text-truncate" style="font-size: 0.85rem; margin-left: 1.5rem;" title="@($"{item.ExecutedAt:h:mm tt} - {GetRelativeTime(item.ExecutedAt)}")">
+                                        @item.ExecutedAt.ToString("h:mm tt") - @GetRelativeTime(item.ExecutedAt)
+                                    </div>
+                                </button>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Pane: Viewer -->
+        <div class="@(IsFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-4 p-md-5 d-flex flex-column" : "col-md-8 h-100 d-flex flex-column")" style="@(IsFullScreen ? "z-index: 1050; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);" : "")">
+            <div class="card bg-dark text-white shadow-sm border-secondary flex-grow-1 d-flex flex-column overflow-hidden @(IsFullScreen ? "shadow-lg border-2" : "")">
+                <div class="card-header bg-secondary bg-opacity-25 border-bottom border-secondary py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0">Query Details</h6>
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-sm btn-outline-light me-2" disabled="@(_selectedItem == null)" @onclick="CopyQueryAsync">
+                            <i class="bi bi-clipboard me-1"></i> Copy
+                        </button>
+                        <button class="btn btn-sm btn-primary me-2" disabled="@(_selectedItem == null)" @onclick="LoadAndRunQuery">
+                            <i class="bi bi-play-fill me-1"></i> Load
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary text-light border-0" @onclick="() => IsFullScreen = !IsFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
+                            <i class="bi @(IsFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0 flex-grow-1 d-flex flex-column position-relative" style="min-height: 0;">
+                    @if (_selectedItem == null)
+                    {
+                        <div class="d-flex justify-content-center align-items-center h-100 text-muted">
+                            <div class="text-center">
+                                Select a query from the history list to view details.
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex-grow-1 w-100" style="min-height: 0;">
+                            <StandaloneCodeEditor @ref="_editor" Id="history-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" />
+                        </div>
+                        
+                        @if (!_selectedItem.IsSuccess && !string.IsNullOrEmpty(_selectedItem.ErrorMessage) && !IsFullScreen)
+                        {
+                            <div class="bg-danger bg-opacity-10 border-top border-danger p-3" style="max-height: 150px; overflow-y: auto; flex-shrink: 0;">
+                                <h6 class="text-danger mb-1"><i class="bi bi-exclamation-triangle-fill me-2"></i>Execution Error</h6>
+                                <pre class="m-0 text-danger" style="font-size: 0.85em; white-space: pre-wrap;">@_selectedItem.ErrorMessage</pre>
+                            </div>
+                        }
+                        
+                        @if (!IsFullScreen)
+                        {
+                            <div class="bg-dark border-top border-secondary p-2 text-muted d-flex justify-content-between align-items-center" style="flex-shrink: 0;">
+                                <small class="fw-semibold text-info"><i class="bi bi-server me-1"></i>@(string.IsNullOrWhiteSpace(_selectedItem.ServerName) ? "localhost" : _selectedItem.ServerName) <i class="bi bi-arrow-right mx-1"></i> @(string.IsNullOrWhiteSpace(_selectedItem.DatabaseName) ? "master" : _selectedItem.DatabaseName)</small>
+                                <small><i class="bi bi-stopwatch me-1"></i>@(_selectedItem.ExecutionTimeMs)ms</small>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<QueryHistoryItem>? _historyItems;
+    private QueryHistoryItem? _selectedItem;
+    private StandaloneCodeEditor _editor = default!;
+    private bool IsFullScreen = false;
+    private DateTime? _filterDate = null;
+    private IEnumerable<QueryHistoryItem>? FilteredHistoryItems => 
+        _filterDate.HasValue && _historyItems != null
+            ? _historyItems.Where(x => x.ExecutedAt.Date == _filterDate.Value.Date)
+            : _historyItems;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _historyItems = await HistoryService.GetHistoryAsync();
+    }
+
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "sql",
+            Theme = "vs-dark",
+            Value = _selectedItem?.QueryText ?? "",
+            AutomaticLayout = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            LineNumbers = "on",
+            ReadOnly = true,
+            ScrollBeyondLastLine = false,
+            FontSize = 14,
+            OverviewRulerBorder = false,
+            HideCursorInOverviewRuler = true,
+            FixedOverflowWidgets = true,
+            Scrollbar = new EditorScrollbarOptions { UseShadows = false }
+        };
+    }
+
+    private async Task SelectItem(QueryHistoryItem item)
+    {
+        _selectedItem = item;
+        if (_editor != null)
+        {
+            await _editor.SetValue(item.QueryText);
+        }
+    }
+
+    private void LoadAndRunQuery()
+    {
+        if (_selectedItem != null)
+        {
+            QueryStateService.CustomQuery = _selectedItem.QueryText;
+            Nav.NavigateTo("/runner");
+        }
+    }
+
+    private async Task CopyQueryAsync()
+    {
+        if (_selectedItem != null)
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selectedItem.QueryText);
+        }
+    }
+
+    private string GetRelativeTime(DateTime executedAt)
+    {
+        var ts = DateTime.Now - executedAt;
+        if (ts.TotalSeconds < 60) return "Just now";
+        if (ts.TotalMinutes < 60) return $"{(int)ts.TotalMinutes}m ago";
+        if (ts.TotalHours < 24) return $"{(int)ts.TotalHours}h ago";
+        if (ts.TotalDays < 30) return $"{(int)ts.TotalDays}d ago";
+        return executedAt.ToString("MMM dd");
+    }
+}

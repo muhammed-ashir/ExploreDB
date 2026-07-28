@@ -1,0 +1,133 @@
+@using System.Globalization
+
+<div class="custom-datepicker flex-grow-1" style="position: relative;">
+    <div class="form-control form-control-sm bg-dark text-white border-secondary d-flex justify-content-between align-items-center" 
+         style="cursor: pointer; font-size: 0.85rem;" @onclick="ToggleDropdown">
+        <span>@(Value.HasValue ? Value.Value.ToString("MMM dd, yyyy") : "Filter by date...")</span>
+        <i class="bi bi-calendar-event text-muted"></i>
+    </div>
+
+    @if (_isOpen)
+    {
+        <!-- Invisible overlay to close dropdown on outside click -->
+        <div style="position: fixed; top: 0; bottom: 0; left: 0; right: 0; z-index: 1050;" @onclick="() => _isOpen = false"></div>
+
+        <div class="dropdown-menu shadow-lg border-secondary bg-dark p-3 show" style="position: absolute; top: 100%; left: 0; z-index: 1060; min-width: 260px; margin-top: 4px;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <button class="btn btn-sm btn-outline-secondary border-0 text-white" @onclick="PrevMonth"><i class="bi bi-chevron-left"></i></button>
+                <span class="fw-bold text-light" style="font-size: 0.95rem;">@_currentDisplay.ToString("MMMM yyyy")</span>
+                <button class="btn btn-sm btn-outline-secondary border-0 text-white" @onclick="NextMonth"><i class="bi bi-chevron-right"></i></button>
+            </div>
+            
+            <div class="d-grid text-center mb-2 text-muted fw-bold" style="grid-template-columns: repeat(7, 1fr); font-size: 0.75rem;">
+                <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+            </div>
+            
+            <div class="d-grid text-center" style="grid-template-columns: repeat(7, 1fr); gap: 4px;">
+                @foreach (var day in GetDaysInMonth())
+                {
+                    if (day == null)
+                    {
+                        <div></div>
+                    }
+                    else
+                    {
+                        bool isSelected = Value.HasValue && Value.Value.Date == day.Value.Date;
+                        bool isToday = day.Value.Date == DateTime.Today;
+                        string btnClass = isSelected ? "btn-primary" : (isToday ? "btn-outline-info border-0" : "btn-outline-secondary border-0 text-light");
+                        
+                        <button class="btn btn-sm p-1 @btnClass" 
+                                style="border-radius: 6px; font-size: 0.85rem;"
+                                @onclick="() => SelectDate(day.Value)">
+                            @day.Value.Day
+                        </button>
+                    }
+                }
+            </div>
+
+            <div class="d-flex justify-content-between mt-3 pt-3 border-top border-secondary border-opacity-50">
+                <button class="btn btn-sm btn-outline-danger border-0" @onclick="ClearDate">Clear</button>
+                <button class="btn btn-sm btn-outline-info border-0" @onclick="SelectToday">Today</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public DateTime? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<DateTime?> ValueChanged { get; set; }
+
+    private bool _isOpen = false;
+    private DateTime _currentDisplay = DateTime.Today;
+
+    protected override void OnParametersSet()
+    {
+        if (Value.HasValue && !_isOpen)
+        {
+            _currentDisplay = new DateTime(Value.Value.Year, Value.Value.Month, 1);
+        }
+    }
+
+    private void ToggleDropdown()
+    {
+        _isOpen = !_isOpen;
+        if (_isOpen)
+        {
+            _currentDisplay = Value.HasValue 
+                ? new DateTime(Value.Value.Year, Value.Value.Month, 1) 
+                : new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        }
+    }
+
+    private void PrevMonth()
+    {
+        _currentDisplay = _currentDisplay.AddMonths(-1);
+    }
+
+    private void NextMonth()
+    {
+        _currentDisplay = _currentDisplay.AddMonths(1);
+    }
+
+    private async Task SelectDate(DateTime date)
+    {
+        Value = date;
+        _isOpen = false;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task ClearDate()
+    {
+        Value = null;
+        _isOpen = false;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task SelectToday()
+    {
+        await SelectDate(DateTime.Today);
+    }
+
+    private List<DateTime?> GetDaysInMonth()
+    {
+        var days = new List<DateTime?>();
+        var firstDayOfMonth = new DateTime(_currentDisplay.Year, _currentDisplay.Month, 1);
+        var daysInMonth = DateTime.DaysInMonth(_currentDisplay.Year, _currentDisplay.Month);
+        
+        int leadingEmptyDays = (int)firstDayOfMonth.DayOfWeek;
+        for (int i = 0; i < leadingEmptyDays; i++)
+        {
+            days.Add(null);
+        }
+
+        for (int i = 1; i <= daysInMonth; i++)
+        {
+            days.Add(new DateTime(_currentDisplay.Year, _currentDisplay.Month, i));
+        }
+
+        return days;
+    }
+}

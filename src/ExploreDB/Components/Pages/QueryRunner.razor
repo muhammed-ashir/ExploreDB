@@ -13,6 +13,7 @@
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject IJSRuntime JS
 @inject NavigationManager Nav
+@inject HistoryService HistoryService
 @implements IDisposable
 
 <div class="container-fluid">
@@ -22,6 +23,9 @@
             <div class="d-flex gap-2">
                 <button class="btn btn-outline-info fw-bold shadow" @onclick="FormatSqlAsync">
                     <i class="bi bi-magic me-1"></i> Format
+                </button>
+                <button class="btn btn-outline-secondary fw-bold shadow" @onclick='() => Nav.NavigateTo("/history")'>
+                    <i class="bi bi-clock-history me-1"></i> History
                 </button>
                 <button class="btn btn-primary fw-bold shadow" @onclick="ExecuteAsync" disabled="@IsExecuting">
                     @if (IsExecuting) { <span class="spinner-border spinner-border-sm me-2"></span><span>Executing...</span> }
@@ -70,7 +74,11 @@
                             </a>
                         </li>
                     </ul>
-                    <div class="pe-2">
+                    <div class="d-flex align-items-center pe-2">
+                        @if (HasExecuted && LastExecutionTimeMs > 0 && !IsExecuting)
+                        {
+                            <span class="text-muted small me-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(LastExecutionTimeMs)</span>
+                        }
                         <button class="btn btn-sm btn-outline-secondary border-0 text-white" @onclick="() => IsFullScreen = !IsFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
                             <i class="bi @(IsFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
                         </button>
@@ -81,7 +89,7 @@
                     {
                         if (IsExecuting)
                         {
-                            <div class="text-center mt-5"><div class="spinner-border text-primary"></div><div class="mt-2 text-muted">Executing...</div></div>
+                            <div class="text-center mt-5"><div class="spinner-border text-primary" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div><div class="mt-3 text-muted fs-5">Executing... (@GetFormattedExecutionTime(_execElapsedSeconds))</div></div>
                         }
                         else if (ResultSets.Count == 0 && !HasExecuted)
                         {
@@ -131,6 +139,8 @@
     private bool IsExecuting = false;
     private bool HasExecuted = false;
     private bool IsFullScreen = false;
+    private long LastExecutionTimeMs = 0;
+    private int _execElapsedSeconds = 0;
     
     private List<IEnumerable<dynamic>> ResultSets = new();
     private List<string> Messages = new();
@@ -236,21 +246,64 @@
         }
     }
 
+    private string GetFormattedExecutionTimeMs(long totalMs)
+    {
+        if (totalMs < 1000) return $"{totalMs}ms";
+        var ts = TimeSpan.FromMilliseconds(totalMs);
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m {ts.Seconds}s";
+        if (ts.TotalMinutes >= 1) return $"{ts.Minutes}m {ts.Seconds}s";
+        return $"{Math.Round(ts.TotalSeconds, 1)}s";
+    }
+
+    private string GetFormattedExecutionTime(int totalSeconds)
+    {
+        if (totalSeconds < 60) return $"{totalSeconds}s";
+        var ts = TimeSpan.FromSeconds(totalSeconds);
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m {ts.Seconds}s";
+        return $"{ts.Minutes}m {ts.Seconds}s";
+    }
+
+    private async Task UpdateTimerAsync()
+    {
+        var start = DateTime.UtcNow;
+        while (IsExecuting)
+        {
+            await Task.Delay(500);
+            if (IsExecuting)
+            {
+                _execElapsedSeconds = (int)(DateTime.UtcNow - start).TotalSeconds;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
     private async Task ExecuteAsync()
     {
         if (IsExecuting) return;
 
         IsExecuting = true;
         HasExecuted = true;
+        _execElapsedSeconds = 0;
+        
+        _ = UpdateTimerAsync();
+
         ResultSets.Clear();
         Messages.Clear();
         ResultTab = "Results";
         StateHasChanged();
 
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        bool isSuccess = false;
+        string? errorMessage = null;
+        string dbName = "";
+        string serverName = "";
+
         try
         {
             QueryStateService.CustomQuery = await _editor.GetValue();
             using var conn = new SqlConnection(ConnectionService.ConnectionString);
+            dbName = conn.Database;
+            serverName = conn.DataSource;
             conn.InfoMessage += (sender, args) =>
             {
                 Messages.Add(args.Message);
@@ -292,15 +345,23 @@
             ResultSets.Add(rs);
             Messages.Add("Executed custom query.");
             Messages.Add($"Rows returned: {rs.Count()}");
+            isSuccess = true;
         }
         catch (Exception ex)
         {
             Messages.Add($"ERROR: {ex.Message}");
             ResultTab = "Messages";
+            errorMessage = ex.Message;
         }
         finally
         {
+            watch.Stop();
+            LastExecutionTimeMs = watch.ElapsedMilliseconds;
             IsExecuting = false;
+            if (!string.IsNullOrWhiteSpace(QueryStateService.CustomQuery))
+            {
+                await HistoryService.AddHistoryItemAsync(QueryStateService.CustomQuery, serverName, dbName, watch.ElapsedMilliseconds, isSuccess, errorMessage);
+            }
         }
     }
 }
