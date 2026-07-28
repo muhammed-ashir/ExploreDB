@@ -748,7 +748,7 @@ public class SchemaService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Schema Load Error");
+            _logger.LogError(ex, "Schema Load Error"); 
             // Handle error (maybe invoke an error event)
         }
     }
