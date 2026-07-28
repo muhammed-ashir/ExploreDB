@@ -55,30 +55,44 @@
         <a class="dismiss">🗙</a>
     </div>
 
+    <script src="js/bootstrap.bundle.min.js"></script>
     <script src="js/sql-formatter.min.js"></script>
     <script src="_framework/blazor.webview.js"></script>
     <script src="_content/BlazorMonaco/jsInterop.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/loader.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/editor/editor.main.js"></script>
-    <script src="js/bootstrap.bundle.min.js"></script>
     <script src="js/query-editor-interop.js"></script>
     <script src="js/mermaid.min.js"></script>
     <script src="js/svg-pan-zoom.min.js"></script>
     <script>
-        // Global Bootstrap Tooltip Initializer
+        // Global Bootstrap Tooltip Initializer - Bulletproof SPA Engine
+        let currentTooltipTarget = null;
+        
         document.body.addEventListener('mouseover', function(e) {
             let target = e.target.closest('[data-bs-tooltip="true"]');
-            if (target && !target.hasAttribute('data-tooltip-init')) {
-                target.setAttribute('data-tooltip-init', 'true');
-                let tooltip = new bootstrap.Tooltip(target, { container: 'body' });
-                tooltip.show();
+            if (target !== currentTooltipTarget) {
+                if (currentTooltipTarget) {
+                    let oldTooltip = bootstrap.Tooltip.getInstance(currentTooltipTarget);
+                    if (oldTooltip) oldTooltip.dispose();
+                }
+                
+                currentTooltipTarget = target;
+                
+                if (target) {
+                    let tooltip = new bootstrap.Tooltip(target, { container: 'body', trigger: 'manual' });
+                    tooltip.show();
+                }
             }
         });
+
         document.body.addEventListener('mouseout', function(e) {
             let target = e.target.closest('[data-bs-tooltip="true"]');
-            if (target) {
+            if (target && !target.contains(e.relatedTarget)) {
                 let tooltip = bootstrap.Tooltip.getInstance(target);
-                if (tooltip) tooltip.hide();
+                if (tooltip) tooltip.dispose();
+                if (currentTooltipTarget === target) {
+                    currentTooltipTarget = null;
+                }
             }
         });
         
@@ -93,10 +107,11 @@
             let target = e.target.closest('[data-bs-tooltip="true"]');
             if (target) {
                 let tooltip = bootstrap.Tooltip.getInstance(target);
-                if (tooltip) tooltip.hide();
+                if (tooltip) tooltip.dispose();
+                if (currentTooltipTarget === target) currentTooltipTarget = null;
             }
             // Fallback: forcefully remove any orphaned tooltip DOM elements
-            document.querySelectorAll('.tooltip.show').forEach(t => t.remove());
+            document.querySelectorAll('.tooltip').forEach(t => t.remove());
         });
 
         mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
