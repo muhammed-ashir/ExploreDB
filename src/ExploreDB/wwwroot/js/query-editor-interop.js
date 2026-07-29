@@ -9,7 +9,7 @@ window.formatSql = (code) => {
     });
 };
 
-window.registerSqlAutocomplete = (tables, views, dotNetHelper) => {
+window.registerSqlAutocomplete = (tables, views, columns, dotNetHelper) => {
     window.sqlDotNetHelper = dotNetHelper;
     if (window.sqlAutocompleteRegistered) return;
     window.sqlAutocompleteRegistered = true;
@@ -77,6 +77,19 @@ window.registerSqlAutocomplete = (tables, views, dotNetHelper) => {
                 });
             }
 
+            if (columns) {
+                columns.forEach(c => {
+                    suggestions.push({
+                        label: c,
+                        kind: monaco.languages.CompletionItemKind.Field,
+                        insertText: c,
+                        filterText: c,
+                        range: replaceRange, // Will just replace the current word
+                        detail: 'Column'
+                    });
+                });
+            }
+
             return { suggestions: suggestions };
         },
         resolveCompletionItem: async function(item, token) {
@@ -110,4 +123,58 @@ window.registerSqlAutocomplete = (tables, views, dotNetHelper) => {
             return null;
         }
     });
+
+    // Auto-capitalize SQL keywords on space
+    if (!window.sqlEditorAutoCapitalizeAttached) {
+        window.sqlEditorAutoCapitalizeAttached = true;
+        
+        var sqlKeywords = new Set([
+            'select', 'from', 'where', 'and', 'or', 'insert', 'into', 'values', 
+            'update', 'set', 'delete', 'inner', 'join', 'left', 'right', 'outer', 
+            'on', 'as', 'order', 'group', 'by', 'having', 'top', 'distinct', 
+            'null', 'is', 'not', 'asc', 'desc', 'like', 'in', 'between', 'exists', 
+            'cast', 'convert', 'create', 'alter', 'drop', 'table', 'view', 
+            'procedure', 'exec', 'execute', 'begin', 'end', 'declare', 'if', 
+            'else', 'while', 'return', 'print', 'count', 'sum', 'min', 'max', 'avg',
+            'with', 'over', 'partition', 'union', 'all', 'any', 'some', 'case', 'when', 'then'
+        ]);
+
+        function attachAutoCapitalize(editor) {
+            editor.onKeyUp(function(e) {
+                if (e.browserEvent.key === ' ') {
+                    var position = editor.getPosition();
+                    var model = editor.getModel();
+                    if (!model || model.getLanguageId() !== 'sql') return;
+                    
+                    var wordInfo = model.getWordAtPosition({
+                        lineNumber: position.lineNumber,
+                        column: Math.max(1, position.column - 1)
+                    });
+                    
+                    if (wordInfo && wordInfo.word) {
+                        var wLower = wordInfo.word.toLowerCase();
+                        if (sqlKeywords.has(wLower) && wordInfo.word !== wLower.toUpperCase()) {
+                            var range = new monaco.Range(
+                                position.lineNumber, 
+                                wordInfo.startColumn, 
+                                position.lineNumber, 
+                                wordInfo.endColumn
+                            );
+                            editor.executeEdits('auto-capitalize', [{
+                                range: range,
+                                text: wLower.toUpperCase(),
+                                forceMoveMarkers: true
+                            }]);
+                        }
+                    }
+                }
+            });
+        }
+
+        monaco.editor.onDidCreateEditor(attachAutoCapitalize);
+        var editors = monaco.editor.getEditors();
+        if (editors) {
+            editors.forEach(attachAutoCapitalize);
+        }
+    }
 };

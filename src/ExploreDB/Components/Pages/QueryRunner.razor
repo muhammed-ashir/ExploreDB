@@ -542,7 +542,14 @@
         _objRef = DotNetObjectReference.Create(this);
         var tables = SchemaService.Tables.Select(t => new { name = t.Name, fullName = t.FullName }).ToList();
         var views = SchemaService.Views.Select(v => new { name = v.Name, fullName = v.FullName }).ToList();
-        await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views, _objRef);
+        
+        var columns = SchemaService.Tables.SelectMany(t => t.Columns)
+                        .Concat(SchemaService.Views.SelectMany(v => v.Columns))
+                        .Select(c => c.Name)
+                        .Distinct()
+                        .ToList();
+
+        await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views, columns, _objRef);
     }
 
     private async Task FormatSqlAsync()
