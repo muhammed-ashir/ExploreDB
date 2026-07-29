@@ -4,6 +4,8 @@
 @inject PathfinderService PathfinderService
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+@inject QueryStateService QueryStateService
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 
 <div class="container-fluid">
     @if (IsLoading)
@@ -546,9 +548,9 @@
                                         @onclick:stopPropagation="true">
                                     <i class="bi @(SelectCopied ? "bi-check2" : "bi-clipboard")"></i> @(SelectCopied ? "Copied!" : "Copy")
                                 </button>
-                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)&query=@Uri.EscapeDataString(SelectQuery)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
+                                <button type="button" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick="@(() => LoadAndRunQuery(SelectQuery, $"Select_{Table.Name}.sql"))" @onclick:stopPropagation="true">
                                     <i class="bi bi-play-fill"></i> Run
-                                </a>
+                                </button>
                             </span>
                         </h2>
                         <div id="collapseSelectQuery" class="accordion-collapse collapse show" aria-labelledby="headingSelectQuery" data-bs-parent="#queryAccordion">
@@ -570,9 +572,9 @@
                                         @onclick:stopPropagation="true">
                                     <i class="bi @(InsertCopied ? "bi-check2" : "bi-clipboard")"></i> @(InsertCopied ? "Copied!" : "Copy")
                                 </button>
-                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)&query=@Uri.EscapeDataString(InsertQuery)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
+                                <button type="button" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick="@(() => LoadAndRunQuery(InsertQuery, $"Insert_{Table.Name}.sql"))" @onclick:stopPropagation="true">
                                     <i class="bi bi-play-fill"></i> Run
-                                </a>
+                                </button>
                             </span>
                         </h2>
                         <div id="collapseInsertQuery" class="accordion-collapse collapse" aria-labelledby="headingInsertQuery" data-bs-parent="#queryAccordion">
@@ -594,9 +596,9 @@
                                         @onclick:stopPropagation="true">
                                     <i class="bi @(UpdateCopied ? "bi-check2" : "bi-clipboard")"></i> @(UpdateCopied ? "Copied!" : "Copy")
                                 </button>
-                                <a href="/runner?type=table&name=@Uri.EscapeDataString(Table.FullName)&query=@Uri.EscapeDataString(UpdateQuery)" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick:stopPropagation="true">
+                                <button type="button" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick="@(() => LoadAndRunQuery(UpdateQuery, $"Update_{Table.Name}.sql"))" @onclick:stopPropagation="true">
                                     <i class="bi bi-play-fill"></i> Run
-                                </a>
+                                </button>
                             </span>
                         </h2>
                         <div id="collapseUpdateQuery" class="accordion-collapse collapse" aria-labelledby="headingUpdateQuery" data-bs-parent="#queryAccordion">
@@ -667,6 +669,27 @@
     }
 </div>
 
+@if (ShowLimitAlert)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowLimitAlert = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
+                    <p class="text-muted small mt-2 mb-0">Please close some existing tabs before opening new ones.</p>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-primary px-4" @onclick="() => ShowLimitAlert = false">Got it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter]
     public string FullName { get; set; } = string.Empty;
@@ -674,6 +697,7 @@
     [SupplyParameterFromQuery]
     public string? ReturnUrl { get; set; }
 
+    private bool ShowLimitAlert = false;
     private bool IsLoading = true;
     private TableInfo? Table;
     private HashSet<string> SelectedUpdateColumns = new(StringComparer.OrdinalIgnoreCase);
@@ -856,6 +880,27 @@
         }
 
         MermaidDefinition = sb.ToString();
+    }
+
+    private async Task LoadAndRunQuery(string queryText, string tabName)
+    {
+        if (QueryStateService.Tabs.Count >= Config.GetValue<int>("MaxOpenTabs", 20))
+        {
+            ShowLimitAlert = true;
+            return;
+        }
+
+        var newCount = QueryStateService.Tabs.Count + 1;
+        var newTab = new ExploreDB.Services.QueryTab 
+        { 
+            Name = tabName,
+            Content = queryText
+        };
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+        await QueryStateService.SaveTabsAsync();
+        
+        Navigation.NavigateTo("/runner");
     }
 
     private string SanitizeForMermaid(string name)
