@@ -384,8 +384,8 @@ body {
     cursor: pointer;
 }
 
-/* Allow Bootstrap tooltips to dynamically stretch to fit full text globally */
+/* Allow Bootstrap tooltips to dynamically stretch but cap at 450px so long text wraps globally */
 .tooltip-inner {
-    max-width: max-content !important;
+    max-width: 450px !important;
     text-align: left !important;
 }
