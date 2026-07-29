@@ -302,44 +302,44 @@ public class SchemaService
             _logger.LogInformation("Processing Batch Results...");
             
             // 1. Tables
-            var rawTables = await multi.ReadAsync<dynamic>();
-            Tables = rawTables.Select(t => new TableInfo { Schema = (string)t.SchemaName, Name = (string)t.Name }).OrderBy(t => t.FullName).ToList();
+            var rawTables = await multi.ReadAsync<RawTable>();
+            Tables = rawTables.Select(t => new TableInfo { Schema = t.SchemaName, Name = t.Name }).OrderBy(t => t.FullName).ToList();
             var tableDict = Tables.ToDictionary(t => t.FullName);
 
             // 2. Views
-            var rawViews = await multi.ReadAsync<dynamic>();
-            Views = rawViews.Select(v => new ViewInfo { Schema = (string)v.SchemaName, Name = (string)v.Name }).OrderBy(v => v.FullName).ToList();
+            var rawViews = await multi.ReadAsync<RawView>();
+            Views = rawViews.Select(v => new ViewInfo { Schema = v.SchemaName, Name = v.Name }).OrderBy(v => v.FullName).ToList();
             var viewDict = Views.ToDictionary(v => v.FullName);
 
             // 3. Columns
-            var rawCols = await multi.ReadAsync<dynamic>();
+            var rawCols = await multi.ReadAsync<RawColumn>();
             foreach(var col in rawCols)
             {
-                var key = $"[{(string)col.SchemaName}].[{(string)col.TableName}]";
+                var key = $"[{col.SchemaName}].[{col.TableName}]";
                 if (tableDict.TryGetValue(key, out var table))
                 {
-                    table.Columns.Add(new ColumnInfo { Name = (string)col.ColumnName, DataType = (string)col.DataType });
+                    table.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = col.DataType });
                 }
                 else if (viewDict.TryGetValue(key, out var view))
                 {
-                    view.Columns.Add(new ColumnInfo { Name = (string)col.ColumnName, DataType = (string)col.DataType });
+                    view.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = col.DataType });
                 }
             }
 
             // 4. Foreign Keys
-            var fks = await multi.ReadAsync<dynamic>();
+            var fks = await multi.ReadAsync<RawFk>();
             foreach(var fk in fks)
             {
-                var parentFull = $"[{(string)fk.ParentSchema}].[{(string)fk.ParentTable}]";
-                var refFull = $"[{(string)fk.RefSchema}].[{(string)fk.RefTable}]";
+                var parentFull = $"[{fk.ParentSchema}].[{fk.ParentTable}]";
+                var refFull = $"[{fk.RefSchema}].[{fk.RefTable}]";
 
                 if (tableDict.TryGetValue(parentFull, out var parent) && tableDict.TryGetValue(refFull, out var reference))
                 {
                     var rel = new Relationship 
                     { 
-                        FromTable = parentFull, FromColumn = (string)fk.ParentColumn,
-                        ToTable = refFull, ToColumn = (string)fk.RefColumn,
-                        IsNullable = (bool)fk.IsNullable
+                        FromTable = parentFull, FromColumn = fk.ParentColumn,
+                        ToTable = refFull, ToColumn = fk.RefColumn,
+                        IsNullable = fk.IsNullable
                     };
                     parent.OutgoingKeys.Add(rel);
                     reference.IncomingKeys.Add(rel);
@@ -347,37 +347,37 @@ public class SchemaService
             }
 
             // 5. Functions
-            var rawFns = await multi.ReadAsync<dynamic>();
+            var rawFns = await multi.ReadAsync<RawFunction>();
             Functions = rawFns.Select(r => new FunctionInfo
             {
-                Schema = (string)r.SchemaName,
-                Name = (string)r.FuncName,
-                FunctionType = (string)r.FuncType switch {
+                Schema = r.SchemaName,
+                Name = r.FuncName,
+                FunctionType = r.FuncType switch {
                     "FN" => "Scalar",
                     "IF" => "Inline Table",
                     "TF" => "Multi-Statement Table",
-                    _ => (string)r.FuncType
+                    _ => r.FuncType
                 },
-                CreatedDate = (DateTime?)r.CreatedDate,
-                ModifiedDate = (DateTime?)r.ModifiedDate
+                CreatedDate = r.CreatedDate,
+                ModifiedDate = r.ModifiedDate
             }).ToList();
             var fnDict = Functions.ToDictionary(f => f.FullName);
 
             // 6. Function Parameters
-            var rawFnParams = await multi.ReadAsync<dynamic>();
+            var rawFnParams = await multi.ReadAsync<RawFnParam>();
             foreach (var param in rawFnParams)
             {
-                var fnFull = $"[{(string)param.SchemaName}].[{(string)param.FuncName}]";
+                var fnFull = $"[{param.SchemaName}].[{param.FuncName}]";
                 if (fnDict.TryGetValue(fnFull, out var fn))
                 {
-                    var rawLen = (short)param.MaxLength;
-                    var dataType = ((string)param.DataType).ToUpper();
+                    var rawLen = param.MaxLength;
+                    var dataType = param.DataType.ToUpper();
                     int displayLen = rawLen;
                     if (dataType is "NVARCHAR" or "NCHAR")
                         displayLen = rawLen == -1 ? -1 : rawLen / 2;
                     
-                    var paramId = (int)param.ParamId;
-                    var isOutput = (bool)param.IsOutput;
+                    var paramId = param.ParamId;
+                    var isOutput = param.IsOutput;
                     
                     if (paramId == 0)
                     {
@@ -385,7 +385,7 @@ public class SchemaService
                         if (displayType is "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR")
                             displayType = displayLen == -1 ? $"{dataType}(MAX)" : $"{dataType}({displayLen})";
                         else if (displayType is "DECIMAL" or "NUMERIC")
-                            displayType = $"{dataType}({(byte)param.Precision},{(byte)param.Scale})";
+                            displayType = $"{dataType}({param.Precision},{param.Scale})";
                             
                         fn.ReturnType = displayType;
                     }
@@ -393,12 +393,12 @@ public class SchemaService
                     {
                         fn.Parameters.Add(new FunctionParameter
                         {
-                            Name = string.IsNullOrEmpty(param.ParamName as string) ? $"@param{paramId}" : (string)param.ParamName,
-                            DataType = (string)param.DataType,
+                            Name = string.IsNullOrEmpty(param.ParamName) ? $"@param{paramId}" : param.ParamName,
+                            DataType = param.DataType,
                             IsOutput = isOutput,
                             MaxLength = displayLen,
-                            Precision = (byte)param.Precision,
-                            Scale = (byte)param.Scale
+                            Precision = param.Precision,
+                            Scale = param.Scale
                         });
                     }
                 }
@@ -831,4 +831,11 @@ public class SchemaService
             _logger.LogError(ex, "Error fetching dependencies for Function {FullName}", fullName);
         }
     }
+
+    private class RawTable { public string SchemaName { get; set; } public string Name { get; set; } }
+    private class RawView { public string SchemaName { get; set; } public string Name { get; set; } }
+    private class RawColumn { public string SchemaName { get; set; } public string TableName { get; set; } public string ColumnName { get; set; } public string DataType { get; set; } }
+    private class RawFk { public string ParentTable { get; set; } public string ParentColumn { get; set; } public bool IsNullable { get; set; } public string RefTable { get; set; } public string RefColumn { get; set; } public string ParentSchema { get; set; } public string RefSchema { get; set; } }
+    private class RawFunction { public string SchemaName { get; set; } public string FuncName { get; set; } public string FuncType { get; set; } public DateTime? CreatedDate { get; set; } public DateTime? ModifiedDate { get; set; } }
+    private class RawFnParam { public string SchemaName { get; set; } public string FuncName { get; set; } public string ParamName { get; set; } public string DataType { get; set; } public bool IsOutput { get; set; } public short MaxLength { get; set; } public byte Precision { get; set; } public byte Scale { get; set; } public int ParamId { get; set; } }
 }
