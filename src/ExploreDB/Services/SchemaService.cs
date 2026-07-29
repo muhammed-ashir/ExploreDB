@@ -243,13 +243,22 @@ public class SchemaService
             
             var batchSql = @"
                 -- 1. Tables
-                SELECT TABLE_SCHEMA AS SchemaName, TABLE_NAME AS Name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE';
+                SELECT s.name AS SchemaName, t.name AS Name
+                FROM sys.tables t
+                INNER JOIN sys.schemas s ON t.schema_id = s.schema_id;
 
                 -- 2. Views
-                SELECT TABLE_SCHEMA AS SchemaName, TABLE_NAME AS Name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='VIEW';
+                SELECT s.name AS SchemaName, v.name AS Name
+                FROM sys.views v
+                INNER JOIN sys.schemas s ON v.schema_id = s.schema_id;
 
                 -- 3. Columns (For both Tables and Views)
-                SELECT TABLE_SCHEMA AS SchemaName, TABLE_NAME AS TableName, COLUMN_NAME AS ColumnName, DATA_TYPE AS DataType FROM INFORMATION_SCHEMA.COLUMNS;
+                SELECT s.name AS SchemaName, o.name AS TableName, c.name AS ColumnName, ty.name AS DataType
+                FROM sys.columns c
+                INNER JOIN sys.objects o ON c.object_id = o.object_id
+                INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
+                INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+                WHERE o.type IN ('U', 'V');
 
                 -- 4. Foreign Keys
                 SELECT 
