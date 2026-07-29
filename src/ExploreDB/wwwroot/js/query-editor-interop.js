@@ -51,7 +51,37 @@ window.registerSqlAutocomplete = (tables, views, columns, dotNetHelper) => {
                 insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
             });
 
-            if (tables) {
+            // Intelligent context detection
+            var fullTextUntilPosition = model.getValueInRange({
+                startLineNumber: 1,
+                startColumn: 1,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column
+            });
+
+            var matches = fullTextUntilPosition.match(/\b[a-z_][a-z0-9_]*\b/ig);
+            var suggestTables = true;
+            var suggestColumns = true;
+
+            if (matches && matches.length > 0) {
+                var tableKeywords = new Set(['from', 'join', 'into', 'update', 'table', 'exec', 'execute']);
+                var columnKeywords = new Set(['select', 'where', 'on', 'by', 'having', 'set', 'and', 'or']);
+                
+                for (var i = matches.length - 1; i >= 0; i--) {
+                    var token = matches[i].toLowerCase();
+                    if (tableKeywords.has(token)) {
+                        suggestTables = true;
+                        suggestColumns = false;
+                        break;
+                    } else if (columnKeywords.has(token)) {
+                        suggestTables = false;
+                        suggestColumns = true;
+                        break;
+                    }
+                }
+            }
+
+            if (suggestTables && tables) {
                 tables.forEach(t => {
                     suggestions.push({
                         label: t.fullName,
@@ -64,7 +94,7 @@ window.registerSqlAutocomplete = (tables, views, columns, dotNetHelper) => {
                 });
             }
 
-            if (views) {
+            if (suggestTables && views) {
                 views.forEach(v => {
                     suggestions.push({
                         label: v.fullName,
@@ -77,7 +107,7 @@ window.registerSqlAutocomplete = (tables, views, columns, dotNetHelper) => {
                 });
             }
 
-            if (columns) {
+            if (suggestColumns && columns) {
                 columns.forEach(c => {
                     suggestions.push({
                         label: c,
