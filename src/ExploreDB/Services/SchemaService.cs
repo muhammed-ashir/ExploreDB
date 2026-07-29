@@ -242,6 +242,8 @@ public class SchemaService
             _logger.LogInformation("Executing Initial Batch Schema Query (Perfect Compromise Architecture)...");
             
             var batchSql = @"
+                SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
                 -- 1. Tables
                 SELECT s.name AS SchemaName, t.name AS Name
                 FROM sys.tables t
