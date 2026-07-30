@@ -4,6 +4,7 @@
 @inject SchemaService SchemaService
 @inject NavigationManager Nav
 @inject ExploreDB.Services.GitHubUpdateService UpdateService
+@inject ExploreDB.Services.StoreUpdateService StoreUpdateService
 
 <div class="container-fluid p-0">
     @if (IsSwitchingDatabaseGlobal)
@@ -46,6 +47,19 @@
                             {
                                 <div class="p-2 text-info fw-bold">
                                     <span class="spinner-border spinner-border-sm me-2"></span> Downloading Update...
+                                    @if(IsStoreUpdate && UpdateProgress > 0)
+                                    {
+                                        <span>(@(Math.Round(UpdateProgress))%)</span>
+                                        <div class="progress mt-3 bg-dark shadow-sm" style="height: 10px; border-radius: 5px;">
+                                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: @(UpdateProgress.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%;" aria-valuenow="@(UpdateProgress)" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else if (StoreUpdateReadyToRestart)
+                            {
+                                <div class="mb-3 text-success fw-bold p-3 rounded" style="background: rgba(25, 135, 84, 0.2); border: 1px solid rgba(25, 135, 84, 0.4);">
+                                    ✅ Update Downloaded! The app will restart momentarily...
                                 </div>
                             }
                             else if (!InstallerLaunched)
@@ -79,7 +93,17 @@
                 <div>
                     @if (IsDownloadingUpdate)
                     {
-                        <span class="me-3 text-info fw-bold"><span class="spinner-border spinner-border-sm me-1"></span> Downloading...</span>
+                        <span class="me-3 text-info fw-bold">
+                            <span class="spinner-border spinner-border-sm me-1"></span> Downloading...
+                            @if(IsStoreUpdate && UpdateProgress > 0)
+                            {
+                                <span>(@(Math.Round(UpdateProgress))%)</span>
+                            }
+                        </span>
+                    }
+                    else if (StoreUpdateReadyToRestart)
+                    {
+                        <span class="me-3 text-success fw-bold">Restarting...</span>
                     }
                     else if (!InstallerLaunched)
                     {
@@ -497,6 +521,9 @@
     private bool IsDownloadingUpdate = false;
     private bool DownloadFailed = false;
     private bool InstallerLaunched = false;
+    private bool IsStoreUpdate = false;
+    private double UpdateProgress = 0;
+    private bool StoreUpdateReadyToRestart = false;
     private System.Threading.PeriodicTimer? _updateTimer;
 
     protected override async Task OnInitializedAsync()
@@ -516,7 +543,19 @@
         ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
 
         // Check for updates silently in the background
+#if WINDOWS
+        IsStoreUpdate = await StoreUpdateService.CheckForUpdateAsync();
+        if (IsStoreUpdate)
+        {
+            UpdateInfo = new ExploreDB.Services.UpdateInfo("STORE_UPDATE", true); // Store updates are forced
+        }
+        else
+        {
+            UpdateInfo = await UpdateService.CheckForUpdateAsync();
+        }
+#else
         UpdateInfo = await UpdateService.CheckForUpdateAsync();
+#endif
 
         // Start background polling every 1 hour
         _ = StartBackgroundUpdateCheck();
@@ -529,6 +568,16 @@
         {
             try 
             {
+#if WINDOWS
+                var hasStoreUpdate = await StoreUpdateService.CheckForUpdateAsync();
+                if (hasStoreUpdate)
+                {
+                    IsStoreUpdate = true;
+                    UpdateInfo = new ExploreDB.Services.UpdateInfo("STORE_UPDATE", true);
+                    await InvokeAsync(StateHasChanged);
+                    continue;
+                }
+#endif
                 var newInfo = await UpdateService.CheckForUpdateAsync();
                 if (newInfo != null)
                 {
@@ -542,20 +591,42 @@
 
     private async Task DownloadAndUpdate()
     {
-        if (string.IsNullOrEmpty(UpdateInfo?.DownloadUrl)) return;
+        if (UpdateInfo == null) return;
         
         IsDownloadingUpdate = true;
         DownloadFailed = false;
+        UpdateProgress = 0;
         StateHasChanged();
 
-        var success = await UpdateService.DownloadAndExecuteUpdateAsync(UpdateInfo.DownloadUrl);
-        if (!success)
+        if (IsStoreUpdate)
         {
-            DownloadFailed = true;
+            var success = await StoreUpdateService.DownloadAndInstallUpdateAsync(percent => 
+            {
+                UpdateProgress = percent;
+                InvokeAsync(StateHasChanged);
+            });
+            if (!success)
+            {
+                DownloadFailed = true;
+            }
+            else
+            {
+                // Store app restarts itself automatically if successful, but might take a few seconds
+                StoreUpdateReadyToRestart = true;
+            }
         }
         else
         {
-            InstallerLaunched = true;
+            if (string.IsNullOrEmpty(UpdateInfo.DownloadUrl)) return;
+            var success = await UpdateService.DownloadAndExecuteUpdateAsync(UpdateInfo.DownloadUrl);
+            if (!success)
+            {
+                DownloadFailed = true;
+            }
+            else
+            {
+                InstallerLaunched = true;
+            }
         }
         
         IsDownloadingUpdate = false;
