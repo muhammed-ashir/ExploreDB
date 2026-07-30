@@ -62,8 +62,6 @@
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/loader.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/editor/editor.main.js"></script>
     <script src="js/query-editor-interop.js"></script>
-    <script src="js/mermaid.min.js"></script>
-    <script src="js/svg-pan-zoom.min.js"></script>
     <script>
         // Global Bootstrap Tooltip Initializer - Bulletproof SPA Engine
         let currentTooltipTarget = null;
@@ -114,40 +112,6 @@
             document.querySelectorAll('.tooltip').forEach(t => t.remove());
         });
 
-        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
-        window.renderMermaid = async () => {
-            try {
-                // Clear any existing mermaid data-processed attributes so it re-renders
-                document.querySelectorAll('.mermaid').forEach(el => el.removeAttribute('data-processed'));
-                await mermaid.run({
-                    querySelector: '.mermaid'
-                });
-                
-                // Initialize pan and zoom on the resulting SVG
-                var svgs = document.querySelectorAll('.mermaid svg');
-                if (svgs.length > 0) {
-                    var svg = svgs[0];
-                    // Ensure the SVG takes up the full container height/width
-                    svg.style.width = '100%';
-                    svg.style.height = '100%';
-                    svg.style.maxWidth = 'none';
-                    
-                    if (window.mermaidPanZoom) {
-                        window.mermaidPanZoom.destroy();
-                    }
-                    window.mermaidPanZoom = svgPanZoom(svg, {
-                        zoomEnabled: true,
-                        controlIconsEnabled: false,
-                        fit: true,
-                        center: true,
-                        minZoom: 0.5,
-                        maxZoom: 10
-                    });
-                }
-            } catch (e) {
-                console.error('Mermaid render error:', e);
-            }
-        };
     </script>
 </body>
 

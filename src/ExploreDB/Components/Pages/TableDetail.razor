@@ -87,12 +87,6 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "ERDTree" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("ERDTree")' style="cursor:pointer">
-                    Visualizer
-                </a>
-            </li>
-            <li class="nav-item">
                 <a class="nav-link @(ActiveTab == "Queries" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
                    @onclick='() => SetActiveTab("Queries")' style="cursor:pointer">
                     Query
@@ -307,6 +301,89 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <div class="accordion-item glass-card mb-3 border-secondary">
+                        <h2 class="accordion-header" id="headingTree">
+                            <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTree" aria-expanded="false" aria-controls="collapseTree">
+                                <div class="d-flex align-items-baseline gap-2">
+                                    <span>Dependency Tree</span>
+                                    <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="recursive dependency text tree" data-bs-placement="top" style="font-size: 0.85em;"></i>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="collapseTree" class="accordion-collapse collapse" aria-labelledby="headingTree" data-bs-parent="#relationshipsAccordion">
+                            <div class="accordion-body text-white">
+                                        <style>
+                                            ul.sql-tree {
+                                                padding-left: 20px;
+                                                list-style: none;
+                                                margin-bottom: 0;
+                                            }
+
+                                            ul.sql-tree li {
+                                                position: relative;
+                                                padding-top: 6px;
+                                                padding-bottom: 6px;
+                                                padding-left: 20px;
+                                            }
+
+                                            ul.sql-tree li::before {
+                                                content: "";
+                                                position: absolute;
+                                                top: 0;
+                                                left: 0;
+                                                border-left: 1px dashed #6c757d;
+                                                height: 100%;
+                                            }
+
+                                            ul.sql-tree li::after {
+                                                content: "";
+                                                position: absolute;
+                                                top: 18px;
+                                                left: 0;
+                                                border-top: 1px dashed #6c757d;
+                                                width: 15px;
+                                            }
+
+                                            ul.sql-tree li:last-child::before {
+                                                height: 19px;
+                                            }
+
+                                            .tree-conn {
+                                                color: #adb5bd;
+                                                font-size: 0.85em;
+                                            }
+                                        </style>
+
+                                        @if (!Table.OutgoingKeys.Any() && !Table.IncomingKeys.Any())
+                                        {
+                                            <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                                <div class="text-muted">No foreign key relationships to display.</div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="tree-root ms-2">
+                                                @if (Table.OutgoingKeys.Any())
+                                                {
+                                                    <div class="fw-bold ms-2 mb-1 text-muted">Parents <i class="bi bi-info-circle ms-1" data-bs-tooltip="true" data-bs-title="tables that this table references" data-bs-placement="top" style="font-size: 0.85em;"></i></div>
+                                                    <div class="ms-2 mb-3">
+                                                        @RenderUpstream(Table, new HashSet<string>())
+                                                    </div>
+                                                }
+
+                                                @if (Table.IncomingKeys.Any())
+                                                {
+                                                    <div class="fw-bold ms-2 mb-1 text-muted">Children <i class="bi bi-info-circle ms-1" data-bs-tooltip="true" data-bs-title="tables that reference this table" data-bs-placement="top" style="font-size: 0.85em;"></i></div>
+                                                    <div class="ms-2">
+                                                        @RenderDownstream(Table, new HashSet<string>())
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 }
             }
@@ -397,140 +474,6 @@
                             }
                         </div>
                     }
-                </div>
-            }
-            else if (ActiveTab == "ERDTree")
-            {
-                <div class="accordion schema-accordion" id="schemaAccordion">
-                    <div class="accordion-item glass-card mb-4">
-                        <h2 class="accordion-header" id="headingErd">
-                            <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseErd" aria-expanded="true" aria-controls="collapseErd">
-                                Visual ERD
-                            </button>
-                        </h2>
-                        <div id="collapseErd" class="accordion-collapse collapse show" aria-labelledby="headingErd" data-bs-parent="#schemaAccordion">
-                            <div class="accordion-body text-white">
-                                        @if (!string.IsNullOrEmpty(MermaidDefinition))
-                                        {
-                                            <div class="d-flex justify-content-end mb-2">
-                                                <div class="btn-group btn-group-sm shadow-sm">
-                                                    <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.zoomIn()" title="Zoom In">
-                                                        🔍 ➕
-                                                    </button>
-                                                    <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.zoomOut()" title="Zoom Out">
-                                                        🔍 ➖
-                                                    </button>
-                                                    <button type="button" class="btn btn-outline-secondary text-light bg-dark px-3" onclick="window.mermaidPanZoom && window.mermaidPanZoom.resetZoom(); window.mermaidPanZoom && window.mermaidPanZoom.resetPan();" title="Reset View">
-                                                        🔄 Reset
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        }
-                                        <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="@(string.IsNullOrEmpty(MermaidDefinition) ? "padding: 3rem 1rem; width: 100%; border: 1px solid #444;" : "height: 600px; width: 100%; border: 1px solid #444;")">
-                                            @if (string.IsNullOrEmpty(MermaidDefinition))
-                                            {
-                                                <div class="text-muted">No foreign key relationships to display.</div>
-                                            }
-                                            else
-                                            {
-                                                <style>
-                                                    .mermaid svg .entityBox,
-                                                    .mermaid svg .entityLabel,
-                                                    .mermaid svg text,
-                                                    .mermaid svg rect {
-                                                        cursor: pointer !important;
-                                                    }
-                                                </style>
-                                                <div class="mermaid w-100 h-100" style="background: transparent;">
-                                                    @MermaidDefinition
-                                                </div>
-                                            }
-                                        </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="accordion-item glass-card mb-4">
-                        <h2 class="accordion-header" id="headingTree">
-                            <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTree" aria-expanded="false" aria-controls="collapseTree">
-                                Text Tree
-                            </button>
-                        </h2>
-                        <div id="collapseTree" class="accordion-collapse collapse" aria-labelledby="headingTree" data-bs-parent="#schemaAccordion">
-                            <div class="accordion-body text-white">
-                                        <style>
-                                            ul.sql-tree {
-                                                padding-left: 20px;
-                                                list-style: none;
-                                                margin-bottom: 0;
-                                            }
-
-                                            ul.sql-tree li {
-                                                position: relative;
-                                                padding-top: 6px;
-                                                padding-bottom: 6px;
-                                                padding-left: 20px;
-                                            }
-
-                                            ul.sql-tree li::before {
-                                                content: "";
-                                                position: absolute;
-                                                top: 0;
-                                                left: 0;
-                                                border-left: 1px dashed #6c757d;
-                                                height: 100%;
-                                            }
-
-                                            ul.sql-tree li::after {
-                                                content: "";
-                                                position: absolute;
-                                                top: 18px;
-                                                left: 0;
-                                                border-top: 1px dashed #6c757d;
-                                                width: 15px;
-                                            }
-
-                                            ul.sql-tree li:last-child::before {
-                                                height: 19px;
-                                            }
-
-                                            .tree-conn {
-                                                color: #adb5bd;
-                                                font-size: 0.85em;
-                                            }
-                                        </style>
-
-                                        @if (!Table.OutgoingKeys.Any() && !Table.IncomingKeys.Any())
-                                        {
-                                            <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                                                <div class="text-muted">No foreign key relationships to display.</div>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <div class="tree-root ms-2">
-
-
-                                                @if (Table.OutgoingKeys.Any())
-                                                {
-                                                    <div class="fw-bold ms-2 mb-1 text-muted">Parents <i class="bi bi-info-circle ms-1" data-bs-tooltip="true" data-bs-title="tables that this table references" data-bs-placement="top" style="font-size: 0.85em;"></i></div>
-                                                    <div class="ms-2 mb-3">
-                                                        @RenderUpstream(Table, new HashSet<string>())
-                                                    </div>
-                                                }
-
-                                                @if (Table.IncomingKeys.Any())
-                                                {
-                                                    <div class="fw-bold ms-2 mb-1 text-muted">Children <i class="bi bi-info-circle ms-1" data-bs-tooltip="true" data-bs-title="tables that reference this table" data-bs-placement="top" style="font-size: 0.85em;"></i></div>
-                                                    <div class="ms-2">
-                                                        @RenderDownstream(Table, new HashSet<string>())
-                                                    </div>
-                                                }
-                                            </div>
-                                        }
-                            </div>
-                        </div>
-                    </div>
                 </div>
             }
             else if (ActiveTab == "Queries")
@@ -712,8 +655,8 @@
     private bool SelectCopied;
     private bool InsertCopied;
     private bool UpdateCopied;
+
     private string ActiveTab = "Columns";
-    private string MermaidDefinition = string.Empty;
 
     private string RelationshipSearchTerm = string.Empty;
     private bool RelationshipSearchCaseSensitive = false;
@@ -822,8 +765,7 @@
         UpdateColumnSearchTerm = string.Empty;
         RelationshipSearchTerm = string.Empty;
         UsedBySearchTerm = string.Empty;
-        GenerateMermaidERD();
-        
+
         IsLoading = false;
     }
 
@@ -832,54 +774,12 @@
         if (firstRender)
         {
             try { await JS.InvokeVoidAsync("scrollToMainTop"); } catch { }
-            
-            if (ActiveTab == "ERDTree" && !string.IsNullOrEmpty(MermaidDefinition))
-            {
-                await Task.Delay(100);
-                try { await JS.InvokeVoidAsync("renderMermaid"); } catch { }
-            }
         }
     }
 
-    private async Task SetActiveTab(string tab)
+    private void SetActiveTab(string tab)
     {
         ActiveTab = tab;
-        if (tab == "ERDTree" && !string.IsNullOrEmpty(MermaidDefinition))
-        {
-            StateHasChanged();
-            await Task.Delay(50);
-            try { await JS.InvokeVoidAsync("renderMermaid"); } catch { }
-        }
-    }
-
-    private void GenerateMermaidERD()
-    {
-        if (Table == null) return;
-        
-        if (Table.OutgoingKeys.Count == 0 && Table.IncomingKeys.Count == 0)
-        {
-            MermaidDefinition = string.Empty;
-            return;
-        }
-
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("erDiagram");
-
-        foreach (var rel in Table.OutgoingKeys)
-        {
-            var from = SanitizeForMermaid(rel.FromTable);
-            var to = SanitizeForMermaid(rel.ToTable);
-            sb.AppendLine($"  {from} }}o--|| {to} : \"{rel.FromColumn}\"");
-        }
-
-        foreach (var rel in Table.IncomingKeys)
-        {
-            var from = SanitizeForMermaid(rel.FromTable);
-            var to = SanitizeForMermaid(rel.ToTable);
-            sb.AppendLine($"  {from} }}o--|| {to} : \"{rel.FromColumn}\"");
-        }
-
-        MermaidDefinition = sb.ToString();
     }
 
     private async Task LoadAndRunQuery(string queryText, string tabName)
@@ -901,11 +801,6 @@
         await QueryStateService.SaveTabsAsync();
         
         Navigation.NavigateTo("/runner");
-    }
-
-    private string SanitizeForMermaid(string name)
-    {
-        return name.Replace("[", "").Replace("]", "").Replace(".", "_").Replace(" ", "_");
     }
 
     private void NavigateBack()
