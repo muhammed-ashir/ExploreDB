@@ -27,7 +27,6 @@ public class StoreUpdateService
 #if WINDOWS
         try
         {
-            return true;
             var storeContext = StoreContext.GetDefault();
             
             // In WinUI 3 / MAUI Desktop, we must associate the StoreContext with the main window handle
