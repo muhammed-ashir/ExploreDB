@@ -44,7 +44,7 @@ else
         </div>
     </div>
 
-    <div class="row mb-3">
+    <div class="row mb-3 align-items-center">
         <div class="col-md-6">
             <div class="input-group shadow-sm flex-nowrap">
                 <input type="text" 
@@ -61,6 +61,20 @@ else
                 <button class="btn @(ExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
                     <i class="bi bi-bullseye fs-6"></i>
                 </button>
+            </div>
+        </div>
+        <div class="col-md-6 d-flex justify-content-md-end justify-content-start align-items-center mt-3 mt-md-0 gap-3">
+            <div class="form-check m-0">
+                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowTableTypes" @bind="ShowTableTypes">
+                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowTableTypes">
+                    Table Types
+                </label>
+            </div>
+            <div class="form-check m-0">
+                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowAliasTypes" @bind="ShowAliasTypes">
+                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowAliasTypes">
+                    Alias Types
+                </label>
             </div>
         </div>
     </div>
@@ -96,7 +110,7 @@ else
                                 </div>
                                 <div class="overflow-hidden" style="min-width: 0;">
                                     <h5 class="mb-1 fw-bold text-white text-truncate" style="letter-spacing: 0.5px;">@type.Name</h5>
-                                    <small class="text-muted fw-bold text-truncate d-block" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@type.Schema</span> | CLASS: @(type.IsTableType ? "TABLE TYPE" : $"ALIAS ({type.BaseType?.ToUpper()})")</small>
+                                    <small class="text-muted fw-bold text-truncate d-block" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@type.Schema</span></small>
                                 </div>
                             </div>
                         </div>
@@ -140,6 +154,19 @@ else
 }
 
 @code {
+    private bool _showTableTypes = true;
+    private bool ShowTableTypes 
+    {
+        get => _showTableTypes;
+        set { _showTableTypes = value; CurrentPage = 1; }
+    }
+    
+    private bool _showAliasTypes = true;
+    private bool ShowAliasTypes 
+    {
+        get => _showAliasTypes;
+        set { _showAliasTypes = value; CurrentPage = 1; }
+    }
     private string _searchTerm = "";
     private string SearchTerm
     {
@@ -171,12 +198,14 @@ else
     {
         get
         {
+            var baseTypes = SchemaService.Types.Where(t => (ShowTableTypes && t.IsTableType) || (ShowAliasTypes && !t.IsTableType));
+
             if (string.IsNullOrWhiteSpace(SearchTerm))
-                return SchemaService.Types;
+                return baseTypes;
 
             var searchTerm = CaseSensitive ? SearchTerm : SearchTerm.ToLower();
 
-            return SchemaService.Types.Where(t =>
+            return baseTypes.Where(t =>
             {
                 var typeName = CaseSensitive ? t.Name   : t.Name.ToLower();
                 var schema   = CaseSensitive ? t.Schema : t.Schema.ToLower();

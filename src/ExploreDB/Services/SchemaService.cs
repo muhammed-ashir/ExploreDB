@@ -514,7 +514,7 @@ public class SchemaService
                 JOIN sys.schemas s ON t.schema_id = s.schema_id
                 LEFT JOIN sys.types bt ON t.system_type_id = bt.user_type_id AND bt.is_user_defined = 0
                 LEFT JOIN sys.table_types tt ON t.user_type_id = tt.user_type_id
-                WHERE t.is_user_defined = 1
+                WHERE t.is_user_defined = 1 AND t.is_assembly_type = 0
                 ORDER BY s.name, t.name;
 
                 -- 2. Type Columns
