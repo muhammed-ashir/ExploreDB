@@ -5,6 +5,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject QueryStateService QueryStateService
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 @implements IDisposable
 
 <style>
@@ -15,6 +16,27 @@
     }
 
 </style>
+
+@if (ShowLimitAlert)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowLimitAlert = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
+                    <p class="text-muted small mt-2 mb-0">Please close some existing tabs before opening new ones.</p>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-primary px-4" @onclick="() => ShowLimitAlert = false">Got it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @if (IsLoading)
 {
@@ -656,6 +678,7 @@ else
     private bool ShowWarningModal { get; set; } = false;
     private string ActiveBuilderTab { get => QueryStateService.ActiveBuilderTab; set => QueryStateService.ActiveBuilderTab = value; }
     private string SearchCol = "";
+    private bool ShowLimitAlert = false;
     private string SearchFilter = "All";
     private bool ExactMatch = false;
     private bool MatchWholeWord = false;
@@ -667,7 +690,6 @@ else
     private string TargetTableSearch = "";
     private bool IsColumnMappingOpen = true;
     
-    private bool IsScopeDropdownOpen = false;
     
     // List (not HashSet) preserves insertion order — first selected table becomes the JOIN root
     private List<string> SelectedColumns { get => QueryStateService.SelectedColumns; set => QueryStateService.SelectedColumns = value; }
@@ -1062,8 +1084,20 @@ else
 
     private void RunInRunner()
     {
-        QueryStateService.CustomQuery = GeneratedSql;
-        Navigation.NavigateTo("/?type=custom");
+        if (QueryStateService.Tabs.Count >= Config.GetValue<int>("MaxOpenTabs", 20))
+        {
+            ShowLimitAlert = true;
+            return;
+        }
+
+        var newTab = new ExploreDB.Services.QueryTab 
+        { 
+            Name = "Generated_Query.sql",
+            Content = GeneratedSql
+        };
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+        Navigation.NavigateTo("/runner");
     }
 
     private async Task CopySql()
