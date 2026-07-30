@@ -391,10 +391,10 @@
             {
                 <!-- Used By Tab -->
                 <div class="text-white mt-1">
-                    @if ((Table.ReferencedByViews?.Count ?? 0) + (Table.ReferencedBySPs?.Count ?? 0) + (Table.ReferencedByFunctions?.Count ?? 0) == 0)
+                    @if ((Table.ReferencedByViews.Count + Table.ReferencedBySPs.Count) == 0)
                     {
                         <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
-                            <div class="text-muted">No views, procedures, or functions reference this table.</div>
+                            <div class="text-muted">No views or procedures reference this table.</div>
                         </div>
                     }
                     else
@@ -431,12 +431,6 @@
                                         View
                                     </label>
                                 </div>
-                                <div class="form-check m-0">
-                                    <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowFunctions" @bind="UsedByShowFunctions">
-                                    <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowFunctions">
-                                        Function
-                                    </label>
-                                </div>
                             </div>
                         </div>
                         <div>
@@ -452,15 +446,14 @@
                                     @foreach (var dep in FilteredUsedBy)
                                     {
                                         var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
-                                        var isFunc = dep.Type.Contains("Function", StringComparison.OrdinalIgnoreCase);
-                                        var link = isFunc ? BuildFunctionLink(dep.FullName) : (isProc ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName));
-                                        var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : "text-success";
+                                        var link = isProc ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName);
+                                        var iconClass = isProc ? "text-warning font-monospace" : "text-success";
                                         <div class="col-md-6 col-12">
                                             <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                                 <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
                                                     <div class="@iconClass fw-bold fs-4 flex-shrink-0">
-                                                        @if (isProc || isFunc)
+                                                        @if (isProc)
                                                         {
                                                             @("{}")
                                                         }
@@ -674,7 +667,6 @@
     private bool UsedBySearchCaseSensitive = false;
     private bool UsedByShowSPs = true;
     private bool UsedByShowViews = true;
-    private bool UsedByShowFunctions = true;
     private bool UsedBySearchMatchWholeWord = false;
     private bool UsedBySearchExactMatch = false;
 
@@ -723,9 +715,8 @@
             if (Table == null) return Array.Empty<Dependency>();
             
             var allUsedBy = Enumerable.Empty<Dependency>();
-            if (UsedByShowViews) allUsedBy = allUsedBy.Concat(Table.ReferencedByViews ?? Enumerable.Empty<Dependency>());
-            if (UsedByShowSPs) allUsedBy = allUsedBy.Concat(Table.ReferencedBySPs ?? Enumerable.Empty<Dependency>());
-            if (UsedByShowFunctions) allUsedBy = allUsedBy.Concat(Table.ReferencedByFunctions ?? Enumerable.Empty<Dependency>());
+            if (UsedByShowViews) allUsedBy = allUsedBy.Concat(Table.ReferencedByViews);
+            if (UsedByShowSPs) allUsedBy = allUsedBy.Concat(Table.ReferencedBySPs);
             
             if (string.IsNullOrWhiteSpace(UsedBySearchTerm)) return allUsedBy;
             
@@ -840,19 +831,6 @@
     {
         var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
         var baseLink = $"/proc/{Uri.EscapeDataString(procFullName)}";
-
-        if (string.IsNullOrWhiteSpace(currentRoute))
-        {
-            return baseLink;
-        }
-
-        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
-    }
-
-    private string BuildFunctionLink(string funcFullName)
-    {
-        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
-        var baseLink = $"/function/{Uri.EscapeDataString(funcFullName)}";
 
         if (string.IsNullOrWhiteSpace(currentRoute))
         {

@@ -192,12 +192,6 @@
                                     View
                                 </label>
                             </div>
-                            <div class="form-check m-0">
-                                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowFunctions" @bind="DependencyShowFunctions">
-                                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowFunctions">
-                                    Function
-                                </label>
-                            </div>
                         </div>
                     </div>
                     <div class="accordion schema-accordion" id="dependenciesAccordion">
@@ -230,24 +224,11 @@
                                             @foreach (var dep in FilteredDependsOn)
                                             {
                                                 <div class="col-12 col-md-6">
-                                                    @{
-                                                        var isFunc = dep.Type.Contains("Function", StringComparison.OrdinalIgnoreCase);
-                                                        var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
-                                                        var link = isFunc ? BuildFunctionLink(dep.FullName) : (isProc ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName));
-                                                        var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : (dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success");
-                                                    }
-                                                    <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                    <a href="@BuildObjectLink(dep.FullName)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @GetShortName(dep.Name)<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                                         <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
-                                                            <div class="@iconClass fw-bold fs-4 flex-shrink-0">
-                                                                @if (isProc || isFunc)
-                                                                {
-                                                                    @("{}")
-                                                                }
-                                                                else
-                                                                {
-                                                                    <i class="bi @(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-layout-text-window")"></i>
-                                                                }
+                                                            <div class="@(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success") fw-bold fs-4 flex-shrink-0">
+                                                                <i class="bi @(dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-layout-text-window")"></i>
                                                             </div>
                                                             <div class="overflow-hidden" style="min-width: 0;">
                                                                 <div class="text-white fw-bold text-truncate" style="font-size: 0.95em;">@GetShortName(dep.Name)</div>
@@ -274,7 +255,7 @@
                             </h2>
                             <div id="collapseUsedBy" class="accordion-collapse collapse" aria-labelledby="headingUsedBy" data-bs-parent="#dependenciesAccordion">
                                 <div class="accordion-body text-white">
-                                    @if ((View.Children?.Count ?? 0) + (View.ReferencedBySPs?.Count ?? 0) + (View.ReferencedByFunctions?.Count ?? 0) == 0)
+                                    @if ((View.Children.Count + View.ReferencedBySPs.Count) == 0)
                                     {
                                         <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
                                             <div class="text-muted">This view is not used by any other objects.</div>
@@ -293,16 +274,15 @@
                                             {
                                                 <div class="col-12 col-md-6">
                                                     @{
-                                                        var isFunc = dep.Type.Contains("Function", StringComparison.OrdinalIgnoreCase);
                                                         var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
-                                                        var link = isFunc ? BuildFunctionLink(dep.FullName) : (isProc ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName));
-                                                        var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : (dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success");
+                                                        var link = isProc ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName);
+                                                        var iconClass = isProc ? "text-warning font-monospace" : (dep.Type.Equals("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success");
                                                     }
                                                     <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @GetShortName(dep.Name)<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                                         <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
                                                             <div class="@iconClass fw-bold fs-4 flex-shrink-0">
-                                                                @if (isProc || isFunc)
+                                                                @if (isProc)
                                                                 {
                                                                     @("{}")
                                                                 }
@@ -407,7 +387,6 @@
     private bool DependencyShowTables = true;
     private bool DependencyShowSPs = true;
     private bool DependencyShowViews = true;
-    private bool DependencyShowFunctions = true;
     private bool DependencySearchMatchWholeWord = false;
     private bool DependencySearchExactMatch = false;
 
@@ -420,14 +399,11 @@
             if (View == null) return Array.Empty<Dependency>();
             
             var allDependsOn = Enumerable.Empty<Dependency>();
-            var parents = View.Parents ?? new List<Dependency>();
-            var tables = parents.Where(p => !p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) && p.Type != "V" && !p.Type.Contains("Function", StringComparison.OrdinalIgnoreCase));
-            var views = parents.Where(p => p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) || p.Type == "V");
-            var funcs = parents.Where(p => p.Type.Contains("Function", StringComparison.OrdinalIgnoreCase));
+            var tables = View.Parents.Where(p => !p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) && p.Type != "V");
+            var views = View.Parents.Where(p => p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) || p.Type == "V");
             
             if (DependencyShowTables) allDependsOn = allDependsOn.Concat(tables);
             if (DependencyShowViews) allDependsOn = allDependsOn.Concat(views);
-            if (DependencyShowFunctions) allDependsOn = allDependsOn.Concat(funcs);
             
             if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return allDependsOn;
             
@@ -455,9 +431,8 @@
             if (View == null) return Array.Empty<Dependency>();
             
             var allUsedBy = Enumerable.Empty<Dependency>();
-            if (DependencyShowViews) allUsedBy = allUsedBy.Concat(View.Children ?? Enumerable.Empty<Dependency>());
-            if (DependencyShowSPs) allUsedBy = allUsedBy.Concat(View.ReferencedBySPs ?? Enumerable.Empty<Dependency>());
-            if (DependencyShowFunctions) allUsedBy = allUsedBy.Concat(View.ReferencedByFunctions ?? Enumerable.Empty<Dependency>());
+            if (DependencyShowViews) allUsedBy = allUsedBy.Concat(View.Children);
+            if (DependencyShowSPs) allUsedBy = allUsedBy.Concat(View.ReferencedBySPs);
             
             if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return allUsedBy;
             
@@ -562,19 +537,6 @@
     {
         var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
         var baseLink = $"/proc/{Uri.EscapeDataString(procFullName)}";
-
-        if (string.IsNullOrWhiteSpace(currentRoute))
-        {
-            return baseLink;
-        }
-
-        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
-    }
-
-    private string BuildFunctionLink(string funcFullName)
-    {
-        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
-        var baseLink = $"/function/{Uri.EscapeDataString(funcFullName)}";
 
         if (string.IsNullOrWhiteSpace(currentRoute))
         {

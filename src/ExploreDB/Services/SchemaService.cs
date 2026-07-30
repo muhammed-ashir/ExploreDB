@@ -19,8 +19,6 @@ public class TableInfo
     public List<Dependency> ReferencedByViews { get; set; } = new();
     // Stored Procedures that reference this table
     public List<Dependency> ReferencedBySPs { get; set; } = new();
-    // Functions that reference this table
-    public List<Dependency> ReferencedByFunctions { get; set; } = new();
 
     public bool AreDependenciesLoaded { get; set; } = false;
 
@@ -70,8 +68,6 @@ public class ViewInfo
     public List<Dependency> Children { get; set; } = new(); // What selects from me
     // Stored Procedures that reference this view
     public List<Dependency> ReferencedBySPs { get; set; } = new();
-    // Functions that reference this view
-    public List<Dependency> ReferencedByFunctions { get; set; } = new();
     
     public bool AreDependenciesLoaded { get; set; } = false;
 
@@ -679,7 +675,7 @@ public class SchemaService
                 else if (type == "P")
                     table.ReferencedBySPs.Add(new Dependency { Schema = schema, Name = name, Type = "Procedure" });
                 else if (type is "FN" or "IF" or "TF")
-                    table.ReferencedByFunctions.Add(new Dependency { Schema = schema, Name = name, Type = "Function" });
+                    table.ReferencedBySPs.Add(new Dependency { Schema = schema, Name = name, Type = "Function" }); // Put in SPs array or create new
             }
 
             table.AreDependenciesLoaded = true;
@@ -769,8 +765,6 @@ public class SchemaService
                     view.Children.Add(new Dependency { Schema = sSchema, Name = sName, Type = "View" });
                 else if (sType == "P")
                     view.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
-                else if (sType is "FN" or "IF" or "TF")
-                    view.ReferencedByFunctions.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Function" });
             }
 
             view.AreDependenciesLoaded = true;
