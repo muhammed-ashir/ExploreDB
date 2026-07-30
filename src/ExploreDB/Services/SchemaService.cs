@@ -19,6 +19,8 @@ public class TableInfo
     public List<Dependency> ReferencedByViews { get; set; } = new();
     // Stored Procedures that reference this table
     public List<Dependency> ReferencedBySPs { get; set; } = new();
+    // Functions that reference this table
+    public List<Dependency> ReferencedByFunctions { get; set; } = new();
 
     public bool AreDependenciesLoaded { get; set; } = false;
 
@@ -68,6 +70,8 @@ public class ViewInfo
     public List<Dependency> Children { get; set; } = new(); // What selects from me
     // Stored Procedures that reference this view
     public List<Dependency> ReferencedBySPs { get; set; } = new();
+    // Functions that reference this view
+    public List<Dependency> ReferencedByFunctions { get; set; } = new();
     
     public bool AreDependenciesLoaded { get; set; } = false;
 
@@ -171,6 +175,10 @@ public class TypeInfo
     
     // For Table Types
     public List<ColumnInfo> Columns { get; set; } = new();
+    
+    // Dependencies
+    public List<Dependency> UsedBy { get; set; } = new();
+    public bool AreDependenciesLoaded { get; set; } = false;
 
     public override string ToString() => FullName;
 }
@@ -575,6 +583,71 @@ public class SchemaService
         }
     }
 
+    public async Task LoadTypeDependenciesAsync(string fullName)
+    {
+        var typeInfo = Types.FirstOrDefault(t => t.FullName == fullName);
+        if (typeInfo == null || typeInfo.AreDependenciesLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+
+        try
+        {
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(_connectionService.ConnectionString);
+            var sql = @"
+                DECLARE @TypeId INT;
+                SELECT @TypeId = user_type_id FROM sys.types WHERE name = @Name AND schema_id = SCHEMA_ID(@Schema);
+
+                IF @TypeId IS NOT NULL
+                BEGIN
+                    SELECT DISTINCT SchemaName, ObjectName, ObjectType
+                    FROM (
+                        SELECT s.name AS SchemaName, o.name AS ObjectName, 
+                               CASE WHEN o.type = 'V' THEN 'View' ELSE 'Table' END AS ObjectType
+                        FROM sys.columns c
+                        JOIN sys.objects o ON c.object_id = o.object_id
+                        JOIN sys.schemas s ON o.schema_id = s.schema_id
+                        WHERE c.user_type_id = @TypeId AND o.type IN ('U', 'V')
+                        
+                        UNION ALL
+                        
+                        SELECT s.name AS SchemaName, o.name AS ObjectName, 
+                               CASE WHEN o.type IN ('P', 'PC') THEN 'SP' ELSE 'Function' END AS ObjectType
+                        FROM sys.parameters p
+                        JOIN sys.objects o ON p.object_id = o.object_id
+                        JOIN sys.schemas s ON o.schema_id = s.schema_id
+                        WHERE p.user_type_id = @TypeId
+                        
+                        UNION ALL
+                        
+                        SELECT s.name AS SchemaName, o.name AS ObjectName, 
+                               CASE WHEN o.type IN ('P', 'PC') THEN 'SP'
+                                    WHEN o.type = 'V' THEN 'View'
+                                    WHEN o.type IN ('FN', 'IF', 'TF') THEN 'Function'
+                                    ELSE 'Other' END AS ObjectType
+                        FROM sys.sql_expression_dependencies d
+                        JOIN sys.objects o ON d.referencing_id = o.object_id
+                        JOIN sys.schemas s ON o.schema_id = s.schema_id
+                        WHERE d.referenced_class = 6 AND d.referenced_id = @TypeId
+                    ) AS results
+                    ORDER BY ObjectType, SchemaName, ObjectName;
+                END
+            ";
+
+            var results = await conn.QueryAsync<dynamic>(sql, new { Schema = typeInfo.Schema, Name = typeInfo.Name });
+            
+            typeInfo.UsedBy = results.Select(r => new Dependency
+            {
+                Schema = (string)r.SchemaName,
+                Name = (string)r.ObjectName,
+                Type = (string)r.ObjectType
+            }).ToList();
+
+            typeInfo.AreDependenciesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading dependencies for type {Type}", fullName);
+        }
+    }
+
     public async Task LoadTableDependenciesAsync(string fullName)
     {
         var table = Tables.FirstOrDefault(t => t.FullName == fullName);
@@ -606,7 +679,7 @@ public class SchemaService
                 else if (type == "P")
                     table.ReferencedBySPs.Add(new Dependency { Schema = schema, Name = name, Type = "Procedure" });
                 else if (type is "FN" or "IF" or "TF")
-                    table.ReferencedBySPs.Add(new Dependency { Schema = schema, Name = name, Type = "Function" }); // Put in SPs array or create new
+                    table.ReferencedByFunctions.Add(new Dependency { Schema = schema, Name = name, Type = "Function" });
             }
 
             table.AreDependenciesLoaded = true;
@@ -696,6 +769,8 @@ public class SchemaService
                     view.Children.Add(new Dependency { Schema = sSchema, Name = sName, Type = "View" });
                 else if (sType == "P")
                     view.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
+                else if (sType is "FN" or "IF" or "TF")
+                    view.ReferencedByFunctions.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Function" });
             }
 
             view.AreDependenciesLoaded = true;

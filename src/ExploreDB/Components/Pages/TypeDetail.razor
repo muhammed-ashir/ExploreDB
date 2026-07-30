@@ -58,6 +58,13 @@
                     @(Type.IsTableType ? "Columns" : "Details")
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link d-inline-flex align-items-baseline gap-2 @(ActiveTab == "UsedBy" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("UsedBy")' style="cursor:pointer">
+                    <span>Used By</span>
+                    <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="objects that depend on this type" data-bs-placement="top" style="font-size: 0.85em; opacity: 0.8;"></i>
+                </a>
+            </li>
         </ul>
 
         <div class="tab-content pb-5">
@@ -146,6 +153,107 @@
                     </div>
                 }
             }
+
+            @if (ActiveTab == "UsedBy")
+            {
+                <div class="card glass-card text-white">
+                    <div class="card-body">
+                        <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4">
+                            <div class="mb-3 mb-md-0" style="flex: 1; max-width: 500px;">
+                                <div class="input-group shadow-sm flex-nowrap">
+                                    <input type="text"
+                                           class="form-control bg-dark text-white border-secondary shadow-none"
+                                           placeholder="Search dependent objects..."
+                                           @bind="UsedBySearchTerm"
+                                           @bind:event="oninput" />
+                                    <button class="btn @(UsedBySearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => UsedBySearchCaseSensitive = !UsedBySearchCaseSensitive">
+                                        <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                    </button>
+                                    <button class="btn @(UsedBySearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { UsedBySearchMatchWholeWord = !UsedBySearchMatchWholeWord; if (UsedBySearchMatchWholeWord) UsedBySearchExactMatch = false; }">
+                                        <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                    </button>
+                                    <button class="btn @(UsedBySearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { UsedBySearchExactMatch = !UsedBySearchExactMatch; if (UsedBySearchExactMatch) UsedBySearchMatchWholeWord = false; }">
+                                        <i class="bi bi-bullseye fs-6"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap align-items-center gap-4 text-light ms-auto mt-2 mt-md-0">
+                                <div class="form-check m-0">
+                                    <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowTables" @bind="UsedByShowTables">
+                                    <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowTables">
+                                        Table
+                                    </label>
+                                </div>
+                                <div class="form-check m-0">
+                                    <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowSPs" @bind="UsedByShowSPs">
+                                    <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowSPs">
+                                        SP
+                                    </label>
+                                </div>
+                                <div class="form-check m-0">
+                                    <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowViews" @bind="UsedByShowViews">
+                                    <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowViews">
+                                        View
+                                    </label>
+                                </div>
+                                <div class="form-check m-0">
+                                    <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowFunctions" @bind="UsedByShowFunctions">
+                                    <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowFunctions">
+                                        Function
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            @if (!FilteredUsedBy.Any())
+                            {
+                                <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                                    <div class="text-muted">No matching dependent objects found.</div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="row g-3">
+                                    @foreach (var dep in FilteredUsedBy)
+                                    {
+                                        var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
+                                        var isFunc = dep.Type.Contains("Function", StringComparison.OrdinalIgnoreCase);
+                                        var link = BuildObjectLink(dep);
+                                        var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) ? "text-success" : "text-primary";
+                                        var iconName = isProc ? "bi-play-circle" : isFunc ? "bi-calculator" : dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-eye";
+
+                                        <div class="col-md-6 col-12">
+                                            <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                               data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
+                                                <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                                                    <div class="@iconClass fw-bold fs-4 flex-shrink-0">
+                                                        @if (isProc || isFunc)
+                                                        {
+                                                            @("{}")
+                                                        }
+                                                        else if (dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            <i class="bi bi-table"></i>
+                                                        }
+                                                        else
+                                                        {
+                                                            <i class="bi bi-layout-text-window"></i>
+                                                        }
+                                                    </div>
+                                                    <div class="overflow-hidden" style="min-width: 0;">
+                                                        <div class="fw-bold text-light mb-1 text-truncate" style="font-size: 1.1rem;">@dep.Name</div>
+                                                        <div class="text-muted fw-bold text-truncate" style="font-size: 0.7rem; letter-spacing: 0.5px;">SCHEMA: <span class="text-lowercase">@dep.Schema</span></div>
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
         </div>
     }
 </div>
@@ -199,6 +307,62 @@
 
     private List<ColumnInfo> VisibleColumns = new();
 
+    // UsedBy State
+    private string _usedBySearchTerm = "";
+    private string UsedBySearchTerm
+    {
+        get => _usedBySearchTerm;
+        set { _usedBySearchTerm = value; }
+    }
+    private bool UsedBySearchCaseSensitive = false;
+    private bool UsedBySearchMatchWholeWord = false;
+    private bool UsedBySearchExactMatch = false;
+
+    private bool UsedByShowTables = true;
+    private bool UsedByShowSPs = true;
+    private bool UsedByShowViews = true;
+    private bool UsedByShowFunctions = true;
+
+    private IEnumerable<Dependency> FilteredUsedBy
+    {
+        get
+        {
+            if (Type == null) return Array.Empty<Dependency>();
+            
+            var allUsedBy = Type.UsedBy.Where(d => 
+                (UsedByShowTables && d.Type.Contains("Table", StringComparison.OrdinalIgnoreCase)) ||
+                (UsedByShowViews && d.Type.Contains("View", StringComparison.OrdinalIgnoreCase)) ||
+                (UsedByShowSPs && (d.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || d.Type == "SP")) ||
+                (UsedByShowFunctions && d.Type.Contains("Function", StringComparison.OrdinalIgnoreCase))
+            );
+            
+            if (string.IsNullOrWhiteSpace(UsedBySearchTerm)) return allUsedBy;
+            
+            var searchStr = UsedBySearchCaseSensitive ? UsedBySearchTerm : UsedBySearchTerm.ToLowerInvariant();
+            
+            return allUsedBy.Where(d => 
+            {
+                var nameVal = UsedBySearchCaseSensitive ? d.Name : d.Name.ToLowerInvariant();
+                var schemaVal = UsedBySearchCaseSensitive ? d.Schema : d.Schema.ToLowerInvariant();
+                
+                if (UsedBySearchExactMatch) 
+                    return nameVal == searchStr || schemaVal == searchStr;
+                if (UsedBySearchMatchWholeWord) 
+                    return nameVal.Split('_', '-', '.').Contains(searchStr) || schemaVal.Split('_', '-', '.').Contains(searchStr);
+                    
+                return nameVal.Contains(searchStr) || schemaVal.Contains(searchStr);
+            });
+        }
+    }
+    
+    private string BuildObjectLink(Dependency dep)
+    {
+        if (dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) || dep.Type.Contains("View", StringComparison.OrdinalIgnoreCase))
+            return $"/table/{Uri.EscapeDataString(dep.FullName)}";
+        else
+            return $"/function/{Uri.EscapeDataString(dep.FullName)}";
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         IsLoading = true;
@@ -212,6 +376,12 @@
         var decoded = Uri.UnescapeDataString(FullName);
         Type = SchemaService.Types.FirstOrDefault(s => s.FullName == decoded);
         ColumnSearchTerm = string.Empty;
+        UsedBySearchTerm = string.Empty;
+        
+        if (Type != null)
+        {
+            await SchemaService.LoadTypeDependenciesAsync(Type.FullName);
+        }
         
         IsLoading = false;
         
