@@ -453,7 +453,7 @@
                                     {
                                         var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                         var isFunc = dep.Type.Contains("Function", StringComparison.OrdinalIgnoreCase);
-                                        var link = (isProc || isFunc) ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName);
+                                        var link = isProc ? BuildProcLink(dep.FullName) : isFunc ? BuildFuncLink(dep.FullName) : BuildObjectLink(dep.FullName);
                                         var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : "text-success";
                                         <div class="col-md-6 col-12">
                                             <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
@@ -842,6 +842,19 @@
     {
         var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
         var baseLink = $"/proc/{Uri.EscapeDataString(procFullName)}";
+
+        if (string.IsNullOrWhiteSpace(currentRoute))
+        {
+            return baseLink;
+        }
+
+        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
+    }
+
+    private string BuildFuncLink(string funcFullName)
+    {
+        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var baseLink = $"/function/{Uri.EscapeDataString(funcFullName)}";
 
         if (string.IsNullOrWhiteSpace(currentRoute))
         {
