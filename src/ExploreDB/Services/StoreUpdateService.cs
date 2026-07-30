@@ -38,7 +38,7 @@ public class StoreUpdateService
             }
 
             var updates = await storeContext.GetAppAndOptionalStorePackageUpdatesAsync();
-            if (updates.Count > 0)
+            if (updates != null && updates.Count > 0)
             {
                 _logger.LogInformation($"Found {updates.Count} available Store updates.");
                 return true;
@@ -71,7 +71,7 @@ public class StoreUpdateService
             }
 
             var updates = await storeContext.GetAppAndOptionalStorePackageUpdatesAsync();
-            if (updates.Count > 0)
+            if (updates != null && updates.Count > 0)
             {
                 // This will show a system UI to download and install the update
                 var operation = storeContext.RequestDownloadAndInstallStorePackageUpdatesAsync(updates);
