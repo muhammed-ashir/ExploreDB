@@ -431,6 +431,12 @@
                                         View
                                     </label>
                                 </div>
+                                <div class="form-check m-0">
+                                    <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowFunctions" @bind="UsedByShowFunctions">
+                                    <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowFunctions">
+                                        Function
+                                    </label>
+                                </div>
                             </div>
                         </div>
                         <div>
@@ -446,14 +452,15 @@
                                     @foreach (var dep in FilteredUsedBy)
                                     {
                                         var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
-                                        var link = isProc ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName);
-                                        var iconClass = isProc ? "text-warning font-monospace" : "text-success";
+                                        var isFunc = dep.Type.Contains("Function", StringComparison.OrdinalIgnoreCase);
+                                        var link = (isProc || isFunc) ? BuildProcLink(dep.FullName) : BuildObjectLink(dep.FullName);
+                                        var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : "text-success";
                                         <div class="col-md-6 col-12">
                                             <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                                 <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
                                                     <div class="@iconClass fw-bold fs-4 flex-shrink-0">
-                                                        @if (isProc)
+                                                        @if (isProc || isFunc)
                                                         {
                                                             @("{}")
                                                         }
@@ -667,6 +674,7 @@
     private bool UsedBySearchCaseSensitive = false;
     private bool UsedByShowSPs = true;
     private bool UsedByShowViews = true;
+    private bool UsedByShowFunctions = true;
     private bool UsedBySearchMatchWholeWord = false;
     private bool UsedBySearchExactMatch = false;
 
@@ -716,7 +724,10 @@
             
             var allUsedBy = Enumerable.Empty<Dependency>();
             if (UsedByShowViews) allUsedBy = allUsedBy.Concat(Table.ReferencedByViews);
-            if (UsedByShowSPs) allUsedBy = allUsedBy.Concat(Table.ReferencedBySPs);
+            
+            var spsAndFuncs = Table.ReferencedBySPs;
+            if (UsedByShowSPs) allUsedBy = allUsedBy.Concat(spsAndFuncs.Where(d => d.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase)));
+            if (UsedByShowFunctions) allUsedBy = allUsedBy.Concat(spsAndFuncs.Where(d => d.Type.Contains("Function", StringComparison.OrdinalIgnoreCase)));
             
             if (string.IsNullOrWhiteSpace(UsedBySearchTerm)) return allUsedBy;
             
