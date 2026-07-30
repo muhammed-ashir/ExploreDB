@@ -362,6 +362,19 @@
   <li><strong>Crucial Step</strong>: Because the old link is broken, automatic updates will fail. You must tell all your teammates to manually download and run the new <code>.appinstaller</code> file one time. This will permanently repoint their computers to your new repository!</li>
 </ol>
 <hr>
+<h2>⚙️ Application Settings</h2>
+<p>ExploreDB provides several configurable settings that can be customized in the <code>appsettings.json</code> file located in the application installation directory.</p>
+<div class="code-container"><div class="code-header"><span class="lang">json</span><button class="copy-btn">Copy</button></div><pre><code>{
+  "QueryHistoryLimit": 500,
+  "MaxOpenTabs": 20,
+  "DisableAutoUpdates": false
+}</code></pre></div>
+<ul>
+  <li><strong><code>QueryHistoryLimit</code></strong>: Sets the maximum number of executed queries saved in your local history tab (default: <code>500</code>). Older queries are automatically purged when this limit is reached.</li>
+  <li><strong><code>MaxOpenTabs</code></strong>: Restricts the maximum number of tabs you can have open at the same time in the Query Runner (default: <code>20</code>). This protects system memory and ensures top performance.</li>
+  <li><strong><code>DisableAutoUpdates</code></strong>: When set to <code>true</code>, the application will completely stop checking for Microsoft Store and GitHub updates in the background, and will never show an update banner (default: <code>false</code>). Useful for enterprise environments requiring strict version control.</li>
+</ul>
+<hr>
 <h2>📝 Application Logs</h2>
 <p>ExploreDB is designed for high reliability and uses asynchronous background logging to ensure the UI never freezes when tracking errors.</p>
 <h3><strong>Log Location</strong></h3>

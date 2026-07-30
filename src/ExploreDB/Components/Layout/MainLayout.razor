@@ -5,6 +5,7 @@
 @inject NavigationManager Nav
 @inject ExploreDB.Services.GitHubUpdateService UpdateService
 @inject ExploreDB.Services.StoreUpdateService StoreUpdateService
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 
 <div class="container-fluid p-0">
     @if (IsSwitchingDatabaseGlobal)
@@ -542,20 +543,23 @@
         ConnectionService.OnDatabaseSwitching += OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
 
-        // Check for updates silently in the background
+        if (!Config.GetValue<bool>("DisableAutoUpdates", false))
+        {
+            // Check for updates silently in the background
 #if WINDOWS
-        IsStoreUpdate = await StoreUpdateService.CheckForUpdateAsync();
-        if (IsStoreUpdate)
-        {
-            UpdateInfo = new ExploreDB.Services.UpdateInfo("STORE_UPDATE", true); // Store updates are forced
-        }
-        else
-        {
-            UpdateInfo = await UpdateService.CheckForUpdateAsync();
-        }
+            IsStoreUpdate = await StoreUpdateService.CheckForUpdateAsync();
+            if (IsStoreUpdate)
+            {
+                UpdateInfo = new ExploreDB.Services.UpdateInfo("STORE_UPDATE", true); // Store updates are forced
+            }
+            else
+            {
+                UpdateInfo = await UpdateService.CheckForUpdateAsync();
+            }
 #else
-        UpdateInfo = await UpdateService.CheckForUpdateAsync();
+            UpdateInfo = await UpdateService.CheckForUpdateAsync();
 #endif
+        }
 
         // Start background polling every 1 hour
         _ = StartBackgroundUpdateCheck();
@@ -563,6 +567,8 @@
 
     private async Task StartBackgroundUpdateCheck()
     {
+        if (Config.GetValue<bool>("DisableAutoUpdates", false)) return;
+
         _updateTimer = new System.Threading.PeriodicTimer(TimeSpan.FromHours(1));
         while (await _updateTimer.WaitForNextTickAsync())
         {
