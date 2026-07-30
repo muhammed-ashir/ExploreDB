@@ -69,7 +69,7 @@ public class QueryStateService
 
     public string? CustomQuery { get; set; }
 
-    // Home.razor State
+    // QueryBuilder.razor State
     public List<string> SelectedColumns { get; set; } = new();
     public HashSet<string> IgnoredRoutingTables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> WaypointTables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
