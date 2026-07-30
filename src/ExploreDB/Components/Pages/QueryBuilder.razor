@@ -449,6 +449,27 @@ else
                                          </div>
                                      </div>
                                  }
+                                 @if (IgnoredRoutingEdges.Count > 0)
+                                 {
+                                     <div>
+                                         <div class="text-danger small fw-bold mb-2">Blocked Paths:</div>
+                                         <div class="d-flex flex-wrap gap-2">
+                                             @foreach(var edgeKey in IgnoredRoutingEdges)
+                                             {
+                                                 var parts = edgeKey.Split('|');
+                                                 if (parts.Length == 4)
+                                                 {
+                                                     var sourceTable = parts[0].Split('.').Last().Replace("[", "").Replace("]", "");
+                                                     var targetTable = parts[1].Split('.').Last().Replace("[", "").Replace("]", "");
+                                                     <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start" style="background-color: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.4); color: #ff98a3; font-size: 0.85rem; max-width: 100%;">
+                                                         <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;">@sourceTable ➔ @targetTable</span>
+                                                         <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #ff98a3; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleIgnoreRoutingEdge(edgeKey)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
+                                                     </span>
+                                                 }
+                                             }
+                                         </div>
+                                     </div>
+                                 }
                              </div>
                          }
                      </div>
@@ -704,6 +725,7 @@ else
     private bool HasOneToMany = false;
     private List<string>? OptimalTableOrder = null;
     private HashSet<string> IgnoredRoutingTables => QueryStateService.IgnoredRoutingTables;
+    private HashSet<string> IgnoredRoutingEdges => QueryStateService.IgnoredRoutingEdges;
     private HashSet<string> WaypointTables => QueryStateService.WaypointTables;
     private Dictionary<string, List<AlternativeRoute>> AlternativeRoutes = new(StringComparer.OrdinalIgnoreCase);
     private bool IsCalculatingRoutes = false;
@@ -713,6 +735,7 @@ else
     {
         public string TargetHub { get; set; } = "";
         public List<string> NewTables { get; set; } = new();
+        public List<ExploreDB.Services.PathfinderJoinStep> NewSteps { get; set; } = new();
     }
     private PathfinderJoinPlan? LastJoinPlan;
 
@@ -879,7 +902,7 @@ else
 
         if (CurrentMode == QueryMode.Select)
         {
-            var result = PathfinderService.GenerateQuery(tables, SelectedColumns.ToList(), IgnoredRoutingTables);
+            var result = PathfinderService.GenerateQuery(tables, SelectedColumns.ToList(), IgnoredRoutingTables, IgnoredRoutingEdges);
             GeneratedSql = result.Sql;
             HasOneToMany = result.HasOneToMany;
             LastJoinPlan = result.JoinPlan;
@@ -891,7 +914,7 @@ else
                     var testOrder = new List<string> { candidate };
                     testOrder.AddRange(tables.Where(t => t != candidate));
 
-                    var plan = PathfinderService.GenerateJoinPlan(testOrder);
+                    var plan = PathfinderService.GenerateJoinPlan(testOrder, ignoredRoutingTables: IgnoredRoutingTables, ignoredRoutingEdges: IgnoredRoutingEdges);
                     if (plan != null && string.IsNullOrEmpty(plan.ErrorMessage) && !plan.HasOneToMany && plan.UnreachableTables.Count == 0)
                     {
                         OptimalTableOrder = plan.Steps.Select(s => s.FullName).ToList();
@@ -903,7 +926,7 @@ else
         }
         else if (CurrentMode == QueryMode.Update)
         {
-            var plan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j");
+            var plan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j", ignoredRoutingTables: IgnoredRoutingTables, ignoredRoutingEdges: IgnoredRoutingEdges);
             var result = PathfinderService.GenerateJoinedUpdateQuery(plan, UpdateMappings);
             GeneratedSql = result.Sql;
             HasOneToMany = result.HasOneToMany;
@@ -1022,6 +1045,7 @@ else
         SelectedColumns.Clear();
         WaypointTables.Clear();
         IgnoredRoutingTables.Clear();
+        IgnoredRoutingEdges.Clear();
         AlternativeRoutes.Clear();
         UpdateMappings.Clear();
         TargetTable = "";
@@ -1040,6 +1064,15 @@ else
         }
         Generate();
     }
+    
+    private void ToggleIgnoreRoutingEdge(string edgeKey)
+    {
+        if (!IgnoredRoutingEdges.Add(edgeKey))
+        {
+            IgnoredRoutingEdges.Remove(edgeKey);
+        }
+        Generate();
+    }
 
     private void ToggleWaypointTable(string tableName)
     {
@@ -1052,7 +1085,17 @@ else
 
     private void SelectAlternativeRoute(AlternativeRoute chosenRoute, string hubToBlock)
     {
-        IgnoredRoutingTables.Add(hubToBlock);
+        if (LastJoinPlan != null)
+        {
+            var hubSteps = LastJoinPlan.Steps.Where(s => 
+                string.Equals(s.FullName, hubToBlock, StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(s.ConnectedFromTable, hubToBlock, StringComparison.OrdinalIgnoreCase));
+                
+            foreach (var step in hubSteps)
+            {
+                IgnoredRoutingEdges.Add(step.Key);
+            }
+        }
         
         foreach (var t in chosenRoute.NewTables)
         {
@@ -1063,9 +1106,9 @@ else
         {
             foreach (var route in routes.Where(r => r != chosenRoute))
             {
-                foreach (var t in route.NewTables)
+                foreach (var step in route.NewSteps)
                 {
-                    IgnoredRoutingTables.Add(t);
+                    IgnoredRoutingEdges.Add(step.Key);
                 }
             }
         }
@@ -1108,11 +1151,13 @@ else
                     if (calcId != _routeCalcId) return; // Cancelled by newer request
                     foundNewRoute = false;
                     
-                    var altPlan = PathfinderService.GenerateJoinPlan(currentSelected, CurrentMode != QueryMode.Select ? TargetTable : null, ignoredRoutingTables: tempIgnored);
+                    var altPlan = PathfinderService.GenerateJoinPlan(currentSelected, CurrentMode != QueryMode.Select ? TargetTable : null, ignoredRoutingTables: tempIgnored, ignoredRoutingEdges: IgnoredRoutingEdges);
                     
                     if (altPlan != null && string.IsNullOrEmpty(altPlan.ErrorMessage) && altPlan.UnreachableTables.Count == 0)
                     {
+                        var newSteps = altPlan.Steps.Where(s => !LastJoinPlan.Steps.Any(ls => ls.Key == s.Key)).ToList();
                         var newTables = altPlan.Steps.Select(s => s.FullName).Except(LastJoinPlan.Steps.Select(s => s.FullName)).Except(new[] { altPlan.RootTable }).ToList();
+                        
                         if (newTables.Count > 0)
                         {
                             if (!newRoutes.ContainsKey(step.FullName)) newRoutes[step.FullName] = new();
@@ -1120,7 +1165,7 @@ else
                             var isDuplicate = newRoutes[step.FullName].Any(r => r.NewTables.SequenceEqual(newTables));
                             if (!isDuplicate)
                             {
-                                newRoutes[step.FullName].Add(new AlternativeRoute { TargetHub = step.FullName, NewTables = newTables });
+                                newRoutes[step.FullName].Add(new AlternativeRoute { TargetHub = step.FullName, NewTables = newTables, NewSteps = newSteps });
                                 foundNewRoute = true;
                                 foreach (var nt in newTables) tempIgnored.Add(nt);
                             }

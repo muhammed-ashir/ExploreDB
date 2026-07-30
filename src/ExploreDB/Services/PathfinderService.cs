@@ -9,7 +9,7 @@ public sealed class PathfinderService
         _schemaService = schemaService;
     }
 
-    public PathfinderQueryResult GenerateQuery(List<string> selectedTableNames, List<string> selectedColumns, IReadOnlySet<string>? ignoredRoutingTables = null)
+    public PathfinderQueryResult GenerateQuery(List<string> selectedTableNames, List<string> selectedColumns, IReadOnlySet<string>? ignoredRoutingTables = null, IReadOnlySet<string>? ignoredRoutingEdges = null)
     {
         if (selectedTableNames.Count == 0)
         {
@@ -19,7 +19,7 @@ public sealed class PathfinderService
             };
         }
 
-        var joinPlan = GenerateJoinPlan(selectedTableNames, ignoredRoutingTables: ignoredRoutingTables);
+        var joinPlan = GenerateJoinPlan(selectedTableNames, ignoredRoutingTables: ignoredRoutingTables, ignoredRoutingEdges: ignoredRoutingEdges);
         if (!string.IsNullOrWhiteSpace(joinPlan.ErrorMessage))
         {
             return new PathfinderQueryResult
@@ -238,7 +238,8 @@ public sealed class PathfinderService
         string? rootTable = null,
         string rootAlias = "t0",
         string joinedAliasPrefix = "j",
-        IReadOnlySet<string>? ignoredRoutingTables = null)
+        IReadOnlySet<string>? ignoredRoutingTables = null,
+        IReadOnlySet<string>? ignoredRoutingEdges = null)
     {
         if (_schemaService.Tables.Count == 0)
         {
@@ -284,7 +285,7 @@ public sealed class PathfinderService
 
         foreach (var target in targets)
         {
-            var path = FindShortestPath(adjacency, resolvedRoot, target, ignoredRoutingTables);
+            var path = FindShortestPath(adjacency, resolvedRoot, target, ignoredRoutingTables, ignoredRoutingEdges);
             if (path == null)
             {
                 unreachableTables.Add(target);
@@ -393,7 +394,8 @@ public sealed class PathfinderService
         IReadOnlyDictionary<string, List<GraphEdge>> adjacency,
         string rootTable,
         string targetTable,
-        IReadOnlySet<string>? ignoredRoutingTables)
+        IReadOnlySet<string>? ignoredRoutingTables,
+        IReadOnlySet<string>? ignoredRoutingEdges)
     {
         if (string.Equals(rootTable, targetTable, StringComparison.OrdinalIgnoreCase))
         {
@@ -432,6 +434,16 @@ public sealed class PathfinderService
                     !string.Equals(edge.TargetTable, targetTable, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
+                }
+
+                if (ignoredRoutingEdges != null)
+                {
+                    var edgeKey = BuildStepKey(edge);
+                    var reverseEdgeKey = $"{edge.TargetTable}|{edge.SourceTable}|{edge.TargetColumn}|{edge.SourceColumn}";
+                    if (ignoredRoutingEdges.Contains(edgeKey) || ignoredRoutingEdges.Contains(reverseEdgeKey))
+                    {
+                        continue;
+                    }
                 }
 
                 var nextDistance = currentDistance + edge.Weight;

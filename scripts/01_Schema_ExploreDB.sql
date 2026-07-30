@@ -1033,96 +1033,109 @@ EXEC dbo.sp_GenerateStressTestSchema;
 GO
 
 
--- Drop tables if they exist (optional)
-DROP TABLE IF EXISTS TableB;
-DROP TABLE IF EXISTS TableC;
-DROP TABLE IF EXISTS TableD;
-DROP TABLE IF EXISTS TableE;
-DROP TABLE IF EXISTS TableA;
+--=========================================================
+-- Drop Tables
+--=========================================================
+DROP TABLE IF EXISTS TableM;
 DROP TABLE IF EXISTS TableF;
+DROP TABLE IF EXISTS TableE;
+DROP TABLE IF EXISTS TableD;
+DROP TABLE IF EXISTS TableC;
+DROP TABLE IF EXISTS TableB;
+DROP TABLE IF EXISTS TableA;
 
---------------------------------------------------------
--- Table F (Parent)
---------------------------------------------------------
-CREATE TABLE TableF
-(
-    FId INT IDENTITY(1,1) PRIMARY KEY,
-    FName NVARCHAR(100) NOT NULL
-);
-
---------------------------------------------------------
--- Table A (Parent of B,C,D,E)
---------------------------------------------------------
+--=========================================================
+-- Table A
+--=========================================================
 CREATE TABLE TableA
 (
-    AId INT IDENTITY(1,1) PRIMARY KEY,
-    AName NVARCHAR(100) NOT NULL
+    AId INT IDENTITY PRIMARY KEY,
+    AName NVARCHAR(100)
 );
 
---------------------------------------------------------
+--=========================================================
 -- Table B
---------------------------------------------------------
+--=========================================================
 CREATE TABLE TableB
 (
-    BId INT IDENTITY(1,1) PRIMARY KEY,
+    BId INT IDENTITY PRIMARY KEY,
     AId INT NOT NULL,
-    FId INT NOT NULL,
     BName NVARCHAR(100),
 
-    CONSTRAINT FK_TableB_TableA
-        FOREIGN KEY (AId) REFERENCES TableA(AId),
-
-    CONSTRAINT FK_TableB_TableF
-        FOREIGN KEY (FId) REFERENCES TableF(FId)
+    CONSTRAINT FK_B_A
+        FOREIGN KEY (AId) REFERENCES TableA(AId)
 );
 
---------------------------------------------------------
+--=========================================================
 -- Table C
---------------------------------------------------------
+--=========================================================
 CREATE TABLE TableC
 (
-    CId INT IDENTITY(1,1) PRIMARY KEY,
+    CId INT IDENTITY PRIMARY KEY,
     AId INT NOT NULL,
-    FId INT NOT NULL,
     CName NVARCHAR(100),
 
-    CONSTRAINT FK_TableC_TableA
-        FOREIGN KEY (AId) REFERENCES TableA(AId),
-
-    CONSTRAINT FK_TableC_TableF
-        FOREIGN KEY (FId) REFERENCES TableF(FId)
+    CONSTRAINT FK_C_A
+        FOREIGN KEY (AId) REFERENCES TableA(AId)
 );
 
---------------------------------------------------------
+--=========================================================
 -- Table D
---------------------------------------------------------
+--=========================================================
 CREATE TABLE TableD
 (
-    DId INT IDENTITY(1,1) PRIMARY KEY,
+    DId INT IDENTITY PRIMARY KEY,
     AId INT NOT NULL,
-    FId INT NOT NULL,
     DName NVARCHAR(100),
 
-    CONSTRAINT FK_TableD_TableA
-        FOREIGN KEY (AId) REFERENCES TableA(AId),
-
-    CONSTRAINT FK_TableD_TableF
-        FOREIGN KEY (FId) REFERENCES TableF(FId)
+    CONSTRAINT FK_D_A
+        FOREIGN KEY (AId) REFERENCES TableA(AId)
 );
 
---------------------------------------------------------
+--=========================================================
 -- Table E
---------------------------------------------------------
+--=========================================================
 CREATE TABLE TableE
 (
-    EId INT IDENTITY(1,1) PRIMARY KEY,
+    EId INT IDENTITY PRIMARY KEY,
     AId INT NOT NULL,
-    FId INT NOT NULL,
     EName NVARCHAR(100),
 
-    CONSTRAINT FK_TableE_TableA
-        FOREIGN KEY (AId) REFERENCES TableA(AId),
+    CONSTRAINT FK_E_A
+        FOREIGN KEY (AId) REFERENCES TableA(AId)
+);
 
-    CONSTRAINT FK_TableE_TableF
-        FOREIGN KEY (FId) REFERENCES TableF(FId)
+--=========================================================
+-- Table F
+-- One row can belong to B OR C OR D OR E
+--=========================================================
+CREATE TABLE TableF
+(
+    FId INT IDENTITY PRIMARY KEY,
+
+    BId INT NULL,
+    CId INT NULL,
+    DId INT NULL,
+    EId INT NULL,
+
+    FName NVARCHAR(100),
+
+    CONSTRAINT FK_F_B FOREIGN KEY (BId) REFERENCES TableB(BId),
+    CONSTRAINT FK_F_C FOREIGN KEY (CId) REFERENCES TableC(CId),
+    CONSTRAINT FK_F_D FOREIGN KEY (DId) REFERENCES TableD(DId),
+    CONSTRAINT FK_F_E FOREIGN KEY (EId) REFERENCES TableE(EId)
+);
+
+--=========================================================
+-- Table M
+--=========================================================
+CREATE TABLE TableM
+(
+    MId INT IDENTITY PRIMARY KEY,
+
+    DId INT NOT NULL,
+    MName NVARCHAR(100),
+
+    CONSTRAINT FK_M_D
+        FOREIGN KEY (DId) REFERENCES TableD(DId)
 );
