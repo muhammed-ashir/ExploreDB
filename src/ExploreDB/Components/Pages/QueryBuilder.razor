@@ -616,7 +616,14 @@ else
             <div class="d-flex flex-column flex-grow-1 overflow-hidden">
                 <h6 class="text-light border-bottom pb-2 mb-3 flex-shrink-0" style="border-color: rgba(255, 255, 255, 0.1) !important;">Alternative Routes</h6>
                 <div class="overflow-auto custom-scrollbar-light pe-2 pb-3">
-                    @if (AlternativeRoutes.TryGetValue(ActiveOffcanvasTable, out var routes) && routes.Count > 0)
+                    @if (IsCalculatingRoutes)
+                    {
+                        <div class="d-flex align-items-center justify-content-center p-4">
+                            <div class="spinner-border text-info spinner-border-sm me-3" role="status"></div>
+                            <span class="text-muted small">Searching all possible routes...</span>
+                        </div>
+                    }
+                    else if (AlternativeRoutes.TryGetValue(ActiveOffcanvasTable, out var routes) && routes.Count > 0)
                     {
                         <div class="small text-muted mb-3">Select a route to bypass this hub:</div>
                         <div class="d-flex flex-column gap-2">
@@ -699,6 +706,8 @@ else
     private HashSet<string> IgnoredRoutingTables => QueryStateService.IgnoredRoutingTables;
     private HashSet<string> WaypointTables => QueryStateService.WaypointTables;
     private Dictionary<string, List<AlternativeRoute>> AlternativeRoutes = new(StringComparer.OrdinalIgnoreCase);
+    private bool IsCalculatingRoutes = false;
+    private int _routeCalcId = 0;
 
     public class AlternativeRoute
     {
@@ -909,7 +918,7 @@ else
             LastJoinPlan = plan;
         }
         
-        CalculateAlternativeRoutes();
+        _ = CalculateAlternativeRoutesAsync();
     }
 
     private void SetMode(QueryMode mode)
@@ -1048,35 +1057,68 @@ else
         Generate();
     }
 
-    private void CalculateAlternativeRoutes()
+    private async Task CalculateAlternativeRoutesAsync()
     {
+        var calcId = ++_routeCalcId;
         AlternativeRoutes.Clear();
         if (LastJoinPlan == null) return;
         
-        var currentSelected = SelectedColumns.Select(c => c.Substring(0, c.LastIndexOf('.'))).Distinct().ToList();
-        foreach(var wp in WaypointTables) if (!currentSelected.Contains(wp)) currentSelected.Add(wp);
+        IsCalculatingRoutes = true;
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(10); // yield for UI spinner
         
-        if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable) && !currentSelected.Contains(TargetTable))
+        var newRoutes = new Dictionary<string, List<AlternativeRoute>>(StringComparer.OrdinalIgnoreCase);
+        
+        await Task.Run(() => 
         {
-            currentSelected.Add(TargetTable);
-        }
-
-        foreach (var step in LastJoinPlan.Steps.Where(s => !s.IsSelectedTable))
-        {
-            var tempIgnored = IgnoredRoutingTables.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            tempIgnored.Add(step.FullName);
+            var currentSelected = SelectedColumns.Select(c => c.Substring(0, c.LastIndexOf('.'))).Distinct().ToList();
+            foreach(var wp in WaypointTables) if (!currentSelected.Contains(wp)) currentSelected.Add(wp);
             
-            var altPlan = PathfinderService.GenerateJoinPlan(currentSelected, CurrentMode != QueryMode.Select ? TargetTable : null, ignoredRoutingTables: tempIgnored);
-            
-            if (altPlan != null && string.IsNullOrEmpty(altPlan.ErrorMessage) && altPlan.UnreachableTables.Count == 0)
+            if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable) && !currentSelected.Contains(TargetTable))
             {
-                var newTables = altPlan.Steps.Select(s => s.FullName).Except(LastJoinPlan.Steps.Select(s => s.FullName)).Except(new[] { altPlan.RootTable }).ToList();
-                if (newTables.Count > 0)
+                currentSelected.Add(TargetTable);
+            }
+
+            foreach (var step in LastJoinPlan.Steps.Where(s => !s.IsSelectedTable))
+            {
+                if (calcId != _routeCalcId) return; // Cancelled by newer request
+                
+                var tempIgnored = IgnoredRoutingTables.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                tempIgnored.Add(step.FullName);
+                
+                bool foundNewRoute = true;
+                while (foundNewRoute)
                 {
-                    if (!AlternativeRoutes.ContainsKey(step.FullName)) AlternativeRoutes[step.FullName] = new();
-                    AlternativeRoutes[step.FullName].Add(new AlternativeRoute { TargetHub = step.FullName, NewTables = newTables });
+                    if (calcId != _routeCalcId) return; // Cancelled by newer request
+                    foundNewRoute = false;
+                    
+                    var altPlan = PathfinderService.GenerateJoinPlan(currentSelected, CurrentMode != QueryMode.Select ? TargetTable : null, ignoredRoutingTables: tempIgnored);
+                    
+                    if (altPlan != null && string.IsNullOrEmpty(altPlan.ErrorMessage) && altPlan.UnreachableTables.Count == 0)
+                    {
+                        var newTables = altPlan.Steps.Select(s => s.FullName).Except(LastJoinPlan.Steps.Select(s => s.FullName)).Except(new[] { altPlan.RootTable }).ToList();
+                        if (newTables.Count > 0)
+                        {
+                            if (!newRoutes.ContainsKey(step.FullName)) newRoutes[step.FullName] = new();
+                            
+                            var isDuplicate = newRoutes[step.FullName].Any(r => r.NewTables.SequenceEqual(newTables));
+                            if (!isDuplicate)
+                            {
+                                newRoutes[step.FullName].Add(new AlternativeRoute { TargetHub = step.FullName, NewTables = newTables });
+                                foundNewRoute = true;
+                                foreach (var nt in newTables) tempIgnored.Add(nt);
+                            }
+                        }
+                    }
                 }
             }
+        });
+        
+        if (calcId == _routeCalcId)
+        {
+            AlternativeRoutes = newRoutes;
+            IsCalculatingRoutes = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
