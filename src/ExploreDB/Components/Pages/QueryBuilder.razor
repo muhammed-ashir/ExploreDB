@@ -374,7 +374,7 @@ else
                      <textarea class="form-control bg-black text-success border-0 font-monospace p-3 d-block flex-grow-1" 
                                style="resize: vertical; min-height: 150px;" readonly>@GeneratedSql</textarea>
                  </div>
-                 @if ((LastJoinPlan != null && LastJoinPlan.Steps.Count > 0) || IgnoredRoutingTables.Count > 0 || WaypointTables.Count > 0)
+                 @if ((LastJoinPlan != null && LastJoinPlan.Steps.Count > 0) || IgnoredRoutingTables.Count > 0 || IgnoredRoutingEdges.Count > 0)
                  {
                      <div class="card-footer bg-dark border-secondary p-3 border-top-0 border-top mt-2">
                          @if (LastJoinPlan != null && LastJoinPlan.Steps.Count > 0)
@@ -408,28 +408,9 @@ else
                              </div>
                          }
 
-                         @if (IgnoredRoutingTables.Count > 0 || WaypointTables.Count > 0)
+                         @if (IgnoredRoutingTables.Count > 0 || IgnoredRoutingEdges.Count > 0)
                          {
                              <div class="@(LastJoinPlan != null && LastJoinPlan.Steps.Count > 0 ? "mt-3" : "") d-flex flex-column gap-3">
-                                 @if (WaypointTables.Count > 0)
-                                 {
-                                     <div>
-                                         <div class="text-primary small fw-bold mb-2">Waypoints:</div>
-                                         <div class="d-flex flex-wrap gap-2">
-                                             @foreach(var wp in WaypointTables)
-                                             {
-                                                 var parts = wp.Replace("[", "").Replace("]", "").Split('.');
-                                                 var schemaName = parts.Length > 1 ? parts[0] : "dbo";
-                                                 var cleanName = parts.Length > 1 ? parts[1] : parts[0];
-                                                 <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start cursor-pointer" style="background-color: rgba(13, 110, 253, 0.15); border: 1px solid rgba(13, 110, 253, 0.4); color: #8bb9fe; font-size: 0.85rem; max-width: 100%;" 
-                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @cleanName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom">
-                                                     <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(wp)">@cleanName</span>
-                                                     <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #8bb9fe; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleWaypointTable(wp)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
-                                                 </span>
-                                             }
-                                         </div>
-                                     </div>
-                                 }
                                  @if (IgnoredRoutingTables.Count > 0)
                                  {
                                      <div>
@@ -726,7 +707,7 @@ else
     private List<string>? OptimalTableOrder = null;
     private HashSet<string> IgnoredRoutingTables => QueryStateService.IgnoredRoutingTables;
     private HashSet<string> IgnoredRoutingEdges => QueryStateService.IgnoredRoutingEdges;
-    private HashSet<string> WaypointTables => QueryStateService.WaypointTables;
+
     private Dictionary<string, List<AlternativeRoute>> AlternativeRoutes = new(StringComparer.OrdinalIgnoreCase);
     private bool IsCalculatingRoutes = false;
     private int _routeCalcId = 0;
@@ -750,7 +731,7 @@ else
 
         SchemaService.OnSchemaLoaded += Refresh;
         
-        if (SelectedColumns.Count > 0 || !string.IsNullOrEmpty(TargetTable) || WaypointTables.Count > 0)
+        if (SelectedColumns.Count > 0 || !string.IsNullOrEmpty(TargetTable))
         {
             Generate();
         }
@@ -882,10 +863,7 @@ else
             .Distinct()
             .ToList();
 
-        foreach (var wp in WaypointTables)
-        {
-            if (!tables.Contains(wp)) tables.Add(wp);
-        }
+
 
         if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable))
         {
@@ -1043,7 +1021,7 @@ else
     private void ClearAll()
     {
         SelectedColumns.Clear();
-        WaypointTables.Clear();
+
         IgnoredRoutingTables.Clear();
         IgnoredRoutingEdges.Clear();
         AlternativeRoutes.Clear();
@@ -1074,14 +1052,7 @@ else
         Generate();
     }
 
-    private void ToggleWaypointTable(string tableName)
-    {
-        if (!WaypointTables.Add(tableName))
-        {
-            WaypointTables.Remove(tableName);
-        }
-        Generate();
-    }
+
 
     private void SelectAlternativeRoute(AlternativeRoute chosenRoute, string hubToBlock)
     {
@@ -1097,10 +1068,6 @@ else
             }
         }
         
-        foreach (var t in chosenRoute.NewTables)
-        {
-            WaypointTables.Add(t);
-        }
         
         if (AlternativeRoutes.TryGetValue(hubToBlock, out var routes))
         {
@@ -1131,7 +1098,7 @@ else
         await Task.Run(() => 
         {
             var currentSelected = SelectedColumns.Select(c => c.Substring(0, c.LastIndexOf('.'))).Distinct().ToList();
-            foreach(var wp in WaypointTables) if (!currentSelected.Contains(wp)) currentSelected.Add(wp);
+
             
             if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable) && !currentSelected.Contains(TargetTable))
             {

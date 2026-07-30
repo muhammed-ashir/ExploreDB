@@ -73,7 +73,6 @@ public class QueryStateService
     public List<string> SelectedColumns { get; set; } = new();
     public HashSet<string> IgnoredRoutingTables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> IgnoredRoutingEdges { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    public HashSet<string> WaypointTables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string TargetTable { get; set; } = "";
     public QueryMode CurrentMode { get; set; } = QueryMode.Select;
     public string ActiveBuilderTab { get; set; } = "Available";
