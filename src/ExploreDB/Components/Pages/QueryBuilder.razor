@@ -128,7 +128,11 @@ else
                                 <div class="col-12 d-flex flex-column gap-2 position-relative">
                                     <div class="input-group input-group-sm shadow-sm">
                                         <input type="text" class="form-control bg-black text-white border-secondary" 
-                                               placeholder="Search..." @bind="SearchColInput" @bind:event="oninput" />
+                                               placeholder="Search... (Enter to filter)" 
+                                               @bind="_searchColInput" 
+                                               @bind:event="oninput"
+                                               @onkeydown="OnSearchKeyDown"
+                                               @onblur="(_ => ApplySearch())" />
                                         <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
                                             <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                         </button>
@@ -742,18 +746,30 @@ else
     private string ActiveBuilderTab { get => QueryStateService.ActiveBuilderTab; set => QueryStateService.ActiveBuilderTab = value; }
     private string SearchCol = "";
     private string _searchColInput = "";
-    private System.Timers.Timer? _debounceTimer;
 
     private string SearchColInput
     {
         get => _searchColInput;
-        set
+        set => _searchColInput = value;
+    }
+
+    private void OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            ApplySearch();
+        else if (e.Key == "Escape")
         {
-            _searchColInput = value;
-            _debounceTimer?.Stop();
-            _debounceTimer?.Start();
+            _searchColInput = "";
+            ApplySearch();
         }
     }
+
+    private void ApplySearch()
+    {
+        SearchCol = _searchColInput;
+    }
+
+
     private bool ShowLimitAlert = false;
     private string SearchFilter = "All";
     private bool ExactMatch = false;
@@ -796,16 +812,6 @@ else
         IsLoading = true;
         
         _searchColInput = SearchCol; // Sync initial value
-        _debounceTimer = new System.Timers.Timer(500); // 500ms debounce
-        _debounceTimer.AutoReset = false;
-        _debounceTimer.Elapsed += (s, e) =>
-        {
-            InvokeAsync(() =>
-            {
-                SearchCol = _searchColInput;
-                StateHasChanged();
-            });
-        };
 
         await Task.Yield();
 
@@ -1228,11 +1234,6 @@ else
     public void Dispose()
     {
         SchemaService.OnSchemaLoaded -= Refresh;
-        if (_debounceTimer != null)
-        {
-            _debounceTimer.Stop();
-            _debounceTimer.Dispose();
-        }
     }
 
     private void MoveTable(string table, int direction)
