@@ -542,6 +542,7 @@
 
         ConnectionService.OnDatabaseSwitching += OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
+        SchemaService.OnError += HandleSchemaError;
 
         if (!Config.GetValue<bool>("DisableAutoUpdates", false))
         {
@@ -892,20 +893,32 @@
         IsBusy = false;
     }
 
-    private async Task TriggerToast(string message, string themeClass, string iconClass)
+    private async Task TriggerToast(string message, string themeClass, string iconClass, int? autoCloseDelay = 3000)
     {
         ToastMessage = message;
         ToastThemeClass = themeClass;
         ToastIconClass = iconClass;
         ShowToast = true;
         StateHasChanged();
-        await Task.Delay(3000);
-        ShowToast = false;
-        StateHasChanged();
+        
+        if (autoCloseDelay.HasValue)
+        {
+            await Task.Delay(autoCloseDelay.Value);
+            ShowToast = false;
+            StateHasChanged();
+        }
     }
     private void PromptDisconnect()
     {
         ShowDisconnectPrompt = true;
+    }
+
+    private void HandleSchemaError(string errorMsg)
+    {
+        InvokeAsync(() =>
+        {
+            _ = TriggerToast(errorMsg, "danger", "bi-exclamation-triangle-fill", null);
+        });
     }
 
     private void ConfirmDisconnect()
@@ -924,5 +937,6 @@
         _updateTimer?.Dispose();
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
+        SchemaService.OnError -= HandleSchemaError;
     }
 }

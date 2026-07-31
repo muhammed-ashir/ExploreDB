@@ -188,6 +188,7 @@ public class SchemaService
     public List<FunctionInfo> Functions { get; private set; } = new();
     public List<TypeInfo> Types { get; private set; } = new();
     public event Action? OnSchemaLoaded;
+    public event Action<string>? OnError;
 
     public bool AreStoredProceduresLoaded { get; private set; } = false;
     public bool AreTypesLoaded { get; private set; } = false;
@@ -419,6 +420,7 @@ public class SchemaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Schema Load Error"); 
+            OnError?.Invoke($"Error loading schema: {ex.Message}");
         }
     }
 
@@ -497,6 +499,7 @@ public class SchemaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading stored procedures lazily");
+            OnError?.Invoke($"Error loading stored procedures: {ex.Message}");
         }
     }
 
@@ -576,6 +579,7 @@ public class SchemaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading types lazily");
+            OnError?.Invoke($"Error loading types: {ex.Message}");
         }
     }
 
@@ -641,6 +645,7 @@ public class SchemaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading dependencies for type {Type}", fullName);
+            OnError?.Invoke($"Error fetching dependencies for Type {fullName}: {ex.Message}");
         }
     }
 
@@ -690,6 +695,7 @@ public class SchemaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching dependencies for table {FullName}", fullName);
+            OnError?.Invoke($"Error fetching dependencies for table {fullName}: {ex.Message}");
         }
     }
 
@@ -788,6 +794,7 @@ public class SchemaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching lineage and dependencies for view {FullName}", fullName);
+            OnError?.Invoke($"Error fetching dependencies for view {fullName}: {ex.Message}");
         }
     }
 
@@ -873,6 +880,7 @@ public class SchemaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching dependencies for SP {FullName}", fullName);
+            OnError?.Invoke($"Error fetching dependencies for SP {fullName}: {ex.Message}");
         }
     }
 
@@ -956,6 +964,7 @@ public class SchemaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching dependencies for Function {FullName}", fullName);
+            OnError?.Invoke($"Error fetching dependencies for Function {fullName}: {ex.Message}");
         }
     }
 
