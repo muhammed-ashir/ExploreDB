@@ -19,8 +19,8 @@
         <GenerateTestAppPackage>true</GenerateTestAppPackage>
         <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
         <ApplicationVersion>7</ApplicationVersion>
-        <ApplicationDisplayVersion>1.1.5.0</ApplicationDisplayVersion>
-        <Version>1.1.5.0</Version>
+        <ApplicationDisplayVersion>1.1.6.0</ApplicationDisplayVersion>
+        <Version>1.1.6.0</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
         <ApplicationIcon>Platforms\Windows\Images\app.ico</ApplicationIcon>
