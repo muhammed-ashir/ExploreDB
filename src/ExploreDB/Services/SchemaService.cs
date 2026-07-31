@@ -654,28 +654,31 @@ public class SchemaService
             using var conn = new SqlConnection(_connectionService.ConnectionString);
             
             var sql = @"
+                DECLARE @RefId INT = OBJECT_ID(@FullName);
+
                 SELECT 
-                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
-                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    s.name AS SourceSchema,
+                    o.name AS SourceName,
                     o.type AS SourceType
                 FROM sys.sql_expression_dependencies d
                 JOIN sys.objects o ON d.referencing_id = o.object_id
-                WHERE d.referenced_id = OBJECT_ID(@FullName)";
+                JOIN sys.schemas s ON o.schema_id = s.schema_id
+                WHERE d.referenced_id = @RefId";
 
             var deps = await conn.QueryAsync<dynamic>(sql, new { FullName = fullName });
             
             foreach(var dep in deps)
             {
-                var schema = (string)dep.SourceSchema;
-                var name = (string)dep.SourceName;
-                var type = (string)dep.SourceType;
+                var schema = dep.SourceSchema as string;
+                var name = dep.SourceName as string;
+                var type = (dep.SourceType as string)?.Trim();
 
                 if (type == "V")
                     table.ReferencedByViews.Add(new Dependency { Schema = schema, Name = name, Type = "View" });
                 else if (type == "P")
                     table.ReferencedBySPs.Add(new Dependency { Schema = schema, Name = name, Type = "Procedure" });
-                else if (type is "FN" or "IF" or "TF")
-                    table.ReferencedBySPs.Add(new Dependency { Schema = schema, Name = name, Type = "Function" }); // Put in SPs array or create new
+                else if (type == "FN" || type == "IF" || type == "TF")
+                    table.ReferencedBySPs.Add(new Dependency { Schema = schema, Name = name, Type = "Function" });
             }
 
             table.AreDependenciesLoaded = true;
@@ -720,23 +723,27 @@ public class SchemaService
 
             // 2. Dependencies (What this view references, and what references this view)
             var depsSql = @"
+                DECLARE @RefId INT = OBJECT_ID(@FullName);
+
                 -- What it references (Parents)
                 SELECT 
-                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(ro.schema_id)) AS TargetSchema,
+                    ISNULL(d.referenced_schema_name, s.name) AS TargetSchema,
                     d.referenced_entity_name AS TargetName,
                     ro.type AS TargetType
                 FROM sys.sql_expression_dependencies d
                 LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
-                WHERE d.referencing_id = OBJECT_ID(@FullName);
+                LEFT JOIN sys.schemas s ON ro.schema_id = s.schema_id
+                WHERE d.referencing_id = @RefId;
 
                 -- What references it (Children/ReferencedBySPs)
                 SELECT 
-                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
-                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    s.name AS SourceSchema,
+                    o.name AS SourceName,
                     o.type AS SourceType
                 FROM sys.sql_expression_dependencies d
                 JOIN sys.objects o ON d.referencing_id = o.object_id
-                WHERE d.referenced_id = OBJECT_ID(@FullName);
+                JOIN sys.schemas s ON o.schema_id = s.schema_id
+                WHERE d.referenced_id = @RefId;
             ";
 
             using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName });
@@ -785,23 +792,27 @@ public class SchemaService
             using var conn = new SqlConnection(_connectionService.ConnectionString);
             
             var depsSql = @"
+                DECLARE @RefId INT = OBJECT_ID(@FullName);
+
                 -- What it references (Dependencies)
                 SELECT 
-                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(ro.schema_id)) AS TargetSchema,
+                    ISNULL(d.referenced_schema_name, s.name) AS TargetSchema,
                     d.referenced_entity_name AS TargetName,
                     ro.type AS TargetType
                 FROM sys.sql_expression_dependencies d
                 LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
-                WHERE d.referencing_id = OBJECT_ID(@FullName);
+                LEFT JOIN sys.schemas s ON ro.schema_id = s.schema_id
+                WHERE d.referencing_id = @RefId;
 
                 -- What references it (ReferencedBySPs)
                 SELECT 
-                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
-                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    s.name AS SourceSchema,
+                    o.name AS SourceName,
                     o.type AS SourceType
                 FROM sys.sql_expression_dependencies d
                 JOIN sys.objects o ON d.referencing_id = o.object_id
-                WHERE d.referenced_id = OBJECT_ID(@FullName);
+                JOIN sys.schemas s ON o.schema_id = s.schema_id
+                WHERE d.referenced_id = @RefId;
             ";
 
             using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName });
@@ -810,8 +821,8 @@ public class SchemaService
             foreach(var p in deps)
             {
                 var tSchema = p.TargetSchema as string;
-                var tName = (string)p.TargetName;
-                var tType = (string)p.TargetType;
+                var tName = p.TargetName as string;
+                var tType = (p.TargetType as string)?.Trim();
                 if (!string.IsNullOrEmpty(tSchema))
                 {
                     string depType = tType == "V" ? "View" : (tType == "U" ? "Table" : (tType == "P" ? "Procedure" : "Function"));
@@ -822,12 +833,14 @@ public class SchemaService
             var refs = await multi.ReadAsync<dynamic>();
             foreach(var c in refs)
             {
-                var sSchema = (string)c.SourceSchema;
-                var sName = (string)c.SourceName;
-                var sType = (string)c.SourceType;
+                var sSchema = c.SourceSchema as string;
+                var sName = c.SourceName as string;
+                var sType = (c.SourceType as string)?.Trim();
 
                 if (sType == "P")
                     sp.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
+                else if (sType == "FN" || sType == "IF" || sType == "TF")
+                    sp.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Function" });
             }
 
             sp.AreDependenciesLoaded = true;
@@ -848,23 +861,27 @@ public class SchemaService
             using var conn = new SqlConnection(_connectionService.ConnectionString);
             
             var depsSql = @"
+                DECLARE @RefId INT = OBJECT_ID(@FullName);
+
                 -- What it references (Dependencies)
                 SELECT 
-                    ISNULL(d.referenced_schema_name, SCHEMA_NAME(ro.schema_id)) AS TargetSchema,
+                    ISNULL(d.referenced_schema_name, s.name) AS TargetSchema,
                     d.referenced_entity_name AS TargetName,
                     ro.type AS TargetType
                 FROM sys.sql_expression_dependencies d
                 LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
-                WHERE d.referencing_id = OBJECT_ID(@FullName);
+                LEFT JOIN sys.schemas s ON ro.schema_id = s.schema_id
+                WHERE d.referencing_id = @RefId;
 
                 -- What references it (ReferencedBy)
                 SELECT 
-                    OBJECT_SCHEMA_NAME(d.referencing_id) AS SourceSchema,
-                    OBJECT_NAME(d.referencing_id) AS SourceName,
+                    s.name AS SourceSchema,
+                    o.name AS SourceName,
                     o.type AS SourceType
                 FROM sys.sql_expression_dependencies d
                 JOIN sys.objects o ON d.referencing_id = o.object_id
-                WHERE d.referenced_id = OBJECT_ID(@FullName);
+                JOIN sys.schemas s ON o.schema_id = s.schema_id
+                WHERE d.referenced_id = @RefId;
             ";
 
             using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName });
@@ -873,8 +890,8 @@ public class SchemaService
             foreach(var p in deps)
             {
                 var tSchema = p.TargetSchema as string;
-                var tName = (string)p.TargetName;
-                var tType = (string)p.TargetType;
+                var tName = p.TargetName as string;
+                var tType = (p.TargetType as string)?.Trim();
                 if (!string.IsNullOrEmpty(tSchema))
                 {
                     string depType = tType == "V" ? "View" : (tType == "U" ? "Table" : (tType == "P" ? "Procedure" : "Function"));
@@ -885,9 +902,9 @@ public class SchemaService
             var refs = await multi.ReadAsync<dynamic>();
             foreach(var c in refs)
             {
-                var sSchema = (string)c.SourceSchema;
-                var sName = (string)c.SourceName;
-                var sType = (string)c.SourceType;
+                var sSchema = c.SourceSchema as string;
+                var sName = c.SourceName as string;
+                var sType = (c.SourceType as string)?.Trim();
 
                 string depType = sType == "V" ? "View" : (sType == "P" ? "Procedure" : "Function");
                 fn.ReferencedBy.Add(new Dependency { Schema = sSchema, Name = sName, Type = depType });
