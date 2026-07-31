@@ -234,7 +234,8 @@
                                             {
                                                 var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                                 var isFunc = dep.Type == "Function";
-                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (dep.Type == "Table" ? "text-primary" : "text-success"));
+                                                var isType = dep.Type == "Type";
+                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (isType ? "text-info" : (dep.Type == "Table" ? "text-primary" : "text-success")));
                                                 <div class="col-md-6 col-12">
                                                     <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
@@ -247,6 +248,10 @@
                                                                 else if (isFunc)
                                                                 {
                                                                     <i class="bi bi-code"></i>
+                                                                }
+                                                                else if (isType)
+                                                                {
+                                                                    <i class="bi bi-box"></i>
                                                                 }
                                                                 else
                                                                 {
@@ -297,7 +302,8 @@
                                             {
                                                 var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                                 var isFunc = dep.Type == "Function";
-                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (dep.Type == "Table" ? "text-primary" : "text-success"));
+                                                var isType = dep.Type == "Type";
+                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (isType ? "text-info" : (dep.Type == "Table" ? "text-primary" : "text-success")));
                                                 <div class="col-md-6 col-12">
                                                     <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
@@ -310,6 +316,10 @@
                                                                 else if (isFunc)
                                                                 {
                                                                     <i class="bi bi-code"></i>
+                                                                }
+                                                                else if (isType)
+                                                                {
+                                                                    <i class="bi bi-box"></i>
                                                                 }
                                                                 else
                                                                 {
@@ -620,7 +630,8 @@
     {
         var isProc = dependency.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dependency.Type == "SP";
         var isFunc = dependency.Type == "Function";
-        var prefix = isProc ? "/proc" : (isFunc ? "/function" : (dependency.Type == "View" ? "/view" : "/table"));
+        var isType = dependency.Type == "Type";
+        var prefix = isProc ? "/proc" : (isFunc ? "/function" : (isType ? "/type" : (dependency.Type == "View" ? "/view" : "/table")));
         var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
         var baseLink = $"{prefix}/{Uri.EscapeDataString(dependency.FullName)}";
 
