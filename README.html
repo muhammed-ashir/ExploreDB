@@ -378,9 +378,7 @@
 <h2>📝 Application Logs</h2>
 <p>ExploreDB is designed for high reliability and uses asynchronous background logging to ensure the UI never freezes when tracking errors.</p>
 <h3><strong>Log Location</strong></h3>
-<p>Logs are written to your local Application Data folder. Because ExploreDB is a secure packaged Windows app, Windows automatically sandboxes this folder here:</p>
-<div class="code-container"><div class="code-header"><span class="lang">path</span><button class="copy-btn">Copy</button></div><pre><code>%LOCALAPPDATA%\Packages\ExploreDB.App_60vbweyrgtvd0\LocalCache\Local\ExploreDB\logs</code></pre></div>
-<p><em>(e.g., <code>C:\Users\[YourUsername]\AppData\Local\Packages\ExploreDB.App_60vbweyrgtvd0\LocalCache\Local\ExploreDB\logs</code>)</em></p>
+<p>Logs are written to your local Application Data folder. Because ExploreDB is a secure packaged Windows app, Windows automatically sandboxes this folder, making it difficult to locate manually.</p>
 <p>A new log file is automatically generated for each day you use the app (e.g., <code>log-2026-07-27.txt</code>).</p>
 <h3><strong>Configuring Logs (Retention & Level)</strong></h3>
 <p>To prevent your hard drive from filling up over time, ExploreDB automatically deletes old log files. By default, files older than <strong>30 days</strong> are deleted.</p>
