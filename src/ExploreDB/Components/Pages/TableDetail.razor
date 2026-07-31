@@ -83,7 +83,7 @@
                 <a class="nav-link d-inline-flex align-items-baseline gap-2 @(ActiveTab == "UsedBy" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
                    @onclick='() => SetActiveTab("UsedBy")' style="cursor:pointer">
                     <span>Used By</span>
-                    <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="views and procedures that query this table" data-bs-placement="top" style="font-size: 0.85em; opacity: 0.8;"></i>
+                    <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="views, procedures, and functions that query this table" data-bs-placement="top" style="font-size: 0.85em; opacity: 0.8;"></i>
                 </a>
             </li>
             <li class="nav-item">
@@ -404,7 +404,7 @@
                                 <div class="input-group shadow-sm flex-nowrap">
                                 <input type="text"
                                        class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
-                                       placeholder="Search dependent views & procedures..."
+                                       placeholder="Search dependent views, procedures, & functions..."
                                        @bind="UsedBySearchTerm"
                                        @bind:event="oninput" />
                                 <button class="btn @(UsedBySearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => UsedBySearchCaseSensitive = !UsedBySearchCaseSensitive">

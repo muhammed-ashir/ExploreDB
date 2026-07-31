@@ -182,11 +182,54 @@ else
                             else
                             {
                                 bool hasResults = false;
-                                
+                                bool hasSearch = !string.IsNullOrWhiteSpace(SearchCol);
+                                string searchTerm = hasSearch ? SearchCol : "";
+                                bool tableFilter = SearchFilter == "All" || SearchFilter == "Table";
+                                bool colFilter = SearchFilter == "All" || SearchFilter == "Column";
+                                StringComparison comp = CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
                                 foreach (var table in FilteredTables)
                                 {
-                                    var matchingColumns = table.Columns.Where(c => SearchMatch(table.Name, c.Name)).ToList();
-                                    if (matchingColumns.Any())
+                                    List<ColumnInfo> matchingColumns;
+                                    
+                                    if (!hasSearch)
+                                    {
+                                        matchingColumns = table.Columns;
+                                    }
+                                    else
+                                    {
+                                        bool tableMatches = false;
+                                        if (tableFilter)
+                                        {
+                                            if (ExactMatch) tableMatches = string.Equals(table.Name, searchTerm, comp);
+                                            else if (MatchWholeWord) tableMatches = table.Name.Split(' ', '.', '_').Any(p => string.Equals(p, searchTerm, comp));
+                                            else tableMatches = table.Name.Contains(searchTerm, comp);
+                                        }
+
+                                        if (tableMatches)
+                                        {
+                                            matchingColumns = table.Columns; // If table matches, show all columns
+                                        }
+                                        else if (colFilter)
+                                        {
+                                            matchingColumns = new List<ColumnInfo>();
+                                            foreach (var c in table.Columns)
+                                            {
+                                                bool colMatches = false;
+                                                if (ExactMatch) colMatches = string.Equals(c.Name, searchTerm, comp);
+                                                else if (MatchWholeWord) colMatches = c.Name.Split(' ', '.', '_').Any(p => string.Equals(p, searchTerm, comp));
+                                                else colMatches = c.Name.Contains(searchTerm, comp);
+                                                
+                                                if (colMatches) matchingColumns.Add(c);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            matchingColumns = new List<ColumnInfo>();
+                                        }
+                                    }
+
+                                    if (matchingColumns.Count > 0)
                                     {
                                         hasResults = true;
                                         var tableId = "table_" + table.FullName.Replace(".", "_").Replace("\"", "");
@@ -781,42 +824,7 @@ else
         InvokeAsync(StateHasChanged);
     }
 
-    private bool SearchMatch(string tableName, string colName)
-    {
-        if (string.IsNullOrWhiteSpace(SearchCol)) return true;
 
-        var searchTerm = CaseSensitive ? SearchCol : SearchCol.ToLower();
-        var tableToSearch = CaseSensitive ? tableName : tableName.ToLower();
-        var colToSearch = CaseSensitive ? colName : colName.ToLower();
-
-        bool tableMatches = false;
-        bool colMatches = false;
-
-        if (ExactMatch)
-        {
-            // Exact match: entire name must match search term
-            tableMatches = tableToSearch == searchTerm;
-            colMatches = colToSearch == searchTerm;
-        }
-        else if (MatchWholeWord)
-        {
-            tableMatches = tableToSearch.Split(' ', '.', '_').Contains(searchTerm);
-            colMatches = colToSearch.Split(' ', '.', '_').Contains(searchTerm);
-        }
-        else
-        {
-            tableMatches = tableToSearch.Contains(searchTerm);
-            colMatches = colToSearch.Contains(searchTerm);
-        }
-
-        return SearchFilter switch
-        {
-            "Table" => tableMatches,
-            "Column" => colMatches,
-            "None" => false,
-            _ => tableMatches || colMatches
-        };
-    }
 
     private void ToggleColumn(string key, string tableName, bool isChecked)
     {
