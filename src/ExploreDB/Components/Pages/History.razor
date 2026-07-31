@@ -44,10 +44,7 @@
                         else if (!FilteredHistoryItems.Any())
                         {
                             <div class="p-4 text-center text-muted">
-                                @if (!_filterDate.HasValue)
-                                {
-                                    <i class="bi bi-inbox fs-2 mb-2 d-block text-secondary"></i>
-                                }
+                                <i class="bi bi-clock-history fs-2 mb-2 d-block text-secondary opacity-50"></i>
                                 @if (_filterDate.HasValue) { <span>No history for this date.</span> } else { <span>No history found.</span> }
                             </div>
                         }
