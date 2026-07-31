@@ -767,6 +767,7 @@ public class SchemaService
                 var tSchema = p.TargetSchema as string;
                 var tName = (string)p.TargetName;
                 var tType = (string)p.TargetType;
+                tType = tType?.Trim();
                 if (!string.IsNullOrEmpty(tSchema))
                 {
                     string depType = tType == "V" ? "View" : (tType == "U" ? "Table" : "Function");
@@ -782,6 +783,7 @@ public class SchemaService
                 var sSchema = (string)c.SourceSchema;
                 var sName = (string)c.SourceName;
                 var sType = (string)c.SourceType;
+                sType = sType?.Trim();
 
                 if (sType == "V")
                     view.Children.Add(new Dependency { Schema = sSchema, Name = sName, Type = "View" });
