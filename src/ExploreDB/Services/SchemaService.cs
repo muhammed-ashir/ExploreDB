@@ -627,7 +627,7 @@ public class SchemaService
                 END
             ";
 
-            var results = await conn.QueryAsync<dynamic>(sql, new { Schema = typeInfo.Schema, Name = typeInfo.Name });
+            var results = await conn.QueryAsync<dynamic>(sql, new { Schema = typeInfo.Schema, Name = typeInfo.Name }, commandTimeout: 300);
             
             typeInfo.UsedBy = results.Select(r => new Dependency
             {
@@ -663,9 +663,10 @@ public class SchemaService
                 FROM sys.sql_expression_dependencies d
                 JOIN sys.objects o ON d.referencing_id = o.object_id
                 JOIN sys.schemas s ON o.schema_id = s.schema_id
-                WHERE d.referenced_id = @RefId";
+                WHERE d.referenced_id = @RefId
+                OPTION (RECOMPILE)";
 
-            var deps = await conn.QueryAsync<dynamic>(sql, new { FullName = fullName });
+            var deps = await conn.QueryAsync<dynamic>(sql, new { FullName = fullName }, commandTimeout: 300);
             
             table.ReferencedByViews.Clear();
             table.ReferencedBySPs.Clear();
@@ -710,7 +711,7 @@ public class SchemaService
                 FROM sys.dm_sql_referenced_entities('{view.FullName}', 'OBJECT') d
                 WHERE d.referenced_minor_name IS NOT NULL";
 
-            var lineage = await conn.QueryAsync<dynamic>(lineageSql);
+            var lineage = await conn.QueryAsync<dynamic>(lineageSql, commandTimeout: 300);
             var colDict = view.Columns.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
             
             foreach(var item in lineage)
@@ -736,7 +737,8 @@ public class SchemaService
                 FROM sys.sql_expression_dependencies d
                 LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
                 LEFT JOIN sys.schemas s ON ro.schema_id = s.schema_id
-                WHERE d.referencing_id = @RefId;
+                WHERE d.referencing_id = @RefId
+                OPTION (RECOMPILE);
 
                 -- What references it (Children/ReferencedBySPs)
                 SELECT DISTINCT
@@ -746,10 +748,11 @@ public class SchemaService
                 FROM sys.sql_expression_dependencies d
                 JOIN sys.objects o ON d.referencing_id = o.object_id
                 JOIN sys.schemas s ON o.schema_id = s.schema_id
-                WHERE d.referenced_id = @RefId;
+                WHERE d.referenced_id = @RefId
+                OPTION (RECOMPILE);
             ";
 
-            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName });
+            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName }, commandTimeout: 300);
             
             var parents = await multi.ReadAsync<dynamic>();
             view.Parents.Clear();
@@ -809,7 +812,8 @@ public class SchemaService
                 FROM sys.sql_expression_dependencies d
                 LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
                 LEFT JOIN sys.schemas s ON ro.schema_id = s.schema_id
-                WHERE d.referencing_id = @RefId;
+                WHERE d.referencing_id = @RefId
+                OPTION (RECOMPILE);
 
                 -- What references it (ReferencedBySPs)
                 SELECT DISTINCT
@@ -819,10 +823,11 @@ public class SchemaService
                 FROM sys.sql_expression_dependencies d
                 JOIN sys.objects o ON d.referencing_id = o.object_id
                 JOIN sys.schemas s ON o.schema_id = s.schema_id
-                WHERE d.referenced_id = @RefId;
+                WHERE d.referenced_id = @RefId
+                OPTION (RECOMPILE);
             ";
 
-            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName });
+            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName }, commandTimeout: 300);
             
             var deps = await multi.ReadAsync<dynamic>();
             sp.Dependencies.Clear();
@@ -892,7 +897,8 @@ public class SchemaService
                 FROM sys.sql_expression_dependencies d
                 LEFT JOIN sys.objects ro ON d.referenced_id = ro.object_id
                 LEFT JOIN sys.schemas s ON ro.schema_id = s.schema_id
-                WHERE d.referencing_id = @RefId;
+                WHERE d.referencing_id = @RefId
+                OPTION (RECOMPILE);
 
                 -- What references it (ReferencedBy)
                 SELECT DISTINCT
@@ -902,10 +908,11 @@ public class SchemaService
                 FROM sys.sql_expression_dependencies d
                 JOIN sys.objects o ON d.referencing_id = o.object_id
                 JOIN sys.schemas s ON o.schema_id = s.schema_id
-                WHERE d.referenced_id = @RefId;
+                WHERE d.referenced_id = @RefId
+                OPTION (RECOMPILE);
             ";
 
-            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName });
+            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName }, commandTimeout: 300);
             
             var deps = await multi.ReadAsync<dynamic>();
             fn.Dependencies.Clear();
