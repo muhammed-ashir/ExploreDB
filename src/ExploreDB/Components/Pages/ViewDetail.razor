@@ -192,6 +192,18 @@
                                     View
                                 </label>
                             </div>
+                            <div class="form-check m-0">
+                                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowFuncs" @bind="DependencyShowFuncs">
+                                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowFuncs">
+                                    Function
+                                </label>
+                            </div>
+                            <div class="form-check m-0">
+                                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowTypes" @bind="DependencyShowTypes">
+                                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowTypes">
+                                    Type
+                                </label>
+                            </div>
                         </div>
                     </div>
                     <div class="accordion schema-accordion" id="dependenciesAccordion">
@@ -387,6 +399,8 @@
     private bool DependencyShowTables = true;
     private bool DependencyShowSPs = true;
     private bool DependencyShowViews = true;
+    private bool DependencyShowFuncs = true;
+    private bool DependencyShowTypes = true;
     private bool DependencySearchMatchWholeWord = false;
     private bool DependencySearchExactMatch = false;
 
@@ -399,11 +413,17 @@
             if (View == null) return Array.Empty<Dependency>();
             
             var allDependsOn = Enumerable.Empty<Dependency>();
-            var tables = View.Parents.Where(p => !p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) && p.Type != "V");
+            var tables = View.Parents.Where(p => !p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) && p.Type != "V" && !p.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) && p.Type != "SP" && p.Type != "Function" && p.Type != "Type");
             var views = View.Parents.Where(p => p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) || p.Type == "V");
+            var sps = View.Parents.Where(p => p.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || p.Type == "SP");
+            var funcs = View.Parents.Where(p => p.Type == "Function");
+            var types = View.Parents.Where(p => p.Type == "Type");
             
             if (DependencyShowTables) allDependsOn = allDependsOn.Concat(tables);
             if (DependencyShowViews) allDependsOn = allDependsOn.Concat(views);
+            if (DependencyShowSPs) allDependsOn = allDependsOn.Concat(sps);
+            if (DependencyShowFuncs) allDependsOn = allDependsOn.Concat(funcs);
+            if (DependencyShowTypes) allDependsOn = allDependsOn.Concat(types);
             
             if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return allDependsOn;
             
