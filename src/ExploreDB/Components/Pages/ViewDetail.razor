@@ -212,12 +212,6 @@
                                     Function
                                 </label>
                             </div>
-                            <div class="form-check m-0">
-                                <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowTypes" @bind="DependencyShowTypes">
-                                <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowTypes">
-                                    Type
-                                </label>
-                            </div>
                         </div>
                     </div>
                     <div class="accordion schema-accordion" id="dependenciesAccordion">
@@ -251,8 +245,7 @@
                                             {
                                                 var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                                 var isFunc = dep.Type == "Function";
-                                                var isType = dep.Type == "Type";
-                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (isType ? "text-info" : (dep.Type == "Table" ? "text-primary" : "text-success")));
+                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (dep.Type == "Table" ? "text-primary" : "text-success"));
                                                 <div class="col-md-6 col-12">
                                                     <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
@@ -265,10 +258,6 @@
                                                                 else if (isFunc)
                                                                 {
                                                                     <i class="bi bi-code"></i>
-                                                                }
-                                                                else if (isType)
-                                                                {
-                                                                    <i class="bi bi-box"></i>
                                                                 }
                                                                 else
                                                                 {
@@ -319,8 +308,7 @@
                                             {
                                                 var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                                 var isFunc = dep.Type == "Function";
-                                                var isType = dep.Type == "Type";
-                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (isType ? "text-info" : (dep.Type == "Table" ? "text-primary" : "text-success")));
+                                                var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (dep.Type == "Table" ? "text-primary" : "text-success"));
                                                 <div class="col-md-6 col-12">
                                                     <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
@@ -333,10 +321,6 @@
                                                                 else if (isFunc)
                                                                 {
                                                                     <i class="bi bi-code"></i>
-                                                                }
-                                                                else if (isType)
-                                                                {
-                                                                    <i class="bi bi-box"></i>
                                                                 }
                                                                 else
                                                                 {
@@ -481,7 +465,6 @@
     private bool DependencyShowSPs = true;
     private bool DependencyShowViews = true;
     private bool DependencyShowFuncs = true;
-    private bool DependencyShowTypes = true;
     private bool DependencySearchMatchWholeWord = false;
     private bool DependencySearchExactMatch = false;
 
@@ -498,13 +481,11 @@
             var views = View.Parents.Where(p => p.Type.Contains("View", StringComparison.OrdinalIgnoreCase) || p.Type == "V");
             var sps = View.Parents.Where(p => p.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || p.Type == "SP");
             var funcs = View.Parents.Where(p => p.Type == "Function");
-            var types = View.Parents.Where(p => p.Type == "Type");
             
             if (DependencyShowTables) allDependsOn = allDependsOn.Concat(tables);
             if (DependencyShowViews) allDependsOn = allDependsOn.Concat(views);
             if (DependencyShowSPs) allDependsOn = allDependsOn.Concat(sps);
             if (DependencyShowFuncs) allDependsOn = allDependsOn.Concat(funcs);
-            if (DependencyShowTypes) allDependsOn = allDependsOn.Concat(types);
             
             if (string.IsNullOrWhiteSpace(DependencySearchTerm)) return allDependsOn;
             
@@ -561,6 +542,11 @@
     {
         IsLoading = true;
         await Task.Yield();
+        
+        if (!SchemaService.AreTypesLoaded)
+        {
+            await SchemaService.LoadTypesAsync();
+        }
         
         var decoded = Uri.UnescapeDataString(FullName);
         View = SchemaService.Views.FirstOrDefault(t => t.FullName == decoded);
@@ -664,8 +650,7 @@
     {
         var isProc = dependency.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dependency.Type == "SP";
         var isFunc = dependency.Type == "Function";
-        var isType = dependency.Type == "Type";
-        var prefix = isProc ? "/proc" : (isFunc ? "/function" : (isType ? "/type" : (dependency.Type == "View" ? "/view" : "/table")));
+        var prefix = isProc ? "/proc" : (isFunc ? "/function" : (dependency.Type == "View" ? "/view" : "/table"));
         var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
         var baseLink = $"{prefix}/{Uri.EscapeDataString(dependency.FullName)}";
 

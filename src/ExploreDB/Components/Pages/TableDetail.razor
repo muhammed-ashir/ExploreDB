@@ -769,6 +769,11 @@
         IsLoading = true;
         await Task.Yield();
         
+        if (!SchemaService.AreTypesLoaded)
+        {
+            await SchemaService.LoadTypesAsync();
+        }
+        
         var decoded = Uri.UnescapeDataString(FullName);
         Table = SchemaService.Tables.FirstOrDefault(t => t.FullName == decoded);
         

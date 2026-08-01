@@ -163,7 +163,9 @@
                                                                 string authType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType;
                                                                 string authDisplay = string.Equals(authType, "SqlServer", StringComparison.OrdinalIgnoreCase) 
                                                                     ? $"SQL Auth ({(string.IsNullOrEmpty(c.Username) ? "sa" : c.Username)})" 
-                                                                    : "Windows Auth";
+                                                                    : string.Equals(authType, "EntraMfa", StringComparison.OrdinalIgnoreCase)
+                                                                        ? $"Entra MFA ({(string.IsNullOrEmpty(c.Username) ? "User" : c.Username)})"
+                                                                        : "Windows Auth";
                                                                 string coreDetails = string.IsNullOrEmpty(c.Server) ? c.ConnectionString : $"{c.Server} • {authDisplay}";
                                                             }
                                                             @coreDetails
