@@ -215,7 +215,7 @@
                                         var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                         var isFunc = dep.Type.Contains("Function", StringComparison.OrdinalIgnoreCase);
                                         var link = BuildObjectLink(dep);
-                                        var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) ? "text-success" : "text-primary";
+                                        var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success";
                                         var iconName = isProc ? "bi-play-circle" : isFunc ? "bi-calculator" : dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-eye";
 
                                         <div class="col-md-6 col-12">
