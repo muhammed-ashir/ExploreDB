@@ -601,6 +601,39 @@ FROM dbo.PageViews
 GROUP BY UserAgent;
 GO
 
+-- View referencing a scalar function: fn_CalculateAge
+CREATE VIEW dbo.vw_EmployeeAgeProfile AS
+SELECT
+    e.EmployeeID,
+    u.FirstName,
+    u.LastName,
+    e.HireDate,
+    dbo.fn_CalculateAge(e.HireDate) AS YearsAtCompany,
+    e.JobTitle,
+    d.DepartmentName,
+    CASE
+        WHEN dbo.fn_CalculateAge(e.HireDate) < 2  THEN 'New Hire'
+        WHEN dbo.fn_CalculateAge(e.HireDate) BETWEEN 2 AND 7 THEN 'Experienced'
+        ELSE 'Veteran'
+    END AS TenureGroup
+FROM dbo.Employees e
+JOIN dbo.Users u ON e.UserID = u.UserID
+JOIN dbo.Departments d ON e.DepartmentID = d.DepartmentID;
+GO
+
+-- View referencing a scalar function: fn_FormatPhone
+CREATE VIEW dbo.vw_UserContactDirectory AS
+SELECT
+    u.UserID,
+    u.FirstName + ' ' + u.LastName AS FullName,
+    u.Email,
+    dbo.fn_FormatPhone(u.Phone) AS FormattedPhone,
+    u.CreatedAt,
+    u.LastLogin
+FROM dbo.Users u
+WHERE u.IsActive = 1;
+GO
+
 -- =======================================================================================
 -- STORED PROCEDURES & FUNCTIONS
 -- =======================================================================================
