@@ -712,6 +712,30 @@ RETURN (
 );
 GO
 
+-- SP referencing scalar functions: fn_ConvertCurrency and fn_CalculateAge
+CREATE PROCEDURE dbo.sp_GetEmployeeSalaryReport
+    @DepartmentID INT,
+    @ToCurrencyCode NVARCHAR(3) = 'USD'
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        e.EmployeeID,
+        u.FirstName + ' ' + u.LastName                               AS FullName,
+        e.JobTitle,
+        e.BaseSalary                                                  AS BaseSalary_USD,
+        dbo.fn_ConvertCurrency(e.BaseSalary, 'USD', @ToCurrencyCode) AS ConvertedSalary,
+        @ToCurrencyCode                                               AS TargetCurrency,
+        e.HireDate,
+        dbo.fn_CalculateAge(e.HireDate)                               AS YearsAtCompany
+    FROM dbo.Employees e
+    JOIN dbo.Users u ON e.UserID = u.UserID
+    WHERE e.DepartmentID = @DepartmentID
+    ORDER BY e.BaseSalary DESC;
+END
+GO
+
 CREATE PROCEDURE dbo.sp_LogPageView
     @SessionID NVARCHAR(100), @UserID INT = NULL, @PageURL NVARCHAR(1000), @IPAddress dbo.IPAddressType = NULL
 AS
