@@ -613,6 +613,15 @@ public class SchemaService
                         WHERE c.user_type_id = @TypeId AND o.type IN ('U', 'V')
                         
                         UNION ALL
+
+                        SELECT s.name AS SchemaName, tt.name AS ObjectName, 
+                               'Type' AS ObjectType
+                        FROM sys.columns c
+                        JOIN sys.table_types tt ON c.object_id = tt.type_table_object_id
+                        JOIN sys.schemas s ON tt.schema_id = s.schema_id
+                        WHERE c.user_type_id = @TypeId
+                        
+                        UNION ALL
                         
                         SELECT s.name AS SchemaName, o.name AS ObjectName, 
                                CASE WHEN o.type IN ('P', 'PC') THEN 'SP' ELSE 'Function' END AS ObjectType

@@ -193,6 +193,15 @@
                                         Function
                                     </label>
                                 </div>
+                                @if (!Type.IsTableType)
+                                {
+                                    <div class="form-check m-0">
+                                        <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowTypes" @bind="UsedByShowTypes">
+                                        <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowTypes">
+                                            Type
+                                        </label>
+                                    </div>
+                                }
                             </div>
                         </div>
                         <div>
@@ -209,9 +218,10 @@
                                     {
                                         var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                         var isFunc = dep.Type.Contains("Function", StringComparison.OrdinalIgnoreCase);
+                                        var isType = dep.Type == "Type";
                                         var link = BuildObjectLink(dep);
-                                        var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success";
-                                        var iconName = isProc ? "bi-play-circle" : isFunc ? "bi-calculator" : dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-eye";
+                                        var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : isType ? "text-info" : dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-success";
+                                        var iconName = isProc ? "bi-play-circle" : isFunc ? "bi-calculator" : isType ? "bi-box" : dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) ? "bi-table" : "bi-eye";
 
                                         <div class="col-md-6 col-12">
                                             <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
@@ -222,13 +232,9 @@
                                                         {
                                                             @("{}")
                                                         }
-                                                        else if (dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase))
-                                                        {
-                                                            <i class="bi bi-table"></i>
-                                                        }
                                                         else
                                                         {
-                                                            <i class="bi bi-layout-text-window"></i>
+                                                            <i class="bi @iconName"></i>
                                                         }
                                                     </div>
                                                     <div class="overflow-hidden" style="min-width: 0;">
@@ -312,6 +318,7 @@
     private bool UsedByShowTables = true;
     private bool UsedByShowSPs = true;
     private bool UsedByShowFunctions = true;
+    private bool UsedByShowTypes = true;
 
     private IEnumerable<Dependency> FilteredUsedBy
     {
@@ -322,7 +329,8 @@
             var allUsedBy = Type.UsedBy.Where(d => 
                 (UsedByShowTables && d.Type.Contains("Table", StringComparison.OrdinalIgnoreCase)) ||
                 (UsedByShowSPs && (d.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || d.Type == "SP")) ||
-                (UsedByShowFunctions && d.Type.Contains("Function", StringComparison.OrdinalIgnoreCase))
+                (UsedByShowFunctions && d.Type.Contains("Function", StringComparison.OrdinalIgnoreCase)) ||
+                (UsedByShowTypes && d.Type == "Type")
             );
             
             if (string.IsNullOrWhiteSpace(UsedBySearchTerm)) return allUsedBy;
@@ -348,7 +356,9 @@
     {
         var currentRoute = $"/type/{Uri.EscapeDataString(FullName)}";
         string baseLink;
-        if (dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) || dep.Type.Contains("View", StringComparison.OrdinalIgnoreCase))
+        if (dep.Type == "Type")
+            baseLink = $"/type/{Uri.EscapeDataString(dep.FullName)}";
+        else if (dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) || dep.Type.Contains("View", StringComparison.OrdinalIgnoreCase))
             baseLink = $"/table/{Uri.EscapeDataString(dep.FullName)}";
         else if (dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP")
             baseLink = $"/proc/{Uri.EscapeDataString(dep.FullName)}";
