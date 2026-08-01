@@ -712,6 +712,21 @@ RETURN (
 );
 GO
 
+-- 5. Inline TVF that references a VIEW (vw_EmployeeTurnover)
+CREATE FUNCTION dbo.fn_GetDepartmentsAboveTurnoverThreshold (@ThresholdPct FLOAT)
+RETURNS TABLE
+AS
+RETURN (
+    SELECT
+        DepartmentName,
+        TotalEmployees,
+        TerminatedEmployees,
+        CAST(TerminatedEmployees AS FLOAT) / NULLIF(TotalEmployees, 0) * 100 AS TurnoverPct
+    FROM dbo.vw_EmployeeTurnover
+    WHERE CAST(TerminatedEmployees AS FLOAT) / NULLIF(TotalEmployees, 0) * 100 > @ThresholdPct
+);
+GO
+
 -- SP referencing scalar functions: fn_ConvertCurrency and fn_CalculateAge
 CREATE PROCEDURE dbo.sp_GetEmployeeSalaryReport
     @DepartmentID INT,
