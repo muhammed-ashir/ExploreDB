@@ -186,12 +186,7 @@
                                         SP
                                     </label>
                                 </div>
-                                <div class="form-check m-0">
-                                    <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowViews" @bind="UsedByShowViews">
-                                    <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowViews">
-                                        View
-                                    </label>
-                                </div>
+
                                 <div class="form-check m-0">
                                     <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="checkShowFunctions" @bind="UsedByShowFunctions">
                                     <label class="form-check-label text-light small cursor-pointer user-select-none" for="checkShowFunctions">
@@ -316,7 +311,6 @@
 
     private bool UsedByShowTables = true;
     private bool UsedByShowSPs = true;
-    private bool UsedByShowViews = true;
     private bool UsedByShowFunctions = true;
 
     private IEnumerable<Dependency> FilteredUsedBy
@@ -327,7 +321,6 @@
             
             var allUsedBy = Type.UsedBy.Where(d => 
                 (UsedByShowTables && d.Type.Contains("Table", StringComparison.OrdinalIgnoreCase)) ||
-                (UsedByShowViews && d.Type.Contains("View", StringComparison.OrdinalIgnoreCase)) ||
                 (UsedByShowSPs && (d.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || d.Type == "SP")) ||
                 (UsedByShowFunctions && d.Type.Contains("Function", StringComparison.OrdinalIgnoreCase))
             );
