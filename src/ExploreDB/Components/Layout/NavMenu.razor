@@ -166,16 +166,29 @@
                 await InvokeAsync(StateHasChanged);
                 
                 var dbs = new List<string>();
-                using (var conn = new Microsoft.Data.SqlClient.SqlConnection(ConnectionService.ConnectionString))
+                var masterBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString) { InitialCatalog = "master" };
+                bool fetched = false;
+
+                try
                 {
+                    using var conn = new Microsoft.Data.SqlClient.SqlConnection(masterBuilder.ConnectionString);
                     await conn.OpenAsync();
                     using var cmd = conn.CreateCommand();
                     cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
                     using var reader = await cmd.ExecuteReaderAsync();
-                    while (await reader.ReadAsync())
-                    {
-                        dbs.Add(reader.GetString(0));
-                    }
+                    while (await reader.ReadAsync()) dbs.Add(reader.GetString(0));
+                    fetched = true;
+                }
+                catch { }
+
+                if (!fetched)
+                {
+                    using var conn = new Microsoft.Data.SqlClient.SqlConnection(ConnectionService.ConnectionString);
+                    await conn.OpenAsync();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync()) dbs.Add(reader.GetString(0));
                 }
                 ServerDatabases = dbs;
                 IsLoadingDBs = false;
