@@ -236,6 +236,28 @@
     </div>
 }
 
+@if (ShowDangerousQueryWarning)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark border-secondary shadow-lg">
+                <div class="modal-body p-4 pb-2">
+                    <div class="fw-bold text-white mb-2" style="font-size: 1rem;">Confirm Execution</div>
+                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.9rem;">
+                        This query modifies the database. Are you sure you want to execute it?
+                    </p>
+                </div>
+                <div class="modal-footer border-0 p-4 pt-2">
+                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ResolveDangerousQueryWarning(false)">Cancel</button>
+                    <button type="button" class="btn btn-danger px-4 fw-bold shadow-sm" @onclick="() => ResolveDangerousQueryWarning(true)">
+                        <i class="bi bi-play-fill me-1"></i>Execute
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (ShowCloseTabConfirmation)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000;">
@@ -306,11 +328,27 @@
     private bool ShowRestoreSessionPrompt = false;
     private bool ShowClearConfirmation = false;
     private bool ShowCloseTabConfirmation = false;
+    private bool ShowDangerousQueryWarning = false;
+    private TaskCompletionSource<bool>? _dangerousQueryTcs;
     private Guid? TabIdToClose = null;
 
     public void Dispose()
     {
         _objRef?.Dispose();
+    }
+
+    private Task<bool> ConfirmDangerousQueryAsync()
+    {
+        _dangerousQueryTcs = new TaskCompletionSource<bool>();
+        ShowDangerousQueryWarning = true;
+        StateHasChanged();
+        return _dangerousQueryTcs.Task;
+    }
+
+    private void ResolveDangerousQueryWarning(bool result)
+    {
+        ShowDangerousQueryWarning = false;
+        _dangerousQueryTcs?.TrySetResult(result);
     }
 
     private async Task ClearQueryAsync()
@@ -822,7 +860,7 @@
                     return;
                 }
 
-                bool confirm = await JS.InvokeAsync<bool>("confirm", "⚠️ WARNING: This query may modify data or schema.\n\nAre you sure you want to execute it?");
+                bool confirm = await ConfirmDangerousQueryAsync();
                 if (!confirm)
                 {
                     Messages.Add("Execution cancelled by user.");
