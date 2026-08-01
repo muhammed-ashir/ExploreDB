@@ -8,7 +8,7 @@
   <Identity
     Name="ZerinApps.ExploreDB"
     Publisher="CN=84A3598C-821D-4FE9-A623-4DA9811C30A8"
-    Version="1.1.6.0" />
+    Version="1.1.7.0" />
 
   <Properties>
     <DisplayName>ExploreDB</DisplayName>
