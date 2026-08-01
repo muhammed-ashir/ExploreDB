@@ -52,10 +52,13 @@ CREATE TYPE dbo.StringListType AS TABLE (
 );
 
 CREATE TYPE dbo.EmployeeRecordType AS TABLE (
-    EmployeeId INT PRIMARY KEY,
-    FirstName NVARCHAR(50) NOT NULL,
-    LastName NVARCHAR(50) NOT NULL,
-    HireDate DATE
+    EmployeeId    INT                  PRIMARY KEY,
+    FirstName     dbo.NameType,
+    LastName      dbo.NameType,
+    Email         dbo.EmailType,
+    Phone         dbo.PhoneType,
+    BaseSalary    dbo.MoneyType,
+    HireDate      dbo.DateOfBirthType
 );
 GO
 
@@ -725,6 +728,29 @@ RETURN (
     FROM dbo.vw_EmployeeTurnover
     WHERE CAST(TerminatedEmployees AS FLOAT) / NULLIF(TotalEmployees, 0) * 100 > @ThresholdPct
 );
+GO
+
+-- 6. Scalar function that calls other functions (fn_CalculateAge + fn_FormatPhone)
+CREATE FUNCTION dbo.fn_GetEmployeeSummary (@EmployeeID INT)
+RETURNS NVARCHAR(500)
+AS
+BEGIN
+    DECLARE @Summary  NVARCHAR(500);
+    DECLARE @Phone    dbo.PhoneType;
+    DECLARE @HireDate DATE;
+
+    SELECT @Phone = u.Phone, @HireDate = e.HireDate
+    FROM dbo.Employees e
+    JOIN dbo.Users u ON e.UserID = u.UserID
+    WHERE e.EmployeeID = @EmployeeID;
+
+    -- Calls fn_FormatPhone and fn_CalculateAge internally
+    SET @Summary =
+        'Phone: ' + ISNULL(dbo.fn_FormatPhone(@Phone), 'N/A') +
+        ' | Tenure: ' + CAST(dbo.fn_CalculateAge(@HireDate) AS NVARCHAR) + ' yrs';
+
+    RETURN @Summary;
+END
 GO
 
 -- SP referencing scalar functions: fn_ConvertCurrency and fn_CalculateAge
