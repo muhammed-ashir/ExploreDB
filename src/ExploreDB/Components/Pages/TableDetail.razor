@@ -164,7 +164,17 @@
                                                         }
                                                     }
                                                 </td>
-                                                <td class="border-secondary text-end"><span class="badge bg-dark text-muted border border-secondary font-monospace">@col.DataType</span></td>
+                                                <td class="border-secondary text-end">
+                                                    @{ var _typeLink = SchemaService.Types.FirstOrDefault(t => t.Name.Equals(col.DataType, StringComparison.OrdinalIgnoreCase)); }
+                                                    @if (_typeLink != null)
+                                                    {
+                                                        <a href="/type/@Uri.EscapeDataString(_typeLink.FullName)" class="badge bg-dark text-info border border-info font-monospace text-decoration-none" title="Custom type: @_typeLink.FullName">@col.DataType</a>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-dark text-muted border border-secondary font-monospace">@col.DataType</span>
+                                                    }
+                                                </td>
                                             </tr>
                                         }
                                     }
