@@ -1,5 +1,7 @@
 @page "/view/{FullName}"
 @using ExploreDB.Services
+@using BlazorMonaco.Editor
+@using BlazorMonaco
 @inject SchemaService SchemaService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -77,6 +79,12 @@
                 <a class="nav-link @(ActiveTab == "Queries" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
                    @onclick='() => SetActiveTab("Queries")' style="cursor:pointer">
                     Query
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Definition" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
+                   @onclick='() => SetActiveTab("Definition")' style="cursor:pointer">
+                    Definition
                 </a>
             </li>
         </ul>
@@ -378,6 +386,44 @@
                     </div>
                 </div>
             }
+            else if (ActiveTab == "Definition")
+            {
+                <div class="card glass-card text-white">
+                    <div class="card-body p-0 position-relative">
+                        <div class="p-3 d-flex justify-content-between align-items-center border-bottom border-secondary bg-dark bg-opacity-50">
+                            <span class="fw-bold">View Definition</span>
+                            @if (!IsDefinitionLoading && !string.IsNullOrEmpty(View?.Definition))
+                            {
+                                <button class="btn btn-sm @(DefinitionCopied ? "btn-success" : "btn-outline-light")"
+                                        @onclick="CopyDefinition" title="Copy to clipboard">
+                                    <i class="bi @(DefinitionCopied ? "bi-check2" : "bi-clipboard")"></i> @(DefinitionCopied ? "Copied" : "Copy")
+                                </button>
+                            }
+                        </div>
+                        @if (IsDefinitionLoading)
+                        {
+                            <div class="d-flex justify-content-center align-items-center" style="padding: 4rem 1rem;">
+                                <div class="spinner-border text-secondary" role="status" style="width: 1.5rem; height: 1.5rem;">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span class="ms-3 text-muted small">Loading definition...</span>
+                            </div>
+                        }
+                        else if (string.IsNullOrEmpty(View?.Definition))
+                        {
+                            <div class="d-flex justify-content-center align-items-center" style="padding: 4rem 1rem;">
+                                <span class="text-muted">Definition not available. You may not have VIEW DEFINITION permission.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="height: 500px; min-height: 300px; resize: vertical; overflow: hidden;">
+                                <StandaloneCodeEditor @ref="_definitionEditor" Id="view-definition-editor" CssClass="w-100 h-100" ConstructionOptions="DefinitionEditorOptions" />
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
         </div>
     }
 </div>
@@ -413,6 +459,9 @@
     private bool ShowLimitAlert = false;
     private bool IsLoading = true;
     private ViewInfo? View;
+    private bool IsDefinitionLoading = false;
+    private bool DefinitionCopied = false;
+    private StandaloneCodeEditor? _definitionEditor;
     private string ActiveTab = "Columns";
 
     private string ColumnSearchTerm = string.Empty;
@@ -528,9 +577,49 @@
         }
     }
 
-    private void SetActiveTab(string tab)
+    private async Task SetActiveTab(string tab)
     {
         ActiveTab = tab;
+        if (tab == "Definition" && View != null && !View.IsDefinitionLoaded && !IsDefinitionLoading)
+        {
+            IsDefinitionLoading = true;
+            await SchemaService.LoadDefinitionAsync(View.FullName);
+            IsDefinitionLoading = false;
+        }
+        if (tab == "Definition" && _definitionEditor != null && View?.Definition != null)
+        {
+            await _definitionEditor.SetValue(View.Definition);
+        }
+    }
+
+    private StandaloneEditorConstructionOptions DefinitionEditorOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "sql",
+            Theme = "vs-dark",
+            Value = View?.Definition ?? "",
+            AutomaticLayout = true,
+            ReadOnly = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            LineNumbers = "on",
+            ScrollBeyondLastLine = false,
+            FontSize = 14,
+            OverviewRulerBorder = false,
+            HideCursorInOverviewRuler = true,
+            FixedOverflowWidgets = true,
+            Scrollbar = new EditorScrollbarOptions { UseShadows = false }
+        };
+    }
+
+    private async Task CopyDefinition()
+    {
+        if (string.IsNullOrEmpty(View?.Definition)) return;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", View.Definition);
+        DefinitionCopied = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        DefinitionCopied = false;
     }
 
     private async Task LoadAndRunQuery(string queryText, string tabName)

@@ -70,6 +70,8 @@ public class ViewInfo
     public List<Dependency> ReferencedBySPs { get; set; } = new();
     
     public bool AreDependenciesLoaded { get; set; } = false;
+    public string? Definition { get; set; }
+    public bool IsDefinitionLoaded { get; set; } = false;
 
     public override string ToString() => FullName;
 }
@@ -113,6 +115,8 @@ public class SpInfo
     public List<Dependency> ReferencedBySPs { get; set; } = new();
 
     public bool AreDependenciesLoaded { get; set; } = false;
+    public string? Definition { get; set; }
+    public bool IsDefinitionLoaded { get; set; } = false;
 
     public override string ToString() => FullName;
 }
@@ -154,6 +158,8 @@ public class FunctionInfo
     public List<Dependency> ReferencedBy { get; set; } = new();
 
     public bool AreDependenciesLoaded { get; set; } = false;
+    public string? Definition { get; set; }
+    public bool IsDefinitionLoaded { get; set; } = false;
 
     public override string ToString() => FullName;
 }
@@ -969,6 +975,33 @@ public class SchemaService
         {
             _logger.LogError(ex, "Error fetching dependencies for Function {FullName}", fullName);
             OnError?.Invoke($"Error fetching dependencies for Function {fullName}: {ex.Message}");
+        }
+    }
+
+    public async Task LoadDefinitionAsync(string fullName)
+    {
+        if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+
+        try
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            var sql = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName)) AS Def";
+            var result = await conn.QueryFirstOrDefaultAsync<string?>(sql, new { FullName = fullName }, commandTimeout: 60);
+
+            // Try to match against view, sp, or function
+            var view = Views.FirstOrDefault(v => v.FullName == fullName);
+            if (view != null) { view.Definition = result; view.IsDefinitionLoaded = true; return; }
+
+            var sp = StoredProcedures.FirstOrDefault(s => s.FullName == fullName);
+            if (sp != null) { sp.Definition = result; sp.IsDefinitionLoaded = true; return; }
+
+            var fn = Functions.FirstOrDefault(f => f.FullName == fullName);
+            if (fn != null) { fn.Definition = result; fn.IsDefinitionLoaded = true; }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching definition for {FullName}", fullName);
+            OnError?.Invoke($"Error fetching definition for {fullName}: {ex.Message}");
         }
     }
 
