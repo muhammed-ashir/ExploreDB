@@ -353,12 +353,15 @@
     
     private string BuildObjectLink(Dependency dep)
     {
+        var currentRoute = $"/type/{Uri.EscapeDataString(FullName)}";
+        string baseLink;
         if (dep.Type.Contains("Table", StringComparison.OrdinalIgnoreCase) || dep.Type.Contains("View", StringComparison.OrdinalIgnoreCase))
-            return $"/table/{Uri.EscapeDataString(dep.FullName)}";
+            baseLink = $"/table/{Uri.EscapeDataString(dep.FullName)}";
         else if (dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP")
-            return $"/proc/{Uri.EscapeDataString(dep.FullName)}";
+            baseLink = $"/proc/{Uri.EscapeDataString(dep.FullName)}";
         else
-            return $"/function/{Uri.EscapeDataString(dep.FullName)}";
+            baseLink = $"/function/{Uri.EscapeDataString(dep.FullName)}";
+        return $"{baseLink}?returnUrl={Uri.EscapeDataString(currentRoute)}";
     }
 
     protected override async Task OnParametersSetAsync()
