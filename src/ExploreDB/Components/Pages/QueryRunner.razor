@@ -869,7 +869,23 @@
     {
         if (IsExecuting) return;
 
-        var queryText = await _editor.GetValue();
+        var queryText = "";
+        try
+        {
+            var selection = await _editor.GetSelection();
+            if (selection != null && (selection.StartLineNumber != selection.EndLineNumber || selection.StartColumn != selection.EndColumn))
+            {
+                var model = await _editor.GetModel();
+                queryText = await model.GetValueInRange(selection, EndOfLinePreference.TextDefined);
+            }
+        }
+        catch { }
+
+        if (string.IsNullOrWhiteSpace(queryText))
+        {
+            queryText = await _editor.GetValue();
+        }
+
         if (string.IsNullOrWhiteSpace(queryText))
         {
             Messages.Add("Error: Query is empty.");
