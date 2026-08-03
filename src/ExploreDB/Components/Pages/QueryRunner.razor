@@ -101,7 +101,7 @@
             <div class="card bg-dark text-white shadow-sm border-secondary">
                 <div class="card-body p-0">
                     <div style="height: 350px; width: 100%; display: block; resize: vertical; overflow: hidden; min-height: 150px; padding-bottom: 2px;">
-                        <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" />
+                        <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
                     </div>
                 </div>
             </div>
@@ -331,10 +331,12 @@
     private bool ShowDangerousQueryWarning = false;
     private TaskCompletionSource<bool>? _dangerousQueryTcs;
     private Guid? TabIdToClose = null;
+    private System.Timers.Timer? _saveDebounceTimer;
 
     public void Dispose()
     {
         _objRef?.Dispose();
+        _saveDebounceTimer?.Dispose();
     }
 
     private static string StripLeadingComments(string sql)
@@ -626,6 +628,36 @@
                         .ToList();
 
         await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views, columns, _objRef);
+    }
+
+    private void EditorOnDidChangeModelContent(ModelContentChangedEvent e)
+    {
+        if (_saveDebounceTimer == null)
+        {
+            _saveDebounceTimer = new System.Timers.Timer(500);
+            _saveDebounceTimer.AutoReset = false;
+            _saveDebounceTimer.Elapsed += async (sender, args) => await SaveContentFromTimerAsync();
+        }
+        
+        _saveDebounceTimer.Stop();
+        _saveDebounceTimer.Start();
+    }
+    
+    private async Task SaveContentFromTimerAsync()
+    {
+        await InvokeAsync(async () =>
+        {
+            try
+            {
+                var text = await _editor.GetValue();
+                var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+                if (currentTab != null && currentTab.Content != text)
+                {
+                    currentTab.Content = text;
+                }
+            }
+            catch { }
+        });
     }
 
     private async Task FormatSqlAsync()
