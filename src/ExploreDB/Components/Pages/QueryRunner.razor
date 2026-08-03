@@ -337,6 +337,36 @@
         _objRef?.Dispose();
     }
 
+    private static string StripLeadingComments(string sql)
+    {
+        var s = sql.AsSpan();
+        while (true)
+        {
+            // Skip whitespace
+            s = s.TrimStart();
+            if (s.IsEmpty) break;
+
+            // Strip single-line comment: -- ... \n
+            if (s.StartsWith("--".AsSpan(), StringComparison.Ordinal))
+            {
+                var nl = s.IndexOf('\n');
+                s = nl >= 0 ? s[(nl + 1)..] : ReadOnlySpan<char>.Empty;
+                continue;
+            }
+
+            // Strip block comment: /* ... */
+            if (s.StartsWith("/*".AsSpan(), StringComparison.Ordinal))
+            {
+                var end = s.IndexOf("*/", StringComparison.Ordinal);
+                s = end >= 0 ? s[(end + 2)..] : ReadOnlySpan<char>.Empty;
+                continue;
+            }
+
+            break;
+        }
+        return s.ToString();
+    }
+
     private Task<bool> ConfirmDangerousQueryAsync()
     {
         _dangerousQueryTcs = new TaskCompletionSource<bool>();
@@ -815,7 +845,7 @@
             return;
         }
 
-        var q = queryText.TrimStart();
+        var q = StripLeadingComments(queryText);
         _isCurrentQuerySelect = q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
                                 q.StartsWith("with", StringComparison.OrdinalIgnoreCase);
 
