@@ -266,11 +266,16 @@ public class SchemaService
                 INNER JOIN sys.schemas s ON v.schema_id = s.schema_id;
 
                 -- 3. Columns (For both Tables and Views)
-                SELECT s.name AS SchemaName, o.name AS TableName, c.name AS ColumnName, ty.name AS DataType
+                SELECT s.name AS SchemaName, o.name AS TableName, c.name AS ColumnName,
+                    CASE 
+                        WHEN ty.name LIKE 'System.%' OR ty.name LIKE '%.%' THEN ISNULL(sty.name, ty.name)
+                        ELSE ty.name 
+                    END AS DataType
                 FROM sys.columns c
                 INNER JOIN sys.objects o ON c.object_id = o.object_id
                 INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
                 INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+                LEFT JOIN sys.types sty ON c.system_type_id = sty.user_type_id AND sty.is_user_defined = 0
                 WHERE o.type IN ('U', 'V');
 
                 -- 4. Foreign Keys
@@ -327,13 +332,14 @@ public class SchemaService
             foreach(var col in rawCols)
             {
                 var key = $"[{col.SchemaName}].[{col.TableName}]";
+                var displayType = NormalizeDataType(col.DataType);
                 if (tableDict.TryGetValue(key, out var table))
                 {
-                    table.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = col.DataType });
+                    table.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = displayType });
                 }
                 else if (viewDict.TryGetValue(key, out var view))
                 {
-                    view.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = col.DataType });
+                    view.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = displayType });
                 }
             }
 
@@ -712,6 +718,27 @@ public class SchemaService
             _logger.LogError(ex, "Error fetching dependencies for table {FullName}", fullName);
             OnError?.Invoke($"Error fetching dependencies for table {fullName}: {ex.Message}");
         }
+    }
+
+    private static string NormalizeDataType(string dataType)
+    {
+        if (string.IsNullOrWhiteSpace(dataType)) return dataType;
+        return dataType switch
+        {
+            "System.Byte[]" => "rowversion",
+            "System.String" => "nvarchar",
+            "System.Int32"  => "int",
+            "System.Int64"  => "bigint",
+            "System.Int16"  => "smallint",
+            "System.Byte"   => "tinyint",
+            "System.Boolean" => "bit",
+            "System.DateTime" => "datetime",
+            "System.Decimal" => "decimal",
+            "System.Double"  => "float",
+            "System.Single"  => "real",
+            "System.Guid"    => "uniqueidentifier",
+            _ => dataType.Contains('.') ? dataType.Split('.').Last() : dataType
+        };
     }
 
     public async Task LoadViewLineageAndDependenciesAsync(string fullName)
