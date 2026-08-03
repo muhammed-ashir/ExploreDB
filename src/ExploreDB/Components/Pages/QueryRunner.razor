@@ -618,6 +618,24 @@
     private async Task EditorOnDidInit()
     {
         _objRef = DotNetObjectReference.Create(this);
+        
+        // Register what we have immediately (Tables, Views, Columns)
+        await RegisterAutocompleteItemsAsync();
+
+        // Load Stored Procedures asynchronously in the background to not block UI
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await SchemaService.LoadStoredProceduresAsync();
+                await InvokeAsync(RegisterAutocompleteItemsAsync);
+            }
+            catch { }
+        });
+    }
+
+    private async Task RegisterAutocompleteItemsAsync()
+    {
         var tables = SchemaService.Tables.Select(t => new { name = t.Name, fullName = t.FullName }).ToList();
         var views = SchemaService.Views.Select(v => new { name = v.Name, fullName = v.FullName }).ToList();
         
@@ -627,7 +645,13 @@
                         .Distinct()
                         .ToList();
 
-        await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views, columns, _objRef);
+        var sps = SchemaService.StoredProcedures.Select(s => new { 
+            name = s.Name, 
+            fullName = s.FullName, 
+            parameters = s.Parameters.Select(p => new { name = p.Name, type = p.DisplayType }).ToList() 
+        }).ToList();
+
+        await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views, columns, sps, _objRef);
     }
 
     private void EditorOnDidChangeModelContent(ModelContentChangedEvent e)

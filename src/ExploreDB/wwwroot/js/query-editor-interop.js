@@ -9,8 +9,16 @@ window.formatSql = (code) => {
     });
 };
 
-window.registerSqlAutocomplete = (tables, views, columns, dotNetHelper) => {
+window.updateSqlAutocompleteData = (tables, views, columns, sps) => {
+    window.sqlTables = tables || window.sqlTables;
+    window.sqlViews = views || window.sqlViews;
+    window.sqlColumns = columns || window.sqlColumns;
+    window.sqlSps = sps || window.sqlSps;
+};
+
+window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => {
     window.sqlDotNetHelper = dotNetHelper;
+    window.updateSqlAutocompleteData(tables, views, columns, sps);
     if (window.sqlAutocompleteRegistered) return;
     window.sqlAutocompleteRegistered = true;
 
@@ -62,27 +70,36 @@ window.registerSqlAutocomplete = (tables, views, columns, dotNetHelper) => {
             var matches = fullTextUntilPosition.match(/\b[a-z_][a-z0-9_]*\b/ig);
             var suggestTables = true;
             var suggestColumns = true;
+            var suggestSps = false;
 
             if (matches && matches.length > 0) {
-                var tableKeywords = new Set(['from', 'join', 'into', 'update', 'table', 'exec', 'execute']);
+                var tableKeywords = new Set(['from', 'join', 'into', 'update', 'table']);
                 var columnKeywords = new Set(['select', 'where', 'on', 'by', 'having', 'set', 'and', 'or']);
+                var spKeywords = new Set(['exec', 'execute']);
                 
                 for (var i = matches.length - 1; i >= 0; i--) {
                     var token = matches[i].toLowerCase();
-                    if (tableKeywords.has(token)) {
+                    if (spKeywords.has(token)) {
+                        suggestTables = false;
+                        suggestColumns = false;
+                        suggestSps = true;
+                        break;
+                    } else if (tableKeywords.has(token)) {
                         suggestTables = true;
                         suggestColumns = false;
+                        suggestSps = false;
                         break;
                     } else if (columnKeywords.has(token)) {
                         suggestTables = false;
                         suggestColumns = true;
+                        suggestSps = false;
                         break;
                     }
                 }
             }
 
-            if (suggestTables && tables) {
-                tables.forEach(t => {
+            if (suggestTables && window.sqlTables) {
+                window.sqlTables.forEach(t => {
                     suggestions.push({
                         label: t.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
@@ -94,8 +111,8 @@ window.registerSqlAutocomplete = (tables, views, columns, dotNetHelper) => {
                 });
             }
 
-            if (suggestTables && views) {
-                views.forEach(v => {
+            if (suggestTables && window.sqlViews) {
+                window.sqlViews.forEach(v => {
                     suggestions.push({
                         label: v.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
@@ -107,8 +124,8 @@ window.registerSqlAutocomplete = (tables, views, columns, dotNetHelper) => {
                 });
             }
 
-            if (suggestColumns && columns) {
-                columns.forEach(c => {
+            if (suggestColumns && window.sqlColumns) {
+                window.sqlColumns.forEach(c => {
                     suggestions.push({
                         label: c,
                         kind: monaco.languages.CompletionItemKind.Field,
@@ -116,6 +133,23 @@ window.registerSqlAutocomplete = (tables, views, columns, dotNetHelper) => {
                         filterText: c,
                         range: replaceRange, // Will just replace the current word
                         detail: 'Column'
+                    });
+                });
+            }
+
+            if (suggestSps && window.sqlSps) {
+                window.sqlSps.forEach(sp => {
+                    var paramsText = '';
+                    if (sp.parameters && sp.parameters.length > 0) {
+                        paramsText = '\n' + sp.parameters.map(p => `    ${p.name} = , /* ${p.type} */`).join('\n');
+                    }
+                    suggestions.push({
+                        label: sp.fullName,
+                        kind: monaco.languages.CompletionItemKind.Method,
+                        insertText: sp.fullName + paramsText,
+                        filterText: sp.fullName,
+                        range: replaceRange,
+                        detail: 'Stored Procedure'
                     });
                 });
             }
