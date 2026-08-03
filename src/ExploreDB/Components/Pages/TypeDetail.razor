@@ -378,7 +378,7 @@
         }
         
         var decoded = Uri.UnescapeDataString(FullName);
-        Type = SchemaService.Types.FirstOrDefault(s => s.FullName == decoded);
+        Type = SchemaService.Types.FirstOrDefault(s => s.FullName.Equals(decoded, StringComparison.OrdinalIgnoreCase));
         ColumnSearchTerm = string.Empty;
         UsedBySearchTerm = string.Empty;
         

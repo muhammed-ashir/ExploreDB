@@ -586,7 +586,7 @@
         }
 
         var decoded = Uri.UnescapeDataString(FullName);
-        Sp = SchemaService.StoredProcedures.FirstOrDefault(s => s.FullName == decoded);
+        Sp = SchemaService.StoredProcedures.FirstOrDefault(s => s.FullName.Equals(decoded, StringComparison.OrdinalIgnoreCase));
         
         if (Sp != null && !Sp.AreDependenciesLoaded)
         {

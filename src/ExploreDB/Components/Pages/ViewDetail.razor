@@ -549,7 +549,7 @@
         }
         
         var decoded = Uri.UnescapeDataString(FullName);
-        View = SchemaService.Views.FirstOrDefault(t => t.FullName == decoded);
+        View = SchemaService.Views.FirstOrDefault(t => t.FullName.Equals(decoded, StringComparison.OrdinalIgnoreCase));
         
         if (View != null && !View.AreDependenciesLoaded)
         {

@@ -775,7 +775,7 @@
         }
         
         var decoded = Uri.UnescapeDataString(FullName);
-        Table = SchemaService.Tables.FirstOrDefault(t => t.FullName == decoded);
+        Table = SchemaService.Tables.FirstOrDefault(t => t.FullName.Equals(decoded, StringComparison.OrdinalIgnoreCase));
         
         if (Table != null && !Table.AreDependenciesLoaded)
         {

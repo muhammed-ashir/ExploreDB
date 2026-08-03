@@ -594,7 +594,7 @@
         await Task.Yield();
         
         var decoded = Uri.UnescapeDataString(FullName);
-        Fn = SchemaService.Functions.FirstOrDefault(s => s.FullName == decoded);
+        Fn = SchemaService.Functions.FirstOrDefault(s => s.FullName.Equals(decoded, StringComparison.OrdinalIgnoreCase));
         
         if (Fn != null && !Fn.AreDependenciesLoaded)
         {
