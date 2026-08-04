@@ -52,6 +52,9 @@
         <table class="table table-dark table-striped table-sm table-bordered border-secondary mb-0" style="min-width: 100%; width: max-content;">
             <thead>
                 <tr>
+                    <th class="bg-black border-secondary p-0 align-middle text-center text-muted" style="width: 40px; min-width: 40px; user-select: none; border-right: 1px solid #555 !important;">
+                        <div class="px-2 py-2" style="font-size: 0.8rem;">#</div>
+                    </th>
                     @foreach (var col in Columns)
                     {
                         <th class="text-info bg-black border-secondary p-0 align-middle" style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px;">
@@ -71,9 +74,16 @@
                 </tr>
             </thead>
             <tbody>
+                @{
+                    int offset = PageSize == -1 ? 0 : (CurrentPage - 1) * PageSize;
+                    int rowIndex = 1;
+                }
                 @foreach (var row in PagedRows)
                 {
                     <tr>
+                        <td class="bg-dark text-muted text-center align-middle border-secondary" style="border-right: 1px solid #555 !important; font-size: 0.8rem; user-select: none;">
+                            @(offset + rowIndex++)
+                        </td>
                         @foreach (var col in Columns)
                         {
                             var val = GetColumnValue(row, col);
@@ -93,7 +103,7 @@
                 @if (PagedRows.Count == 0)
                 {
                     <tr>
-                        <td colspan="@Columns.Count" class="text-center text-muted py-4">
+                        <td colspan="@(Columns.Count + 1)" class="text-center text-muted py-4">
                             No matching records found.
                         </td>
                     </tr>
