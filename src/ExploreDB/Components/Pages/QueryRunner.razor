@@ -161,7 +161,14 @@
                             int rsIndex = 1;
                             foreach (var rs in ResultSets)
                             {
-                                @if (ResultSets.Count > 1) { <div class="fw-bold mb-2 mt-3 text-info">Result Set @rsIndex</div> }
+                                @if (ResultSets.Count > 1) 
+                                { 
+                                    <div class="d-flex align-items-center mb-3 mt-4">
+                                        <hr class="flex-grow-1 border-secondary m-0" style="opacity: 0.3;">
+                                        <span class="px-3 fw-bold text-info" style="letter-spacing: 1px; font-size: 0.95rem;">Result Set @rsIndex</span>
+                                        <hr class="flex-grow-1 border-secondary m-0" style="opacity: 0.3;">
+                                    </div>
+                                }
                                 <ResultSetGrid Data="rs" />
                                 rsIndex++;
                             }
@@ -972,11 +979,32 @@
             }
 
             var cmd = new CommandDefinition(QueryStateService.CustomQuery, cancellationToken: _queryCts.Token, commandTimeout: 0);
-            var rs = await conn.QueryAsync<dynamic>(cmd);
             
-            ResultSets.Add(rs);
+            using var multi = await conn.QueryMultipleAsync(cmd);
+            int totalRows = 0;
+            
+            while (!multi.IsConsumed)
+            {
+                try
+                {
+                    var rs = (await multi.ReadAsync<dynamic>()).ToList();
+                    if (rs != null)
+                    {
+                        ResultSets.Add(rs);
+                        totalRows += rs.Count;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // If a specific result set fails (e.g. invalid column in the second query), 
+                    // we log it as a message and break out.
+                    Messages.Add($"Error reading result set: {ex.Message}");
+                    break;
+                }
+            }
+            
             Messages.Add("Executed custom query.");
-            Messages.Add($"Rows returned: {rs.Count()}");
+            Messages.Add($"Result Sets: {ResultSets.Count}, Total Rows: {totalRows}");
             isSuccess = true;
         }
         catch (Exception ex)
