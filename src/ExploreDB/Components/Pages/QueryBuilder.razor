@@ -38,9 +38,13 @@
     </div>
 }
 
-@if (IsLoading)
+@if (IsLoading || SchemaService.IsLoading)
 {
-    <LoadingSpinner />
+    <LoadingSpinner Height="calc(100vh - 100px)" Message="Loading query builder..." />
+}
+else if (!SchemaService.IsDatabaseConnected)
+{
+    <NoDatabaseBanner Height="calc(100vh - 100px)" />
 }
 else
 {
@@ -111,13 +115,13 @@ else
                                                         <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
                                                     </div>
                                                     @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
-                                                    {
-                                                        <button class="dropdown-item text-white py-1 text-truncate @(TargetTable == table.FullName ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" type="button" 
-                                                                data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(table.FullName)" data-bs-placement="right" 
-                                                                @onclick="() => SelectTargetTable(table.FullName)">
-                                                            @table.Name
-                                                        </button>
-                                                    }
+                                                        {
+                                                            <button class="dropdown-item text-white py-1 text-truncate @(TargetTable == table.FullName ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" type="button" 
+                                                                    data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(table.FullName)" data-bs-placement="right" 
+                                                                    @onclick="() => SelectTargetTable(table.FullName)">
+                                                                @table.Name
+                                                            </button>
+                                                        }
                                                 </div>
                                             }
                                         </div>

@@ -9,7 +9,48 @@
         @if (!string.IsNullOrEmpty(ActiveServer))
         {
             <div>
-                <label class="small text-muted mb-2 text-truncate d-block" title="@ActiveServer" style="font-size: 0.75rem; max-width: 100%;">@ActiveServer</label>
+                <div class="position-relative mb-2">
+                    <input class="form-control form-control-sm bg-dark text-white border-secondary pe-4" 
+                           @bind="ConnectionSearch" 
+                           @bind:event="oninput"
+                           placeholder="Search connections..." 
+                           @onfocus="OpenConnectionDropdown"
+                           style="cursor: pointer; font-size: 0.85rem;" />
+                    
+                    @if (IsConnectionDropdownOpen)
+                    {
+                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseConnectionDropdown"></div>
+                        <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
+                            @{
+                                var filteredConns = ConnectionService.SavedConnections.Where(c => 
+                                    string.IsNullOrWhiteSpace(ConnectionSearch) || 
+                                    (c.Name ?? "").Contains(ConnectionSearch, StringComparison.OrdinalIgnoreCase) || 
+                                    (c.Server ?? "").Contains(ConnectionSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                                if (filteredConns.Any())
+                                {
+                                    <div class="list-group list-group-flush">
+                                        @foreach (var c in filteredConns)
+                                        {
+                                            string displayName = string.IsNullOrWhiteSpace(c.Name) ? c.Server : $"{c.Name} ({c.Server})";
+                                            <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid #333 !important; font-size: 0.85rem;" title="@displayName" @onclick="() => OnConnectionSelected(c.ConnectionString)">
+                                                @displayName
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="p-3 text-muted small text-center">No matches found.</div>
+                                }
+                            }
+                        </div>
+                    }
+
+                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 10px; top: 0; pointer-events: none;">
+                        <i class="bi bi-chevron-down text-muted" style="font-size: 0.8rem;"></i>
+                    </div>
+                </div>
                 <div class="position-relative">
                     <input class="form-control form-control-sm bg-dark text-white border-secondary pe-4" 
                            @bind="DatabaseSearch" 
@@ -119,6 +160,8 @@
     private string SelectedDatabase = "";
     private string DatabaseSearch = "";
     private bool IsDropdownOpen = false;
+    private string ConnectionSearch = "";
+    private bool IsConnectionDropdownOpen = false;
     private List<string> ServerDatabases = new();
     private bool IsLoadingDBs = false;
 
@@ -137,11 +180,21 @@
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
         CurrentUrl = Nav.Uri;
         await LoadServerDatabases();
+        ConnectionSearch = GetActiveConnectionDisplayName();
+    }
+
+    private string GetActiveConnectionDisplayName()
+    {
+        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
+        if (active == null) return ActiveServer;
+        return string.IsNullOrWhiteSpace(active.Name) ? active.Server : $"{active.Name} ({active.Server})";
     }
 
     private async void OnConnectionChangedHandler()
     {
         await LoadServerDatabases();
+        ConnectionSearch = GetActiveConnectionDisplayName();
+        await SchemaService.LoadSchemaAsync();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -216,6 +269,34 @@
         DatabaseSearch = SelectedDatabase;
     }
 
+    private void OpenConnectionDropdown()
+    {
+        IsConnectionDropdownOpen = true;
+        ConnectionSearch = "";
+    }
+
+    private void CloseConnectionDropdown()
+    {
+        IsConnectionDropdownOpen = false;
+        ConnectionSearch = GetActiveConnectionDisplayName();
+    }
+
+    private void OnConnectionSelected(string connString)
+    {
+        IsConnectionDropdownOpen = false;
+        ConnectionService.SaveActiveConnection(connString);
+        ConnectionSearch = GetActiveConnectionDisplayName();
+    }
+
+    private void OnConnectionDropdownChanged(ChangeEventArgs e)
+    {
+        var newConnString = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(newConnString))
+        {
+            ConnectionService.SaveActiveConnection(newConnString);
+        }
+    }
+
     private async Task OnDatabaseSelected(string db)
     {
         SelectedDatabase = db;
@@ -244,7 +325,7 @@
             if (result.Success)
             {
                 ConnectionService.SaveActiveConnection(newConnString);
-                await SchemaService.LoadSchemaAsync();
+                // Schema load is automatically triggered by OnConnectionChanged
             }
             else
             {

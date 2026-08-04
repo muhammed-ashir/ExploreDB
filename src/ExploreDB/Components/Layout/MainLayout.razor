@@ -247,57 +247,7 @@
                                     </div>
                                 }
 
-                                <div class="mb-3">
-                                    <label class="form-label small text-muted">Database</label>
-                                    <div class="position-relative">
-                                        <input class="form-control bg-dark text-white border-secondary pe-5" style="cursor: pointer;"
-                                               @bind="DatabaseSearch" 
-                                               @bind:event="oninput"
-                                               placeholder="Type to search or select..." 
-                                               @onfocus="OpenDatabaseDropdown" />
-                                        
-                                        @if (IsDatabaseDropdownOpen)
-                                        {
-                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseDatabaseDropdown"></div>
-                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
-                                                @if (IsFetchingDatabases)
-                                                {
-                                                    <div class="p-4 text-center text-info">
-                                                        <span class="spinner-border spinner-border-sm me-2"></span>
-                                                        <small>Loading databases...</small>
-                                                    </div>
-                                                }
-                                                else if (AvailableDatabases.Any())
-                                                {
-                                                    var filtered = AvailableDatabases.Where(d => string.IsNullOrWhiteSpace(DatabaseSearch) || d.Contains(DatabaseSearch, StringComparison.OrdinalIgnoreCase)).ToList();
-                                                    if (filtered.Any())
-                                                    {
-                                                        <div class="list-group list-group-flush">
-                                                            @foreach (var db in filtered)
-                                                            {
-                                                                <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3" style="border-bottom: 1px solid #333 !important;" @onclick="() => SelectDatabase(db)">
-                                                                    @db
-                                                                </button>
-                                                            }
-                                                        </div>
-                                                    }
-                                                    else
-                                                    {
-                                                        <div class="p-3 text-muted small text-center">No matching databases found.</div>
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    <div class="p-3 text-muted small text-center">Server not connected or no databases.</div>
-                                                }
-                                            </div>
-                                        }
 
-                                        <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
-                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
-                                        </div>
-                                    </div>
-                                </div>
 
                                 @if (!string.IsNullOrEmpty(ErrorMsg))
                                 {
@@ -311,7 +261,7 @@
 
                                 <div class="d-flex gap-2 mt-4">
                                     <button class="btn btn-outline-success flex-grow-1 @(string.IsNullOrWhiteSpace(Server) ? "opacity-50" : "")" style="@(string.IsNullOrWhiteSpace(Server) ? "cursor: not-allowed;" : "")" @onclick="SaveCurrentConnection">Save Profile</button>
-                                    <button class="btn btn-primary flex-grow-1 fw-bold @((string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) ? "opacity-50" : "")" style="@((string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database)) ? "cursor: not-allowed;" : "")" @onclick="Connect" disabled="@(IsBusy)">
+                                    <button class="btn btn-primary flex-grow-1 fw-bold @(string.IsNullOrWhiteSpace(Server) ? "opacity-50" : "")" style="@(string.IsNullOrWhiteSpace(Server) ? "cursor: not-allowed;" : "")" @onclick="Connect" disabled="@(IsBusy)">
                                         @if(IsBusy) { <span class="spinner-border spinner-border-sm me-2"></span> }
                                         @(IsBusy ? "Connecting..." : "Connect")
                                     </button>
@@ -380,7 +330,30 @@
                     </div>
                 </div>
                 <div class="app-shell-content flex-grow-1">
-                    @Body
+                    @{
+                        bool isDatabaseSelected = false;
+                        bool isLearningHub = Nav.Uri.Contains("/learning", StringComparison.OrdinalIgnoreCase);
+
+                        if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
+                        {
+                            try
+                            {
+                                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                                isDatabaseSelected = !string.IsNullOrEmpty(builder.InitialCatalog);
+                            }
+                            catch { }
+                        }
+                    }
+                    @if (!isDatabaseSelected && !isLearningHub)
+                    {
+                        <div class="w-100 h-100 d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+                            <ExploreDB.Components.Shared.NoDatabaseBanner Height="100%" />
+                        </div>
+                    }
+                    else
+                    {
+                        @Body
+                    }
                 </div>
             </main>
         </div>
@@ -439,12 +412,8 @@
     private string AuthType = "Windows";
     private string Username = "";
     private string Password = "";
-    private string Database = "";
-    private string DatabaseSearch = "";
-    private bool IsDatabaseDropdownOpen = false;
     private bool IsAuthDropdownOpen = false;
-    private List<string> AvailableDatabases = new();
-    private bool IsFetchingDatabases = false;
+
     private bool IsSwitchingDatabaseGlobal = false;
     private string SwitchingDatabaseName = "";
     private string ActiveConnId = "";
@@ -531,6 +500,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Nav.LocationChanged += OnLocationChanged;
+
         ConnString = ConnectionService.ConnectionString;
         var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnString);
         if (active != null)
@@ -647,59 +618,13 @@
         await Microsoft.Maui.ApplicationModel.Launcher.OpenAsync("https://zerinapps.web.app/app/dbexplorer");
     }
 
-    private async Task OpenDatabaseDropdown()
-    {
-        IsDatabaseDropdownOpen = true;
-        DatabaseSearch = "";
-        if (!AvailableDatabases.Any() && !IsFetchingDatabases)
-        {
-            await FetchDatabases();
-        }
-    }
-
-    private void CloseDatabaseDropdown()
-    {
-        IsDatabaseDropdownOpen = false;
-        DatabaseSearch = Database;
-    }
-
     private void SetAuthType(string type)
     {
         if (AuthType != type)
         {
             AuthType = type;
-            AvailableDatabases.Clear();
-            Database = "";
-            DatabaseSearch = "";
         }
         IsAuthDropdownOpen = false;
-    }
-
-    private void SelectDatabase(string db)
-    {
-        Database = db;
-        DatabaseSearch = db;
-        IsDatabaseDropdownOpen = false;
-    }
-
-    private async Task FetchDatabases()
-    {
-        if(string.IsNullOrWhiteSpace(Server)) return;
-        if(AuthType != "Windows" && string.IsNullOrWhiteSpace(Username)) 
-        {
-            string fieldName = AuthType == "EntraMfa" ? "Email Address" : "Username";
-            await TriggerToast($"{fieldName} is required.", "warning", "bi-exclamation-triangle-fill");
-            return;
-        }
-        IsFetchingDatabases = true;
-        ErrorMsg = "";
-        try {
-            AvailableDatabases = await ConnectionService.GetDatabasesAsync(Server, AuthType, Username, Password);
-        } catch (Exception ex) {
-            ErrorMsg = "Failed to fetch databases: " + ex.Message;
-        }
-        IsFetchingDatabases = false;
-        await InvokeAsync(StateHasChanged);
     }
 
     private void OnDatabaseSwitchingHandler(string dbName)
@@ -723,11 +648,8 @@
         AuthType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType;
         Username = c.Username;
         Password = c.Password;
-        Database = "";
-        DatabaseSearch = "";
         ConnString = c.ConnectionString;
         ErrorMsg = "";
-        AvailableDatabases.Clear();
         IsDetailsVisible = true;
     }
 
@@ -763,11 +685,8 @@
         AuthType = "Windows";
         Username = "";
         Password = "";
-        Database = "";
-        DatabaseSearch = "";
         ConnString = "";
         ErrorMsg = "";
-        AvailableDatabases.Clear();
         IsDetailsVisible = true;
     }
 
@@ -819,7 +738,7 @@
 
     private async Task Connect()
     {
-        if (string.IsNullOrWhiteSpace(Server) || string.IsNullOrWhiteSpace(Database))
+        if (string.IsNullOrWhiteSpace(Server))
         {
             await TriggerToast("Please enter valid inputs.", "danger", "bi-exclamation-circle-fill");
             return;
@@ -846,8 +765,7 @@
                 }
             }
         }
-        
-        ConnString = ConnectionService.BuildConnectionString(Server, AuthType, Username, Password, Database);
+        ConnString = ConnectionService.BuildConnectionString(Server, AuthType, Username, Password, "");
 
         IsBusy = true;
         var result = await ConnectionService.TestConnectionAsync(ConnString);
@@ -890,7 +808,7 @@
         }
         
         ConnectionService.SaveActiveConnection(ConnString);
-        await SchemaService.LoadSchemaAsync();
+        // Schema load is automatically triggered by OnConnectionChanged
         IsConnected = true;
         IsBusy = false;
     }
@@ -934,8 +852,14 @@
         IsConnected = false;
     }
 
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
+        Nav.LocationChanged -= OnLocationChanged;
         _updateTimer?.Dispose();
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;

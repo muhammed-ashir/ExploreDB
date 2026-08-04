@@ -193,11 +193,31 @@ public class SchemaService
     public List<SpInfo> StoredProcedures { get; private set; } = new();
     public List<FunctionInfo> Functions { get; private set; } = new();
     public List<TypeInfo> Types { get; private set; } = new();
+    
+    public bool IsLoading { get; private set; } = false;
+    
     public event Action? OnSchemaLoaded;
     public event Action<string>? OnError;
 
     public bool AreStoredProceduresLoaded { get; private set; } = false;
     public bool AreTypesLoaded { get; private set; } = false;
+
+    public bool IsDatabaseConnected
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return false;
+            try
+            {
+                var builder = new SqlConnectionStringBuilder(_connectionService.ConnectionString);
+                return !string.IsNullOrEmpty(builder.InitialCatalog);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
 
     private readonly ILogger<SchemaService> _logger;
 
@@ -244,6 +264,26 @@ public class SchemaService
     public async Task LoadSchemaAsync()
     {
         if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+        
+        var builder = new SqlConnectionStringBuilder(_connectionService.ConnectionString);
+        
+        IsLoading = true;
+        Tables.Clear();
+        Views.Clear();
+        Functions.Clear();
+        StoredProcedures.Clear();
+        Types.Clear();
+        AreStoredProceduresLoaded = false;
+        AreTypesLoaded = false;
+        
+        if (string.IsNullOrEmpty(builder.InitialCatalog))
+        {
+            IsLoading = false;
+            OnSchemaLoaded?.Invoke();
+            return;
+        }
+
+        OnSchemaLoaded?.Invoke();
 
         try 
         {
@@ -421,16 +461,12 @@ public class SchemaService
                 }
             }
 
-            // Reset lazy loading flags
-            StoredProcedures.Clear();
-            Types.Clear();
-            AreStoredProceduresLoaded = false;
-            AreTypesLoaded = false;
-
+            IsLoading = false;
             OnSchemaLoaded?.Invoke();
         }
         catch (Exception ex)
         {
+            IsLoading = false;
             _logger.LogError(ex, "Schema Load Error"); 
             OnError?.Invoke($"Error loading schema: {ex.Message}");
         }
@@ -438,7 +474,7 @@ public class SchemaService
 
     public async Task LoadStoredProceduresAsync()
     {
-        if (AreStoredProceduresLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+        if (AreStoredProceduresLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString) || !IsDatabaseConnected) return;
 
         try
         {
@@ -517,7 +553,7 @@ public class SchemaService
 
     public async Task LoadTypesAsync()
     {
-        if (AreTypesLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+        if (AreTypesLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString) || !IsDatabaseConnected) return;
 
         try
         {

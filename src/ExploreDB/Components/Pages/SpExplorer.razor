@@ -4,9 +4,13 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-@if (_isLoading)
+@if (_isLoading || SchemaService.IsLoading)
 {
-    <ExploreDB.Components.Shared.LoadingSpinner />
+    <LoadingSpinner Height="calc(100vh - 100px)" Message="Loading stored procedures..." />
+}
+else if (!SchemaService.IsDatabaseConnected)
+{
+    <NoDatabaseBanner Height="calc(100vh - 100px)" />
 }
 else
 {
@@ -207,9 +211,18 @@ else
         }
     }
 
-    private void Refresh()
+    private async void Refresh()
     {
-        InvokeAsync(StateHasChanged);
+        if (!SchemaService.IsLoading && !SchemaService.AreStoredProceduresLoaded && !_isLoading)
+        {
+            _isLoading = true;
+            await InvokeAsync(StateHasChanged);
+            
+            await SchemaService.LoadStoredProceduresAsync();
+            
+            _isLoading = false;
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private void SetPage(int page)

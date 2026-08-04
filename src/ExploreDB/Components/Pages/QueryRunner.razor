@@ -20,8 +20,8 @@
     <div class="row mb-3">
         <div class="col d-flex justify-content-between align-items-center flex-nowrap">
             <div class="position-relative me-5" style="min-width: 0;">
-                <div class="d-flex align-items-center cursor-pointer text-white w-100" @onclick="() => IsTabDropdownOpen = !IsTabDropdownOpen">
-                    <span class="me-2 fs-6 text-truncate" title="@ActiveTabName">@ActiveTabName</span>
+                <div class="d-flex align-items-center cursor-pointer text-white w-100" data-bs-tooltip="true" data-bs-title="@GetTabTooltip(ActiveTab)" data-bs-html="true" data-bs-placement="bottom" @onclick="() => IsTabDropdownOpen = !IsTabDropdownOpen">
+                    <span class="me-2 fs-6 text-truncate">@GetTabDisplayName(ActiveTab)</span>
                     <i class="bi bi-chevron-down flex-shrink-0" style="font-size: 0.85rem;"></i>
                 </div>
                 @if (IsTabDropdownOpen)
@@ -34,8 +34,14 @@
                         <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 300px; overflow-y: auto;">
                             @foreach (var tab in QueryStateService.Tabs.Where(t => string.IsNullOrEmpty(TabSearchTerm) || t.Name.Contains(TabSearchTerm, StringComparison.OrdinalIgnoreCase)))
                         {
-                            <div class="dropdown-item d-flex justify-content-between align-items-center text-white @(tab.Id == QueryStateService.ActiveTabId ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" style="cursor: pointer; min-width: 0;" @onclick="async () => { await SwitchTabAsync(tab.Id); IsTabDropdownOpen = false; }">
-                                <span class="text-truncate me-3" title="@tab.Name" style="flex: 1; min-width: 0;">@tab.Name</span>
+                            <div class="dropdown-item d-flex justify-content-between align-items-center text-white @(tab.Id == QueryStateService.ActiveTabId ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" style="cursor: pointer; min-width: 0;" data-bs-tooltip="true" data-bs-title="@GetTabTooltip(tab)" data-bs-html="true" data-bs-placement="right" @onclick="async () => { await SwitchTabAsync(tab.Id); IsTabDropdownOpen = false; }">
+                                <div class="d-flex flex-column text-truncate me-3" style="flex: 1; min-width: 0;">
+                                    <span class="text-truncate">@GetTabDisplayName(tab)</span>
+                                    @if (!string.IsNullOrEmpty(GetTabConnectionSummary(tab)))
+                                    {
+                                        <span class="text-secondary text-truncate" style="font-size: 0.7rem;">@GetTabConnectionSummary(tab)</span>
+                                    }
+                                </div>
                                 @if (QueryStateService.Tabs.Count > 1)
                                 {
                                     <button class="btn btn-sm btn-outline-danger border-0 flex-shrink-0 px-1 py-0 rounded" @onclick="async () => { await CloseTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation>
@@ -401,6 +407,42 @@
     {
         _objRef?.Dispose();
         _saveDebounceTimer?.Dispose();
+        ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
+        ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
+        SchemaService.OnSchemaLoaded -= OnSchemaLoadedHandler;
+    }
+
+    private async void OnConnectionChangedHandler()
+    {
+        if (ActiveTab != _fallbackTab && ActiveTab.ConnectionString != ConnectionService.ConnectionString)
+        {
+            ActiveTab.ConnectionString = ConnectionService.ConnectionString;
+            await QueryStateService.SaveTabsAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void OnDatabaseSwitchingHandler(string dbName)
+    {
+        try
+        {
+            await InvokeAsync(ClearAutocompleteItemsAsync);
+        }
+        catch { }
+    }
+
+    private async Task ClearAutocompleteItemsAsync()
+    {
+        await JS.InvokeVoidAsync("updateSqlAutocompleteData", new List<object>(), new List<object>(), new List<object>(), new List<object>());
+    }
+
+    private async void OnSchemaLoadedHandler()
+    {
+        try
+        {
+            await InvokeAsync(RegisterAutocompleteItemsAsync);
+        }
+        catch { }
     }
 
     private static string StripLeadingComments(string sql)
@@ -461,10 +503,54 @@
         ShowClearConfirmation = false;
     }
 
-    private string ActiveTabName => QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId)?.Name ?? "Query Runner";
+    private string GetTabDisplayName(ExploreDB.Services.QueryTab? tab)
+    {
+        return tab?.Name ?? "Query Runner";
+    }
+
+    private string GetTabConnectionSummary(ExploreDB.Services.QueryTab? tab)
+    {
+        if (tab == null || string.IsNullOrEmpty(tab.ConnectionString)) return "";
+        try
+        {
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(tab.ConnectionString);
+            string server = builder.DataSource;
+            string db = builder.InitialCatalog;
+            if (string.IsNullOrEmpty(db)) db = "master";
+            return $"{server} \u2192 {db}";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private string GetTabTooltip(ExploreDB.Services.QueryTab? tab)
+    {
+        if (tab == null) return "Query Runner";
+        if (string.IsNullOrEmpty(tab.ConnectionString)) return $"<strong>Name:</strong> {tab.Name}";
+        try
+        {
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(tab.ConnectionString);
+            string server = builder.DataSource;
+            string db = builder.InitialCatalog;
+            if (string.IsNullOrEmpty(db)) db = "master";
+            return $"<strong>Name:</strong> {tab.Name}<br/><strong>Server:</strong> {server}<br/><strong>DB:</strong> {db}";
+        }
+        catch
+        {
+            return $"<strong>Name:</strong> {tab.Name}";
+        }
+    }
+
+
 
     protected override async Task OnInitializedAsync()
     {
+        ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
+        ConnectionService.OnDatabaseSwitching += OnDatabaseSwitchingHandler;
+        SchemaService.OnSchemaLoaded += OnSchemaLoadedHandler;
+        
         if (!QueryStateService.Initialized)
         {
             if (QueryStateService.HasSavedTabs())
@@ -475,6 +561,13 @@
             else
             {
                 await QueryStateService.LoadTabsAsync();
+                
+                // Set the initial tab's connection to whatever the global context is currently
+                var firstTab = QueryStateService.Tabs.FirstOrDefault();
+                if (firstTab != null && string.IsNullOrEmpty(firstTab.ConnectionString))
+                {
+                    firstTab.ConnectionString = ConnectionService.ConnectionString;
+                }
             }
             QueryStateService.Initialized = true;
         }
@@ -520,6 +613,12 @@
         {
             await _editor.SetValue(newTab.Content);
         }
+        
+        if (newTab.ConnectionString != ConnectionService.ConnectionString && !string.IsNullOrEmpty(newTab.ConnectionString))
+        {
+            ConnectionService.SaveActiveConnection(newTab.ConnectionString);
+        }
+        
         await QueryStateService.SaveTabsAsync();
     }
 
@@ -539,7 +638,10 @@
         }
 
         var newCount = QueryStateService.Tabs.Count + 1;
-        var newTab = new ExploreDB.Services.QueryTab { Name = $"SQLQuery{newCount}.sql" };
+        var newTab = new ExploreDB.Services.QueryTab { 
+            Name = $"SQLQuery{newCount}.sql",
+            ConnectionString = ConnectionService.ConnectionString
+        };
         QueryStateService.Tabs.Add(newTab);
         QueryStateService.ActiveTabId = newTab.Id;
 
@@ -579,7 +681,8 @@
                 var newTab = new ExploreDB.Services.QueryTab
                 {
                     Name = result.FileName,
-                    Content = text
+                    Content = text,
+                    ConnectionString = ConnectionService.ConnectionString
                 };
                 QueryStateService.Tabs.Add(newTab);
                 QueryStateService.ActiveTabId = newTab.Id;

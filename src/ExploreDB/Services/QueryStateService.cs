@@ -9,6 +9,9 @@ public class QueryTab
     public string Name { get; set; } = "SQLQuery1.sql";
     public string Content { get; set; } = "";
     public string? FilePath { get; set; }
+    
+    public string ConnectionString { get; set; } = string.Empty;
+    public string ConnectionName { get; set; } = string.Empty;
 
     [System.Text.Json.Serialization.JsonIgnore]
     public List<IEnumerable<dynamic>> ResultSets { get; set; } = new();
