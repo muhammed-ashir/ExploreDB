@@ -349,6 +349,14 @@ else
     {
         if (row.TryGetValue(column, out var val))
         {
+            if (val is DateTime dt)
+            {
+                return dt.ToString("M/d/yyyy h:mm:ss.fff tt");
+            }
+            if (val is DateTimeOffset dto)
+            {
+                return dto.ToString("M/d/yyyy h:mm:ss.fff tt zzz");
+            }
             return val?.ToString();
         }
         return null;
