@@ -471,9 +471,12 @@ else
                              <div class="@(LastJoinPlan != null && LastJoinPlan.Steps.Count > 0 ? "mt-3" : "") d-flex flex-column gap-3">
                                  @if (IgnoredRoutingTables.Count > 0)
                                  {
-                                     <hr style="border-color: rgba(255,255,255,0.3); margin: 0.75rem 0;" />
                                      <div>
-                                         <div class="text-danger small fw-bold mb-2">Blocked Hubs:</div>
+                                         <div class="d-flex align-items-center mb-3 mt-1">
+                                             <span class="text-danger small fw-bold me-2" style="letter-spacing: 0.5px;">Blocked Hubs</span>
+                                             <hr class="flex-grow-1 border-secondary m-0 me-2" style="opacity: 0.3;">
+                                             <button type="button" class="btn btn-sm flex-shrink-0" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; background-color: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.35); color: #ff98a3; border-radius: 0.375rem;" @onclick="() => ShowClearBlockedHubsConfirmation = true" onmouseover="this.style.backgroundColor='rgba(220,53,69,0.25)'" onmouseout="this.style.backgroundColor='rgba(220,53,69,0.12)'">Clear All</button>
+                                         </div>
                                          <div class="d-flex flex-wrap gap-2">
                                              @foreach(var ignored in IgnoredRoutingTables)
                                              {
@@ -491,11 +494,11 @@ else
                                  }
                                  @if (IgnoredRoutingEdges.Count > 0)
                                  {
-                                     <hr style="border-color: rgba(255,255,255,0.3); margin: 0.75rem 0;" />
                                      <div>
-                                         <div class="d-flex align-items-center gap-2 mb-2">
-                                             <div class="text-danger small fw-bold">Blocked Paths:</div>
-                                             <button type="button" class="btn btn-sm" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; background-color: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.35); color: #ff98a3; border-radius: 0.375rem;" @onclick="() => ShowClearBlockedPathsConfirmation = true" onmouseover="this.style.backgroundColor='rgba(220,53,69,0.25)'" onmouseout="this.style.backgroundColor='rgba(220,53,69,0.12)'">Clear All</button>
+                                         <div class="d-flex align-items-center mb-3 mt-1">
+                                             <span class="text-danger small fw-bold me-2" style="letter-spacing: 0.5px;">Blocked Paths</span>
+                                             <hr class="flex-grow-1 border-secondary m-0 me-2" style="opacity: 0.3;">
+                                             <button type="button" class="btn btn-sm flex-shrink-0" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; background-color: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.35); color: #ff98a3; border-radius: 0.375rem;" @onclick="() => ShowClearBlockedPathsConfirmation = true" onmouseover="this.style.backgroundColor='rgba(220,53,69,0.25)'" onmouseout="this.style.backgroundColor='rgba(220,53,69,0.12)'">Clear All</button>
                                          </div>
                                          <div class="d-flex flex-wrap gap-2">
                                              @foreach(var edgeKey in IgnoredRoutingEdges)
@@ -634,6 +637,25 @@ else
     </div>
 }
 
+@if (ShowClearBlockedHubsConfirmation)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark border-secondary shadow-lg">
+                <div class="modal-body p-4 pb-2">
+                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                        Are you sure you want to <strong class="text-danger">clear all blocked hubs</strong>? This action cannot be undone.
+                    </p>
+                </div>
+                <div class="modal-footer border-0 p-4 pt-2">
+                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowClearBlockedHubsConfirmation = false">Cancel</button>
+                    <button type="button" class="btn btn-danger px-4 fw-bold shadow-sm text-white" @onclick="ClearAllBlockedHubs">Clear All</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (ShowDeleteModal)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1060;">
@@ -766,6 +788,7 @@ else
     private bool ShowDeleteModal = false;
     private bool ShowClearConfirmation = false;
     private bool ShowClearBlockedPathsConfirmation = false;
+    private bool ShowClearBlockedHubsConfirmation = false;
     private bool ShowResetModal = false;
     private string TableToDelete = "";
     private bool ShowWarningModal { get; set; } = false;
@@ -1133,6 +1156,13 @@ else
     {
         IgnoredRoutingEdges.Clear();
         ShowClearBlockedPathsConfirmation = false;
+        Generate();
+    }
+
+    private void ClearAllBlockedHubs()
+    {
+        IgnoredRoutingTables.Clear();
+        ShowClearBlockedHubsConfirmation = false;
         Generate();
     }
 
