@@ -15,6 +15,7 @@
                            @bind:event="oninput"
                            placeholder="Search connections..." 
                            @onfocus="OpenConnectionDropdown"
+                           data-bs-tooltip="true" data-bs-placement="right" data-bs-title="@ConnectionSearch"
                            style="cursor: pointer; font-size: 0.85rem;" />
                     
                     @if (IsConnectionDropdownOpen)
@@ -33,7 +34,7 @@
                                         @foreach (var c in filteredConns)
                                         {
                                             string displayName = string.IsNullOrWhiteSpace(c.Name) ? c.Server : $"{c.Name} ({c.Server})";
-                                            <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid #333 !important; font-size: 0.85rem;" title="@displayName" @onclick="() => OnConnectionSelected(c.ConnectionString)">
+                                            <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid #333 !important; font-size: 0.85rem;" data-bs-tooltip="true" data-bs-placement="right" data-bs-title="@displayName" @onclick="() => OnConnectionSelected(c.ConnectionString)">
                                                 @displayName
                                             </button>
                                         }
@@ -57,6 +58,7 @@
                            @bind:event="oninput"
                            placeholder="Search database..." 
                            @onfocus="OpenDropdown"
+                           data-bs-tooltip="true" data-bs-placement="right" data-bs-title="@DatabaseSearch"
                            style="cursor: pointer;" />
                     
                     @if (IsDropdownOpen)
@@ -78,7 +80,7 @@
                                     <div class="list-group list-group-flush">
                                         @foreach (var db in filtered)
                                         {
-                                            <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid #333 !important; font-size: 0.85rem;" title="@db" @onclick="() => OnDatabaseSelected(db)">
+                                            <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid #333 !important; font-size: 0.85rem;" data-bs-tooltip="true" data-bs-placement="right" data-bs-title="@db" @onclick="() => OnDatabaseSelected(db)">
                                                 @db
                                             </button>
                                         }
