@@ -597,7 +597,7 @@ else
                 // Add Data
                 for (int rowIdx = 0; rowIdx < rowsSnapshot.Count; rowIdx++)
                 {
-                    token.ThrowIfCancellationRequested();
+                    if (token.IsCancellationRequested) return Array.Empty<byte>();
                     
                     var row = rowsSnapshot[rowIdx];
                     for (int colIdx = 0; colIdx < colsSnapshot.Count; colIdx++)
@@ -620,13 +620,21 @@ else
                     }
                 }
 
+                if (token.IsCancellationRequested) return Array.Empty<byte>();
                 worksheet.Columns().AdjustToContents();
+
+                if (token.IsCancellationRequested) return Array.Empty<byte>();
 
                 using var memoryStream = new MemoryStream();
                 workbook.SaveAs(memoryStream);
+                if (token.IsCancellationRequested) return Array.Empty<byte>();
                 return memoryStream.ToArray();
             }, token);
 
+            if (token.IsCancellationRequested || fileBytes == null || fileBytes.Length == 0)
+            {
+                return;
+            }
             using var stream = new MemoryStream(fileBytes);
             using var streamRef = new DotNetStreamReference(stream);
             await JS.InvokeVoidAsync("downloadFileFromStream", $"Export_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx", streamRef);
