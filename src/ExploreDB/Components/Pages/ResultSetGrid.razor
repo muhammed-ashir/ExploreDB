@@ -2,6 +2,7 @@
 @using System.Linq
 @inject IJSRuntime JS
 
+<div class="position-relative">
 @if (Columns.Count > 0)
 {
     <div class="mb-3 d-flex justify-content-between align-items-center">
@@ -101,6 +102,40 @@
         </table>
     </div>
 
+    @if (!string.IsNullOrEmpty(ActiveAggregateColumn))
+    {
+        <div class="d-flex justify-content-between align-items-center bg-dark border border-secondary rounded mt-3 px-3 py-2 shadow-sm text-white" style="font-size: 0.85rem;">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <span class="text-warning fw-bold">@ActiveAggregateColumn</span>
+                <span class="text-muted">|</span>
+                <span>COUNT : <strong class="text-info">@AggCount</strong></span>
+                <span class="text-muted">|</span>
+                <span>DISTINCT : <strong class="text-info">@AggDistinct</strong></span>
+                @if (AggSum.HasValue)
+                {
+                    <span class="text-muted">|</span>
+                    <span>SUM : <strong class="text-info">@AggSum</strong></span>
+                }
+                @if (AggAverage.HasValue)
+                {
+                    <span class="text-muted">|</span>
+                    <span>AVERAGE : <strong class="text-info">@Math.Round(AggAverage.Value, 2)</strong></span>
+                }
+                @if (AggMin != null)
+                {
+                    <span class="text-muted">|</span>
+                    <span>MIN : <strong class="text-info">@AggMin</strong></span>
+                }
+                @if (AggMax != null)
+                {
+                    <span class="text-muted">|</span>
+                    <span>MAX : <strong class="text-info">@AggMax</strong></span>
+                }
+            </div>
+            <i class="bi bi-x-lg text-muted ms-3" style="cursor: pointer; font-size: 0.8rem;" @onclick="() => ActiveAggregateColumn = null" onmouseover="this.classList.replace('text-muted', 'text-white')" onmouseout="this.classList.replace('text-white', 'text-muted')"></i>
+        </div>
+    }
+
     <div class="d-flex justify-content-between align-items-center mt-3">
         <div class="text-muted small">
             @if (FilteredRows.Count == 0)
@@ -159,18 +194,23 @@ else
 
 @if (ShowContextMenu)
 {
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.4); backdrop-filter: blur(2px); z-index: 1060;" @onclick="HideContextMenu" @oncontextmenu="HideContextMenu" @oncontextmenu:preventDefault="true">
-        <div class="modal-dialog modal-dialog-centered modal-sm">
-            <div class="modal-content bg-dark border-secondary shadow-lg" @onclick:stopPropagation>
-                <div class="modal-body p-2">
-                    <div class="d-flex justify-content-between align-items-center text-info small fw-bold px-2 mb-2 border-bottom border-secondary pb-2" style="letter-spacing: 0.5px;">
-                        <span>@ContextMenuColumn</span>
-                        <i class="bi bi-x-lg text-muted" style="cursor: pointer; font-size: 0.8rem;" @onclick="HideContextMenu" onmouseover="this.classList.replace('text-muted', 'text-white')" onmouseout="this.classList.replace('text-white', 'text-muted')"></i>
-                    </div>
-                    <button class="btn w-100 text-start text-white copy-in-btn border-0 py-2 d-flex align-items-center gap-2" @onclick="CopyColumnAsInClause">
-                        <i class="bi bi-clipboard text-muted"></i> Copy as IN clause
-                    </button>
+    <!-- Invisible overlay to close menu -->
+    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1050;" @onclick="HideContextMenu" @oncontextmenu="HideContextMenu" @oncontextmenu:preventDefault="true"></div>
+    
+    <!-- Top-centered menu relative to this grid -->
+    <div class="position-absolute shadow-lg" style="top: 45px; left: 50%; transform: translateX(-50%); z-index: 1060; min-width: 280px;">
+        <div class="card bg-dark border-secondary" @onclick:stopPropagation>
+            <div class="card-body p-2">
+                <div class="d-flex justify-content-between align-items-center text-info small fw-bold px-2 mb-2 border-bottom border-secondary pb-2" style="letter-spacing: 0.5px;">
+                    <span>@ContextMenuColumn</span>
+                    <i class="bi bi-x-lg text-muted" style="cursor: pointer; font-size: 0.8rem;" @onclick="HideContextMenu" onmouseover="this.classList.replace('text-muted', 'text-white')" onmouseout="this.classList.replace('text-white', 'text-muted')"></i>
                 </div>
+                <button class="btn w-100 text-start text-white copy-in-btn border-0 py-2 d-flex align-items-center gap-2" @onclick="CopyColumnAsInClause">
+                    <i class="bi bi-clipboard text-muted"></i> Copy as IN clause
+                </button>
+                <button class="btn w-100 text-start text-white copy-in-btn border-0 py-2 d-flex align-items-center gap-2" @onclick="CalculateAggregates">
+                    <i class="bi bi-calculator text-muted"></i> Show aggregate result
+                </button>
             </div>
         </div>
     </div>
@@ -180,6 +220,7 @@ else
         .copy-in-btn:hover i { color: white !important; }
     </style>
 }
+</div>
 
 @code {
     [Parameter]
@@ -195,6 +236,15 @@ else
     private double ContextMenuX = 0;
     private double ContextMenuY = 0;
     private string ContextMenuColumn = "";
+    
+    // Aggregates State
+    private string? ActiveAggregateColumn = null;
+    private int AggCount = 0;
+    private int AggDistinct = 0;
+    private double? AggSum = null;
+    private double? AggAverage = null;
+    private object? AggMin = null;
+    private object? AggMax = null;
     private List<string> Columns = new();
 
     private string _searchTerm = "";
@@ -418,6 +468,51 @@ else
             }
         }
         
+        HideContextMenu();
+    }
+
+    private void CalculateAggregates()
+    {
+        if (string.IsNullOrEmpty(ContextMenuColumn)) return;
+
+        var values = FilteredRows
+            .Select(r => r.TryGetValue(ContextMenuColumn, out var val) ? val : null)
+            .Where(v => v != null)
+            .ToList();
+
+        AggCount = values.Count;
+        AggDistinct = values.Select(v => v?.ToString()).Distinct().Count();
+        
+        AggSum = null;
+        AggAverage = null;
+        AggMin = null;
+        AggMax = null;
+
+        if (values.Count > 0)
+        {
+            var firstVal = values.First();
+            if (firstVal is short or int or long or decimal or float or double or byte)
+            {
+                var doubles = values.Select(v => Convert.ToDouble(v)).ToList();
+                AggSum = doubles.Sum();
+                AggAverage = doubles.Average();
+                AggMin = doubles.Min();
+                AggMax = doubles.Max();
+            }
+            else if (firstVal is DateTime or DateOnly or DateTimeOffset)
+            {
+                var dates = values.Select(v => Convert.ToDateTime(v)).ToList();
+                AggMin = dates.Min().ToString("g");
+                AggMax = dates.Max().ToString("g");
+            }
+            else
+            {
+                // For strings/GUIDs, we only care about Count and Distinct.
+                // Alphabetical Min/Max is rarely useful and clutters the UI.
+            }
+        }
+
+        ActiveAggregateColumn = ContextMenuColumn;
         HideContextMenu();
     }
 }
