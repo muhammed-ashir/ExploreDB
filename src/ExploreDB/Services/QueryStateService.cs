@@ -9,6 +9,30 @@ public class QueryTab
     public string Name { get; set; } = "SQLQuery1.sql";
     public string Content { get; set; } = "";
     public string? FilePath { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<IEnumerable<dynamic>> ResultSets { get; set; } = new();
+    
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<string> Messages { get; set; } = new();
+    
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasExecuted { get; set; }
+    
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsExecuting { get; set; }
+    
+    [System.Text.Json.Serialization.JsonIgnore]
+    public long LastExecutionTimeMs { get; set; }
+    
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int ExecElapsedSeconds { get; set; }
+    
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsCurrentQuerySelect { get; set; }
+    
+    [System.Text.Json.Serialization.JsonIgnore]
+    public CancellationTokenSource? QueryCts { get; set; }
 }
 
 public enum QueryMode { Select, Update, Delete }

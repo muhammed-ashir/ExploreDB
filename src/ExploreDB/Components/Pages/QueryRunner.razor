@@ -71,7 +71,7 @@
                 <button class="btn btn-sm btn-outline-secondary shadow-sm" data-bs-tooltip="true" data-bs-title="View History" data-bs-placement="bottom" @onclick='() => Nav.NavigateTo("/history")'>
                     <i class="bi bi-clock-history"></i>
                 </button>
-                @if (IsExecuting)
+                @if (ActiveTab.IsExecuting)
                 {
                     <button class="btn btn-sm btn-danger shadow-sm" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
                         <i class="bi bi-stop-fill me-1"></i><span>Stop</span>
@@ -122,14 +122,14 @@
                             <a class="nav-link @(ResultTab == "Messages" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted border-transparent")"
                                @onclick='() => ResultTab = "Messages"' style="cursor:pointer">
                                 Messages
-                                @if (Messages.Count > 0) { <span class="badge bg-secondary ms-1">@Messages.Count</span> }
+                                @if (ActiveTab.Messages.Count > 0) { <span class="badge bg-secondary ms-1">@ActiveTab.Messages.Count</span> }
                             </a>
                         </li>
                     </ul>
                     <div class="d-flex align-items-center pe-2">
-                        @if (HasExecuted && LastExecutionTimeMs > 0 && !IsExecuting)
+                        @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
                         {
-                            <span class="text-muted small me-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(LastExecutionTimeMs)</span>
+                            <span class="text-muted small me-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
                         }
                         <button class="btn btn-sm btn-outline-secondary border-0 text-white" @onclick="() => IsFullScreen = !IsFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
                             <i class="bi @(IsFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
@@ -139,29 +139,29 @@
                 <div class="card-body overflow-auto flex-grow-1">
                     @if (ResultTab == "Results")
                     {
-                        if (IsExecuting)
+                        if (ActiveTab.IsExecuting)
                         {
                             <div class="text-center mt-5">
                                 <div class="spinner-border text-primary" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div>
-                                <div class="mt-3 text-muted fs-5">Executing... (@GetFormattedExecutionTime(_execElapsedSeconds))</div>
+                                <div class="mt-3 text-muted fs-5">Executing... (@GetFormattedExecutionTime(ActiveTab.ExecElapsedSeconds))</div>
                             </div>
                         }
-                        else if (ResultSets.Count == 0 && !HasExecuted)
+                        else if (ActiveTab.ResultSets.Count == 0 && !ActiveTab.HasExecuted)
                         {
                             <div class="text-muted text-center mt-5">
                                 Enter a custom query and click Execute to see results.
                             </div>
                         }
-                        else if (ResultSets.Count == 0 && HasExecuted)
+                        else if (ActiveTab.ResultSets.Count == 0 && ActiveTab.HasExecuted)
                         {
                             <div class="text-muted text-center mt-5">Command completed successfully. No data tables returned.</div>
                         }
                         else
                         {
                             int rsIndex = 1;
-                            foreach (var rs in ResultSets)
+                            foreach (var rs in ActiveTab.ResultSets)
                             {
-                                @if (ResultSets.Count > 1) 
+                                @if (ActiveTab.ResultSets.Count > 1) 
                                 { 
                                     <div class="d-flex align-items-center mb-3 mt-4">
                                         <hr class="flex-grow-1 border-secondary m-0" style="opacity: 0.3;">
@@ -177,8 +177,8 @@
                     else if (ResultTab == "Messages")
                     {
                         <pre class="m-0 text-light" style="font-size: 0.85em; white-space: pre-wrap;">
-@if (Messages.Count == 0) { <span class="text-muted fst-italic">No messages.</span> }
-@foreach (var msg in Messages) { @msg<br/> }
+@if (ActiveTab.Messages.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
+@foreach (var msg in ActiveTab.Messages) { @msg<br/> }
                         </pre>
                     }
                 </div>
@@ -187,7 +187,7 @@
     </div>
 </div>
 
-@if (_execElapsedSeconds >= 10 && _isCurrentQuerySelect)
+@if (ActiveTab.ExecElapsedSeconds >= 10 && ActiveTab.IsCurrentQuerySelect)
 {
     <div class="toast-container position-fixed bottom-0 end-0 p-4" style="z-index: 10000; animation: fadeIn 0.5s;">
         <div class="toast show bg-dark text-white shadow-lg" style="border: 1px solid rgba(255,193,7,0.5);" role="alert" aria-live="assertive" aria-atomic="true">
@@ -351,8 +351,8 @@
     public string? InitialQuery { get; set; }
 
     private string ResultTab = "Results";
-    private bool IsExecuting = false;
-    private bool HasExecuted = false;
+    private ExploreDB.Services.QueryTab _fallbackTab = new ExploreDB.Services.QueryTab();
+    private ExploreDB.Services.QueryTab ActiveTab => QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId) ?? _fallbackTab;
     
     // Global Export State
     private bool IsExportingToExcel = false;
@@ -381,12 +381,7 @@
         StateHasChanged();
     }
     private bool IsFullScreen = false;
-    private long LastExecutionTimeMs = 0;
-    private int _execElapsedSeconds = 0;
-    private bool _isCurrentQuerySelect = false;
-    
-    private List<IEnumerable<dynamic>> ResultSets = new();
-    private List<string> Messages = new();
+
     private string? FormatError = null;
     private StandaloneCodeEditor _editor = default!;
     private DotNetObjectReference<QueryRunner>? _objRef;
@@ -934,33 +929,31 @@
         return $"{ts.Minutes}m {ts.Seconds}s";
     }
 
-    private async Task UpdateTimerAsync()
+    private async Task UpdateTimerAsync(ExploreDB.Services.QueryTab tab)
     {
         var start = DateTime.UtcNow;
-        while (IsExecuting)
+        while (tab.IsExecuting)
         {
             await Task.Delay(500);
-            if (IsExecuting)
+            if (tab.IsExecuting)
             {
-                _execElapsedSeconds = (int)(DateTime.UtcNow - start).TotalSeconds;
+                tab.ExecElapsedSeconds = (int)(DateTime.UtcNow - start).TotalSeconds;
                 await InvokeAsync(StateHasChanged);
             }
         }
     }
 
-    private CancellationTokenSource? _queryCts;
-
     private void CancelExecution()
     {
-        if (_queryCts != null && !_queryCts.IsCancellationRequested)
+        if (ActiveTab.QueryCts != null && !ActiveTab.QueryCts.IsCancellationRequested)
         {
-            _queryCts.Cancel();
+            ActiveTab.QueryCts.Cancel();
         }
     }
 
     private async Task ExecuteAsync()
     {
-        if (IsExecuting) return;
+        if (ActiveTab.IsExecuting) return;
 
         var queryText = "";
         try
@@ -981,24 +974,24 @@
 
         if (string.IsNullOrWhiteSpace(queryText))
         {
-            Messages.Add("Error: Query is empty.");
+            ActiveTab.Messages.Add("Error: Query is empty.");
             ResultTab = "Messages";
             return;
         }
 
         var q = StripLeadingComments(queryText);
-        _isCurrentQuerySelect = q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
+        ActiveTab.IsCurrentQuerySelect = q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
                                 q.StartsWith("with", StringComparison.OrdinalIgnoreCase);
 
-        IsExecuting = true;
-        HasExecuted = true;
-        _execElapsedSeconds = 0;
+        ActiveTab.IsExecuting = true;
+        ActiveTab.HasExecuted = true;
+        ActiveTab.ExecElapsedSeconds = 0;
         
-        _queryCts = new CancellationTokenSource();
-        _ = UpdateTimerAsync();
+        ActiveTab.QueryCts = new CancellationTokenSource();
+        _ = UpdateTimerAsync(ActiveTab);
 
-        ResultSets.Clear();
-        Messages.Clear();
+        ActiveTab.ResultSets.Clear();
+        ActiveTab.Messages.Clear();
         ResultTab = "Results";
         StateHasChanged();
 
@@ -1016,17 +1009,17 @@
             serverName = conn.DataSource;
             conn.InfoMessage += (sender, args) =>
             {
-                Messages.Add(args.Message);
+                ActiveTab.Messages.Add(args.Message);
                 InvokeAsync(StateHasChanged);
             };
             await conn.OpenAsync();
 
-            if (!_isCurrentQuerySelect)
+            if (!ActiveTab.IsCurrentQuerySelect)
             {
                 bool allowNonSelect = Config.GetValue<bool>("AllowNonSelectQueries", false);
                 if (!allowNonSelect)
                 {
-                    Messages.Add("Error: Execution of non-SELECT statements is disabled.");
+                    ActiveTab.Messages.Add("Error: Execution of non-SELECT statements is disabled.");
                     ResultTab = "Messages";
                     return;
                 }
@@ -1034,13 +1027,13 @@
                 bool confirm = await ConfirmDangerousQueryAsync();
                 if (!confirm)
                 {
-                    Messages.Add("Execution cancelled by user.");
+                    ActiveTab.Messages.Add("Execution cancelled by user.");
                     ResultTab = "Messages";
                     return;
                 }
             }
 
-            var cmd = new CommandDefinition(QueryStateService.CustomQuery, cancellationToken: _queryCts.Token, commandTimeout: 0);
+            var cmd = new CommandDefinition(QueryStateService.CustomQuery, cancellationToken: ActiveTab.QueryCts.Token, commandTimeout: 0);
             
             using var multi = await conn.QueryMultipleAsync(cmd);
             int totalRows = 0;
@@ -1052,7 +1045,7 @@
                     var rs = (await multi.ReadAsync<dynamic>()).ToList();
                     if (rs != null)
                     {
-                        ResultSets.Add(rs);
+                        ActiveTab.ResultSets.Add(rs);
                         totalRows += rs.Count;
                     }
                 }
@@ -1060,26 +1053,26 @@
                 {
                     // If a specific result set fails (e.g. invalid column in the second query), 
                     // we log it as a message and break out.
-                    Messages.Add($"Error reading result set: {ex.Message}");
+                    ActiveTab.Messages.Add($"Error reading result set: {ex.Message}");
                     break;
                 }
             }
             
-            Messages.Add("Executed custom query.");
-            Messages.Add($"Result Sets: {ResultSets.Count}, Total Rows: {totalRows}");
+            ActiveTab.Messages.Add("Executed custom query.");
+            ActiveTab.Messages.Add($"Result Sets: {ActiveTab.ResultSets.Count}, Total Rows: {totalRows}");
             isSuccess = true;
         }
         catch (Exception ex)
         {
-            if (_queryCts != null && _queryCts.IsCancellationRequested)
+            if (ActiveTab.QueryCts != null && ActiveTab.QueryCts.IsCancellationRequested)
             {
-                Messages.Add("Execution cancelled by user.");
+                ActiveTab.Messages.Add("Execution cancelled by user.");
                 ResultTab = "Messages";
                 errorMessage = "Cancelled";
             }
             else
             {
-                Messages.Add($"ERROR: {ex.Message}");
+                ActiveTab.Messages.Add($"ERROR: {ex.Message}");
                 ResultTab = "Messages";
                 errorMessage = ex.Message;
             }
@@ -1087,14 +1080,16 @@
         finally
         {
             watch.Stop();
-            LastExecutionTimeMs = watch.ElapsedMilliseconds;
-            IsExecuting = false;
+            ActiveTab.LastExecutionTimeMs = watch.ElapsedMilliseconds;
+            ActiveTab.IsExecuting = false;
             if (!string.IsNullOrWhiteSpace(QueryStateService.CustomQuery))
             {
                 await HistoryService.AddHistoryItemAsync(QueryStateService.CustomQuery, serverName, dbName, watch.ElapsedMilliseconds, isSuccess, errorMessage);
             }
-            _queryCts?.Dispose();
-            _queryCts = null;
+            ActiveTab.QueryCts?.Dispose();
+            ActiveTab.QueryCts = null;
         }
     }
 }
+
+
