@@ -1,10 +1,14 @@
 @using System.Collections.Generic
 @using System.Linq
+@using System.IO
+@using System.Threading
+@using ClosedXML.Excel
 @inject IJSRuntime JS
 
 <div class="position-relative">
 @if (Columns.Count > 0)
 {
+
     <div class="mb-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center">
             <label class="text-muted small mb-0 me-2">Show</label>
@@ -28,8 +32,8 @@
             </div>
             <label class="text-muted small mb-0 ms-2">per page</label>
         </div>
-        <div style="width: 350px;">
-            <div class="input-group input-group-sm flex-grow-1" style="min-width: 0;">
+        <div class="d-flex align-items-center gap-2">
+            <div class="input-group input-group-sm flex-grow-1" style="width: 350px;">
                 <input type="text"
                        class="form-control bg-dark text-white border-secondary shadow-none"
                        placeholder="Search in results..."
@@ -45,6 +49,18 @@
                     <i class="bi bi-bullseye fs-6"></i>
                 </button>
             </div>
+            <button class="btn btn-sm btn-outline-success px-3 d-flex align-items-center gap-2 flex-shrink-0" @onclick="ExportToExcelAsync" disabled="@IsExporting">
+                @if (IsExporting)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span>Exporting...</span>
+                }
+                else
+                {
+                    <i class="bi bi-file-earmark-excel"></i>
+                    <span>Export</span>
+                }
+            </button>
         </div>
     </div>
 
@@ -193,7 +209,7 @@
                     </li>
                 </ul>
             </nav>
-        }
+            }
         </div>
     </div>
 }
@@ -230,6 +246,9 @@ else
         .copy-in-btn:hover i { color: white !important; }
     </style>
 }
+
+
+
 </div>
 
 @code {
@@ -239,8 +258,18 @@ else
     [Parameter]
     public long? ExecutionTimeMs { get; set; }
 
+    [Parameter]
+    public EventCallback<ExportStatus> OnExportStateChanged { get; set; }
+
+    public record ExportStatus(bool IsExporting, bool IsSuccess, Action CancelAction);
+
     private List<IDictionary<string, object>> Rows = new();
     
+    // Export State
+    private bool IsExporting = false;
+    private bool ShowExportSuccess = false;
+    private CancellationTokenSource? _exportCts;
+
     // Context Menu State
     private bool ShowContextMenu = false;
     private double ContextMenuX = 0;
@@ -524,5 +553,108 @@ else
 
         ActiveAggregateColumn = ContextMenuColumn;
         HideContextMenu();
+    }
+
+    private void CancelExport()
+    {
+        _exportCts?.Cancel();
+    }
+
+    private async Task ExportToExcelAsync()
+    {
+        if (FilteredRows == null || FilteredRows.Count == 0) return;
+
+        // Take snapshot for thread safety in case the user runs another query
+        var rowsSnapshot = FilteredRows.ToList();
+        var colsSnapshot = Columns.ToList();
+
+        IsExporting = true;
+        _exportCts = new CancellationTokenSource();
+        if (OnExportStateChanged.HasDelegate)
+        {
+            await OnExportStateChanged.InvokeAsync(new ExportStatus(true, false, CancelExport));
+        }
+        StateHasChanged();
+        
+        // Small delay to ensure the UI renders the loading spinner before the CPU-bound task blocks the thread
+        await Task.Delay(50);
+
+        try
+        {
+            var token = _exportCts.Token;
+            byte[] fileBytes = await Task.Run(() =>
+            {
+                using var workbook = new XLWorkbook();
+                var worksheet = workbook.Worksheets.Add("Result Set");
+
+                // Add Headers
+                for (int i = 0; i < colsSnapshot.Count; i++)
+                {
+                    worksheet.Cell(1, i + 1).Value = colsSnapshot[i];
+                    worksheet.Cell(1, i + 1).Style.Font.Bold = true;
+                }
+
+                // Add Data
+                for (int rowIdx = 0; rowIdx < rowsSnapshot.Count; rowIdx++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    
+                    var row = rowsSnapshot[rowIdx];
+                    for (int colIdx = 0; colIdx < colsSnapshot.Count; colIdx++)
+                    {
+                        if (row.TryGetValue(colsSnapshot[colIdx], out var val) && val != null)
+                        {
+                            if (val is string s) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = s;
+                            else if (val is int i) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = i;
+                            else if (val is long l) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = l;
+                            else if (val is short sh) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = sh;
+                            else if (val is byte b) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = b;
+                            else if (val is decimal d) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = d;
+                            else if (val is double dub) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = dub;
+                            else if (val is float f) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = f;
+                            else if (val is bool bl) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = bl;
+                            else if (val is DateTime dt) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = dt;
+                            else if (val is TimeSpan ts) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = ts;
+                            else worksheet.Cell(rowIdx + 2, colIdx + 1).Value = val.ToString();
+                        }
+                    }
+                }
+
+                worksheet.Columns().AdjustToContents();
+
+                using var memoryStream = new MemoryStream();
+                workbook.SaveAs(memoryStream);
+                return memoryStream.ToArray();
+            }, token);
+
+            using var stream = new MemoryStream(fileBytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", $"Export_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx", streamRef);
+            
+            ShowExportSuccess = true;
+            if (OnExportStateChanged.HasDelegate)
+            {
+                await OnExportStateChanged.InvokeAsync(new ExportStatus(false, true, null!));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Export was cancelled by the user, do nothing
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting to excel: {ex.Message}");
+        }
+        finally
+        {
+            IsExporting = false;
+            if (OnExportStateChanged.HasDelegate && !ShowExportSuccess)
+            {
+                _ = OnExportStateChanged.InvokeAsync(new ExportStatus(false, false, null!));
+            }
+            _exportCts?.Dispose();
+            _exportCts = null;
+            StateHasChanged();
+        }
     }
 }

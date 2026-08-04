@@ -169,7 +169,7 @@
                                         <hr class="flex-grow-1 border-secondary m-0" style="opacity: 0.3;">
                                     </div>
                                 }
-                                <ResultSetGrid Data="rs" />
+                                <ResultSetGrid Data="rs" OnExportStateChanged="HandleExportStateChanged" />
                                 rsIndex++;
                             }
                         }
@@ -305,6 +305,41 @@
     </div>
 }
 
+@if (IsExportingToExcel)
+{
+    <div class="position-fixed d-flex justify-content-end pe-none" style="bottom: 20px; right: 20px; z-index: 10000;">
+        <div class="bg-dark border-success d-flex align-items-center justify-content-between shadow-lg rounded-1 p-3 pe-auto" style="border-style: solid; border-width: 1px 1px 1px 4px !important; min-width: 350px;">
+            <div class="d-flex align-items-center gap-3 pe-4">
+                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                <div>
+                    <strong class="text-white d-block mb-1" style="font-size: 0.9rem;">Exporting to Excel...</strong>
+                    <span class="text-light opacity-75" style="font-size: 0.75rem;">Preparing your data for download...</span>
+                </div>
+            </div>
+            @if (CancelExportAction != null)
+            {
+                <button class="btn btn-sm btn-outline-danger px-3 rounded-pill flex-shrink-0" @onclick="() => CancelExportAction?.Invoke()">Cancel</button>
+            }
+        </div>
+    </div>
+}
+
+@if (ShowExportSuccess)
+{
+    <div class="position-fixed d-flex justify-content-end pe-none" style="bottom: 20px; right: 20px; z-index: 10000;">
+        <div class="bg-dark border-primary d-flex align-items-center justify-content-between shadow-lg rounded-1 p-3 pe-auto" style="border-style: solid; border-width: 1px 1px 1px 4px !important; min-width: 350px;">
+            <div class="d-flex align-items-center gap-3 pe-4">
+                <i class="bi bi-check-circle-fill text-primary fs-4"></i>
+                <div>
+                    <strong class="text-white d-block mb-1" style="font-size: 0.9rem;">Export Complete</strong>
+                    <span class="text-light opacity-75" style="font-size: 0.75rem;">Check your download folder.</span>
+                </div>
+            </div>
+            <button class="btn btn-sm text-muted flex-shrink-0" @onclick="() => ShowExportSuccess = false"><i class="bi bi-x-lg"></i></button>
+        </div>
+    </div>
+}
+
 @code {
     [SupplyParameterFromQuery(Name = "type")]
     public string? ObjectType { get; set; }
@@ -318,6 +353,33 @@
     private string ResultTab = "Results";
     private bool IsExecuting = false;
     private bool HasExecuted = false;
+    
+    // Global Export State
+    private bool IsExportingToExcel = false;
+    private bool ShowExportSuccess = false;
+    private Action? CancelExportAction;
+
+    private void HandleExportStateChanged(ExploreDB.Components.Pages.ResultSetGrid.ExportStatus status)
+    {
+        if (status.IsExporting)
+        {
+            IsExportingToExcel = true;
+            ShowExportSuccess = false;
+            CancelExportAction = status.CancelAction;
+        }
+        else if (status.IsSuccess)
+        {
+            IsExportingToExcel = false;
+            ShowExportSuccess = true;
+            CancelExportAction = null;
+        }
+        else
+        {
+            IsExportingToExcel = false;
+            CancelExportAction = null;
+        }
+        StateHasChanged();
+    }
     private bool IsFullScreen = false;
     private long LastExecutionTimeMs = 0;
     private int _execElapsedSeconds = 0;
