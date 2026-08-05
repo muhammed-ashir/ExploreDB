@@ -3,7 +3,6 @@
 @using BlazorMonaco.Editor
 @using BlazorMonaco
 @using ExploreDB.Services
-@using Dapper
 @using Microsoft.Data.SqlClient
 @using System.Data
 @using Microsoft.Extensions.Configuration
@@ -807,22 +806,30 @@
 
     private async Task RegisterAutocompleteItemsAsync()
     {
+        // Chunk 1: Tables and Views
         var tables = SchemaService.Tables.Select(t => new { name = t.Name, fullName = t.FullName }).ToList();
         var views = SchemaService.Views.Select(v => new { name = v.Name, fullName = v.FullName }).ToList();
-        
+        await JS.InvokeVoidAsync("updateSqlAutocompleteData", tables, views, null, null);
+        await Task.Delay(1); // Yield to keep UI responsive
+
+        // Chunk 2: Columns (Heavy CPU operation)
         var columns = SchemaService.Tables.SelectMany(t => t.Columns)
                         .Concat(SchemaService.Views.SelectMany(v => v.Columns))
                         .Select(c => c.Name)
                         .Distinct()
                         .ToList();
+        await JS.InvokeVoidAsync("updateSqlAutocompleteData", null, null, columns, null);
+        await Task.Delay(1); // Yield
 
+        // Chunk 3: Stored Procedures
         var sps = SchemaService.StoredProcedures.Select(s => new { 
             name = s.Name, 
             fullName = s.FullName, 
             parameters = s.Parameters.Select(p => new { name = p.Name, type = p.DisplayType }).ToList() 
         }).ToList();
-
-        await JS.InvokeVoidAsync("registerSqlAutocomplete", tables, views, columns, sps, _objRef);
+        
+        // Register the provider and set dotNetHelper, retaining existing data
+        await JS.InvokeVoidAsync("registerSqlAutocomplete", null, null, null, sps, _objRef);
     }
 
     private void EditorOnDidChangeModelContent(ModelContentChangedEvent e)
@@ -1140,20 +1147,51 @@
                 }
             }
 
-            var cmd = new CommandDefinition(QueryStateService.CustomQuery, cancellationToken: ActiveTab.QueryCts.Token, commandTimeout: 0);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = QueryStateService.CustomQuery;
+            cmd.CommandTimeout = 0;
             
-            using var multi = await conn.QueryMultipleAsync(cmd);
+            using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
             int totalRows = 0;
             
-            while (!multi.IsConsumed)
+            do
             {
                 try
                 {
-                    var rs = (await multi.ReadAsync<dynamic>()).ToList();
-                    if (rs != null)
+                    var rs = new List<dynamic>();
+                    int fieldCount = reader.FieldCount;
+                    
+                    if (fieldCount > 0)
                     {
+                        var columnNames = new string[fieldCount];
+                        for (int i = 0; i < fieldCount; i++)
+                        {
+                            columnNames[i] = reader.GetName(i);
+                            if (string.IsNullOrEmpty(columnNames[i])) columnNames[i] = $"Column{i}";
+                        }
+
+                        int yieldCount = 0;
+                        while (await reader.ReadAsync(ActiveTab.QueryCts.Token))
+                        {
+                            var row = new System.Dynamic.ExpandoObject() as IDictionary<string, object>;
+                            for (int i = 0; i < fieldCount; i++)
+                            {
+                                row[columnNames[i]] = await reader.IsDBNullAsync(i, ActiveTab.QueryCts.Token) ? null! : reader.GetValue(i);
+                            }
+                            rs.Add(row);
+                            
+                            if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                        }
+                        
                         ActiveTab.ResultSets.Add(rs);
                         totalRows += rs.Count;
+                    }
+                    else
+                    {
+                        if (reader.RecordsAffected >= 0)
+                        {
+                            ActiveTab.Messages.Add($"({reader.RecordsAffected} row(s) affected)");
+                        }
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1164,6 +1202,7 @@
                     break;
                 }
             }
+            while (await reader.NextResultAsync(ActiveTab.QueryCts.Token));
             
             ActiveTab.Messages.Add("Executed custom query.");
             ActiveTab.Messages.Add($"Result Sets: {ActiveTab.ResultSets.Count}, Total Rows: {totalRows}");

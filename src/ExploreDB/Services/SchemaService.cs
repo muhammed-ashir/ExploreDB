@@ -1,4 +1,4 @@
-using Dapper;
+using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 
@@ -245,8 +245,12 @@ public class SchemaService
         try 
         {
             using var conn = new SqlConnection(_connectionService.ConnectionString);
-            var sql = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName))";
-            return await conn.QuerySingleOrDefaultAsync<string>(sql, new { FullName = fullName });
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName))";
+            cmd.Parameters.AddWithValue("@FullName", fullName);
+            var result = await cmd.ExecuteScalarAsync();
+            return result as string;
         }
         catch (Exception ex)
         {
@@ -262,8 +266,12 @@ public class SchemaService
         try 
         {
             using var conn = new SqlConnection(_connectionService.ConnectionString);
-            var sql = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName))";
-            return await conn.QuerySingleOrDefaultAsync<string>(sql, new { FullName = fullName });
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName))";
+            cmd.Parameters.AddWithValue("@FullName", fullName);
+            var result = await cmd.ExecuteScalarAsync();
+            return result as string;
         }
         catch (Exception ex)
         {
@@ -354,38 +362,65 @@ public class SchemaService
                 OPTION (FORCE ORDER);
             ";
 
-            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = batchSql;
+            cmd.CommandTimeout = 600;
+
+            using var reader = await cmd.ExecuteReaderAsync();
             
-            var rawTables = await multi.ReadAsync<RawTable>();
-            var newTables = rawTables.Select(t => new TableInfo { Schema = t.SchemaName, Name = t.Name }).OrderBy(t => t.FullName).ToList();
+            var newTables = new List<TableInfo>();
+            while (await reader.ReadAsync())
+            {
+                newTables.Add(new TableInfo 
+                { 
+                    Schema = reader.GetString(0), 
+                    Name = reader.GetString(1) 
+                });
+            }
+            newTables = newTables.OrderBy(t => t.FullName).ToList();
             var tableDict = newTables.ToDictionary(t => t.FullName);
 
-            var rawCols = await multi.ReadAsync<RawColumn>();
-            foreach(var col in rawCols)
+            int yieldCount = 0;
+            if (await reader.NextResultAsync())
             {
-                var key = $"[{col.SchemaName}].[{col.TableName}]";
-                if (tableDict.TryGetValue(key, out var table))
+                while (await reader.ReadAsync())
                 {
-                    table.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = NormalizeDataType(col.DataType) });
+                    if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                    var schema = reader.GetString(0);
+                    var table = reader.GetString(1);
+                    var colName = reader.GetString(2);
+                    var dataType = reader.GetString(3);
+                    
+                    var key = $"[{schema}].[{table}]";
+                    if (tableDict.TryGetValue(key, out var t))
+                    {
+                        t.Columns.Add(new ColumnInfo { Name = colName, DataType = NormalizeDataType(dataType) });
+                    }
                 }
             }
 
-            var fks = await multi.ReadAsync<RawFk>();
-            foreach(var fk in fks)
+            if (await reader.NextResultAsync())
             {
-                var parentFull = $"[{fk.ParentSchema}].[{fk.ParentTable}]";
-                var refFull = $"[{fk.RefSchema}].[{fk.RefTable}]";
-
-                if (tableDict.TryGetValue(parentFull, out var parent) && tableDict.TryGetValue(refFull, out var reference))
+                while (await reader.ReadAsync())
                 {
-                    var rel = new Relationship 
-                    { 
-                        FromTable = parentFull, FromColumn = fk.ParentColumn,
-                        ToTable = refFull, ToColumn = fk.RefColumn,
-                        IsNullable = fk.IsNullable
-                    };
-                    parent.OutgoingKeys.Add(rel);
-                    reference.IncomingKeys.Add(rel);
+                    if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                    
+                    var parentFull = $"[{reader.GetString(5)}].[{reader.GetString(0)}]";
+                    var refFull = $"[{reader.GetString(6)}].[{reader.GetString(3)}]";
+
+                    if (tableDict.TryGetValue(parentFull, out var parent) && tableDict.TryGetValue(refFull, out var reference))
+                    {
+                        var rel = new Relationship 
+                        { 
+                            FromTable = parentFull, 
+                            FromColumn = reader.GetString(1),
+                            ToTable = refFull, 
+                            ToColumn = reader.GetString(4),
+                            IsNullable = reader.GetBoolean(2)
+                        };
+                        parent.OutgoingKeys.Add(rel);
+                        reference.IncomingKeys.Add(rel);
+                    }
                 }
             }
 
@@ -437,19 +472,40 @@ public class SchemaService
                 WHERE o.type = 'V';
             ";
 
-            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = batchSql;
+            cmd.CommandTimeout = 600;
+
+            using var reader = await cmd.ExecuteReaderAsync();
             
-            var rawViews = await multi.ReadAsync<RawView>();
-            var newViews = rawViews.Select(v => new ViewInfo { Schema = v.SchemaName, Name = v.Name }).OrderBy(v => v.FullName).ToList();
+            var newViews = new List<ViewInfo>();
+            while (await reader.ReadAsync())
+            {
+                newViews.Add(new ViewInfo 
+                { 
+                    Schema = reader.GetString(0), 
+                    Name = reader.GetString(1) 
+                });
+            }
+            newViews = newViews.OrderBy(v => v.FullName).ToList();
             var viewDict = newViews.ToDictionary(v => v.FullName);
 
-            var rawCols = await multi.ReadAsync<RawColumn>();
-            foreach(var col in rawCols)
+            int yieldCount = 0;
+            if (await reader.NextResultAsync())
             {
-                var key = $"[{col.SchemaName}].[{col.TableName}]";
-                if (viewDict.TryGetValue(key, out var view))
+                while (await reader.ReadAsync())
                 {
-                    view.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = NormalizeDataType(col.DataType) });
+                    if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                    var schema = reader.GetString(0);
+                    var table = reader.GetString(1);
+                    var colName = reader.GetString(2);
+                    var dataType = reader.GetString(3);
+                    
+                    var key = $"[{schema}].[{table}]";
+                    if (viewDict.TryGetValue(key, out var view))
+                    {
+                        view.Columns.Add(new ColumnInfo { Name = colName, DataType = NormalizeDataType(dataType) });
+                    }
                 }
             }
 
@@ -502,60 +558,79 @@ public class SchemaService
                 ORDER BY s.name, o.name, pm.parameter_id;
             ";
 
-            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = batchSql;
+            cmd.CommandTimeout = 600;
+
+            using var reader = await cmd.ExecuteReaderAsync();
             
-            var rawFns = await multi.ReadAsync<RawFunction>();
-            var newFunctions = rawFns.Select(r => new FunctionInfo
+            var newFunctions = new List<FunctionInfo>();
+            while (await reader.ReadAsync())
             {
-                Schema = r.SchemaName,
-                Name = r.FuncName,
-                FunctionType = r.FuncType switch {
-                    "FN" => "Scalar",
-                    "IF" => "Inline Table",
-                    "TF" => "Multi-Statement Table",
-                    _ => r.FuncType
-                },
-                CreatedDate = r.CreatedDate,
-                ModifiedDate = r.ModifiedDate
-            }).ToList();
+                var typeCode = reader.GetString(2).Trim();
+                newFunctions.Add(new FunctionInfo 
+                { 
+                    Schema = reader.GetString(0), 
+                    Name = reader.GetString(1),
+                    FunctionType = typeCode switch {
+                        "FN" => "Scalar",
+                        "IF" => "Inline Table",
+                        "TF" => "Multi-Statement Table",
+                        _ => typeCode
+                    },
+                    CreatedDate = await reader.IsDBNullAsync(3) ? null : reader.GetDateTime(3),
+                    ModifiedDate = await reader.IsDBNullAsync(4) ? null : reader.GetDateTime(4)
+                });
+            }
             var fnDict = newFunctions.ToDictionary(f => f.FullName);
 
-            var rawFnParams = await multi.ReadAsync<RawFnParam>();
-            foreach (var param in rawFnParams)
+            int yieldCount = 0;
+            if (await reader.NextResultAsync())
             {
-                var fnFull = $"[{param.SchemaName}].[{param.FuncName}]";
-                if (fnDict.TryGetValue(fnFull, out var fn))
+                while (await reader.ReadAsync())
                 {
-                    var rawLen = param.MaxLength;
-                    var dataType = param.DataType.ToUpper();
-                    int displayLen = rawLen;
-                    if (dataType is "NVARCHAR" or "NCHAR")
-                        displayLen = rawLen == -1 ? -1 : rawLen / 2;
-                    
-                    var paramId = param.ParamId;
-                    var isOutput = param.IsOutput;
-                    
-                    if (paramId == 0)
+                    if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                    var schema = reader.GetString(0);
+                    var funcName = reader.GetString(1);
+                    var paramName = await reader.IsDBNullAsync(2) ? "" : reader.GetString(2);
+                    var dataType = reader.GetString(3);
+                    var isOutput = reader.GetBoolean(4);
+                    var maxLen = reader.GetInt16(5);
+                    var prec = reader.GetByte(6);
+                    var scale = reader.GetByte(7);
+                    var paramId = reader.GetInt32(8);
+
+                    var fnFull = $"[{schema}].[{funcName}]";
+                    if (fnDict.TryGetValue(fnFull, out var fn))
                     {
-                        var displayType = dataType;
-                        if (displayType is "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR")
-                            displayType = displayLen == -1 ? $"{dataType}(MAX)" : $"{dataType}({displayLen})";
-                        else if (displayType is "DECIMAL" or "NUMERIC")
-                            displayType = $"{dataType}({param.Precision},{param.Scale})";
-                            
-                        fn.ReturnType = displayType;
-                    }
-                    else
-                    {
-                        fn.Parameters.Add(new FunctionParameter
+                        var rawLen = maxLen;
+                        var upperType = dataType.ToUpper();
+                        int displayLen = rawLen;
+                        if (upperType is "NVARCHAR" or "NCHAR")
+                            displayLen = rawLen == -1 ? -1 : rawLen / 2;
+                        
+                        if (paramId == 0)
                         {
-                            Name = string.IsNullOrEmpty(param.ParamName) ? $"@param{paramId}" : param.ParamName,
-                            DataType = param.DataType,
-                            IsOutput = isOutput,
-                            MaxLength = displayLen,
-                            Precision = param.Precision,
-                            Scale = param.Scale
-                        });
+                            var displayType = upperType;
+                            if (displayType is "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR")
+                                displayType = displayLen == -1 ? $"{upperType}(MAX)" : $"{upperType}({displayLen})";
+                            else if (displayType is "DECIMAL" or "NUMERIC")
+                                displayType = $"{upperType}({prec},{scale})";
+
+                            fn.ReturnType = displayType;
+                        }
+                        else
+                        {
+                            fn.Parameters.Add(new FunctionParameter
+                            {
+                                Name = paramName,
+                                DataType = dataType,
+                                MaxLength = displayLen,
+                                Precision = prec,
+                                Scale = scale,
+                                IsOutput = isOutput
+                            });
+                        }
                     }
                 }
             }
@@ -611,41 +686,63 @@ public class SchemaService
                 ORDER BY s.name, p.name, pm.parameter_id;
             ";
 
-            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = batchSql;
+            cmd.CommandTimeout = 600;
 
-            var rawSps = await multi.ReadAsync<dynamic>();
-            var newSps = rawSps.Select(r => new SpInfo
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            var newSps = new List<SpInfo>();
+            while (await reader.ReadAsync())
             {
-                Schema = (string)r.SchemaName,
-                Name = (string)r.ProcName,
-                CreatedDate = (DateTime?)r.CreatedDate,
-                ModifiedDate = (DateTime?)r.ModifiedDate
-            }).ToList();
+                newSps.Add(new SpInfo
+                {
+                    Schema = reader.GetString(0),
+                    Name = reader.GetString(1),
+                    CreatedDate = await reader.IsDBNullAsync(2) ? null : reader.GetDateTime(2),
+                    ModifiedDate = await reader.IsDBNullAsync(3) ? null : reader.GetDateTime(3)
+                });
+            }
             var spDict = newSps.ToDictionary(sp => sp.FullName);
 
-            var rawParams = await multi.ReadAsync<dynamic>();
-            foreach (var param in rawParams)
+            int yieldCount = 0;
+            if (await reader.NextResultAsync())
             {
-                var spFull = $"[{(string)param.SchemaName}].[{(string)param.ProcName}]";
-                if (spDict.TryGetValue(spFull, out var sp))
+                while (await reader.ReadAsync())
                 {
-                    var rawLen = (short)param.MaxLength;
-                    var dataType = ((string)param.DataType).ToUpper();
-                    int displayLen = rawLen;
-                    if (dataType is "NVARCHAR" or "NCHAR")
-                        displayLen = rawLen == -1 ? -1 : rawLen / 2;
+                    if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                    var schema = reader.GetString(0);
+                    var procName = reader.GetString(1);
+                    var paramName = reader.GetString(2);
+                    var dataType = reader.GetString(3);
+                    var isOutput = reader.GetBoolean(4);
+                    var hasDefault = reader.GetBoolean(5);
+                    var defaultValue = await reader.IsDBNullAsync(6) ? null : reader.GetString(6);
+                    var maxLen = reader.GetInt16(7);
+                    var prec = reader.GetByte(8);
+                    var scale = reader.GetByte(9);
 
-                    sp.Parameters.Add(new SpParameter
+                    var spFull = $"[{schema}].[{procName}]";
+                    if (spDict.TryGetValue(spFull, out var sp))
                     {
-                        Name = (string)param.ParamName,
-                        DataType = (string)param.DataType,
-                        IsOutput = (bool)param.IsOutput,
-                        HasDefault = (bool)param.HasDefault,
-                        DefaultValue = param.DefaultValue as string,
-                        MaxLength = displayLen,
-                        Precision = (byte)param.Precision,
-                        Scale = (byte)param.Scale
-                    });
+                        var rawLen = maxLen;
+                        var upperType = dataType.ToUpper();
+                        int displayLen = rawLen;
+                        if (upperType is "NVARCHAR" or "NCHAR")
+                            displayLen = rawLen == -1 ? -1 : rawLen / 2;
+
+                        sp.Parameters.Add(new SpParameter
+                        {
+                            Name = paramName,
+                            DataType = dataType,
+                            IsOutput = isOutput,
+                            HasDefault = hasDefault,
+                            DefaultValue = defaultValue,
+                            MaxLength = displayLen,
+                            Precision = prec,
+                            Scale = scale
+                        });
+                    }
                 }
             }
 
@@ -697,45 +794,53 @@ public class SchemaService
                 JOIN sys.table_types tt ON c.object_id = tt.type_table_object_id;
             ";
 
-            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = batchSql;
+            cmd.CommandTimeout = 600;
 
-            var rawTypes = await multi.ReadAsync<dynamic>();
+            using var reader = await cmd.ExecuteReaderAsync();
+
             var typeTableMap = new Dictionary<int, TypeInfo>();
             
             var newTypes = new List<TypeInfo>();
-            foreach (var r in rawTypes)
+            while (await reader.ReadAsync())
             {
+                var isTableType = reader.GetBoolean(2);
                 var t = new TypeInfo
                 {
-                    Schema = (string)r.SchemaName,
-                    Name = (string)r.TypeName,
-                    IsTableType = (bool)r.IsTableType,
-                    BaseType = r.BaseTypeName as string,
-                    MaxLength = (short)r.MaxLength,
-                    Precision = (byte)r.Precision,
-                    Scale = (byte)r.Scale
+                    Schema = reader.GetString(0),
+                    Name = reader.GetString(1),
+                    IsTableType = isTableType,
+                    BaseType = await reader.IsDBNullAsync(3) ? null : reader.GetString(3),
+                    MaxLength = reader.GetInt16(4),
+                    Precision = reader.GetByte(5),
+                    Scale = reader.GetByte(6)
                 };
                 
-                if (t.IsTableType)
+                if (isTableType && !await reader.IsDBNullAsync(7))
                 {
-                    int typeObjId = (int)r.TypeTableObjId;
+                    int typeObjId = reader.GetInt32(7);
                     typeTableMap[typeObjId] = t;
                 }
                 
                 newTypes.Add(t);
             }
 
-            var typeCols = await multi.ReadAsync<dynamic>();
-            foreach (var col in typeCols)
+            int yieldCount = 0;
+            if (await reader.NextResultAsync())
             {
-                int objId = (int)col.ObjectId;
-                if (typeTableMap.TryGetValue(objId, out var typeInfo))
+                while (await reader.ReadAsync())
                 {
-                    typeInfo.Columns.Add(new ColumnInfo
+                    if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                    int objId = reader.GetInt32(0);
+                    if (typeTableMap.TryGetValue(objId, out var typeInfo))
                     {
-                        Name = (string)col.ColumnName,
-                        DataType = (string)col.DataType
-                    });
+                        typeInfo.Columns.Add(new ColumnInfo
+                        {
+                            Name = reader.GetString(1),
+                            DataType = reader.GetString(2)
+                        });
+                    }
                 }
             }
 
@@ -811,15 +916,26 @@ public class SchemaService
                 END
             ";
 
-            var results = await conn.QueryAsync<dynamic>(sql, new { Schema = typeInfo.Schema, Name = typeInfo.Name }, commandTimeout: 300);
-            
-            typeInfo.UsedBy = results.Select(r => new Dependency
-            {
-                Schema = (string)r.SchemaName,
-                Name = (string)r.ObjectName,
-                Type = (string)r.ObjectType
-            }).ToList();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("@Schema", typeInfo.Schema);
+            cmd.Parameters.AddWithValue("@Name", typeInfo.Name);
+            cmd.CommandTimeout = 300;
 
+            using var reader = await cmd.ExecuteReaderAsync();
+            
+            var usedBy = new List<Dependency>();
+            while (await reader.ReadAsync())
+            {
+                usedBy.Add(new Dependency
+                {
+                    Schema = reader.GetString(0),
+                    Name = reader.GetString(1),
+                    Type = reader.GetString(2)
+                });
+            }
+            
+            typeInfo.UsedBy = usedBy;
             typeInfo.AreDependenciesLoaded = true;
         }
         catch (Exception ex)
@@ -851,16 +967,21 @@ public class SchemaService
                 WHERE d.referenced_id = @RefId
                 OPTION (RECOMPILE)";
 
-            var deps = await conn.QueryAsync<dynamic>(sql, new { FullName = fullName }, commandTimeout: 300);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("@FullName", fullName);
+            cmd.CommandTimeout = 300;
+
+            using var reader = await cmd.ExecuteReaderAsync();
             
             table.ReferencedByViews.Clear();
             table.ReferencedBySPs.Clear();
 
-            foreach(var dep in deps)
+            while (await reader.ReadAsync())
             {
-                var schema = dep.SourceSchema as string;
-                var name = dep.SourceName as string;
-                var type = (dep.SourceType as string)?.Trim();
+                var schema = reader.GetString(0);
+                var name = reader.GetString(1);
+                var type = reader.GetString(2)?.Trim();
 
                 if (type == "V")
                     table.ReferencedByViews.Add(new Dependency { Schema = schema, Name = name, Type = "View" });
@@ -918,17 +1039,24 @@ public class SchemaService
                 FROM sys.dm_sql_referenced_entities('{view.FullName}', 'OBJECT') d
                 WHERE d.referenced_minor_name IS NOT NULL";
 
-            var lineage = await conn.QueryAsync<dynamic>(lineageSql, commandTimeout: 300);
+            using var cmdLineage = conn.CreateCommand();
+            cmdLineage.CommandText = lineageSql;
+            cmdLineage.CommandTimeout = 300;
+            
+            await conn.OpenAsync();
+            using var readerLineage = await cmdLineage.ExecuteReaderAsync();
             var colDict = view.Columns.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
             
-            foreach(var item in lineage)
+            while (await readerLineage.ReadAsync())
             {
-                var sourceColName = (string)item.SourceColumn;
+                var sourceSchema = readerLineage.GetString(0);
+                var sourceTable = readerLineage.GetString(1);
+                var sourceColName = readerLineage.GetString(2);
                 if (colDict.TryGetValue(sourceColName, out var col) && string.IsNullOrEmpty(col.SourceTable))
                 {
-                    col.SourceSchema = item.SourceSchema;
-                    col.SourceTable = item.SourceTable;
-                    col.SourceColumn = item.SourceColumn;
+                    col.SourceSchema = sourceSchema;
+                    col.SourceTable = sourceTable;
+                    col.SourceColumn = sourceColName;
                 }
             }
 
@@ -959,16 +1087,19 @@ public class SchemaService
                 OPTION (RECOMPILE);
             ";
 
-            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName }, commandTimeout: 300);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = depsSql;
+            cmd.Parameters.AddWithValue("@FullName", fullName);
+            cmd.CommandTimeout = 300;
+
+            using var reader = await cmd.ExecuteReaderAsync();
             
-            var parents = await multi.ReadAsync<dynamic>();
             view.Parents.Clear();
-            foreach(var p in parents)
+            while (await reader.ReadAsync())
             {
-                var tSchema = p.TargetSchema as string;
-                var tName = (string)p.TargetName;
-                var tType = (string)p.TargetType;
-                tType = tType?.Trim();
+                var tSchema = reader.GetString(0);
+                var tName = reader.GetString(1);
+                var tType = reader.GetString(2)?.Trim();
                 if (!string.IsNullOrEmpty(tSchema))
                 {
                     string depType = tType == "V" ? "View" : (tType == "U" ? "Table" : "Function");
@@ -976,22 +1107,23 @@ public class SchemaService
                 }
             }
 
-            var children = await multi.ReadAsync<dynamic>();
             view.Children.Clear();
             view.ReferencedBySPs.Clear();
-            foreach(var c in children)
+            if (await reader.NextResultAsync())
             {
-                var sSchema = (string)c.SourceSchema;
-                var sName = (string)c.SourceName;
-                var sType = (string)c.SourceType;
-                sType = sType?.Trim();
+                while (await reader.ReadAsync())
+                {
+                    var sSchema = reader.GetString(0);
+                    var sName = reader.GetString(1);
+                    var sType = reader.GetString(2)?.Trim();
 
-                if (sType == "V")
-                    view.Children.Add(new Dependency { Schema = sSchema, Name = sName, Type = "View" });
-                else if (sType == "P")
-                    view.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
-                else if (sType is "FN" or "IF" or "TF")
-                    view.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Function" });
+                    if (sType == "V")
+                        view.Children.Add(new Dependency { Schema = sSchema, Name = sName, Type = "View" });
+                    else if (sType == "P")
+                        view.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
+                    else if (sType is "FN" or "IF" or "TF")
+                        view.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Function" });
+                }
             }
 
             view.AreDependenciesLoaded = true;
@@ -1039,16 +1171,20 @@ public class SchemaService
                 OPTION (RECOMPILE);
             ";
 
-            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName }, commandTimeout: 300);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = depsSql;
+            cmd.Parameters.AddWithValue("@FullName", fullName);
+            cmd.CommandTimeout = 300;
+
+            using var reader = await cmd.ExecuteReaderAsync();
             
-            var deps = await multi.ReadAsync<dynamic>();
             sp.Dependencies.Clear();
-            foreach(var p in deps)
+            while (await reader.ReadAsync())
             {
-                var tSchema = p.TargetSchema as string;
-                var tName = p.TargetName as string;
-                var tType = (p.TargetType as string)?.Trim();
-                var refClass = p.ReferencedClass != null ? (byte)p.ReferencedClass : (byte)1;
+                var tSchema = reader.GetString(0);
+                var tName = reader.GetString(1);
+                var tType = reader.GetString(2)?.Trim();
+                var refClass = await reader.IsDBNullAsync(3) ? (byte)1 : reader.GetByte(3);
                 
                 if (!string.IsNullOrEmpty(tSchema))
                 {
@@ -1066,18 +1202,20 @@ public class SchemaService
                 }
             }
 
-            var refs = await multi.ReadAsync<dynamic>();
             sp.ReferencedBySPs.Clear();
-            foreach(var c in refs)
+            if (await reader.NextResultAsync())
             {
-                var sSchema = c.SourceSchema as string;
-                var sName = c.SourceName as string;
-                var sType = (c.SourceType as string)?.Trim();
+                while (await reader.ReadAsync())
+                {
+                    var sSchema = reader.GetString(0);
+                    var sName = reader.GetString(1);
+                    var sType = reader.GetString(2)?.Trim();
 
-                if (sType == "P")
-                    sp.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
-                else if (sType == "FN" || sType == "IF" || sType == "TF")
-                    sp.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Function" });
+                    if (sType == "P")
+                        sp.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
+                    else if (sType == "FN" || sType == "IF" || sType == "TF")
+                        sp.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Function" });
+                }
             }
 
             sp.AreDependenciesLoaded = true;
@@ -1125,16 +1263,20 @@ public class SchemaService
                 OPTION (RECOMPILE);
             ";
 
-            using var multi = await conn.QueryMultipleAsync(depsSql, new { FullName = fullName }, commandTimeout: 300);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = depsSql;
+            cmd.Parameters.AddWithValue("@FullName", fullName);
+            cmd.CommandTimeout = 300;
+
+            using var reader = await cmd.ExecuteReaderAsync();
             
-            var deps = await multi.ReadAsync<dynamic>();
             fn.Dependencies.Clear();
-            foreach(var p in deps)
+            while (await reader.ReadAsync())
             {
-                var tSchema = p.TargetSchema as string;
-                var tName = p.TargetName as string;
-                var tType = (p.TargetType as string)?.Trim();
-                var refClass = p.ReferencedClass != null ? (byte)p.ReferencedClass : (byte)1;
+                var tSchema = reader.GetString(0);
+                var tName = reader.GetString(1);
+                var tType = reader.GetString(2)?.Trim();
+                var refClass = await reader.IsDBNullAsync(3) ? (byte)1 : reader.GetByte(3);
                 
                 if (!string.IsNullOrEmpty(tSchema))
                 {
@@ -1152,16 +1294,18 @@ public class SchemaService
                 }
             }
 
-            var refs = await multi.ReadAsync<dynamic>();
             fn.ReferencedBy.Clear();
-            foreach(var c in refs)
+            if (await reader.NextResultAsync())
             {
-                var sSchema = c.SourceSchema as string;
-                var sName = c.SourceName as string;
-                var sType = (c.SourceType as string)?.Trim();
+                while (await reader.ReadAsync())
+                {
+                    var sSchema = reader.GetString(0);
+                    var sName = reader.GetString(1);
+                    var sType = reader.GetString(2)?.Trim();
 
-                string depType = sType == "V" ? "View" : (sType == "P" ? "Procedure" : "Function");
-                fn.ReferencedBy.Add(new Dependency { Schema = sSchema, Name = sName, Type = depType });
+                    string depType = sType == "V" ? "View" : (sType == "P" ? "Procedure" : "Function");
+                    fn.ReferencedBy.Add(new Dependency { Schema = sSchema, Name = sName, Type = depType });
+                }
             }
 
             fn.AreDependenciesLoaded = true;
@@ -1180,8 +1324,11 @@ public class SchemaService
         try
         {
             using var conn = new SqlConnection(_connectionService.ConnectionString);
-            var sql = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName)) AS Def";
-            var result = await conn.QueryFirstOrDefaultAsync<string?>(sql, new { FullName = fullName }, commandTimeout: 60);
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName)) AS Def";
+            cmd.Parameters.AddWithValue("@FullName", fullName);
+            var result = await cmd.ExecuteScalarAsync() as string;
 
             // Try to match against view, sp, or function
             var view = Views.FirstOrDefault(v => v.FullName == fullName);
@@ -1199,11 +1346,4 @@ public class SchemaService
             OnError?.Invoke($"Error fetching definition for {fullName}: {ex.Message}");
         }
     }
-
-    private class RawTable { public string SchemaName { get; set; } public string Name { get; set; } }
-    private class RawView { public string SchemaName { get; set; } public string Name { get; set; } }
-    private class RawColumn { public string SchemaName { get; set; } public string TableName { get; set; } public string ColumnName { get; set; } public string DataType { get; set; } }
-    private class RawFk { public string ParentTable { get; set; } public string ParentColumn { get; set; } public bool IsNullable { get; set; } public string RefTable { get; set; } public string RefColumn { get; set; } public string ParentSchema { get; set; } public string RefSchema { get; set; } }
-    private class RawFunction { public string SchemaName { get; set; } public string FuncName { get; set; } public string FuncType { get; set; } public DateTime? CreatedDate { get; set; } public DateTime? ModifiedDate { get; set; } }
-    private class RawFnParam { public string SchemaName { get; set; } public string FuncName { get; set; } public string ParamName { get; set; } public string DataType { get; set; } public bool IsOutput { get; set; } public short MaxLength { get; set; } public byte Precision { get; set; } public byte Scale { get; set; } public int ParamId { get; set; } }
 }
