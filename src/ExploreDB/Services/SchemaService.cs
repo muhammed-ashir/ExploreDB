@@ -194,11 +194,22 @@ public class SchemaService
     public List<FunctionInfo> Functions { get; private set; } = new();
     public List<TypeInfo> Types { get; private set; } = new();
     
-    public bool IsLoading { get; private set; } = false;
+    public bool IsLoadingTables { get; private set; } = false;
+    public bool IsLoadingViews { get; private set; } = false;
+    public bool IsLoadingFunctions { get; private set; } = false;
+    public bool IsLoadingStoredProcedures { get; private set; } = false;
+    public bool IsLoadingTypes { get; private set; } = false;
     
-    public event Action? OnSchemaLoaded;
+    public event Action? OnTablesLoaded;
+    public event Action? OnViewsLoaded;
+    public event Action? OnFunctionsLoaded;
+    public event Action? OnStoredProceduresLoaded;
+    public event Action? OnTypesLoaded;
     public event Action<string>? OnError;
 
+    public bool AreTablesLoaded { get; private set; } = false;
+    public bool AreViewsLoaded { get; private set; } = false;
+    public bool AreFunctionsLoaded { get; private set; } = false;
     public bool AreStoredProceduresLoaded { get; private set; } = false;
     public bool AreTypesLoaded { get; private set; } = false;
 
@@ -261,51 +272,61 @@ public class SchemaService
         }
     }
 
-    public async Task LoadSchemaAsync()
+    public Task LoadSchemaAsync()
     {
-        if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+        if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return Task.CompletedTask;
         
         var builder = new SqlConnectionStringBuilder(_connectionService.ConnectionString);
         
-        IsLoading = true;
-        Tables.Clear();
-        Views.Clear();
-        Functions.Clear();
-        StoredProcedures.Clear();
-        Types.Clear();
-        AreStoredProceduresLoaded = false;
-        AreTypesLoaded = false;
-        
         if (string.IsNullOrEmpty(builder.InitialCatalog))
         {
-            IsLoading = false;
-            OnSchemaLoaded?.Invoke();
-            return;
+            Tables.Clear(); Views.Clear(); Functions.Clear(); StoredProcedures.Clear(); Types.Clear();
+            AreTablesLoaded = false; AreViewsLoaded = false; AreFunctionsLoaded = false; AreStoredProceduresLoaded = false; AreTypesLoaded = false;
+            OnTablesLoaded?.Invoke();
+            OnViewsLoaded?.Invoke();
+            OnFunctionsLoaded?.Invoke();
+            OnStoredProceduresLoaded?.Invoke();
+            OnTypesLoaded?.Invoke();
+            return Task.CompletedTask;
         }
 
-        OnSchemaLoaded?.Invoke();
+        AreTablesLoaded = false;
+        AreViewsLoaded = false;
+        AreFunctionsLoaded = false;
+        AreStoredProceduresLoaded = false;
+        AreTypesLoaded = false;
+
+        _logger.LogInformation("Kicking off Parallel Eager Schema Load Tasks...");
+        
+        _ = LoadTablesAsync();
+        _ = LoadViewsAsync();
+        _ = LoadFunctionsAsync();
+        _ = LoadStoredProceduresAsync();
+        _ = LoadTypesAsync();
+        
+        return Task.CompletedTask;
+    }
+
+    public async Task LoadTablesAsync()
+    {
+        if (AreTablesLoaded || !IsDatabaseConnected) return;
+        
+        IsLoadingTables = true;
+        Tables.Clear();
+        OnTablesLoaded?.Invoke();
 
         try 
         {
             using var conn = new SqlConnection(_connectionService.ConnectionString);
             await conn.OpenAsync();
 
-            _logger.LogInformation("Executing Initial Batch Schema Query (Perfect Compromise Architecture)...");
-            
             var batchSql = @"
                 SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 
-                -- 1. Tables
                 SELECT s.name AS SchemaName, t.name AS Name
                 FROM sys.tables t
                 INNER JOIN sys.schemas s ON t.schema_id = s.schema_id;
 
-                -- 2. Views
-                SELECT s.name AS SchemaName, v.name AS Name
-                FROM sys.views v
-                INNER JOIN sys.schemas s ON v.schema_id = s.schema_id;
-
-                -- 3. Columns (For both Tables and Views)
                 SELECT s.name AS SchemaName, o.name AS TableName, c.name AS ColumnName,
                     CASE 
                         WHEN ty.name LIKE 'System.%' OR ty.name LIKE '%.%' THEN ISNULL(sty.name, ty.name)
@@ -316,9 +337,8 @@ public class SchemaService
                 INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
                 INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
                 LEFT JOIN sys.types sty ON c.system_type_id = sty.user_type_id AND sty.is_user_defined = 0
-                WHERE o.type IN ('U', 'V');
+                WHERE o.type = 'U';
 
-                -- 4. Foreign Keys
                 SELECT 
                     tp.name AS ParentTable, cp.name AS ParentColumn, cp.is_nullable AS IsNullable,
                     tr.name AS RefTable, cr.name AS RefColumn,
@@ -332,58 +352,24 @@ public class SchemaService
                 INNER JOIN sys.columns cp ON fkc.parent_object_id = cp.object_id AND fkc.parent_column_id = cp.column_id
                 INNER JOIN sys.columns cr ON fkc.referenced_object_id = cr.object_id AND fkc.referenced_column_id = cr.column_id
                 OPTION (FORCE ORDER);
-
-                -- 5. Functions
-                SELECT 
-                    s.name AS SchemaName, o.name AS FuncName, o.type AS FuncType, o.create_date AS CreatedDate, o.modify_date AS ModifiedDate
-                FROM sys.objects o
-                JOIN sys.schemas s ON o.schema_id = s.schema_id
-                WHERE o.type IN ('FN', 'IF', 'TF') AND o.is_ms_shipped = 0
-                ORDER BY s.name, o.name;
-
-                -- 6. Function Parameters
-                SELECT 
-                    s.name AS SchemaName, o.name AS FuncName, pm.name AS ParamName, t.name AS DataType,
-                    pm.is_output AS IsOutput, pm.max_length AS MaxLength, pm.precision AS Precision, pm.scale AS Scale, pm.parameter_id AS ParamId
-                FROM sys.objects o
-                JOIN sys.schemas s ON o.schema_id = s.schema_id
-                JOIN sys.parameters pm ON pm.object_id = o.object_id
-                JOIN sys.types t ON pm.user_type_id = t.user_type_id
-                WHERE o.type IN ('FN', 'IF', 'TF') AND o.is_ms_shipped = 0
-                ORDER BY s.name, o.name, pm.parameter_id;
             ";
 
             using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
-
-            _logger.LogInformation("Processing Batch Results...");
             
-            // 1. Tables
             var rawTables = await multi.ReadAsync<RawTable>();
-            Tables = rawTables.Select(t => new TableInfo { Schema = t.SchemaName, Name = t.Name }).OrderBy(t => t.FullName).ToList();
-            var tableDict = Tables.ToDictionary(t => t.FullName);
+            var newTables = rawTables.Select(t => new TableInfo { Schema = t.SchemaName, Name = t.Name }).OrderBy(t => t.FullName).ToList();
+            var tableDict = newTables.ToDictionary(t => t.FullName);
 
-            // 2. Views
-            var rawViews = await multi.ReadAsync<RawView>();
-            Views = rawViews.Select(v => new ViewInfo { Schema = v.SchemaName, Name = v.Name }).OrderBy(v => v.FullName).ToList();
-            var viewDict = Views.ToDictionary(v => v.FullName);
-
-            // 3. Columns
             var rawCols = await multi.ReadAsync<RawColumn>();
             foreach(var col in rawCols)
             {
                 var key = $"[{col.SchemaName}].[{col.TableName}]";
-                var displayType = NormalizeDataType(col.DataType);
                 if (tableDict.TryGetValue(key, out var table))
                 {
-                    table.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = displayType });
-                }
-                else if (viewDict.TryGetValue(key, out var view))
-                {
-                    view.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = displayType });
+                    table.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = NormalizeDataType(col.DataType) });
                 }
             }
 
-            // 4. Foreign Keys
             var fks = await multi.ReadAsync<RawFk>();
             foreach(var fk in fks)
             {
@@ -403,9 +389,123 @@ public class SchemaService
                 }
             }
 
-            // 5. Functions
+            Tables = newTables;
+            AreTablesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Tables"); 
+            OnError?.Invoke($"Error loading tables: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingTables = false;
+            OnTablesLoaded?.Invoke();
+        }
+    }
+
+    public async Task LoadViewsAsync()
+    {
+        if (AreViewsLoaded || !IsDatabaseConnected) return;
+        
+        IsLoadingViews = true;
+        Views.Clear();
+        OnViewsLoaded?.Invoke();
+
+        try 
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            await conn.OpenAsync();
+
+            var batchSql = @"
+                SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+                SELECT s.name AS SchemaName, v.name AS Name
+                FROM sys.views v
+                INNER JOIN sys.schemas s ON v.schema_id = s.schema_id;
+
+                SELECT s.name AS SchemaName, o.name AS TableName, c.name AS ColumnName,
+                    CASE 
+                        WHEN ty.name LIKE 'System.%' OR ty.name LIKE '%.%' THEN ISNULL(sty.name, ty.name)
+                        ELSE ty.name 
+                    END AS DataType
+                FROM sys.columns c
+                INNER JOIN sys.objects o ON c.object_id = o.object_id
+                INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
+                INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+                LEFT JOIN sys.types sty ON c.system_type_id = sty.user_type_id AND sty.is_user_defined = 0
+                WHERE o.type = 'V';
+            ";
+
+            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
+            
+            var rawViews = await multi.ReadAsync<RawView>();
+            var newViews = rawViews.Select(v => new ViewInfo { Schema = v.SchemaName, Name = v.Name }).OrderBy(v => v.FullName).ToList();
+            var viewDict = newViews.ToDictionary(v => v.FullName);
+
+            var rawCols = await multi.ReadAsync<RawColumn>();
+            foreach(var col in rawCols)
+            {
+                var key = $"[{col.SchemaName}].[{col.TableName}]";
+                if (viewDict.TryGetValue(key, out var view))
+                {
+                    view.Columns.Add(new ColumnInfo { Name = col.ColumnName, DataType = NormalizeDataType(col.DataType) });
+                }
+            }
+
+            Views = newViews;
+            AreViewsLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Views"); 
+            OnError?.Invoke($"Error loading views: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingViews = false;
+            OnViewsLoaded?.Invoke();
+        }
+    }
+
+    public async Task LoadFunctionsAsync()
+    {
+        if (AreFunctionsLoaded || !IsDatabaseConnected) return;
+        
+        IsLoadingFunctions = true;
+        Functions.Clear();
+        OnFunctionsLoaded?.Invoke();
+
+        try 
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            await conn.OpenAsync();
+
+            var batchSql = @"
+                SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+                SELECT 
+                    s.name AS SchemaName, o.name AS FuncName, o.type AS FuncType, o.create_date AS CreatedDate, o.modify_date AS ModifiedDate
+                FROM sys.objects o
+                JOIN sys.schemas s ON o.schema_id = s.schema_id
+                WHERE o.type IN ('FN', 'IF', 'TF') AND o.is_ms_shipped = 0
+                ORDER BY s.name, o.name;
+
+                SELECT 
+                    s.name AS SchemaName, o.name AS FuncName, pm.name AS ParamName, t.name AS DataType,
+                    pm.is_output AS IsOutput, pm.max_length AS MaxLength, pm.precision AS Precision, pm.scale AS Scale, pm.parameter_id AS ParamId
+                FROM sys.objects o
+                JOIN sys.schemas s ON o.schema_id = s.schema_id
+                JOIN sys.parameters pm ON pm.object_id = o.object_id
+                JOIN sys.types t ON pm.user_type_id = t.user_type_id
+                WHERE o.type IN ('FN', 'IF', 'TF') AND o.is_ms_shipped = 0
+                ORDER BY s.name, o.name, pm.parameter_id;
+            ";
+
+            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
+            
             var rawFns = await multi.ReadAsync<RawFunction>();
-            Functions = rawFns.Select(r => new FunctionInfo
+            var newFunctions = rawFns.Select(r => new FunctionInfo
             {
                 Schema = r.SchemaName,
                 Name = r.FuncName,
@@ -418,9 +518,8 @@ public class SchemaService
                 CreatedDate = r.CreatedDate,
                 ModifiedDate = r.ModifiedDate
             }).ToList();
-            var fnDict = Functions.ToDictionary(f => f.FullName);
+            var fnDict = newFunctions.ToDictionary(f => f.FullName);
 
-            // 6. Function Parameters
             var rawFnParams = await multi.ReadAsync<RawFnParam>();
             foreach (var param in rawFnParams)
             {
@@ -461,20 +560,28 @@ public class SchemaService
                 }
             }
 
-            IsLoading = false;
-            OnSchemaLoaded?.Invoke();
+            Functions = newFunctions;
+            AreFunctionsLoaded = true;
         }
         catch (Exception ex)
         {
-            IsLoading = false;
-            _logger.LogError(ex, "Schema Load Error"); 
-            OnError?.Invoke($"Error loading schema: {ex.Message}");
+            _logger.LogError(ex, "Error loading Functions"); 
+            OnError?.Invoke($"Error loading functions: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingFunctions = false;
+            OnFunctionsLoaded?.Invoke();
         }
     }
 
     public async Task LoadStoredProceduresAsync()
     {
-        if (AreStoredProceduresLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString) || !IsDatabaseConnected) return;
+        if (AreStoredProceduresLoaded || !IsDatabaseConnected) return;
+
+        IsLoadingStoredProcedures = true;
+        StoredProcedures.Clear();
+        OnStoredProceduresLoaded?.Invoke();
 
         try
         {
@@ -482,7 +589,8 @@ public class SchemaService
             await conn.OpenAsync();
             
             var batchSql = @"
-                -- 1. Stored Procedures
+                SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
                 SELECT 
                     s.name AS SchemaName, p.name AS ProcName, p.create_date AS CreatedDate, p.modify_date AS ModifiedDate
                 FROM sys.procedures p
@@ -490,7 +598,6 @@ public class SchemaService
                 WHERE p.is_ms_shipped = 0
                 ORDER BY s.name, p.name;
 
-                -- 2. SP Parameters
                 SELECT 
                     s.name AS SchemaName, p.name AS ProcName, pm.name AS ParamName, t.name AS DataType,
                     pm.is_output AS IsOutput, pm.has_default_value AS HasDefault,
@@ -504,17 +611,17 @@ public class SchemaService
                 ORDER BY s.name, p.name, pm.parameter_id;
             ";
 
-            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 300);
+            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
 
             var rawSps = await multi.ReadAsync<dynamic>();
-            StoredProcedures = rawSps.Select(r => new SpInfo
+            var newSps = rawSps.Select(r => new SpInfo
             {
                 Schema = (string)r.SchemaName,
                 Name = (string)r.ProcName,
                 CreatedDate = (DateTime?)r.CreatedDate,
                 ModifiedDate = (DateTime?)r.ModifiedDate
             }).ToList();
-            var spDict = StoredProcedures.ToDictionary(sp => sp.FullName);
+            var spDict = newSps.ToDictionary(sp => sp.FullName);
 
             var rawParams = await multi.ReadAsync<dynamic>();
             foreach (var param in rawParams)
@@ -542,18 +649,28 @@ public class SchemaService
                 }
             }
 
+            StoredProcedures = newSps;
             AreStoredProceduresLoaded = true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading stored procedures lazily");
+            _logger.LogError(ex, "Error loading Stored Procedures");
             OnError?.Invoke($"Error loading stored procedures: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingStoredProcedures = false;
+            OnStoredProceduresLoaded?.Invoke();
         }
     }
 
     public async Task LoadTypesAsync()
     {
-        if (AreTypesLoaded || string.IsNullOrEmpty(_connectionService.ConnectionString) || !IsDatabaseConnected) return;
+        if (AreTypesLoaded || !IsDatabaseConnected) return;
+
+        IsLoadingTypes = true;
+        Types.Clear();
+        OnTypesLoaded?.Invoke();
 
         try
         {
@@ -561,7 +678,8 @@ public class SchemaService
             await conn.OpenAsync();
             
             var batchSql = @"
-                -- 1. Types
+                SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
                 SELECT 
                     s.name AS SchemaName, t.name AS TypeName, t.is_table_type AS IsTableType,
                     bt.name AS BaseTypeName, t.max_length AS MaxLength, t.precision AS Precision, t.scale AS Scale, tt.type_table_object_id AS TypeTableObjId
@@ -572,7 +690,6 @@ public class SchemaService
                 WHERE t.is_user_defined = 1 AND t.is_assembly_type = 0
                 ORDER BY s.name, t.name;
 
-                -- 2. Type Columns
                 SELECT 
                     c.object_id AS ObjectId, c.name AS ColumnName, t.name AS DataType
                 FROM sys.columns c
@@ -580,12 +697,12 @@ public class SchemaService
                 JOIN sys.table_types tt ON c.object_id = tt.type_table_object_id;
             ";
 
-            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 300);
+            using var multi = await conn.QueryMultipleAsync(batchSql, commandTimeout: 600);
 
             var rawTypes = await multi.ReadAsync<dynamic>();
             var typeTableMap = new Dictionary<int, TypeInfo>();
             
-            Types = new List<TypeInfo>();
+            var newTypes = new List<TypeInfo>();
             foreach (var r in rawTypes)
             {
                 var t = new TypeInfo
@@ -605,7 +722,7 @@ public class SchemaService
                     typeTableMap[typeObjId] = t;
                 }
                 
-                Types.Add(t);
+                newTypes.Add(t);
             }
 
             var typeCols = await multi.ReadAsync<dynamic>();
@@ -622,12 +739,18 @@ public class SchemaService
                 }
             }
 
+            Types = newTypes;
             AreTypesLoaded = true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading types lazily");
+            _logger.LogError(ex, "Error loading Types");
             OnError?.Invoke($"Error loading types: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingTypes = false;
+            OnTypesLoaded?.Invoke();
         }
     }
 

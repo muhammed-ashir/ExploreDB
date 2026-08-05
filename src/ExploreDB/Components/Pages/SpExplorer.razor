@@ -4,7 +4,7 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-@if (_isLoading || SchemaService.IsLoading)
+@if (SchemaService.IsLoadingStoredProcedures)
 {
     <LoadingSpinner Height="calc(100vh - 100px)" Message="Loading stored procedures..." />
 }
@@ -198,31 +198,14 @@ else
         }
     }
 
-    private bool _isLoading = false;
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        SchemaService.OnSchemaLoaded += Refresh;
-        if (!SchemaService.AreStoredProceduresLoaded)
-        {
-            _isLoading = true;
-            await SchemaService.LoadStoredProceduresAsync();
-            _isLoading = false;
-        }
+        SchemaService.OnStoredProceduresLoaded += Refresh;
     }
 
-    private async void Refresh()
+    private void Refresh()
     {
-        if (!SchemaService.IsLoading && !SchemaService.AreStoredProceduresLoaded && !_isLoading)
-        {
-            _isLoading = true;
-            await InvokeAsync(StateHasChanged);
-            
-            await SchemaService.LoadStoredProceduresAsync();
-            
-            _isLoading = false;
-        }
-        await InvokeAsync(StateHasChanged);
+        InvokeAsync(StateHasChanged);
     }
 
     private void SetPage(int page)
@@ -235,6 +218,6 @@ else
 
     public void Dispose()
     {
-        SchemaService.OnSchemaLoaded -= Refresh;
+        SchemaService.OnStoredProceduresLoaded -= Refresh;
     }
 }

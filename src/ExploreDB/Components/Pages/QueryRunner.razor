@@ -409,7 +409,9 @@
         _saveDebounceTimer?.Dispose();
         ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
-        SchemaService.OnSchemaLoaded -= OnSchemaLoadedHandler;
+        SchemaService.OnTablesLoaded -= OnSchemaLoadedHandler;
+        SchemaService.OnViewsLoaded -= OnSchemaLoadedHandler;
+        SchemaService.OnStoredProceduresLoaded -= OnSchemaLoadedHandler;
     }
 
     private async void OnConnectionChangedHandler()
@@ -549,7 +551,9 @@
     {
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
         ConnectionService.OnDatabaseSwitching += OnDatabaseSwitchingHandler;
-        SchemaService.OnSchemaLoaded += OnSchemaLoadedHandler;
+        SchemaService.OnTablesLoaded += OnSchemaLoadedHandler;
+        SchemaService.OnViewsLoaded += OnSchemaLoadedHandler;
+        SchemaService.OnStoredProceduresLoaded += OnSchemaLoadedHandler;
         
         if (!QueryStateService.Initialized)
         {

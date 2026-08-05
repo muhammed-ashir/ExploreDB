@@ -4,7 +4,7 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-@if (_isLoading || SchemaService.IsLoading)
+@if (SchemaService.IsLoadingTypes)
 {
     <LoadingSpinner Height="calc(100vh - 100px)" Message="Loading custom types..." />
 }
@@ -226,31 +226,14 @@ else
         }
     }
 
-    private bool _isLoading = false;
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        SchemaService.OnSchemaLoaded += Refresh;
-        if (!SchemaService.AreTypesLoaded)
-        {
-            _isLoading = true;
-            await SchemaService.LoadTypesAsync();
-            _isLoading = false;
-        }
+        SchemaService.OnTypesLoaded += Refresh;
     }
 
-    private async void Refresh()
+    private void Refresh()
     {
-        if (!SchemaService.IsLoading && !SchemaService.AreTypesLoaded && !_isLoading)
-        {
-            _isLoading = true;
-            await InvokeAsync(StateHasChanged);
-            
-            await SchemaService.LoadTypesAsync();
-            
-            _isLoading = false;
-        }
-        await InvokeAsync(StateHasChanged);
+        InvokeAsync(StateHasChanged);
     }
 
     private void SetPage(int page)
@@ -263,6 +246,6 @@ else
 
     public void Dispose()
     {
-        SchemaService.OnSchemaLoaded -= Refresh;
+        SchemaService.OnTypesLoaded -= Refresh;
     }
 }

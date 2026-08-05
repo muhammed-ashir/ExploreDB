@@ -4,7 +4,7 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-@if (SchemaService.IsLoading)
+@if (SchemaService.IsLoadingFunctions)
 {
     <LoadingSpinner Height="calc(100vh - 100px)" Message="Loading functions..." />
 }
@@ -199,7 +199,7 @@ else
 
     protected override void OnInitialized()
     {
-        SchemaService.OnSchemaLoaded += Refresh;
+        SchemaService.OnFunctionsLoaded += Refresh;
     }
 
     private void Refresh()
@@ -217,6 +217,6 @@ else
 
     public void Dispose()
     {
-        SchemaService.OnSchemaLoaded -= Refresh;
+        SchemaService.OnFunctionsLoaded -= Refresh;
     }
 }
