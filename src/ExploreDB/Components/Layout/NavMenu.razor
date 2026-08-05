@@ -188,6 +188,10 @@
     private string GetActiveConnectionDisplayName()
     {
         var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
+        if (active == null) 
+        {
+            active = ConnectionService.SavedConnections.FirstOrDefault(c => c.Server == ActiveServer);
+        }
         if (active == null) return ActiveServer;
         return string.IsNullOrWhiteSpace(active.Name) ? active.Server : $"{active.Server} ({active.Name})";
     }
@@ -195,6 +199,10 @@
     private string GetActiveConnectionTooltipHtml()
     {
         var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
+        if (active == null)
+        {
+            active = ConnectionService.SavedConnections.FirstOrDefault(c => c.Server == ActiveServer);
+        }
         return GetConnectionTooltipHtml(active);
     }
 
