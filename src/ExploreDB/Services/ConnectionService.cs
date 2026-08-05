@@ -79,7 +79,8 @@ public class ConnectionService
         var builder = new SqlConnectionStringBuilder
         {
             DataSource = server,
-            TrustServerCertificate = true // Helpful for local dev
+            TrustServerCertificate = true, // Helpful for local dev
+            ConnectTimeout = 60 // Increase connection timeout to 60 seconds
         };
 
         if (authType == "Windows")

@@ -922,6 +922,7 @@ public class SchemaService
             cmd.Parameters.AddWithValue("@Name", typeInfo.Name);
             cmd.CommandTimeout = 300;
 
+            await conn.OpenAsync();
             using var reader = await cmd.ExecuteReaderAsync();
             
             var usedBy = new List<Dependency>();
@@ -929,9 +930,9 @@ public class SchemaService
             {
                 usedBy.Add(new Dependency
                 {
-                    Schema = reader.GetString(0),
-                    Name = reader.GetString(1),
-                    Type = reader.GetString(2)
+                    Schema = await reader.IsDBNullAsync(0) ? string.Empty : reader.GetString(0),
+                    Name = await reader.IsDBNullAsync(1) ? string.Empty : reader.GetString(1),
+                    Type = await reader.IsDBNullAsync(2) ? string.Empty : reader.GetString(2)
                 });
             }
             
@@ -972,6 +973,7 @@ public class SchemaService
             cmd.Parameters.AddWithValue("@FullName", fullName);
             cmd.CommandTimeout = 300;
 
+            await conn.OpenAsync();
             using var reader = await cmd.ExecuteReaderAsync();
             
             table.ReferencedByViews.Clear();
@@ -979,9 +981,9 @@ public class SchemaService
 
             while (await reader.ReadAsync())
             {
-                var schema = reader.GetString(0);
-                var name = reader.GetString(1);
-                var type = reader.GetString(2)?.Trim();
+                var schema = await reader.IsDBNullAsync(0) ? null : reader.GetString(0);
+                var name = await reader.IsDBNullAsync(1) ? null : reader.GetString(1);
+                var type = await reader.IsDBNullAsync(2) ? null : reader.GetString(2)?.Trim();
 
                 if (type == "V")
                     table.ReferencedByViews.Add(new Dependency { Schema = schema, Name = name, Type = "View" });
@@ -1059,6 +1061,7 @@ public class SchemaService
                     col.SourceColumn = sourceColName;
                 }
             }
+            await readerLineage.CloseAsync();
 
             // 2. Dependencies (What this view references, and what references this view)
             var depsSql = @"
@@ -1097,9 +1100,9 @@ public class SchemaService
             view.Parents.Clear();
             while (await reader.ReadAsync())
             {
-                var tSchema = reader.GetString(0);
-                var tName = reader.GetString(1);
-                var tType = reader.GetString(2)?.Trim();
+                var tSchema = await reader.IsDBNullAsync(0) ? null : reader.GetString(0);
+                var tName = await reader.IsDBNullAsync(1) ? null : reader.GetString(1);
+                var tType = await reader.IsDBNullAsync(2) ? null : reader.GetString(2)?.Trim();
                 if (!string.IsNullOrEmpty(tSchema))
                 {
                     string depType = tType == "V" ? "View" : (tType == "U" ? "Table" : "Function");
@@ -1113,9 +1116,9 @@ public class SchemaService
             {
                 while (await reader.ReadAsync())
                 {
-                    var sSchema = reader.GetString(0);
-                    var sName = reader.GetString(1);
-                    var sType = reader.GetString(2)?.Trim();
+                    var sSchema = await reader.IsDBNullAsync(0) ? null : reader.GetString(0);
+                    var sName = await reader.IsDBNullAsync(1) ? null : reader.GetString(1);
+                    var sType = await reader.IsDBNullAsync(2) ? null : reader.GetString(2)?.Trim();
 
                     if (sType == "V")
                         view.Children.Add(new Dependency { Schema = sSchema, Name = sName, Type = "View" });
@@ -1176,14 +1179,15 @@ public class SchemaService
             cmd.Parameters.AddWithValue("@FullName", fullName);
             cmd.CommandTimeout = 300;
 
+            await conn.OpenAsync();
             using var reader = await cmd.ExecuteReaderAsync();
             
             sp.Dependencies.Clear();
             while (await reader.ReadAsync())
             {
-                var tSchema = reader.GetString(0);
-                var tName = reader.GetString(1);
-                var tType = reader.GetString(2)?.Trim();
+                var tSchema = await reader.IsDBNullAsync(0) ? null : reader.GetString(0);
+                var tName = await reader.IsDBNullAsync(1) ? null : reader.GetString(1);
+                var tType = await reader.IsDBNullAsync(2) ? null : reader.GetString(2)?.Trim();
                 var refClass = await reader.IsDBNullAsync(3) ? (byte)1 : reader.GetByte(3);
                 
                 if (!string.IsNullOrEmpty(tSchema))
@@ -1207,9 +1211,9 @@ public class SchemaService
             {
                 while (await reader.ReadAsync())
                 {
-                    var sSchema = reader.GetString(0);
-                    var sName = reader.GetString(1);
-                    var sType = reader.GetString(2)?.Trim();
+                    var sSchema = await reader.IsDBNullAsync(0) ? null : reader.GetString(0);
+                    var sName = await reader.IsDBNullAsync(1) ? null : reader.GetString(1);
+                    var sType = await reader.IsDBNullAsync(2) ? null : reader.GetString(2)?.Trim();
 
                     if (sType == "P")
                         sp.ReferencedBySPs.Add(new Dependency { Schema = sSchema, Name = sName, Type = "Procedure" });
@@ -1268,14 +1272,15 @@ public class SchemaService
             cmd.Parameters.AddWithValue("@FullName", fullName);
             cmd.CommandTimeout = 300;
 
+            await conn.OpenAsync();
             using var reader = await cmd.ExecuteReaderAsync();
             
             fn.Dependencies.Clear();
             while (await reader.ReadAsync())
             {
-                var tSchema = reader.GetString(0);
-                var tName = reader.GetString(1);
-                var tType = reader.GetString(2)?.Trim();
+                var tSchema = await reader.IsDBNullAsync(0) ? null : reader.GetString(0);
+                var tName = await reader.IsDBNullAsync(1) ? null : reader.GetString(1);
+                var tType = await reader.IsDBNullAsync(2) ? null : reader.GetString(2)?.Trim();
                 var refClass = await reader.IsDBNullAsync(3) ? (byte)1 : reader.GetByte(3);
                 
                 if (!string.IsNullOrEmpty(tSchema))
@@ -1299,9 +1304,9 @@ public class SchemaService
             {
                 while (await reader.ReadAsync())
                 {
-                    var sSchema = reader.GetString(0);
-                    var sName = reader.GetString(1);
-                    var sType = reader.GetString(2)?.Trim();
+                    var sSchema = await reader.IsDBNullAsync(0) ? null : reader.GetString(0);
+                    var sName = await reader.IsDBNullAsync(1) ? null : reader.GetString(1);
+                    var sType = await reader.IsDBNullAsync(2) ? null : reader.GetString(2)?.Trim();
 
                     string depType = sType == "V" ? "View" : (sType == "P" ? "Procedure" : "Function");
                     fn.ReferencedBy.Add(new Dependency { Schema = sSchema, Name = sName, Type = depType });
