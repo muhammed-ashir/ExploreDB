@@ -323,7 +323,6 @@
                         <span style="font-size: 1.2rem; line-height: 1;">☰</span>
                     </button>
                     <div class="ms-auto d-flex align-items-center gap-3">
-                        <span class="text-muted small">@GetWorkspaceTitle()</span>
                         <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="PromptDisconnect">
                             <i class="bi bi-power" style="font-size: 1.2rem;"></i>
                         </button>
@@ -424,28 +423,7 @@
     private bool FilterWholeWord = false;
     private bool FilterExactMatch = false;
 
-    private string GetWorkspaceTitle()
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(ConnectionService.ConnectionString))
-                return "ExploreDB Workspace";
 
-            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
-            var dbName = builder.InitialCatalog;
-            
-            if (!string.IsNullOrEmpty(dbName))
-            {
-                var serverName = builder.DataSource;
-                if (!string.IsNullOrEmpty(serverName))
-                    return $"{serverName} ➔ {dbName}";
-                return dbName;
-            }
-        }
-        catch { }
-
-        return string.IsNullOrWhiteSpace(ConnName) ? "ExploreDB Workspace" : ConnName;
-    }
 
     private string _searchConn = "";
     private string SearchConn
@@ -625,6 +603,12 @@
         if (AuthType != type)
         {
             AuthType = type;
+            if (AuthType == "Windows")
+            {
+                Username = "";
+                Password = "";
+            }
+            StateHasChanged();
         }
         IsAuthDropdownOpen = false;
     }

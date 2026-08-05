@@ -44,6 +44,12 @@ public class ConnectionService
 
     public void UpsertConnection(string id, string name, string server, string authType, string username, string password, string database, string connString)
     {
+        if (authType == "Windows")
+        {
+            username = "";
+            password = "";
+        }
+
         var existing = SavedConnections.FirstOrDefault(c => c.Id == id);
         if (existing != null)
         {
