@@ -123,6 +123,29 @@
             anchorElement.remove();
             URL.revokeObjectURL(url);
         };
+
+        // Global Keyboard Shortcuts
+        window.globalShortcuts = {
+            queryRunnerInstance: null,
+            registerQueryRunner: function (dotNetHelper) {
+                this.queryRunnerInstance = dotNetHelper;
+            },
+            unregisterQueryRunner: function () {
+                this.queryRunnerInstance = null;
+            }
+        };
+
+        document.addEventListener('keydown', function (e) {
+            // Intercept F5
+            if (e.key === 'F5' || e.keyCode === 116) {
+                e.preventDefault(); // Block browser refresh completely
+                
+                // If Query Runner is active, execute the query
+                if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                    window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('ExecuteQueryFromShortcut');
+                }
+            }
+        });
     </script>
 </body>
 
