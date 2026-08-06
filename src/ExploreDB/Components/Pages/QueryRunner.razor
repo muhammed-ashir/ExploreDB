@@ -659,7 +659,11 @@
             await _editor.SetValue(newTab.Content);
         }
         
-        if (newTab.ConnectionString != ConnectionService.ConnectionString && !string.IsNullOrEmpty(newTab.ConnectionString))
+        if (string.IsNullOrEmpty(newTab.ConnectionString))
+        {
+            newTab.ConnectionString = ConnectionService.ConnectionString;
+        }
+        else if (newTab.ConnectionString != ConnectionService.ConnectionString)
         {
             ConnectionService.SaveActiveConnection(newTab.ConnectionString);
         }
