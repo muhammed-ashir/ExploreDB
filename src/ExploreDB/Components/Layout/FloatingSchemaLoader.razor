@@ -127,6 +127,14 @@
     private bool _isExpanded = false;
     private CancellationTokenSource? _debounceCts;
 
+    public void ForceShow()
+    {
+        _debounceCts?.Cancel();
+        _showWidget = true;
+        _isExpanded = true;
+        StateHasChanged();
+    }
+
     private bool IsAnythingLoading => SchemaService.IsLoadingTables || 
                                       SchemaService.IsLoadingViews || 
                                       SchemaService.IsLoadingFunctions || 

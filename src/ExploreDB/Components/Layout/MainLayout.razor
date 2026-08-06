@@ -344,8 +344,15 @@
                                 @connDisplay
                             </div>
                         }
-                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center border-0 p-0" style="width: 32px; height: 32px;" title="Refresh Schema" @onclick="RefreshSchema">
-                            <i class="bi bi-arrow-clockwise d-flex align-items-center justify-content-center" style="font-size: 1.2rem; line-height: 1;"></i>
+                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center border-0 p-0" style="width: 32px; height: 32px;" title="Refresh Schema" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
+                            @if (IsRefreshingSchema)
+                            {
+                                <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-arrow-clockwise d-flex align-items-center justify-content-center" style="font-size: 1.2rem; line-height: 1;"></i>
+                            }
                         </button>
                         <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0 p-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="PromptDisconnect">
                             <i class="bi bi-power d-flex align-items-center justify-content-center" style="font-size: 1.2rem; line-height: 1;"></i>
@@ -403,6 +410,25 @@
         </div>
     }
 
+    @if (ShowRefreshPrompt)
+    {
+        <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); z-index: 1070;">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content glass-card border-warning text-white shadow-lg text-center p-4" style="background-color: #2b3035;">
+                    <div class="mb-3 text-warning">
+                        <i class="bi bi-arrow-clockwise" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="fw-bold mb-2">Refresh Schema?</h5>
+                    <p class="small text-muted mb-4">Are you sure you want to completely reload the schema from the server? This may take a moment.</p>
+                    <div class="d-flex justify-content-center gap-3">
+                        <button class="btn btn-outline-secondary px-4 rounded-pill" @onclick="() => ShowRefreshPrompt = false">Cancel</button>
+                        <button class="btn btn-warning px-4 rounded-pill fw-bold shadow text-dark" @onclick="ConfirmRefreshSchema">Refresh</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (ShowToast)
     {
         <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
@@ -418,16 +444,19 @@
         </div>
     }
 
-    <FloatingSchemaLoader />
+    <FloatingSchemaLoader @ref="_schemaLoader" />
 </div>
 
 @code {
     private bool IsConnected = false;
+    private ExploreDB.Components.Layout.FloatingSchemaLoader? _schemaLoader;
     private bool IsBusy = false;
     private bool SidebarCollapsed = false;
     private bool IsDetailsVisible = false;
     private bool ShowSavePrompt = false;
     private bool ShowDisconnectPrompt = false;
+    private bool ShowRefreshPrompt = false;
+    private bool IsRefreshingSchema = false;
     private bool ShowToast = false;
     private string ToastMessage = "";
     private string ToastThemeClass = "success";
@@ -847,9 +876,22 @@
         }
     }
 
-    private async Task RefreshSchema()
+    private void RefreshSchema()
     {
+        ShowRefreshPrompt = true;
+    }
+
+    private async Task ConfirmRefreshSchema()
+    {
+        ShowRefreshPrompt = false;
+        IsRefreshingSchema = true;
+        _schemaLoader?.ForceShow();
+        StateHasChanged();
+        
         await SchemaService.LoadSchemaAsync(forceRefresh: true);
+        
+        IsRefreshingSchema = false;
+        StateHasChanged();
     }
 
     private void PromptDisconnect()
