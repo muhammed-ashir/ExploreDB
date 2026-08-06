@@ -355,7 +355,9 @@
                 <div class="app-shell-content flex-grow-1">
                     @{
                         bool isDatabaseSelected = false;
-                        bool isLearningHub = Nav.Uri.Contains("/learning", StringComparison.OrdinalIgnoreCase);
+                        string relativePath = Nav.ToBaseRelativePath(Nav.Uri);
+                        bool isLearningHub = relativePath.Contains("learning", StringComparison.OrdinalIgnoreCase);
+                        bool isQueryRunner = string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("runner", StringComparison.OrdinalIgnoreCase);
 
                         if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
                         {
@@ -367,7 +369,7 @@
                             catch { }
                         }
                     }
-                    @if (!isDatabaseSelected && !isLearningHub)
+                    @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner)
                     {
                         <div class="w-100 h-100 d-flex justify-content-center align-items-center" style="min-height: 80vh;">
                             <ExploreDB.Components.Shared.NoDatabaseBanner Height="100%" />
