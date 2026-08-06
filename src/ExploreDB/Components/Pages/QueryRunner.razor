@@ -743,6 +743,11 @@
                 {
                     await _editor.SetValue(newTab.Content);
                 }
+                
+                if (newTab.ConnectionString != ConnectionService.ConnectionString && !string.IsNullOrEmpty(newTab.ConnectionString))
+                {
+                    ConnectionService.SaveActiveConnection(newTab.ConnectionString);
+                }
             }
             await QueryStateService.SaveTabsAsync();
         }
