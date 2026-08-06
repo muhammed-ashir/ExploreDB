@@ -323,8 +323,32 @@
                         <span style="font-size: 1.2rem; line-height: 1;">☰</span>
                     </button>
                     <div class="ms-auto d-flex align-items-center gap-3">
-                        <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="PromptDisconnect">
-                            <i class="bi bi-power" style="font-size: 1.2rem;"></i>
+                        @{
+                            string connDisplay = "";
+                            if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
+                            {
+                                try
+                                {
+                                    var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                                    if (!string.IsNullOrEmpty(builder.DataSource) && !string.IsNullOrEmpty(builder.InitialCatalog))
+                                    {
+                                        connDisplay = $"{builder.DataSource} ➔ {builder.InitialCatalog}";
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                        @if (!string.IsNullOrEmpty(connDisplay))
+                        {
+                            <div class="text-secondary small fw-bold me-2">
+                                @connDisplay
+                            </div>
+                        }
+                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center border-0 p-0" style="width: 32px; height: 32px;" title="Refresh Schema" @onclick="RefreshSchema">
+                            <i class="bi bi-arrow-clockwise d-flex align-items-center justify-content-center" style="font-size: 1.2rem; line-height: 1;"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0 p-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="PromptDisconnect">
+                            <i class="bi bi-power d-flex align-items-center justify-content-center" style="font-size: 1.2rem; line-height: 1;"></i>
                         </button>
                     </div>
                 </div>
@@ -495,6 +519,7 @@
 
         ConnectionService.OnDatabaseSwitching += OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
+        ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
         SchemaService.OnError += HandleSchemaError;
 
         if (!Config.GetValue<bool>("DisableAutoUpdates", false))
@@ -623,6 +648,11 @@
     private void OnDatabaseSwitchedHandler()
     {
         IsSwitchingDatabaseGlobal = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnConnectionChangedHandler()
+    {
         InvokeAsync(StateHasChanged);
     }
 
@@ -814,6 +844,12 @@
             StateHasChanged();
         }
     }
+
+    private async Task RefreshSchema()
+    {
+        await SchemaService.LoadSchemaAsync(forceRefresh: true);
+    }
+
     private void PromptDisconnect()
     {
         ShowDisconnectPrompt = true;
@@ -849,6 +885,7 @@
         _updateTimer?.Dispose();
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
+        ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
         SchemaService.OnError -= HandleSchemaError;
     }
 }

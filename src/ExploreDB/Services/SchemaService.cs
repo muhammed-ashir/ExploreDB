@@ -1,7 +1,7 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
-
+using Microsoft.Extensions.Configuration;
 namespace ExploreDB.Services;
 
 public class TableInfo
@@ -185,6 +185,17 @@ public class TypeInfo
     public override string ToString() => FullName;
 }
 
+public class SchemaCacheEntry
+{
+    public string ConnectionString { get; set; } = string.Empty;
+    public List<TableInfo> Tables { get; set; } = new();
+    public List<ViewInfo> Views { get; set; } = new();
+    public List<SpInfo> StoredProcedures { get; set; } = new();
+    public List<FunctionInfo> Functions { get; set; } = new();
+    public List<TypeInfo> Types { get; set; } = new();
+    public DateTime LastAccessed { get; set; } = DateTime.Now;
+}
+
 public class SchemaService
 {
     private readonly ConnectionService _connectionService;
@@ -231,11 +242,16 @@ public class SchemaService
     }
 
     private readonly ILogger<SchemaService> _logger;
+    private readonly IConfiguration _config;
+    private readonly Dictionary<string, SchemaCacheEntry> _schemaCache = new();
+    private readonly int _maxCacheSize = 10;
 
-    public SchemaService(ConnectionService connectionService, ILogger<SchemaService> logger)
+    public SchemaService(ConnectionService connectionService, ILogger<SchemaService> logger, IConfiguration config)
     {
         _connectionService = connectionService;
         _logger = logger;
+        _config = config;
+        _maxCacheSize = _config.GetValue<int>("MaxSchemaCacheCount", 10);
     }
 
     public async Task<string?> GetStoredProcedureDefinitionAsync(string fullName)
@@ -280,7 +296,7 @@ public class SchemaService
         }
     }
 
-    public Task LoadSchemaAsync()
+    public Task LoadSchemaAsync(bool forceRefresh = false)
     {
         if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return Task.CompletedTask;
         
@@ -288,8 +304,35 @@ public class SchemaService
         
         if (string.IsNullOrEmpty(builder.InitialCatalog))
         {
-            Tables.Clear(); Views.Clear(); Functions.Clear(); StoredProcedures.Clear(); Types.Clear();
+            Tables = new(); Views = new(); Functions = new(); StoredProcedures = new(); Types = new();
             AreTablesLoaded = false; AreViewsLoaded = false; AreFunctionsLoaded = false; AreStoredProceduresLoaded = false; AreTypesLoaded = false;
+            OnTablesLoaded?.Invoke();
+            OnViewsLoaded?.Invoke();
+            OnFunctionsLoaded?.Invoke();
+            OnStoredProceduresLoaded?.Invoke();
+            OnTypesLoaded?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        string cacheKey = _connectionService.ConnectionString;
+
+        if (!forceRefresh && _schemaCache.TryGetValue(cacheKey, out var cacheEntry))
+        {
+            _logger.LogInformation("Loading schema from cache for {ConnectionString}", cacheKey);
+            cacheEntry.LastAccessed = DateTime.Now;
+            
+            Tables = cacheEntry.Tables;
+            Views = cacheEntry.Views;
+            Functions = cacheEntry.Functions;
+            StoredProcedures = cacheEntry.StoredProcedures;
+            Types = cacheEntry.Types;
+
+            AreTablesLoaded = true;
+            AreViewsLoaded = true;
+            AreFunctionsLoaded = true;
+            AreStoredProceduresLoaded = true;
+            AreTypesLoaded = true;
+
             OnTablesLoaded?.Invoke();
             OnViewsLoaded?.Invoke();
             OnFunctionsLoaded?.Invoke();
@@ -306,13 +349,44 @@ public class SchemaService
 
         _logger.LogInformation("Kicking off Parallel Eager Schema Load Tasks...");
         
-        _ = LoadTablesAsync();
-        _ = LoadViewsAsync();
-        _ = LoadFunctionsAsync();
-        _ = LoadStoredProceduresAsync();
-        _ = LoadTypesAsync();
+        _ = LoadAllAndCacheAsync(cacheKey);
         
         return Task.CompletedTask;
+    }
+
+    private async Task LoadAllAndCacheAsync(string cacheKey)
+    {
+        await Task.WhenAll(
+            LoadTablesAsync(),
+            LoadViewsAsync(),
+            LoadFunctionsAsync(),
+            LoadStoredProceduresAsync(),
+            LoadTypesAsync()
+        );
+
+        if (AreTablesLoaded && AreViewsLoaded && AreFunctionsLoaded && AreStoredProceduresLoaded && AreTypesLoaded)
+        {
+            var newEntry = new SchemaCacheEntry
+            {
+                ConnectionString = cacheKey,
+                Tables = Tables,
+                Views = Views,
+                Functions = Functions,
+                StoredProcedures = StoredProcedures,
+                Types = Types,
+                LastAccessed = DateTime.Now
+            };
+
+            lock (_schemaCache)
+            {
+                if (_schemaCache.Count >= _maxCacheSize && !_schemaCache.ContainsKey(cacheKey))
+                {
+                    var oldest = _schemaCache.Values.OrderBy(x => x.LastAccessed).First();
+                    _schemaCache.Remove(oldest.ConnectionString);
+                }
+                _schemaCache[cacheKey] = newEntry;
+            }
+        }
     }
 
     public async Task LoadTablesAsync()
@@ -320,7 +394,7 @@ public class SchemaService
         if (AreTablesLoaded || !IsDatabaseConnected) return;
         
         IsLoadingTables = true;
-        Tables.Clear();
+        Tables = new List<TableInfo>();
         OnTablesLoaded?.Invoke();
 
         try 
@@ -444,7 +518,7 @@ public class SchemaService
         if (AreViewsLoaded || !IsDatabaseConnected) return;
         
         IsLoadingViews = true;
-        Views.Clear();
+        Views = new List<ViewInfo>();
         OnViewsLoaded?.Invoke();
 
         try 
@@ -529,7 +603,7 @@ public class SchemaService
         if (AreFunctionsLoaded || !IsDatabaseConnected) return;
         
         IsLoadingFunctions = true;
-        Functions.Clear();
+        Functions = new List<FunctionInfo>();
         OnFunctionsLoaded?.Invoke();
 
         try 
@@ -655,7 +729,7 @@ public class SchemaService
         if (AreStoredProceduresLoaded || !IsDatabaseConnected) return;
 
         IsLoadingStoredProcedures = true;
-        StoredProcedures.Clear();
+        StoredProcedures = new List<SpInfo>();
         OnStoredProceduresLoaded?.Invoke();
 
         try
@@ -766,7 +840,7 @@ public class SchemaService
         if (AreTypesLoaded || !IsDatabaseConnected) return;
 
         IsLoadingTypes = true;
-        Types.Clear();
+        Types = new List<TypeInfo>();
         OnTypesLoaded?.Invoke();
 
         try
