@@ -260,6 +260,27 @@
     </div>
 }
 
+@if (ShowPopoutLimitAlert)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Popout Limit Reached</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowPopoutLimitAlert = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxPopoutTabs", 5))</strong> popped out tabs.</p>
+                    <p class="text-muted small mt-2 mb-0">Please close some existing popout windows before opening new ones.</p>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-primary px-4" @onclick="() => ShowPopoutLimitAlert = false">Got it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (ShowClearConfirmation)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000;">
@@ -456,6 +477,7 @@
     private bool IsTabDropdownOpen = false;
     private string TabSearchTerm = "";
     private bool ShowLimitAlert = false;
+    private bool ShowPopoutLimitAlert = false;
     private bool ShowRestoreSessionPrompt = false;
     private bool ShowClearConfirmation = false;
     private bool ShowCloseTabConfirmation = false;
@@ -815,6 +837,13 @@
     {
         var tabToPop = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabId);
         if (tabToPop == null) return;
+
+        var maxPopoutTabs = Config.GetValue<int>("MaxPopoutTabs", 5);
+        if (QueryStateService.Tabs.Count(t => t.IsPoppedOut) >= maxPopoutTabs)
+        {
+            ShowPopoutLimitAlert = true;
+            return;
+        }
 
         if (QueryStateService.ActiveTabId == tabId && _editor != null)
         {
