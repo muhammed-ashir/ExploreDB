@@ -228,11 +228,38 @@
         _isReady = true;
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _objRef != null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("window.globalShortcuts.registerQueryRunner", _objRef);
+            }
+            catch { }
+        }
+    }
+
     public void Dispose()
     {
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
         _execTimer?.Dispose();
+        try { _ = JS.InvokeVoidAsync("window.globalShortcuts.unregisterQueryRunner"); } catch { }
         _objRef?.Dispose();
+    }
+
+    [JSInvokable]
+    public async Task SaveQueryFromShortcut()
+    {
+        await SaveActiveQueryAsync();
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task ExecuteQueryFromShortcut()
+    {
+        await ExecuteAsync();
+        StateHasChanged();
     }
 
     private void HandleTabUpdated(Guid tabId)

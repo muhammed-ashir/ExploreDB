@@ -145,6 +145,22 @@
                     window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('ExecuteQueryFromShortcut');
                 }
             }
+
+            // Intercept Ctrl+N
+            if (e.ctrlKey && (e.key === 'n' || e.key === 'N')) {
+                e.preventDefault(); // Block default new window shortcut
+                if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                    window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('NewTabFromShortcut');
+                }
+            }
+
+            // Intercept Ctrl+S
+            if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault(); // Block default save page shortcut
+                if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                    window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('SaveQueryFromShortcut');
+                }
+            }
         });
     </script>
 </body>
