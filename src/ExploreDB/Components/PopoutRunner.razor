@@ -253,6 +253,7 @@
     public async Task SaveQueryFromShortcut()
     {
         await SaveActiveQueryAsync();
+        UpdateMauiWindowTitle();
         StateHasChanged();
     }
 
@@ -267,7 +268,10 @@
     {
         if (tabId == TabId)
         {
-            InvokeAsync(StateHasChanged);
+            InvokeAsync(() => {
+                StateHasChanged();
+                UpdateMauiWindowTitle();
+            });
         }
     }
 
@@ -307,22 +311,36 @@
 
     private async Task SaveContentFromTimerAsync()
     {
-        await InvokeAsync(async () =>
+        try
         {
-            try
+            await InvokeAsync(async () =>
             {
-                if (_editor != null)
+                try
                 {
-                    var newContent = await _editor.GetValue();
-                    if (ActiveTab.Content != newContent)
+                    if (_editor != null)
                     {
-                        ActiveTab.Content = newContent;
-                        StateHasChanged();
+                        var newContent = await _editor.GetValue();
+                        if (ActiveTab.Content != newContent)
+                        {
+                            ActiveTab.Content = newContent;
+                            StateHasChanged();
+                            UpdateMauiWindowTitle();
+                        }
                     }
                 }
-            }
-            catch { }
-        });
+                catch { }
+            });
+        }
+        catch { }
+    }
+
+    private void UpdateMauiWindowTitle()
+    {
+        var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => w.Page is PopoutPage pp && pp.TabId == TabId);
+        if (mauiWindow != null)
+        {
+            mauiWindow.Title = GetTabDisplayName(ActiveTab);
+        }
     }
 
     private async Task RegisterAutocompleteItemsAsync()
@@ -535,12 +553,12 @@
     {
         try
         {
-            var tabIdToSave = targetTabId ?? QueryStateService.ActiveTabId;
+            var tabIdToSave = targetTabId ?? TabId;
             var tabToSave = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabIdToSave);
             if (tabToSave == null) return false;
 
             string queryText;
-            if (tabIdToSave == QueryStateService.ActiveTabId && _editor != null)
+            if (tabIdToSave == TabId && _editor != null)
             {
                 queryText = await _editor.GetValue();
                 tabToSave.Content = queryText;
@@ -553,6 +571,7 @@
             if (!string.IsNullOrEmpty(tabToSave.FilePath))
             {
                 await Windows.Storage.FileIO.WriteTextAsync(await Windows.Storage.StorageFile.GetFileFromPathAsync(tabToSave.FilePath), queryText);
+                tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 return true;
             }
@@ -576,6 +595,7 @@
                 await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
                 tabToSave.FilePath = file.Path;
                 tabToSave.Name = file.Name;
+                tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 StateHasChanged();
                 return true;
@@ -616,6 +636,7 @@
                 await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
                 ActiveTab.FilePath = file.Path;
                 ActiveTab.Name = file.Name;
+                ActiveTab.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 StateHasChanged();
             }

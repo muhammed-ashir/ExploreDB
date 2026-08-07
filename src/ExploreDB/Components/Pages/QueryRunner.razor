@@ -825,6 +825,7 @@
         
         // Open native window via MAUI
         var windowTitle = string.IsNullOrEmpty(tabToPop.FilePath) ? tabToPop.Name : System.IO.Path.GetFileName(tabToPop.FilePath);
+        if (tabToPop.IsDirty) windowTitle += " *";
         if (windowTitle.Length > 100) windowTitle = windowTitle.Substring(0, 97) + "...";
         var popoutWindow = new Microsoft.Maui.Controls.Window(new PopoutPage(tabId, QueryStateService))
         {
@@ -1051,20 +1052,24 @@
     
     private async Task SaveContentFromTimerAsync()
     {
-        await InvokeAsync(async () =>
+        try
         {
-            try
+            await InvokeAsync(async () =>
             {
-                var text = await _editor.GetValue();
-                var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
-                if (currentTab != null && currentTab.Content != text)
+                try
                 {
-                    currentTab.Content = text;
-                    StateHasChanged();
+                    var text = await _editor.GetValue();
+                    var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+                    if (currentTab != null && currentTab.Content != text)
+                    {
+                        currentTab.Content = text;
+                        StateHasChanged();
+                    }
                 }
-            }
-            catch { }
-        });
+                catch { }
+            });
+        }
+        catch { }
     }
 
     private async Task FormatSqlAsync()
