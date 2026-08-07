@@ -26,12 +26,12 @@
                 @if (IsTabDropdownOpen)
                 {
                     <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTabDropdownOpen = false"></div>
-                    <div class="dropdown-menu show bg-dark border-secondary shadow-lg p-1 mt-2" style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 250px; max-width: 350px; overflow-x: hidden;">
+                    <div class="dropdown-menu show bg-dark border-secondary shadow-lg p-1 mt-2" style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 350px; max-width: 450px; overflow-x: hidden;">
                         <div class="p-1 mb-1">
                             <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" placeholder="Search tabs..." @bind="TabSearchTerm" @bind:event="oninput" @onclick:stopPropagation />
                         </div>
                         <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 300px; overflow-y: auto;">
-                            @foreach (var tab in QueryStateService.Tabs.Where(t => string.IsNullOrEmpty(TabSearchTerm) || t.Name.Contains(TabSearchTerm, StringComparison.OrdinalIgnoreCase)))
+                            @foreach (var tab in QueryStateService.Tabs.Where(t => !t.IsPoppedOut && (string.IsNullOrEmpty(TabSearchTerm) || t.Name.Contains(TabSearchTerm, StringComparison.OrdinalIgnoreCase))))
                         {
                             <div class="dropdown-item d-flex justify-content-between align-items-center text-white @(tab.Id == QueryStateService.ActiveTabId ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" style="cursor: pointer; min-width: 0;" data-bs-tooltip="true" data-bs-title="@GetTabTooltip(tab)" data-bs-html="true" data-bs-placement="right" @onclick="async () => { await SwitchTabAsync(tab.Id); IsTabDropdownOpen = false; }">
                                 <div class="d-flex flex-column text-truncate me-3" style="flex: 1; min-width: 0;">
@@ -41,12 +41,17 @@
                                         <span class="text-secondary text-truncate" style="font-size: 0.7rem;">@GetTabConnectionSummary(tab)</span>
                                     }
                                 </div>
-                                @if (QueryStateService.Tabs.Count > 1)
-                                {
-                                    <button class="btn btn-sm btn-outline-danger border-0 flex-shrink-0 px-1 py-0 rounded" @onclick="async () => { await CloseTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation>
-                                        <i class="bi bi-x fs-5"></i>
-                                    </button>
-                                }
+                                <div class="d-flex align-items-center flex-shrink-0">
+                                    @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+                                    {
+                                        <button class="btn btn-sm btn-outline-info border-0 p-0 rounded me-1 d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await PopoutTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Pop Out">
+                                            <i class="bi bi-box-arrow-up-right" style="font-size: 0.9rem;"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger border-0 p-0 rounded d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await CloseTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Close">
+                                            <i class="bi bi-x" style="font-size: 1.3rem;"></i>
+                                        </button>
+                                    }
+                                </div>
                             </div>
                         }
                         </div>
@@ -444,6 +449,24 @@
         SchemaService.OnTablesLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnViewsLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded -= OnSchemaLoadedHandler;
+        QueryStateService.OnTabUpdated -= HandleTabUpdated;
+    }
+
+    private async void HandleTabUpdated(Guid tabId)
+    {
+        if (QueryStateService.ActiveTabId == tabId && _editor != null)
+        {
+            var tab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabId);
+            if (tab != null)
+            {
+                var currentEditorContent = await _editor.GetValue();
+                if (currentEditorContent != tab.Content)
+                {
+                    await _editor.SetValue(tab.Content);
+                }
+            }
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private async void OnConnectionChangedHandler()
@@ -550,8 +573,13 @@
             var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(tab.ConnectionString);
             string server = builder.DataSource;
             string db = builder.InitialCatalog;
-            if (string.IsNullOrEmpty(db)) db = "master";
-            return $"{server} \u2192 {db}";
+            
+            if (string.IsNullOrEmpty(db)) 
+            {
+                return "Not Connected";
+            }
+            
+            return $"{server} ➔ {db}";
         }
         catch
         {
@@ -568,7 +596,12 @@
             var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(tab.ConnectionString);
             string server = builder.DataSource;
             string db = builder.InitialCatalog;
-            if (string.IsNullOrEmpty(db)) db = "master";
+            
+            if (string.IsNullOrEmpty(db))
+            {
+                return $"<strong>Name:</strong> {tab.Name}<br/><strong>Server:</strong> {server}<br/><strong>DB:</strong> Not Selected";
+            }
+            
             return $"<strong>Name:</strong> {tab.Name}<br/><strong>Server:</strong> {server}<br/><strong>DB:</strong> {db}";
         }
         catch
@@ -586,6 +619,7 @@
         SchemaService.OnTablesLoaded += OnSchemaLoadedHandler;
         SchemaService.OnViewsLoaded += OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded += OnSchemaLoadedHandler;
+        QueryStateService.OnTabUpdated += HandleTabUpdated;
         
         if (!QueryStateService.Initialized)
         {
@@ -686,7 +720,12 @@
             currentTab.Content = await _editor.GetValue();
         }
 
-        var newCount = QueryStateService.Tabs.Count + 1;
+        int newCount = 1;
+        while (QueryStateService.Tabs.Any(t => t.Name == $"SQLQuery{newCount}.sql"))
+        {
+            newCount++;
+        }
+        
         var newTab = new ExploreDB.Services.QueryTab { 
             Name = $"SQLQuery{newCount}.sql",
             ConnectionString = ConnectionService.ConnectionString
@@ -746,6 +785,39 @@
         catch { }
     }
 
+    private async Task PopoutTabAsync(Guid tabId)
+    {
+        var tabToPop = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabId);
+        if (tabToPop == null) return;
+
+        if (QueryStateService.ActiveTabId == tabId && _editor != null)
+        {
+            tabToPop.Content = await _editor.GetValue();
+        }
+
+        tabToPop.IsPoppedOut = true;
+        
+        // Open native window via MAUI
+        var windowTitle = string.IsNullOrEmpty(tabToPop.FilePath) ? tabToPop.Name : System.IO.Path.GetFileName(tabToPop.FilePath);
+        if (windowTitle.Length > 100) windowTitle = windowTitle.Substring(0, 97) + "...";
+        var popoutWindow = new Microsoft.Maui.Controls.Window(new PopoutPage(tabId, QueryStateService))
+        {
+            Title = windowTitle
+        };
+        Microsoft.Maui.Controls.Application.Current?.OpenWindow(popoutWindow);
+
+        if (QueryStateService.ActiveTabId == tabId)
+        {
+            var nextTab = QueryStateService.Tabs.FirstOrDefault(t => !t.IsPoppedOut);
+            if (nextTab != null)
+            {
+                await SwitchTabAsync(nextTab.Id);
+            }
+        }
+        
+        QueryStateService.NotifyTabUpdated(tabId);
+    }
+
     private async Task CloseTabAsync(Guid tabId)
     {
         if (QueryStateService.Tabs.Count <= 1) return;
@@ -778,6 +850,10 @@
         var tabToRemove = QueryStateService.Tabs.FirstOrDefault(t => t.Id == idToClose);
         if (tabToRemove != null)
         {
+            if (tabToRemove.QueryCts != null && !tabToRemove.QueryCts.IsCancellationRequested)
+            {
+                try { tabToRemove.QueryCts.Cancel(); } catch { }
+            }
             QueryStateService.Tabs.Remove(tabToRemove);
 
             if (QueryStateService.ActiveTabId == idToClose)

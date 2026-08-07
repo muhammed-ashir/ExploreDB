@@ -1,0 +1,10 @@
+@using ExploreDB.Components.Pages
+
+<div class="h-100 bg-dark text-white d-flex flex-column" data-bs-theme="dark" style="height: 100vh;">
+    <PopoutRunner TabId="@TabId" />
+</div>
+
+@code {
+    [Parameter]
+    public Guid TabId { get; set; }
+}

@@ -1,0 +1,626 @@
+@using BlazorMonaco.Editor
+@using BlazorMonaco
+@using ExploreDB.Services
+@using Microsoft.Data.SqlClient
+@using System.Data
+@using Microsoft.Extensions.Configuration
+@inject ConnectionService ConnectionService
+@inject SchemaService SchemaService
+@inject QueryStateService QueryStateService
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="container-fluid d-flex flex-column h-100 p-4 bg-dark">
+    <div class="row mb-3">
+        <div class="col d-flex justify-content-between align-items-center flex-nowrap">
+            <div class="d-flex align-items-center" style="min-width: 0;">
+                <span class="fw-bold text-truncate" style="color: rgba(255,255,255,0.65);" title="@GetTabConnectionSummary(ActiveTab)">@GetTabConnectionSummary(ActiveTab)</span>
+            </div>
+            <div class="d-flex gap-2 flex-shrink-0">
+                <button class="btn btn-sm btn-outline-light shadow-sm" data-bs-tooltip="true" data-bs-title="Dock to Main Window" data-bs-placement="bottom" @onclick="DockTab">
+                    <i class="bi bi-box-arrow-in-down-right"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-light shadow-sm" data-bs-tooltip="true" data-bs-title="Save Query" data-bs-placement="bottom" @onclick="SaveActiveQueryAsync">
+                    <i class="bi bi-floppy"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-light shadow-sm" data-bs-tooltip="true" data-bs-title="Save As..." data-bs-placement="bottom" @onclick="SaveAsQueryAsync">
+                    <i class="bi bi-file-earmark-plus"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-warning shadow-sm" data-bs-tooltip="true" data-bs-title="Clear Editor" data-bs-placement="bottom" @onclick="() => ShowClearConfirmation = true">
+                    <i class="bi bi-eraser-fill"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-info shadow-sm" data-bs-tooltip="true" data-bs-title="Format SQL" data-bs-placement="bottom" @onclick="FormatSqlAsync">
+                    <i class="bi bi-magic"></i>
+                </button>
+
+                @if (ActiveTab.IsExecuting)
+                {
+                    <button class="btn btn-sm btn-danger shadow-sm" @onclick="CancelExecution">
+                        <i class="bi bi-stop-fill me-1"></i>Stop
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-primary shadow-sm" @onclick="ExecuteAsync">
+                        <i class="bi bi-play-fill me-1"></i>Execute
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(FormatError))
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Format Error:</strong> @FormatError
+            <button type="button" class="btn-close" @onclick="() => FormatError = null" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Execution Harness Area -->
+    <div class="row g-4 mb-4 @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")">
+        <div class="col-12 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column" : "")">
+            <div class="card bg-dark text-white shadow-sm border-secondary @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1 d-flex flex-column" : "")">
+                
+                <div class="card-body p-0 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column flex-grow-1" : "")">
+                    <div class="@(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")" style="@(ActiveTab.HasExecuted && !IsMinimized ? "height: 350px;" : "") width: 100%; display: block; resize: vertical; overflow: hidden; min-height: 150px; padding-bottom: 2px;">
+                        @if (_isReady)
+                        {
+                            <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Area --> 
+    @if (ActiveTab.HasExecuted)
+    {
+        <div class="@(IsFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-4" : IsMinimized ? "position-sticky bottom-0 w-100 p-0 mt-auto" : "row")" 
+             style="@(IsFullScreen ? "background-color: rgba(15, 15, 20, 0.95); z-index: 9999; padding-top: 60px !important;" : IsMinimized ? "z-index: 1030;" : "")">
+            <div class="@(IsFullScreen || IsMinimized ? "w-100 h-100" : "col-12")">
+                <div class="card glass-card text-white d-flex flex-column" style="@(IsFullScreen ? "height: 100%;" : IsMinimized ? "border-bottom-left-radius: 0; border-bottom-right-radius: 0;" : "min-height: 400px;")">
+                    <div class="card-header border-secondary p-0 d-flex justify-content-between align-items-center">
+                        <ul class="nav nav-tabs border-secondary flex-grow-1 border-bottom-0">
+                            <li class="nav-item">
+                                <a class="nav-link @(ResultTab == "Results" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted border-transparent")"
+                                   @onclick='() => { ResultTab = "Results"; IsMinimized = false; }' style="cursor:pointer">Results</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link @(ResultTab == "Messages" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted border-transparent")"
+                                   @onclick='() => { ResultTab = "Messages"; IsMinimized = false; }' style="cursor:pointer">
+                                    Messages
+                                    @if (ActiveTab.Messages.Count > 0) { <span class="badge bg-secondary ms-1">@ActiveTab.Messages.Count</span> }
+                                </a>
+                            </li>
+                        </ul>
+                        <div class="d-flex align-items-center pe-2">
+                            @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
+                            {
+                                <span class="text-muted small me-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+                            }
+                            @if (!IsFullScreen)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary border-0 text-white me-1" @onclick="ToggleMinimize" title="@(IsMinimized ? "Restore Up" : "Minimize")">
+                                    <i class="bi @(IsMinimized ? "bi-chevron-up" : "bi-chevron-down")"></i>
+                                </button>
+                            }
+                            <button class="btn btn-sm btn-outline-secondary border-0 text-white @(!IsFullScreen ? "me-1" : "")" @onclick="ToggleFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
+                                <i class="bi @(IsFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                            </button>
+                            
+                            @if (!IsFullScreen)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary border-0 text-white" @onclick="() => ActiveTab.HasExecuted = false" title="Close Results">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    
+                    @if (!IsMinimized)
+                    {
+                        <div class="card-body overflow-auto flex-grow-1">
+                        @if (ResultTab == "Results")
+                        {
+                            if (ActiveTab.IsExecuting)
+                            {
+                                <div class="text-center mt-5">
+                                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div>
+                                    <div class="mt-3 text-muted fs-5">Executing... (@(TimeSpan.FromSeconds(ActiveTab.ExecElapsedSeconds).ToString(@"mm\:ss")))</div>
+                                </div>
+                            }
+                            else if (ActiveTab.ResultSets == null || ActiveTab.ResultSets.Count == 0)
+                            {
+                                <div class="text-muted text-center mt-5">Command completed successfully. No data tables returned.</div>
+                            }
+                            else
+                            {
+                                int rsIndex = 1;
+                                foreach (var rs in ActiveTab.ResultSets)
+                                {
+                                    @if (ActiveTab.ResultSets.Count > 1) 
+                                    { 
+                                        <div class="d-flex align-items-center mb-3 mt-4">
+                                            <hr class="flex-grow-1 border-secondary m-0" style="opacity: 0.3;">
+                                            <span class="px-3 fw-bold text-info" style="letter-spacing: 1px; font-size: 0.95rem;">Result Set @rsIndex</span>
+                                            <hr class="flex-grow-1 border-secondary m-0" style="opacity: 0.3;">
+                                        </div>
+                                    }
+                                    <ExploreDB.Components.Pages.ResultSetGrid Data="rs" />
+                                    rsIndex++;
+                                }
+                            }
+                        }
+                        else if (ResultTab == "Messages")
+                        {
+                            <pre class="m-0 text-light" style="font-size: 0.85em; white-space: pre-wrap;">
+@if (ActiveTab.Messages.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
+@foreach (var msg in ActiveTab.Messages) { @msg<br/> }
+                            </pre>
+                        }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (ShowClearConfirmation)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark border-secondary shadow-lg">
+                <div class="modal-body p-4 pb-2">
+                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                        Are you sure you want to <strong class="text-warning">clear the editor</strong>? This action cannot be undone.
+                    </p>
+                </div>
+                <div class="modal-footer border-0 p-4 pt-2">
+                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowClearConfirmation = false">Cancel</button>
+                    <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm text-dark" @onclick="ClearQueryAsync">Clear</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid TabId { get; set; }
+
+    private QueryTab ActiveTab => QueryStateService.Tabs.FirstOrDefault(t => t.Id == TabId) ?? new QueryTab();
+    private string ResultTab = "Results";
+    private StandaloneCodeEditor _editor = default!;
+    private DotNetObjectReference<PopoutRunner>? _objRef;
+    private System.Timers.Timer? _execTimer;
+    private string _initialContent = string.Empty;
+    private bool _hasUnsavedChanges = false;
+    private bool _isReady = false;
+    private bool ShowClearConfirmation = false;
+    private string? FormatError;
+
+    private bool IsFullScreen = false;
+    private bool IsMinimized = false;
+
+    private void ToggleFullScreen()
+    {
+        IsFullScreen = !IsFullScreen;
+        if (IsFullScreen) IsMinimized = false;
+    }
+
+    private void ToggleMinimize()
+    {
+        IsMinimized = !IsMinimized;
+        if (IsMinimized) IsFullScreen = false;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        QueryStateService.OnTabUpdated += HandleTabUpdated;
+        _objRef = DotNetObjectReference.Create(this);
+        
+        // Small delay to ensure MAUI WebView is fully initialized and DOM is ready for Monaco
+        await Task.Delay(100);
+        _isReady = true;
+    }
+
+    public void Dispose()
+    {
+        QueryStateService.OnTabUpdated -= HandleTabUpdated;
+        _execTimer?.Dispose();
+        _objRef?.Dispose();
+    }
+
+    private void HandleTabUpdated(Guid tabId)
+    {
+        if (tabId == TabId)
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            AutomaticLayout = true,
+            Language = "sql",
+            Value = ActiveTab.Content,
+            Theme = "vs-dark",
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            FontSize = 14,
+            WordWrap = "on",
+            FormatOnPaste = true,
+            Scrollbar = new EditorScrollbarOptions { UseShadows = false }
+        };
+    }
+
+    private async Task EditorOnDidInit()
+    {
+        _initialContent = ActiveTab.Content;
+        await RegisterAutocompleteItemsAsync();
+    }
+
+    private async Task EditorOnDidChangeModelContent(ModelContentChangedEvent e)
+    {
+        if (_editor != null)
+        {
+            var newContent = await _editor.GetValue();
+            ActiveTab.Content = newContent;
+            
+            if (!_hasUnsavedChanges && newContent != _initialContent)
+            {
+                _hasUnsavedChanges = true;
+            }
+        }
+    }
+
+    private async Task RegisterAutocompleteItemsAsync()
+    {
+        var schema = SchemaService.GetCachedSchema(ActiveTab.ConnectionString);
+        
+        var tables = schema.Tables.Select(t => new { name = t.Split('.').Last().Trim('[', ']'), fullName = t }).ToList();
+        var views = schema.Views.Select(v => new { name = v.Split('.').Last().Trim('[', ']'), fullName = v }).ToList();
+        
+        await JS.InvokeVoidAsync("updateSqlAutocompleteData", tables, views, null, null);
+        await Task.Delay(1); 
+
+        var columns = schema.Columns;
+        await JS.InvokeVoidAsync("updateSqlAutocompleteData", null, null, columns, null);
+        await Task.Delay(1);
+
+        var sps = schema.Sps.Select(s => new { name = s.Split('.').Last().Trim('[', ']'), fullName = s, parameters = new List<object>() }).ToList();
+        await JS.InvokeVoidAsync("registerSqlAutocomplete", null, null, null, sps, null);
+    }
+
+    private async Task ExecuteAsync()
+    {
+        if (ActiveTab.IsExecuting || string.IsNullOrEmpty(ActiveTab.ConnectionString)) return;
+        
+        // Save content from editor to model before executing
+        if (_editor != null)
+        {
+            ActiveTab.Content = await _editor.GetValue();
+        }
+
+        ActiveTab.IsExecuting = true;
+        ActiveTab.HasExecuted = true;
+        ActiveTab.ResultSets.Clear();
+        ActiveTab.Messages.Clear();
+        ActiveTab.ExecElapsedSeconds = 0;
+        
+        _execTimer?.Dispose();
+        _execTimer = new System.Timers.Timer(1000);
+        _execTimer.Elapsed += (s, e) => {
+            ActiveTab.ExecElapsedSeconds++;
+            InvokeAsync(StateHasChanged);
+        };
+        _execTimer.Start();
+
+        ActiveTab.QueryCts = new CancellationTokenSource();
+        ResultTab = "Results";
+        StateHasChanged();
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            string queryToRun = ActiveTab.Content;
+            
+            if (_editor != null)
+            {
+                var selection = await _editor.GetSelection();
+                if (selection != null && (selection.StartLineNumber != selection.EndLineNumber || selection.StartColumn != selection.EndColumn))
+                {
+                    var model = await _editor.GetModel();
+                    queryToRun = await model.GetValueInRange(selection, EndOfLinePreference.LF);
+                }
+            }
+            
+            if (string.IsNullOrWhiteSpace(queryToRun))
+            {
+                ActiveTab.Messages.Add("Query text is empty.");
+                ResultTab = "Messages";
+                return;
+            }
+
+            using var conn = new SqlConnection(ActiveTab.ConnectionString);
+            conn.InfoMessage += (sender, e) => 
+            {
+                InvokeAsync(() => {
+                    ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] {e.Message}");
+                    StateHasChanged();
+                });
+            };
+            
+            await conn.OpenAsync(ActiveTab.QueryCts.Token);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = queryToRun;
+            cmd.CommandTimeout = 0;
+            
+            ActiveTab.IsCurrentQuerySelect = queryToRun.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase);
+
+            using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
+            int totalRows = 0;
+            
+            do
+            {
+                try
+                {
+                    var rs = new List<dynamic>();
+                    int fieldCount = reader.FieldCount;
+                    
+                    if (fieldCount > 0)
+                    {
+                        var columnNames = new string[fieldCount];
+                        for (int i = 0; i < fieldCount; i++)
+                        {
+                            columnNames[i] = reader.GetName(i);
+                            if (string.IsNullOrEmpty(columnNames[i])) columnNames[i] = $"Column{i}";
+                        }
+
+                        int yieldCount = 0;
+                        while (await reader.ReadAsync(ActiveTab.QueryCts.Token))
+                        {
+                            var row = new System.Dynamic.ExpandoObject() as IDictionary<string, object>;
+                            for (int i = 0; i < fieldCount; i++)
+                            {
+                                row[columnNames[i]] = await reader.IsDBNullAsync(i, ActiveTab.QueryCts.Token) ? null! : reader.GetValue(i);
+                            }
+                            rs.Add(row);
+                            
+                            if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                        }
+                        
+                        ActiveTab.ResultSets.Add(rs);
+                        totalRows += rs.Count;
+                    }
+                    else
+                    {
+                        if (reader.RecordsAffected >= 0)
+                        {
+                            ActiveTab.Messages.Add($"({reader.RecordsAffected} row(s) affected)");
+                        }
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Error reading result set: {ex.Message}");
+                }
+            } while (await reader.NextResultAsync(ActiveTab.QueryCts.Token));
+
+            if (ActiveTab.ResultSets.Count == 0 && ResultTab == "Results")
+            {
+                ResultTab = "Messages";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Query execution was canceled by the user.");
+            ResultTab = "Messages";
+        }
+        catch (Exception ex)
+        {
+            ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Error: {ex.Message}");
+            ResultTab = "Messages";
+        }
+        finally
+        {
+            watch.Stop();
+            _execTimer?.Stop();
+            ActiveTab.IsExecuting = false;
+            ActiveTab.LastExecutionTimeMs = watch.ElapsedMilliseconds;
+            StateHasChanged();
+        }
+    }
+
+    private void DockTab()
+    {
+        var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => 
+            w.Page is PopoutPage pp && pp.TabId == TabId);
+            
+        if (mauiWindow != null)
+        {
+            if (mauiWindow.Page is PopoutPage pp)
+            {
+                pp.IsDocking = true;
+            }
+            Microsoft.Maui.Controls.Application.Current?.CloseWindow(mauiWindow);
+        }
+    }
+
+    private async Task ClearQueryAsync()
+    {
+        if (_editor != null)
+        {
+            await _editor.SetValue("");
+        }
+        if (ActiveTab != null)
+        {
+            ActiveTab.Content = "";
+        }
+        ShowClearConfirmation = false;
+    }
+
+    private async Task FormatSqlAsync()
+    {
+        FormatError = null;
+        var currentQuery = await _editor.GetValue();
+        if (!string.IsNullOrWhiteSpace(currentQuery))
+        {
+            try
+            {
+                var formatted = await JS.InvokeAsync<string>("formatSql", currentQuery);
+                await _editor.SetValue(formatted);
+            }
+            catch (Exception ex)
+            {
+                FormatError = "Syntax error near: " + ex.Message.Split('\n').FirstOrDefault()?.Replace("Error:", "").Trim();
+            }
+        }
+    }
+
+    private async Task SaveActiveQueryAsync() => await SaveQueryAsync(null);
+
+    private async Task<bool> SaveQueryAsync(Guid? targetTabId = null)
+    {
+        try
+        {
+            var tabIdToSave = targetTabId ?? QueryStateService.ActiveTabId;
+            var tabToSave = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabIdToSave);
+            if (tabToSave == null) return false;
+
+            string queryText;
+            if (tabIdToSave == QueryStateService.ActiveTabId && _editor != null)
+            {
+                queryText = await _editor.GetValue();
+                tabToSave.Content = queryText;
+            }
+            else
+            {
+                queryText = tabToSave.Content;
+            }
+
+            if (!string.IsNullOrEmpty(tabToSave.FilePath))
+            {
+                await Windows.Storage.FileIO.WriteTextAsync(await Windows.Storage.StorageFile.GetFileFromPathAsync(tabToSave.FilePath), queryText);
+                await QueryStateService.SaveTabsAsync();
+                return true;
+            }
+
+            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
+            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
+            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
+            savePicker.SuggestedFileName = tabToSave.Name;
+
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            {
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
+            }
+
+            var file = await savePicker.PickSaveFileAsync();
+            if (file != null)
+            {
+                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
+                tabToSave.FilePath = file.Path;
+                tabToSave.Name = file.Name;
+                await QueryStateService.SaveTabsAsync();
+                StateHasChanged();
+                return true;
+            }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            return false;
+        }
+    }
+
+    private async Task SaveAsQueryAsync()
+    {
+        try
+        {
+            var queryText = await _editor.GetValue();
+            if (ActiveTab == null) return;
+            ActiveTab.Content = queryText;
+
+            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
+            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
+            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
+            savePicker.SuggestedFileName = ActiveTab.Name;
+
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            {
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
+            }
+
+            var file = await savePicker.PickSaveFileAsync();
+            if (file != null)
+            {
+                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
+                ActiveTab.FilePath = file.Path;
+                ActiveTab.Name = file.Name;
+                await QueryStateService.SaveTabsAsync();
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private void CancelExecution()
+    {
+        if (ActiveTab.IsExecuting && ActiveTab.QueryCts != null)
+        {
+            ActiveTab.QueryCts.Cancel();
+        }
+    }
+
+    private string GetTabDisplayName(QueryTab? tab)
+    {
+        if (tab == null) return "";
+        string displayName = string.IsNullOrEmpty(tab.FilePath) ? tab.Name : Path.GetFileName(tab.FilePath);
+        if (_hasUnsavedChanges) displayName += " *";
+        return displayName;
+    }
+
+    private string GetTabConnectionSummary(QueryTab? tab)
+    {
+        if (tab == null || string.IsNullOrEmpty(tab.ConnectionString)) return "Not Connected";
+        try
+        {
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(tab.ConnectionString);
+            string server = builder.DataSource;
+            string db = builder.InitialCatalog;
+            
+            if (string.IsNullOrEmpty(db))
+            {
+                return "Not Connected";
+            }
+            
+            return $"{server} ➔ {db}";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private string GetFormattedExecutionTimeMs(long ms)
+    {
+        if (ms < 1000) return $"{ms}ms";
+        return $"{ms / 1000.0:F1}s";
+    }
+}

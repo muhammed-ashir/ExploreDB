@@ -36,6 +36,8 @@ public class QueryTab
     
     [System.Text.Json.Serialization.JsonIgnore]
     public CancellationTokenSource? QueryCts { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsPoppedOut { get; set; }
 }
 
 public enum QueryMode { Select, Update, Delete }
@@ -44,6 +46,13 @@ public class QueryStateService
 {
     public List<QueryTab> Tabs { get; set; } = new();
     public Guid ActiveTabId { get; set; }
+    
+    public event Action<Guid>? OnTabUpdated;
+    
+    public void NotifyTabUpdated(Guid tabId)
+    {
+        OnTabUpdated?.Invoke(tabId);
+    }
     
     // Tracks if the session prompt has already been shown this app lifecycle
     public bool Initialized { get; set; } = false;

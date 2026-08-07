@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:ExploreDB"
+             x:Class="ExploreDB.PopoutPage"
+             BackgroundColor="#212529">
+
+    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
+        <BlazorWebView.RootComponents>
+            <!-- We will configure the RootComponent dynamically in code-behind to pass the TabId -->
+        </BlazorWebView.RootComponents>
+    </BlazorWebView>
+
+</ContentPage>
