@@ -117,6 +117,25 @@
             </div>
         }
     }
+
+    @if (ShowExitConfirmation)
+    {
+        <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 5000;">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content bg-dark border-secondary shadow-lg">
+                    <div class="modal-body p-4 pb-2">
+                        <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                            Are you sure you want to <strong class="text-warning">exit ExploreDB</strong>?
+                        </p>
+                    </div>
+                    <div class="modal-footer border-0 p-4 pt-2">
+                        <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowExitConfirmation = false">Cancel</button>
+                        <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm text-dark" @onclick="ConfirmExit">Exit</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
     @if (!IsConnected)
     {
         <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8);">
@@ -532,9 +551,11 @@
     private double UpdateProgress = 0;
     private bool StoreUpdateReadyToRestart = false;
     private System.Threading.PeriodicTimer? _updateTimer;
+    private bool ShowExitConfirmation = false;
 
     protected override async Task OnInitializedAsync()
     {
+        MauiProgram.RequestAppExit += HandleRequestAppExit;
         Nav.LocationChanged += OnLocationChanged;
 
         ConnString = ConnectionService.ConnectionString;
@@ -569,17 +590,41 @@
 #else
             UpdateInfo = await UpdateService.CheckForUpdateAsync();
 #endif
+            
+            if (UpdateInfo != null)
+            {
+                _updateTimer = new System.Threading.PeriodicTimer(TimeSpan.FromHours(1));
+                _ = PollForUpdatesAsync();
+            }
         }
-
-        // Start background polling every 1 hour
-        _ = StartBackgroundUpdateCheck();
     }
 
-    private async Task StartBackgroundUpdateCheck()
+    private void HandleRequestAppExit()
     {
-        if (Config.GetValue<bool>("DisableAutoUpdates", false)) return;
+        InvokeAsync(() => {
+            ShowExitConfirmation = true;
+            StateHasChanged();
+        });
+    }
 
-        _updateTimer = new System.Threading.PeriodicTimer(TimeSpan.FromHours(1));
+    private void ConfirmExit()
+    {
+        Environment.Exit(0);
+    }
+
+    public void Dispose()
+    {
+        MauiProgram.RequestAppExit -= HandleRequestAppExit;
+        ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
+        ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
+        ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
+        SchemaService.OnError -= HandleSchemaError;
+        Nav.LocationChanged -= OnLocationChanged;
+        _updateTimer?.Dispose();
+    }
+
+    private async Task PollForUpdatesAsync()
+    {
         while (await _updateTimer.WaitForNextTickAsync())
         {
             try 
@@ -923,13 +968,4 @@
         InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose()
-    {
-        Nav.LocationChanged -= OnLocationChanged;
-        _updateTimer?.Dispose();
-        ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
-        ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
-        ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
-        SchemaService.OnError -= HandleSchemaError;
-    }
 }

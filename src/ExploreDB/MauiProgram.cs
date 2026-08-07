@@ -10,6 +10,9 @@ namespace ExploreDB;
 
 public static class MauiProgram
 {
+    public static event Action? RequestAppExit;
+    private static bool _isMainWindowCreated = false;
+
 	public static MauiApp CreateMauiApp()
 	{
 		try {
@@ -74,6 +77,16 @@ public static class MauiProgram
                             
                             var iconPath = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "Images\\app.ico");
                             appWindow.SetIcon(iconPath);
+
+                            if (!_isMainWindowCreated)
+                            {
+                                _isMainWindowCreated = true;
+                                appWindow.Closing += (sender, args) =>
+                                {
+                                    args.Cancel = true;
+                                    RequestAppExit?.Invoke();
+                                };
+                            }
                         }
                         catch { }
                     });
