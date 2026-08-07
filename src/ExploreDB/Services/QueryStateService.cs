@@ -8,8 +8,12 @@ public class QueryTab
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = "SQLQuery1.sql";
     public string Content { get; set; } = "";
+    public string OriginalContent { get; set; } = "";
     public string? FilePath { get; set; }
     
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsDirty => Content != OriginalContent;
+
     public string ConnectionString { get; set; } = string.Empty;
     public string ConnectionName { get; set; } = string.Empty;
 

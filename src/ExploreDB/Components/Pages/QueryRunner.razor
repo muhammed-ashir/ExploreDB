@@ -587,7 +587,8 @@
 
     private string GetTabDisplayName(ExploreDB.Services.QueryTab? tab)
     {
-        return tab?.Name ?? "Query Runner";
+        if (tab == null) return "Query Runner";
+        return tab.IsDirty ? $"{tab.Name} *" : tab.Name;
     }
 
     private string GetTabConnectionSummary(ExploreDB.Services.QueryTab? tab)
@@ -1059,6 +1060,7 @@
                 if (currentTab != null && currentTab.Content != text)
                 {
                     currentTab.Content = text;
+                    StateHasChanged();
                 }
             }
             catch { }
@@ -1109,6 +1111,7 @@
             if (!string.IsNullOrEmpty(tabToSave.FilePath))
             {
                 await Windows.Storage.FileIO.WriteTextAsync(await Windows.Storage.StorageFile.GetFileFromPathAsync(tabToSave.FilePath), queryText);
+                tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 return true;
             }
@@ -1132,6 +1135,7 @@
                 await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
                 tabToSave.FilePath = file.Path;
                 tabToSave.Name = file.Name;
+                tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 StateHasChanged();
                 return true;
@@ -1173,6 +1177,7 @@
                 await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
                 activeTab.FilePath = file.Path;
                 activeTab.Name = file.Name;
+                activeTab.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 StateHasChanged();
             }

@@ -197,8 +197,8 @@
     private StandaloneCodeEditor _editor = default!;
     private DotNetObjectReference<PopoutRunner>? _objRef;
     private System.Timers.Timer? _execTimer;
-    private string _initialContent = string.Empty;
-    private bool _hasUnsavedChanges = false;
+    private System.Timers.Timer? _saveDebounceTimer;
+
     private bool _isReady = false;
     private bool ShowClearConfirmation = false;
     private string? FormatError;
@@ -244,6 +244,7 @@
     {
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
         _execTimer?.Dispose();
+        _saveDebounceTimer?.Dispose();
         try { _ = JS.InvokeVoidAsync("window.globalShortcuts.unregisterQueryRunner"); } catch { }
         _objRef?.Dispose();
     }
@@ -288,22 +289,40 @@
 
     private async Task EditorOnDidInit()
     {
-        _initialContent = ActiveTab.Content;
         await RegisterAutocompleteItemsAsync();
     }
 
-    private async Task EditorOnDidChangeModelContent(ModelContentChangedEvent e)
+    private void EditorOnDidChangeModelContent(ModelContentChangedEvent e)
     {
-        if (_editor != null)
+        if (_saveDebounceTimer == null)
         {
-            var newContent = await _editor.GetValue();
-            ActiveTab.Content = newContent;
-            
-            if (!_hasUnsavedChanges && newContent != _initialContent)
-            {
-                _hasUnsavedChanges = true;
-            }
+            _saveDebounceTimer = new System.Timers.Timer(500);
+            _saveDebounceTimer.AutoReset = false;
+            _saveDebounceTimer.Elapsed += async (sender, args) => await SaveContentFromTimerAsync();
         }
+        
+        _saveDebounceTimer.Stop();
+        _saveDebounceTimer.Start();
+    }
+
+    private async Task SaveContentFromTimerAsync()
+    {
+        await InvokeAsync(async () =>
+        {
+            try
+            {
+                if (_editor != null)
+                {
+                    var newContent = await _editor.GetValue();
+                    if (ActiveTab.Content != newContent)
+                    {
+                        ActiveTab.Content = newContent;
+                        StateHasChanged();
+                    }
+                }
+            }
+            catch { }
+        });
     }
 
     private async Task RegisterAutocompleteItemsAsync()
@@ -619,7 +638,7 @@
     {
         if (tab == null) return "";
         string displayName = string.IsNullOrEmpty(tab.FilePath) ? tab.Name : Path.GetFileName(tab.FilePath);
-        if (_hasUnsavedChanges) displayName += " *";
+        if (tab.IsDirty) displayName += " *";
         return displayName;
     }
 
