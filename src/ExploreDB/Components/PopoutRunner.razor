@@ -228,6 +228,9 @@
     protected override async Task OnInitializedAsync()
     {
         QueryStateService.OnTabUpdated += HandleTabUpdated;
+        SchemaService.OnTablesLoaded += OnSchemaLoadedHandler;
+        SchemaService.OnViewsLoaded += OnSchemaLoadedHandler;
+        SchemaService.OnStoredProceduresLoaded += OnSchemaLoadedHandler;
         _objRef = DotNetObjectReference.Create(this);
         
         // Small delay to ensure MAUI WebView is fully initialized and DOM is ready for Monaco
@@ -250,6 +253,9 @@
     public void Dispose()
     {
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
+        SchemaService.OnTablesLoaded -= OnSchemaLoadedHandler;
+        SchemaService.OnViewsLoaded -= OnSchemaLoadedHandler;
+        SchemaService.OnStoredProceduresLoaded -= OnSchemaLoadedHandler;
         _execTimer?.Dispose();
         _saveDebounceTimer?.Dispose();
         try { _ = JS.InvokeVoidAsync("window.globalShortcuts.unregisterQueryRunner"); } catch { }
@@ -269,6 +275,11 @@
     {
         await ExecuteAsync();
         StateHasChanged();
+    }
+
+    private async void OnSchemaLoadedHandler()
+    {
+        await InvokeAsync(RegisterAutocompleteItemsAsync);
     }
 
     private void HandleTabUpdated(Guid tabId)
