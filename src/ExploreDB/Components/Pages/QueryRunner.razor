@@ -653,7 +653,11 @@
     private string GetTabTooltip(ExploreDB.Services.QueryTab? tab)
     {
         if (tab == null) return "Query Runner";
-        if (string.IsNullOrEmpty(tab.ConnectionString)) return $"<strong>Name:</strong> {tab.Name}";
+        
+        string pathInfo = string.IsNullOrEmpty(tab.FilePath) ? "Unsaved" : tab.FilePath;
+        string tooltip = $"<strong>Name:</strong> {tab.Name}<br/><strong>File Path:</strong> {pathInfo}";
+
+        if (string.IsNullOrEmpty(tab.ConnectionString)) return tooltip;
         try
         {
             var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(tab.ConnectionString);
@@ -662,14 +666,14 @@
             
             if (string.IsNullOrEmpty(db))
             {
-                return $"<strong>Name:</strong> {tab.Name}<br/><strong>Server:</strong> {server}<br/><strong>DB:</strong> Not Selected";
+                return $"{tooltip}<br/><strong>Server:</strong> {server}<br/><strong>DB:</strong> Not Selected";
             }
             
-            return $"<strong>Name:</strong> {tab.Name}<br/><strong>Server:</strong> {server}<br/><strong>DB:</strong> {db}";
+            return $"{tooltip}<br/><strong>Server:</strong> {server}<br/><strong>DB:</strong> {db}";
         }
         catch
         {
-            return $"<strong>Name:</strong> {tab.Name}";
+            return tooltip;
         }
     }
 
