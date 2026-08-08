@@ -5,9 +5,9 @@
              x:Class="ExploreDB.PopoutPage"
              BackgroundColor="#212529">
     <Grid BackgroundColor="#212529">
-        <VerticalStackLayout x:Name="NativeLoader" HorizontalOptions="Center" VerticalOptions="Center" Spacing="10" BackgroundColor="#212529">
-            <Label Text="ExploreDB" FontSize="28" TextColor="#ffffff" FontAttributes="Bold" HorizontalOptions="Center" />
-            <Label Text="Loading editor..." FontSize="14" TextColor="#888888" HorizontalOptions="Center" />
+        <VerticalStackLayout x:Name="NativeLoader" HorizontalOptions="Center" VerticalOptions="Center" Spacing="15" BackgroundColor="#212529">
+            <Image Source="Images/Square150x150Logo.png" WidthRequest="100" HeightRequest="100" HorizontalOptions="Center" />
+            <Label Text="Loading..." FontSize="14" TextColor="#aaaaaa" HorizontalOptions="Center" />
         </VerticalStackLayout>
 
         <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" WidthRequest="0" HeightRequest="0" HorizontalOptions="Fill" VerticalOptions="Fill">
