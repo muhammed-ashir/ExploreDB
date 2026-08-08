@@ -136,13 +136,92 @@
             </div>
         </div>
     }
-    @if (!IsConnected)
+    <div class="app-shell">
+        <aside class="sidebar app-shell-sidebar @(SidebarCollapsed ? "collapsed" : "")">
+            <NavMenu />
+        </aside>
+
+        <main class="app-shell-main d-flex flex-column" style="height: 100vh; overflow-y: auto;">
+            <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top" style="background-color: rgba(33, 37, 41, 0.95); backdrop-filter: blur(5px); z-index: 1020;">
+                <button class="btn btn-sm btn-outline-secondary text-white border-0 me-3" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
+                    <span style="font-size: 1.2rem; line-height: 1;">☰</span>
+                </button>
+                <div class="ms-auto d-flex align-items-center gap-3">
+                    @{
+                        string connDisplay = "";
+                        if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
+                        {
+                            try
+                            {
+                                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                                if (!string.IsNullOrEmpty(builder.DataSource) && !string.IsNullOrEmpty(builder.InitialCatalog))
+                                {
+                                    connDisplay = $"{builder.DataSource} ➔ {builder.InitialCatalog}";
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    @if (!string.IsNullOrEmpty(connDisplay))
+                    {
+                        <div class="small fw-bold me-2" style="color: rgba(255,255,255,0.65);">
+                            @connDisplay
+                        </div>
+                    }
+                    <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center border-0 p-0" style="width: 32px; height: 32px;" title="Refresh Schema" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
+                        @if (IsRefreshingSchema)
+                        {
+                            <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-arrow-clockwise d-flex align-items-center justify-content-center" style="font-size: 1.2rem; line-height: 1;"></i>
+                        }
+                    </button>
+                    <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0 p-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="() => ShowConnectionManager = true">
+                        <i class="bi bi-plug d-flex align-items-center justify-content-center" style="font-size: 1.2rem; line-height: 1;"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="app-shell-content flex-grow-1">
+                @{
+                    bool isDatabaseSelected = false;
+                    string relativePath = Nav.ToBaseRelativePath(Nav.Uri);
+                    bool isLearningHub = relativePath.Contains("learning", StringComparison.OrdinalIgnoreCase);
+                    bool isQueryRunner = string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("runner", StringComparison.OrdinalIgnoreCase);
+
+                    if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
+                    {
+                        try
+                        {
+                            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                            isDatabaseSelected = !string.IsNullOrEmpty(builder.InitialCatalog);
+                        }
+                        catch { }
+                    }
+                }
+                @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner)
+                {
+                    <div class="w-100 h-100 d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+                        <ExploreDB.Components.Shared.NoDatabaseBanner Height="100%" />
+                    </div>
+                }
+                else
+                {
+                    @Body
+                }
+            </div>
+        </main>
+    </div>
+
+    @if (ShowConnectionManager)
     {
-        <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8);">
+        <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8); z-index: 1050;">
             <div class="modal-dialog modal-dialog-centered modal-lg">
                 <div class="modal-content glass-card border-0 text-white" style="background-color: #2b3035;">
                     <div class="modal-header border-bottom border-secondary">
                         <h5 class="modal-title fw-bold mb-0">Connection Manager</h5>
+                        <button type="button" class="btn-close btn-close-white" @onclick="() => ShowConnectionManager = false" style="font-size: 0.8rem;"></button>
                     </div>
                     <div class="modal-body p-0">
                         <div class="d-flex flex-column" style="height: 450px;">
@@ -329,86 +408,6 @@
             </div>
         }
     }
-    else
-    {
-        <div class="app-shell">
-            <aside class="sidebar app-shell-sidebar @(SidebarCollapsed ? "collapsed" : "")">
-                <NavMenu />
-            </aside>
-
-            <main class="app-shell-main d-flex flex-column" style="height: 100vh; overflow-y: auto;">
-                <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top" style="background-color: rgba(33, 37, 41, 0.95); backdrop-filter: blur(5px); z-index: 1020;">
-                    <button class="btn btn-sm btn-outline-secondary text-white border-0 me-3" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
-                        <span style="font-size: 1.2rem; line-height: 1;">☰</span>
-                    </button>
-                    <div class="ms-auto d-flex align-items-center gap-3">
-                        @{
-                            string connDisplay = "";
-                            if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
-                            {
-                                try
-                                {
-                                    var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
-                                    if (!string.IsNullOrEmpty(builder.DataSource) && !string.IsNullOrEmpty(builder.InitialCatalog))
-                                    {
-                                        connDisplay = $"{builder.DataSource} ➔ {builder.InitialCatalog}";
-                                    }
-                                }
-                                catch { }
-                            }
-                        }
-                        @if (!string.IsNullOrEmpty(connDisplay))
-                        {
-                            <div class="small fw-bold me-2" style="color: rgba(255,255,255,0.65);">
-                                @connDisplay
-                            </div>
-                        }
-                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center border-0 p-0" style="width: 32px; height: 32px;" title="Refresh Schema" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
-                            @if (IsRefreshingSchema)
-                            {
-                                <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
-                            }
-                            else
-                            {
-                                <i class="bi bi-arrow-clockwise d-flex align-items-center justify-content-center" style="font-size: 1.2rem; line-height: 1;"></i>
-                            }
-                        </button>
-                        <button class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center border-0 p-0" style="width: 32px; height: 32px;" title="Switch Server" @onclick="PromptDisconnect">
-                            <i class="bi bi-power d-flex align-items-center justify-content-center" style="font-size: 1.2rem; line-height: 1;"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="app-shell-content flex-grow-1">
-                    @{
-                        bool isDatabaseSelected = false;
-                        string relativePath = Nav.ToBaseRelativePath(Nav.Uri);
-                        bool isLearningHub = relativePath.Contains("learning", StringComparison.OrdinalIgnoreCase);
-                        bool isQueryRunner = string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("runner", StringComparison.OrdinalIgnoreCase);
-
-                        if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
-                        {
-                            try
-                            {
-                                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
-                                isDatabaseSelected = !string.IsNullOrEmpty(builder.InitialCatalog);
-                            }
-                            catch { }
-                        }
-                    }
-                    @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner)
-                    {
-                        <div class="w-100 h-100 d-flex justify-content-center align-items-center" style="min-height: 80vh;">
-                            <ExploreDB.Components.Shared.NoDatabaseBanner Height="100%" />
-                        </div>
-                    }
-                    else
-                    {
-                        @Body
-                    }
-                </div>
-            </main>
-        </div>
-    }
 
     @if (ShowDisconnectPrompt)
     {
@@ -468,6 +467,7 @@
 
 @code {
     private bool IsConnected = false;
+    private bool ShowConnectionManager = false;
     private ExploreDB.Components.Layout.FloatingSchemaLoader? _schemaLoader;
     private bool IsBusy = false;
     private bool SidebarCollapsed = false;
@@ -555,6 +555,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        ShowConnectionManager = !IsConnected;
         MauiProgram.RequestAppExit += HandleRequestAppExit;
         Nav.LocationChanged += OnLocationChanged;
 
@@ -609,6 +610,7 @@
 
     private void ConfirmExit()
     {
+        Microsoft.Data.SqlClient.SqlConnection.ClearAllPools();
         Environment.Exit(0);
     }
 
@@ -902,6 +904,7 @@
         ConnectionService.SaveActiveConnection(ConnString);
         // Schema load is automatically triggered by OnConnectionChanged
         IsConnected = true;
+        ShowConnectionManager = false;
         IsBusy = false;
     }
 
@@ -961,6 +964,7 @@
     private void Disconnect()
     {
         IsConnected = false;
+        ShowConnectionManager = true;
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)

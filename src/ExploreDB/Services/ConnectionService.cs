@@ -35,9 +35,21 @@ public class ConnectionService
         }
     }
 
+    public List<SavedConnection> ActiveSessionConnections { get; } = new();
+
     public void SaveActiveConnection(string connString)
     {
         ConnectionString = connString;
+        
+        if (!string.IsNullOrEmpty(connString) && !ActiveSessionConnections.Any(c => c.ConnectionString == connString))
+        {
+            var saved = SavedConnections.FirstOrDefault(c => c.ConnectionString == connString);
+            if (saved != null)
+            {
+                ActiveSessionConnections.Add(saved);
+            }
+        }
+        
         SaveToDisk();
         OnConnectionChanged?.Invoke();
     }
@@ -173,19 +185,21 @@ public class ConnectionService
                 var data = JsonSerializer.Deserialize<SettingsModel>(json);
                 if (data != null)
                 {
-                    ConnectionString = data.ConnectionString ?? "";
+                    // Intentionally start in a disconnected state
+                    ConnectionString = ""; 
+                    
                     if (data.SavedConnections != null)
                     {
                         SavedConnections = data.SavedConnections;
                     }
-                    else if (!string.IsNullOrEmpty(ConnectionString))
+                    else if (!string.IsNullOrEmpty(data.ConnectionString))
                     {
                         // Legacy migration
                         SavedConnections.Add(new SavedConnection
                         {
                             Id = Guid.NewGuid().ToString(),
                             Name = "Default Connection",
-                            ConnectionString = ConnectionString
+                            ConnectionString = data.ConnectionString
                         });
                         SaveToDisk();
                     }
