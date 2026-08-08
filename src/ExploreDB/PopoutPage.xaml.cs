@@ -12,20 +12,32 @@ public partial class PopoutPage : ContentPage
     public PopoutPage(Guid tabId, QueryStateService queryStateService)
     {
         InitializeComponent();
+        MauiProgram.AppReady += HandleAppReady;
         
         _tabId = tabId;
         _queryStateService = queryStateService;
-
-        // Dynamically add the RootComponent with the TabId parameter
         blazorWebView.RootComponents.Add(new RootComponent
         {
             Selector = "#app",
-            ComponentType = typeof(Components.PopoutRoot),
+            ComponentType = typeof(ExploreDB.Components.PopoutRoot),
             Parameters = new Dictionary<string, object?>
             {
-                { "TabId", _tabId }
+                { "TabId", tabId }
             }
         });
+    }
+
+    private void HandleAppReady(Guid? tabId)
+    {
+        if (tabId != _tabId) return; // Only process this specific popout window's ready event
+
+        Dispatcher.Dispatch(() =>
+        {
+            blazorWebView.WidthRequest = -1;
+            blazorWebView.HeightRequest = -1;
+            NativeLoader.IsVisible = false;
+        });
+        MauiProgram.AppReady -= HandleAppReady;
     }
 
     protected override void OnNavigatedTo(NavigatedToEventArgs args)

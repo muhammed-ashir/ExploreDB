@@ -4,11 +4,17 @@
              xmlns:local="clr-namespace:ExploreDB"
              x:Class="ExploreDB.MainPage"
              BackgroundColor="#212529">
+    <Grid BackgroundColor="#212529">
+        <VerticalStackLayout x:Name="NativeLoader" HorizontalOptions="Center" VerticalOptions="Center" Spacing="10" BackgroundColor="#212529">
+            <Label Text="ExploreDB" FontSize="28" TextColor="#ffffff" FontAttributes="Bold" HorizontalOptions="Center" />
+            <Label Text="Initializing workspace..." FontSize="14" TextColor="#888888" HorizontalOptions="Center" />
+        </VerticalStackLayout>
 
-    <BlazorWebView HostPage="wwwroot/index.html">
-        <BlazorWebView.RootComponents>
-            <RootComponent Selector="#app" ComponentType="{x:Type local:Components.Routes}" />
-        </BlazorWebView.RootComponents>
-    </BlazorWebView>
+        <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" WidthRequest="0" HeightRequest="0" HorizontalOptions="Fill" VerticalOptions="Fill">
+            <BlazorWebView.RootComponents>
+                <RootComponent Selector="#app" ComponentType="{x:Type local:Components.Routes}" />
+            </BlazorWebView.RootComponents>
+        </BlazorWebView>
+    </Grid>
 
 </ContentPage>

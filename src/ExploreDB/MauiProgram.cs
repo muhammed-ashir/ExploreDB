@@ -11,6 +11,13 @@ namespace ExploreDB;
 public static class MauiProgram
 {
     public static event Action? RequestAppExit;
+    public static event Action<Guid?>? AppReady;
+    
+    public static void InvokeAppReady(Guid? tabId = null)
+    {
+        AppReady?.Invoke(tabId);
+    }
+    
     private static bool _isMainWindowCreated = false;
 
 	public static MauiApp CreateMauiApp()

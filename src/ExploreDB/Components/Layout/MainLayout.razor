@@ -600,6 +600,19 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Signal to MAUI that the Blazor UI is ready
+                MauiProgram.InvokeAppReady(null);
+            }
+            catch { }
+        }
+    }
+
     private void HandleRequestAppExit()
     {
         InvokeAsync(() => {
