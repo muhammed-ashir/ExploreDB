@@ -117,7 +117,10 @@
             <div class="card bg-dark text-white shadow-sm border-secondary @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1 d-flex flex-column" : "")">
                 <div class="card-body p-0 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column flex-grow-1" : "")">
                     <div class="@(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")" style="@(ActiveTab.HasExecuted && !IsMinimized ? "height: 350px;" : "") width: 100%; display: block; resize: vertical; overflow: hidden; min-height: 150px; padding-bottom: 2px;">
-                        <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
+                        @if (QueryStateService.Initialized)
+                        {
+                            <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
+                        }
                     </div>
                 </div>
             </div>
