@@ -146,7 +146,7 @@
                 <button class="btn btn-sm btn-outline-secondary text-white border-0 me-3" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
                     <span style="font-size: 1.2rem; line-height: 1;">☰</span>
                 </button>
-                <div class="ms-auto d-flex align-items-center gap-3 pe-3">
+                <div class="ms-auto d-flex align-items-center gap-2 pe-3">
                     @{
                         string connDisplay = "";
                         if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
@@ -164,11 +164,11 @@
                     }
                     @if (!string.IsNullOrEmpty(connDisplay))
                     {
-                        <div class="small fw-bold me-2" style="color: rgba(255,255,255,0.65);">
+                        <div class="small fw-bold" style="color: rgba(255,255,255,0.65);">
                             @connDisplay
                         </div>
                     }
-                    <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center me-1" style="width: 28px; height: 28px; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="Refresh Schema" data-bs-tooltip="true" data-bs-placement="bottom" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
+                    <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="Refresh Schema" data-bs-tooltip="true" data-bs-placement="bottom" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
                         @if (IsRefreshingSchema)
                         {
                             <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
