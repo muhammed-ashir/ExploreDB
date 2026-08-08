@@ -143,6 +143,12 @@
             }
         };
 
+        window.addEventListener('focus', function () {
+            if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('OnWindowFocusAsync');
+            }
+        });
+
         document.addEventListener('keydown', function (e) {
             // Intercept F5
             if (e.key === 'F5' || e.keyCode === 116) {

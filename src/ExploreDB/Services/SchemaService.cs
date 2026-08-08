@@ -194,6 +194,7 @@ public class SchemaCacheEntry
     public List<FunctionInfo> Functions { get; set; } = new();
     public List<TypeInfo> Types { get; set; } = new();
     public DateTime LastAccessed { get; set; } = DateTime.Now;
+    public DateTime LastFetched { get; set; } = DateTime.Now;
 }
 
 public class SchemaService
@@ -337,14 +338,21 @@ public class SchemaService
 
         if (!forceRefresh && _schemaCache.TryGetValue(cacheKey, out var cacheEntry))
         {
-            _logger.LogInformation("Loading schema from cache for {ConnectionString}", cacheKey);
-            cacheEntry.LastAccessed = DateTime.Now;
-            
-            Tables = cacheEntry.Tables;
-            Views = cacheEntry.Views;
-            Functions = cacheEntry.Functions;
-            StoredProcedures = cacheEntry.StoredProcedures;
-            Types = cacheEntry.Types;
+            var expirationHours = _config.GetValue<int>("SchemaCacheExpirationHours", 24);
+            if ((DateTime.Now - cacheEntry.LastFetched).TotalHours >= expirationHours)
+            {
+                _logger.LogInformation("Schema cache expired for {ConnectionString}, forcing refresh.", cacheKey);
+            }
+            else
+            {
+                _logger.LogInformation("Loading schema from cache for {ConnectionString}", cacheKey);
+                cacheEntry.LastAccessed = DateTime.Now;
+                
+                Tables = cacheEntry.Tables;
+                Views = cacheEntry.Views;
+                Functions = cacheEntry.Functions;
+                StoredProcedures = cacheEntry.StoredProcedures;
+                Types = cacheEntry.Types;
 
             AreTablesLoaded = true;
             AreViewsLoaded = true;
@@ -358,6 +366,7 @@ public class SchemaService
             OnStoredProceduresLoaded?.Invoke();
             OnTypesLoaded?.Invoke();
             return Task.CompletedTask;
+            }
         }
 
         AreTablesLoaded = false;

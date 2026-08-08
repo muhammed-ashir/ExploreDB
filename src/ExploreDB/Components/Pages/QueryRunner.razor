@@ -1357,6 +1357,15 @@
     }
 
     [JSInvokable]
+    public async Task OnWindowFocusAsync()
+    {
+        if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        {
+            await SchemaService.LoadSchemaAsync();
+        }
+    }
+
+    [JSInvokable]
     public async Task ExecuteQueryFromShortcut()
     {
         await ExecuteAsync();
