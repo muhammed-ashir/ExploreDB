@@ -550,18 +550,13 @@
     private async Task FormatSqlAsync()
     {
         FormatError = null;
-        var currentQuery = await _editor.GetValue();
-        if (!string.IsNullOrWhiteSpace(currentQuery))
+        try
         {
-            try
-            {
-                var formatted = await JS.InvokeAsync<string>("formatSql", currentQuery);
-                await _editor.SetValue(formatted);
-            }
-            catch (Exception ex)
-            {
-                FormatError = "Syntax error near: " + ex.Message.Split('\n').FirstOrDefault()?.Replace("Error:", "").Trim();
-            }
+            await JS.InvokeVoidAsync("formatSqlEditor", "query-editor");
+        }
+        catch (Exception ex)
+        {
+            FormatError = "Syntax error near: " + ex.Message.Split('\n').FirstOrDefault()?.Replace("Error:", "").Trim();
         }
     }
 

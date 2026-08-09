@@ -9,6 +9,52 @@ window.formatSql = (code) => {
     });
 };
 
+window.formatSqlEditor = (editorId) => {
+    if (!window.sqlFormatter) {
+        throw new Error("SQL Formatter is not loaded correctly.");
+    }
+    
+    var editors = monaco.editor.getEditors();
+    var editor = null;
+    
+    for (var i = 0; i < editors.length; i++) {
+        var e = editors[i];
+        var container = e.getContainerDomNode();
+        if (container && (container.id === editorId || (container.parentElement && container.parentElement.id === editorId) || (container.closest && container.closest('#' + editorId)))) {
+            editor = e;
+            break;
+        }
+    }
+    
+    if (!editor && editors.length > 0) {
+        editor = editors[0];
+    }
+    
+    if (!editor) {
+        throw new Error("Editor not found.");
+    }
+    
+    var code = editor.getValue();
+    if (!code || !code.trim()) return;
+
+    var formatted = window.sqlFormatter.format(code, {
+        language: 'tsql',
+        keywordCase: 'upper',
+        linesBetweenQueries: 2
+    });
+    
+    var model = editor.getModel();
+    var fullRange = model.getFullModelRange();
+    
+    editor.pushUndoStop();
+    editor.executeEdits('formatter', [{
+        range: fullRange,
+        text: formatted,
+        forceMoveMarkers: true
+    }]);
+    editor.pushUndoStop();
+};
+
 window.updateSqlAutocompleteData = (tables, views, columns, sps) => {
     window.sqlTables = tables || window.sqlTables;
     window.sqlViews = views || window.sqlViews;
