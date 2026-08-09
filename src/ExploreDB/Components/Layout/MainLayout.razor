@@ -178,7 +178,7 @@
                             }
                         </button>
                     }
-                    <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; position: relative; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" @onclick="() => ShowConnectionManager = true" title="Connection Manager" data-bs-tooltip="true" data-bs-placement="bottom">
+                    <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; position: relative; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" @onclick="() => { ShowConnectionManager = true; IsDetailsVisible = false; }" title="Connection Manager" data-bs-tooltip="true" data-bs-placement="bottom">
                         <i class="bi bi-plugin text-info" style="font-size: 1.25rem; line-height: 1;"></i>
                     </button>
                 </div>
