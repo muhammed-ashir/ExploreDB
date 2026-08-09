@@ -41,12 +41,59 @@ public class ConnectionService
     {
         ConnectionString = connString;
         
-        if (!string.IsNullOrEmpty(connString) && !ActiveSessionConnections.Any(c => c.ConnectionString == connString))
+        if (!string.IsNullOrEmpty(connString))
         {
-            var saved = SavedConnections.FirstOrDefault(c => c.ConnectionString == connString);
-            if (saved != null)
+            var builder = new SqlConnectionStringBuilder(connString);
+            string server = builder.DataSource;
+            string userId = builder.UserID ?? "";
+            
+            var existingActive = ActiveSessionConnections.FirstOrDefault(c => 
+                string.Equals(c.Server, server, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(c.Username ?? "", userId, StringComparison.OrdinalIgnoreCase));
+            
+            if (existingActive != null)
             {
-                ActiveSessionConnections.Add(saved);
+                existingActive.ConnectionString = connString;
+                existingActive.Database = builder.InitialCatalog;
+            }
+            else
+            {
+                var saved = SavedConnections.FirstOrDefault(c => string.Equals(c.ConnectionString, connString, StringComparison.OrdinalIgnoreCase));
+                if (saved == null)
+                {
+                    saved = SavedConnections.FirstOrDefault(c => 
+                        string.Equals(c.Server, server, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(c.Username ?? "", userId, StringComparison.OrdinalIgnoreCase));
+                }
+                
+                if (saved != null)
+                {
+                    ActiveSessionConnections.Add(new SavedConnection
+                    {
+                        Id = saved.Id,
+                        Name = saved.Name,
+                        Server = saved.Server,
+                        AuthType = saved.AuthType,
+                        UseWindowsAuth = saved.UseWindowsAuth,
+                        Username = saved.Username,
+                        Database = builder.InitialCatalog,
+                        ConnectionString = connString,
+                        LastUsed = DateTime.Now
+                    });
+                }
+                else
+                {
+                    ActiveSessionConnections.Add(new SavedConnection
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Name = server,
+                        Server = server,
+                        Username = userId,
+                        Database = builder.InitialCatalog,
+                        ConnectionString = connString,
+                        LastUsed = DateTime.Now
+                    });
+                }
             }
         }
         
