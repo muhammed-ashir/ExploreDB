@@ -34,21 +34,24 @@ window.formatSqlEditor = (editorId) => {
         throw new Error("Editor not found.");
     }
     
-    var code = editor.getValue();
-    if (!code || !code.trim()) return;
+    var model = editor.getModel();
+    var selection = editor.getSelection();
+    var hasSelection = selection && !selection.isEmpty();
+    
+    var codeToFormat = hasSelection ? model.getValueInRange(selection) : editor.getValue();
+    if (!codeToFormat || !codeToFormat.trim()) return;
 
-    var formatted = window.sqlFormatter.format(code, {
+    var formatted = window.sqlFormatter.format(codeToFormat, {
         language: 'tsql',
         keywordCase: 'upper',
         linesBetweenQueries: 2
     });
     
-    var model = editor.getModel();
-    var fullRange = model.getFullModelRange();
+    var rangeToReplace = hasSelection ? selection : model.getFullModelRange();
     
     editor.pushUndoStop();
     editor.executeEdits('formatter', [{
-        range: fullRange,
+        range: rangeToReplace,
         text: formatted,
         forceMoveMarkers: true
     }]);
