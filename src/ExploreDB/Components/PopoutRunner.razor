@@ -595,7 +595,7 @@
             savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
             savePicker.SuggestedFileName = tabToSave.Name;
 
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => w.Page is PopoutPage pp && pp.TabId == TabId);
             if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
             {
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
@@ -636,7 +636,7 @@
             savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
             savePicker.SuggestedFileName = ActiveTab.Name;
 
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => w.Page is PopoutPage pp && pp.TabId == TabId);
             if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
             {
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
