@@ -18,6 +18,7 @@
         <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
         <GenerateTestAppPackage>true</GenerateTestAppPackage>
         <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+        <ApplicationManifest Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">Platforms\Windows\app.manifest</ApplicationManifest>
         <ApplicationVersion>7</ApplicationVersion>
         <ApplicationDisplayVersion>2.1.1.0</ApplicationDisplayVersion>
         <Version>2.1.1.0</Version>

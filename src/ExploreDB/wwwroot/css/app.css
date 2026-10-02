@@ -171,7 +171,6 @@ body {
     max-height: 420px;
     overflow-y: auto;
     overflow-x: hidden;
-    overscroll-behavior: contain;
     scrollbar-gutter: stable;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -192,7 +191,6 @@ body {
     max-height: 320px;
     overflow-y: auto;
     overflow-x: hidden;
-    overscroll-behavior: contain;
     padding: 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 0.75rem;
