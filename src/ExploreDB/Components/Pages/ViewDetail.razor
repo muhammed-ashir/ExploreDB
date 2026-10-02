@@ -27,15 +27,22 @@
                         <h5 class="text-white mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="letter-spacing: 0.5px; word-break: break-word;">
                             @View.Name
                             <span class="badge bg-info text-dark fw-normal align-middle" style="font-size: 0.45em; padding: 0.35em 0.6em;">VIEW</span>
+                            @if (!IsPopout)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary border-0 ms-2" style="padding: 2px 6px;" title="Pop Out" @onclick="PopOutSchema"><i class="bi bi-box-arrow-up-right text-info"></i></button>
+                            }
                         </h5>
                         <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">SCHEMA: <span class="text-lowercase">@View.Schema</span></small>
                     </div>
                 </div>
             </div>
             <div class="col-auto">
-                <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm border-secondary text-light">
-                    <i class="bi bi-arrow-left"></i> Back
-                </a>
+                @if (!IsPopout || !IsPopoutRoot)
+                {
+                    <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm border-secondary text-light">
+                        <i class="bi bi-arrow-left"></i> Back
+                    </a>
+                }
             </div>
 
         </div>
@@ -539,8 +546,7 @@
     private List<ColumnInfo> VisibleColumns => FilterColumns(ColumnSearchTerm, ColumnSearchCaseSensitive, ColumnSearchMatchWholeWord, ColumnSearchExactMatch);
     private string SelectQuery => $"SELECT TOP 100 * FROM {QuotedViewName(View!)};";
 
-    protected override async Task OnParametersSetAsync()
-    {
+    protected override async Task OnParametersSetAsync() { 
         IsLoading = true;
         await Task.Yield();
         
@@ -638,8 +644,38 @@
         Navigation.NavigateTo("/runner");
     }
 
-    private void NavigateBack()
+    [CascadingParameter(Name = "IsPopout")] 
+    public bool IsPopout { get; set; }
+
+    [CascadingParameter(Name = "IsPopoutRoot")] public bool IsPopoutRoot { get; set; }
+
+    private void PopOutSchema()
     {
+        var maxSchemaPopouts = Config.GetValue<int>("MaxSchemaPopouts", 5);
+        var popouts = Microsoft.Maui.Controls.Application.Current?.Windows.OfType<Microsoft.Maui.Controls.Window>().Where(w => w.Page is SchemaPopoutPage).Count() ?? 0;
+        if (popouts >= maxSchemaPopouts)
+        {
+            JS.InvokeVoidAsync("alert", $"Maximum schema popouts ({maxSchemaPopouts}) reached.");
+            return;
+        }
+
+        var startPath = $"/view/{Uri.EscapeDataString(FullName)}";
+        var windowTitle = $"{View.Schema}.{View.Name} (View)";
+        var popoutWindow = new Microsoft.Maui.Controls.Window(new SchemaPopoutPage(startPath, windowTitle, ConnectionService))
+        {
+            Title = windowTitle
+        };
+        Microsoft.Maui.Controls.Application.Current?.OpenWindow(popoutWindow);
+    }
+
+    private async Task NavigateBack()
+    {
+        if (IsPopout)
+        {
+            await JS.InvokeVoidAsync("history.back");
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(ReturnUrl))
         {
             Navigation.NavigateTo(ReturnUrl);
@@ -736,3 +772,5 @@
         StateHasChanged();
     }
 }
+
+

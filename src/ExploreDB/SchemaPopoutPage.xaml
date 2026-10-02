@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:ExploreDB"
+             x:Class="ExploreDB.SchemaPopoutPage"
+             BackgroundColor="#212529">
+    <Grid BackgroundColor="#212529">
+        <VerticalStackLayout x:Name="NativeLoader" HorizontalOptions="Center" VerticalOptions="Center" Spacing="15" BackgroundColor="#212529">
+            <Image Source="Images/Square150x150Logo.png" WidthRequest="100" HeightRequest="100" HorizontalOptions="Center" />
+            <Label Text="Loading..." FontSize="14" TextColor="#aaaaaa" HorizontalOptions="Center" />
+        </VerticalStackLayout>
+
+        <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" WidthRequest="0" HeightRequest="0" HorizontalOptions="Fill" VerticalOptions="Fill">
+        </BlazorWebView>
+    </Grid>
+</ContentPage>

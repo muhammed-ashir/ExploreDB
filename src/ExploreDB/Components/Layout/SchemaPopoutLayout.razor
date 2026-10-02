@@ -1,0 +1,44 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Nav
+
+<div class="h-100 bg-dark text-white d-flex flex-column p-3 pt-4" data-bs-theme="dark" style="height: 100vh; overflow-y: auto;">
+    <CascadingValue Value="true" Name="IsPopout">
+        <CascadingValue Value="IsAtRoot" Name="IsPopoutRoot">
+            @Body
+        </CascadingValue>
+    </CascadingValue>
+</div>
+
+@code {
+    private string RootUri = "";
+
+    private bool IsAtRoot 
+    {
+        get 
+        {
+            if (string.IsNullOrEmpty(RootUri) || RootUri == Nav.BaseUri) return true;
+            return Nav.Uri.Equals(RootUri, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        RootUri = Nav.Uri;
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (RootUri == Nav.BaseUri && !e.Location.Equals(Nav.BaseUri, StringComparison.OrdinalIgnoreCase))
+        {
+            RootUri = e.Location;
+        }
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

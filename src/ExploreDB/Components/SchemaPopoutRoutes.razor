@@ -1,0 +1,25 @@
+@inject NavigationManager NavigationManager
+
+<Router AppAssembly="@typeof(SchemaPopoutRoutes).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.SchemaPopoutLayout)" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="@typeof(Layout.SchemaPopoutLayout)">
+            <p role="alert">Sorry, there's nothing at this address.</p>
+        </LayoutView>
+    </NotFound>
+</Router>
+
+@code {
+    [Parameter] 
+    public string InitialRoute { get; set; } = "";
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(InitialRoute))
+        {
+            NavigationManager.NavigateTo(InitialRoute, replace: true);
+        }
+    }
+}
