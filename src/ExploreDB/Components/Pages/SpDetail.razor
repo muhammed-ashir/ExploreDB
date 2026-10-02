@@ -698,7 +698,9 @@
         var newTab = new ExploreDB.Services.QueryTab 
         { 
             Name = tabName,
-            Content = queryText
+            Content = queryText,
+            ConnectionString = ConnectionService.ConnectionString,
+            ConnectionName = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString)?.Name ?? ""
         };
         QueryStateService.Tabs.Add(newTab);
         QueryStateService.ActiveTabId = newTab.Id;

@@ -5,6 +5,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject QueryStateService QueryStateService
+@inject ConnectionService ConnectionService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 
 <div class="container-fluid">
@@ -820,7 +821,9 @@
         var newTab = new ExploreDB.Services.QueryTab 
         { 
             Name = tabName,
-            Content = queryText
+            Content = queryText,
+            ConnectionString = ConnectionService.ConnectionString,
+            ConnectionName = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString)?.Name ?? ""
         };
         QueryStateService.Tabs.Add(newTab);
         QueryStateService.ActiveTabId = newTab.Id;
