@@ -88,6 +88,13 @@ public static class MauiProgram
                             if (!_isMainWindowCreated)
                             {
                                 _isMainWindowCreated = true;
+
+                                // Maximize the main window on startup
+                                if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+                                {
+                                    presenter.Maximize();
+                                }
+
                                 appWindow.Closing += (sender, args) =>
                                 {
                                     args.Cancel = true;
