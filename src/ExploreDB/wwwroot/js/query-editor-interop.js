@@ -72,13 +72,17 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
     window.sqlAutocompleteRegistered = true;
 
     monaco.languages.registerCompletionItemProvider('sql', {
+        triggerCharacters: ['.'],
         provideCompletionItems: function(model, position) {
-            var word = model.getWordUntilPosition(position);
+            var lineContent = model.getLineContent(position.lineNumber);
+            var textBeforeCursor = lineContent.substring(0, position.column - 1);
+            var match = textBeforeCursor.match(/([a-zA-Z0-9_]*)$/);
+            var typedWord = match ? match[1] : "";
             var replaceRange = {
                 startLineNumber: position.lineNumber,
                 endLineNumber: position.lineNumber,
-                startColumn: word.startColumn,
-                endColumn: word.endColumn
+                startColumn: position.column - typedWord.length,
+                endColumn: position.column
             };
 
             var textUntilPosition = model.getValueInRange({
@@ -175,17 +179,114 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
                 });
             }
 
-            if (suggestColumns && window.sqlColumns) {
-                window.sqlColumns.forEach(c => {
-                    suggestions.push({
-                        label: c,
-                        kind: monaco.languages.CompletionItemKind.Field,
-                        insertText: c,
-                        filterText: c,
-                        range: replaceRange, // Will just replace the current word
-                        detail: 'Column'
-                    });
+            if (suggestColumns || suggestTables) {
+                var allText = model.getValue();
+                
+                // Parse Aliases (e.g., FROM [hr].[Settings] s)
+                var aliasMap = {};
+                var sqlKw = new Set(['where', 'on', 'join', 'inner', 'left', 'right', 'outer', 'group', 'order', 'having', 'select', 'as', 'cross', 'apply', 'from', 'and', 'or', 'is', 'not', 'set']);
+                var tableRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)([a-zA-Z0-9_]+)/gi;
+                var match;
+                while ((match = tableRegex.exec(allText)) !== null) {
+                    var tableName = match[1];
+                    var possibleAlias = match[2].toLowerCase().trim();
+                    if (!sqlKw.has(possibleAlias)) {
+                        aliasMap[possibleAlias] = tableName.toLowerCase().trim();
+                    }
+                }
+                
+                // Check if user is typing an alias dot (e.g., "ou.")
+                var lineUntilCursor = model.getValueInRange({
+                    startLineNumber: position.lineNumber,
+                    startColumn: 1,
+                    endLineNumber: position.lineNumber,
+                    endColumn: position.column
                 });
+                var dotMatch = lineUntilCursor.match(/([a-zA-Z0-9_]+)\.[a-zA-Z0-9_]*$/);
+                var explicitTableName = null;
+                var rawPrefix = "";
+                if (dotMatch) {
+                    rawPrefix = dotMatch[1];
+                    var prefix = rawPrefix.toLowerCase();
+                    explicitTableName = aliasMap[prefix] || prefix;
+                }
+
+                if (suggestColumns) {
+                    var allTokens = allText.match(/[a-zA-Z0-9_\[\]\.]+/g) || [];
+                    var tokenSet = new Set(allTokens.map(x => x.toLowerCase()));
+                    
+                    var activeColumns = new Set();
+                    var hasMatchedTables = false;
+                    
+                    var checkTableMatch = (t) => {
+                        var tLower = t.fullName.toLowerCase();
+                        var nameLower = t.name.toLowerCase();
+                        var bracketName = "[" + nameLower + "]";
+                        
+                        if (explicitTableName) {
+                            if (tLower === explicitTableName || nameLower === explicitTableName || bracketName === explicitTableName) {
+                                hasMatchedTables = true;
+                                if (t.columns && Array.isArray(t.columns)) {
+                                    t.columns.forEach(c => activeColumns.add(c));
+                                }
+                            }
+                        } else {
+                            if (tokenSet.has(tLower) || tokenSet.has(nameLower) || tokenSet.has(bracketName)) {
+                                hasMatchedTables = true;
+                                if (t.columns && Array.isArray(t.columns)) {
+                                    t.columns.forEach(c => activeColumns.add(c));
+                                }
+                            }
+                        }
+                    };
+                    
+                    if (window.sqlTables) window.sqlTables.forEach(checkTableMatch);
+                    if (window.sqlViews) window.sqlViews.forEach(checkTableMatch);
+                    
+                    var columnsToSuggest = [];
+                    if (explicitTableName) {
+                        columnsToSuggest = Array.from(activeColumns);
+                        if (columnsToSuggest.length === 0) {
+                            // Debug fallback:
+                            var availableTables = window.sqlTables ? window.sqlTables.map(x => x.fullName).join(',') : 'none';
+                            suggestions.push({
+                                label: 'DEBUG_' + explicitTableName,
+                                kind: monaco.languages.CompletionItemKind.Text,
+                                insertText: 'DEBUG',
+                                detail: 'Tables: ' + availableTables.substring(0, 50)
+                            });
+                            // Fallback to all columns just in case
+                            columnsToSuggest = window.sqlColumns || [];
+                        }
+                    } else {
+                        columnsToSuggest = (hasMatchedTables && activeColumns.size > 0) ? Array.from(activeColumns) : (window.sqlColumns || []);
+                    }
+                        
+                    columnsToSuggest.forEach(c => {
+                        suggestions.push({
+                            label: c,
+                            kind: monaco.languages.CompletionItemKind.Field,
+                            insertText: c,
+                            filterText: rawPrefix ? (rawPrefix + "." + c) : c,
+                            range: replaceRange,
+                            detail: explicitTableName ? ('Column of ' + explicitTableName) : 'Column'
+                        });
+                    });
+
+                    // Suggest aliases if not after a dot
+                    if (!explicitTableName) {
+                        Object.keys(aliasMap).forEach(alias => {
+                            suggestions.push({
+                                label: alias,
+                                kind: monaco.languages.CompletionItemKind.Variable,
+                                insertText: alias,
+                                filterText: alias,
+                                range: replaceRange,
+                                detail: 'Alias for ' + aliasMap[alias]
+                            });
+                        });
+                    }
+                }
             }
 
             if (suggestSps && window.sqlSps) {
@@ -306,6 +407,16 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
         }
     }
 };
+
+
+
+
+
+
+
+
+
+
 
 
 
