@@ -153,7 +153,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
                         label: t.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
                         insertText: t.fullName,
-                        filterText: t.fullName,
+                        filterText: t.name + " " + t.fullName,
+                        sortText: t.name + " " + t.fullName,
                         range: replaceRange,
                         detail: 'Table'
                     });
@@ -166,7 +167,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
                         label: v.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
                         insertText: v.fullName,
-                        filterText: v.fullName,
+                        filterText: v.name + " " + v.fullName,
+                        sortText: v.name + " " + v.fullName,
                         range: replaceRange,
                         detail: 'View'
                     });
@@ -196,7 +198,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
                         label: sp.fullName,
                         kind: monaco.languages.CompletionItemKind.Method,
                         insertText: sp.fullName + paramsText,
-                        filterText: sp.fullName,
+                        filterText: sp.name + " " + sp.fullName,
+                        sortText: sp.name + " " + sp.fullName,
                         range: replaceRange,
                         detail: 'Stored Procedure'
                     });
@@ -303,4 +306,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
         }
     }
 };
+
+
 
