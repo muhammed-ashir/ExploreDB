@@ -37,7 +37,7 @@
                 </div>
             </div>
             <div class="col-auto">
-                @if (!IsPopout || !IsPopoutRoot)
+                @if ((IsPopout && !IsPopoutRoot) || (!IsPopout && !string.IsNullOrEmpty(ReturnUrl)))
                 {
                     <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm border-secondary text-light">
                         <i class="bi bi-arrow-left"></i> Back
@@ -893,12 +893,16 @@
             var decoded = Uri.UnescapeDataString(FullName);
             _schemaTabCache[decoded] = ActiveTab;
             
-            var targetUri = new Uri(context.TargetLocation);
-            var targetSegment = targetUri.Segments.LastOrDefault()?.TrimEnd('/');
-            if (!string.IsNullOrEmpty(targetSegment) && targetSegment != "explorer" && targetSegment != "runner" && targetSegment != "history")
+            try 
             {
-                _schemaLastClickedCache[decoded] = Uri.UnescapeDataString(targetSegment);
-            }
+                var targetUri = Navigation.ToAbsoluteUri(context.TargetLocation);
+                var targetSegment = targetUri.Segments.LastOrDefault()?.TrimEnd('/');
+                if (!string.IsNullOrEmpty(targetSegment) && targetSegment != "explorer" && targetSegment != "runner" && targetSegment != "history")
+                {
+                    _schemaLastClickedCache[decoded] = Uri.UnescapeDataString(targetSegment);
+                }
+            } 
+            catch { }
         }
         return ValueTask.CompletedTask;
     }
@@ -1273,5 +1277,7 @@
         return false;
     }
 }
+
+
 
 
