@@ -100,3 +100,52 @@ GO
     -- Generates exactly 5,000,000 rows in a single table for performance testing
     EXEC dbo.sp_GenerateMassiveDataVolume;
 GO
+
+--=========================================================
+-- Insert Data for ApiIntegrationLogs
+--=========================================================
+PRINT 'Inserting ApiIntegrationLogs Data...';
+
+INSERT INTO dbo.ApiIntegrationLogs (SystemName, EndpointUrl, RequestXml, ResponseJson, ConfigurationData)
+VALUES 
+(
+    'PaymentGateway',
+    'https://api.paymentgateway.com/v1/charge',
+    '<ChargeRequest><Amount>150.00</Amount><Currency>USD</Currency><Card><Number>****4242</Number><Expiry>12/28</Expiry></Card></ChargeRequest>',
+    '{"status":"success","transactionId":"txn_1234567890","amount":150.00,"currency":"USD","receipt_url":"https://receipt.gateway.com/123"}',
+    '{"retryCount": 3, "timeoutMs": 5000}'
+),
+(
+    'CRM_Sync',
+    'https://crm.internal/api/sync/customer',
+    '<CustomerSync><CustomerId>84920</CustomerId><Action>Update</Action><Details><Email>john.doe@example.com</Email><Status>Active</Status></Details></CustomerSync>',
+    '{"sync_id": 998822, "processed_at": "2026-10-03T10:00:00Z", "records_updated": 1, "errors": []}',
+    '{"enabled": true, "syncIntervalMinutes": 15}'
+),
+(
+    'InventorySupplier',
+    'https://supplier.api/rest/check-stock',
+    '<StockCheck><ItemCode>SKU-992-A</ItemCode><Quantity>500</Quantity></StockCheck>',
+    '{"itemCode":"SKU-992-A","availableQuantity":1200,"backorderAvailable":true,"estimatedDelivery":"2026-10-10"}',
+    '{"supplierId": "SUP-88", "authMethod": "OAuth2"}'
+);
+GO
+
+--=========================================================
+-- Insert Data for Multi-Schema Tables
+--=========================================================
+PRINT 'Inserting Data for Multi-Schema Tables...';
+
+-- Data for 'Settings' tables
+INSERT INTO sales.Settings (SettingKey, SettingValue, SalesRegion) VALUES ('TargetGoal', '1000000', 'North America');
+INSERT INTO hr.Settings (SettingKey, SettingValue, DepartmentCode) VALUES ('MaxLeaveDays', '25', 'HR-01');
+INSERT INTO reporting.Settings (SettingKey, SettingValue, LastRunDate) VALUES ('RefreshInterval', '60', '2026-10-01 00:00:00');
+
+-- Data for 'Orders' tables
+INSERT INTO sales.Orders (CustomerId, OrderTotal, SalesRepId) VALUES (101, 1500.50, 5), (102, 340.00, 2);
+INSERT INTO reporting.Orders (SourceOrderId, AggregatedTotal, ReportedMonth) VALUES (1, 1500.50, '2026-10'), (2, 340.00, '2026-10');
+
+-- Data for 'Employees' tables
+INSERT INTO hr.Employees (FullName, Salary, HireDate) VALUES ('Jane Smith', 85000.00, '2023-05-15');
+INSERT INTO reporting.Employees (EmployeeId, TotalHoursWorked, PerformanceScore) VALUES (1, 160.5, 95);
+GO

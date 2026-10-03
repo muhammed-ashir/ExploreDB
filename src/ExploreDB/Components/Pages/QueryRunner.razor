@@ -700,6 +700,12 @@
         {
             await InitializeSessionAsync();
         }
+
+        if (QueryStateService.Initialized && ActiveTab != _fallbackTab && ActiveTab.ConnectionString != ConnectionService.ConnectionString && !string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        {
+            ActiveTab.ConnectionString = ConnectionService.ConnectionString;
+            await QueryStateService.SaveTabsAsync();
+        }
     }
 
     private async Task InitializeSessionAsync()
@@ -739,6 +745,12 @@
             foreach (var tab in QueryStateService.Tabs)
             {
                 tab.ConnectionString = ""; // Open tabs as not connected
+            }
+            
+            var restoredTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+            if (restoredTab != null && !string.IsNullOrEmpty(ConnectionService.ConnectionString))
+            {
+                restoredTab.ConnectionString = ConnectionService.ConnectionString;
             }
         }
         else
@@ -1560,5 +1572,6 @@
         }
     }
 }
+
 
 

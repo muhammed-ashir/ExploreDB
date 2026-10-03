@@ -604,6 +604,28 @@ FROM dbo.PageViews
 GROUP BY UserAgent;
 GO
 
+-- 1. Scalar Function returning INT from DATETIME2
+CREATE FUNCTION dbo.fn_CalculateAge (@DOB DATE)
+RETURNS INT
+AS
+BEGIN
+    IF @DOB IS NULL RETURN NULL;
+    RETURN DATEDIFF(YEAR, @DOB, GETDATE()) - 
+           CASE WHEN DATEADD(YEAR, DATEDIFF(YEAR, @DOB, GETDATE()), @DOB) > GETDATE() THEN 1 ELSE 0 END;
+END
+GO
+
+-- 3. String Formatting Scalar Function
+CREATE FUNCTION dbo.fn_FormatPhone (@Phone dbo.PhoneType)
+RETURNS dbo.PhoneType
+AS
+BEGIN
+    IF LEN(@Phone) = 10
+        RETURN '(' + SUBSTRING(@Phone, 1, 3) + ') ' + SUBSTRING(@Phone, 4, 3) + '-' + SUBSTRING(@Phone, 7, 4);
+    RETURN @Phone;
+END
+GO
+
 -- View referencing a scalar function: fn_CalculateAge
 CREATE VIEW dbo.vw_EmployeeAgeProfile AS
 SELECT
@@ -659,16 +681,7 @@ BEGIN
 END
 GO
 
--- 1. Scalar Function returning INT from DATETIME2
-CREATE FUNCTION dbo.fn_CalculateAge (@DOB DATE)
-RETURNS INT
-AS
-BEGIN
-    IF @DOB IS NULL RETURN NULL;
-    RETURN DATEDIFF(YEAR, @DOB, GETDATE()) - 
-           CASE WHEN DATEADD(YEAR, DATEDIFF(YEAR, @DOB, GETDATE()), @DOB) > GETDATE() THEN 1 ELSE 0 END;
-END
-GO
+
 
 -- 2. Multi-Statement Table Valued Function (MSTVF)
 CREATE FUNCTION dbo.fn_GetTopEmployeesBySalary (@Limit INT)
@@ -693,16 +706,7 @@ BEGIN
 END
 GO
 
--- 3. String Formatting Scalar Function
-CREATE FUNCTION dbo.fn_FormatPhone (@Phone dbo.PhoneType)
-RETURNS dbo.PhoneType
-AS
-BEGIN
-    IF LEN(@Phone) = 10
-        RETURN '(' + SUBSTRING(@Phone, 1, 3) + ') ' + SUBSTRING(@Phone, 4, 3) + '-' + SUBSTRING(@Phone, 7, 4);
-    RETURN @Phone;
-END
-GO
+
 
 -- 4. Simple Table Valued Function (Inline TVF)
 CREATE FUNCTION dbo.fn_GetActiveUsers ()
@@ -1237,3 +1241,89 @@ CREATE TABLE TableM
     CONSTRAINT FK_M_D
         FOREIGN KEY (DId) REFERENCES TableD(DId)
 );
+--=========================================================
+-- API Integration Logs (JSON & XML Example)
+--=========================================================
+CREATE TABLE dbo.ApiIntegrationLogs
+(
+    LogId INT IDENTITY(1,1) PRIMARY KEY,
+    SystemName NVARCHAR(100) NOT NULL,
+    EndpointUrl NVARCHAR(500) NOT NULL,
+    RequestXml XML NULL,
+    ResponseJson NVARCHAR(MAX) NULL,
+    ConfigurationData NVARCHAR(MAX) NULL,
+    CreatedAt DATETIME2(7) NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT CHK_ResponseJson_IsJson CHECK (ResponseJson IS NULL OR ISJSON(ResponseJson) = 1),
+    CONSTRAINT CHK_ConfigData_IsJson CHECK (ConfigurationData IS NULL OR ISJSON(ConfigurationData) = 1)
+);
+GO
+
+--=========================================================
+-- Additional Schemas for Testing Identical Table Names
+--=========================================================
+GO
+CREATE SCHEMA [sales];
+GO
+CREATE SCHEMA [hr];
+GO
+CREATE SCHEMA [reporting];
+GO
+
+--=========================================================
+-- Tables with identical names across different schemas
+-- (Testing schema qualification UI behavior)
+--=========================================================
+
+-- 1. 'Settings' table in multiple schemas
+CREATE TABLE sales.Settings (
+    SettingId INT IDENTITY(1,1) PRIMARY KEY,
+    SettingKey NVARCHAR(50) NOT NULL,
+    SettingValue NVARCHAR(255) NOT NULL,
+    SalesRegion NVARCHAR(50) NULL
+);
+
+CREATE TABLE hr.Settings (
+    SettingId INT IDENTITY(1,1) PRIMARY KEY,
+    SettingKey NVARCHAR(50) NOT NULL,
+    SettingValue NVARCHAR(255) NOT NULL,
+    DepartmentCode NVARCHAR(20) NULL
+);
+
+CREATE TABLE reporting.Settings (
+    SettingId INT IDENTITY(1,1) PRIMARY KEY,
+    SettingKey NVARCHAR(50) NOT NULL,
+    SettingValue NVARCHAR(255) NOT NULL,
+    LastRunDate DATETIME2 NULL
+);
+
+-- 2. 'Orders' table in sales and reporting (dbo.Orders already exists)
+CREATE TABLE sales.Orders (
+    OrderId INT IDENTITY(1,1) PRIMARY KEY,
+    CustomerId INT NOT NULL,
+    OrderTotal DECIMAL(18,2) NOT NULL,
+    SalesRepId INT NULL
+);
+
+CREATE TABLE reporting.Orders (
+    ReportId INT IDENTITY(1,1) PRIMARY KEY,
+    SourceOrderId INT NOT NULL,
+    AggregatedTotal DECIMAL(18,2) NOT NULL,
+    ReportedMonth VARCHAR(10) NOT NULL
+);
+
+-- 3. 'Employees' table in hr and reporting (dbo.Employees already exists)
+CREATE TABLE hr.Employees (
+    EmployeeId INT IDENTITY(1,1) PRIMARY KEY,
+    FullName NVARCHAR(100) NOT NULL,
+    Salary DECIMAL(18,2) NOT NULL,
+    HireDate DATE NOT NULL
+);
+
+CREATE TABLE reporting.Employees (
+    ReportId INT IDENTITY(1,1) PRIMARY KEY,
+    EmployeeId INT NOT NULL,
+    TotalHoursWorked DECIMAL(10,2) NOT NULL,
+    PerformanceScore INT NULL
+);
+GO
+
