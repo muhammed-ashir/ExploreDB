@@ -218,15 +218,27 @@
                                     int rsIndex = 1;
                                     foreach (var rs in ActiveTab.ResultSets)
                                     {
+                                        var capturedIndex = rsIndex;
                                         @if (ActiveTab.ResultSets.Count > 1) 
                                         { 
-                                            <div class="d-flex align-items-center mb-3 mt-4">
+                                            var isCollapsed = ActiveTab.CollapsedResultSets.Contains(capturedIndex);
+                                            <div class="d-flex align-items-center mb-2 mt-4" style="cursor:pointer;" @onclick="() => ActiveTab.ToggleResultSet(capturedIndex)">
                                                 <hr class="flex-grow-1 border-secondary m-0" style="opacity: 0.3;">
-                                                <span class="px-3 fw-bold text-info" style="letter-spacing: 1px; font-size: 0.95rem;">Result Set @rsIndex</span>
+                                                <span class="px-3 fw-bold text-info d-flex align-items-center gap-2" style="letter-spacing: 1px; font-size: 0.95rem; white-space:nowrap;">
+                                                    Result Set @capturedIndex
+                                                    <i class="bi @(isCollapsed ? "bi-chevron-down" : "bi-chevron-up")" style="font-size:0.75rem;"></i>
+                                                </span>
                                                 <hr class="flex-grow-1 border-secondary m-0" style="opacity: 0.3;">
                                             </div>
+                                            @if (!isCollapsed)
+                                            {
+                                                <ResultSetGrid Data="rs" OnExportStateChanged="HandleExportStateChanged" />
+                                            }
                                         }
-                                        <ResultSetGrid Data="rs" OnExportStateChanged="HandleExportStateChanged" />
+                                        else
+                                        {
+                                            <ResultSetGrid Data="rs" OnExportStateChanged="HandleExportStateChanged" />
+                                        }
                                         rsIndex++;
                                     }
                                 }

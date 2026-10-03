@@ -19,6 +19,15 @@ public class QueryTab
 
     [System.Text.Json.Serialization.JsonIgnore]
     public List<IEnumerable<dynamic>> ResultSets { get; set; } = new();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public HashSet<int> CollapsedResultSets { get; set; } = new();
+
+    public void ToggleResultSet(int index)
+    {
+        if (!CollapsedResultSets.Remove(index))
+            CollapsedResultSets.Add(index);
+    }
     
     [System.Text.Json.Serialization.JsonIgnore]
     public List<string> Messages { get; set; } = new();
