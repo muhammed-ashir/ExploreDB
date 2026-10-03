@@ -1,5 +1,6 @@
 @page "/table/{FullName}"
 @using ExploreDB.Services
+@implements IDisposable
 @inject SchemaService SchemaService
 @inject PathfinderService PathfinderService
 @inject IJSRuntime JS
@@ -250,8 +251,9 @@
                                     <div class="row g-3">
                                         @foreach (var rel in FilteredOutgoingKeys)
                                         {
+                                            var isGlow = _glowTarget != null && _glowTarget.Equals(rel.ToTable, StringComparison.OrdinalIgnoreCase);
                                             <div class="col-12 col-md-6">
-                                                <a href="@BuildTableLink(rel.ToTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                <a id="@($"item-{rel.ToTable.Replace("[", "").Replace("]", "")}")" href="@BuildTableLink(rel.ToTable)" class="card text-decoration-none h-100 hover-scale transition-transform @(isGlow ? "border-info" : "")" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid @(isGlow ? "var(--bs-info)" : "rgba(255, 255, 255, 0.1)"); box-shadow: @(isGlow ? "0 0 8px rgba(13, 202, 240, 0.35)" : "none");"
                                                    data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @(rel.ToTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault())<br/><b>Schema:</b> @(rel.ToTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault()?.ToLower())" data-bs-placement="bottom">
                                                     <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
                                                         <div class="text-primary fw-bold fs-4 flex-shrink-0">
@@ -299,8 +301,9 @@
                                     <div class="row g-3">
                                         @foreach (var rel in FilteredIncomingKeys)
                                         {
+                                            var isGlow = _glowTarget != null && _glowTarget.Equals(rel.FromTable, StringComparison.OrdinalIgnoreCase);
                                             <div class="col-12 col-md-6">
-                                                <a href="@BuildTableLink(rel.FromTable)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                <a id="@($"item-{rel.FromTable.Replace("[", "").Replace("]", "")}")" href="@BuildTableLink(rel.FromTable)" class="card text-decoration-none h-100 hover-scale transition-transform @(isGlow ? "border-info" : "")" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid @(isGlow ? "var(--bs-info)" : "rgba(255, 255, 255, 0.1)"); box-shadow: @(isGlow ? "0 0 8px rgba(13, 202, 240, 0.35)" : "none");"
                                                    data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @(rel.FromTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault())<br/><b>Schema:</b> @(rel.FromTable.Replace("[", "").Replace("]", "").Split('.').FirstOrDefault()?.ToLower())" data-bs-placement="bottom">
                                                     <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
                                                         <div class="text-primary fw-bold fs-4 flex-shrink-0">
@@ -469,12 +472,13 @@
                                 <div class="row g-3">
                                     @foreach (var dep in FilteredUsedBy)
                                     {
+                                        var isGlow = _glowTarget != null && _glowTarget.Equals(dep.FullName, StringComparison.OrdinalIgnoreCase);
                                         var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                         var isFunc = dep.Type.Contains("Function", StringComparison.OrdinalIgnoreCase);
                                         var link = isProc ? BuildProcLink(dep.FullName) : isFunc ? BuildFuncLink(dep.FullName) : BuildObjectLink(dep.FullName);
                                         var iconClass = isProc ? "text-warning font-monospace" : isFunc ? "text-info font-monospace" : "text-success";
                                         <div class="col-md-6 col-12">
-                                            <a href="@link" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                            <a id="@($"item-{dep.FullName.Replace("[", "").Replace("]", "")}")" href="@link" class="card text-decoration-none h-100 hover-scale transition-transform @(isGlow ? "border-info" : "")" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid @(isGlow ? "var(--bs-info)" : "rgba(255, 255, 255, 0.1)"); box-shadow: @(isGlow ? "0 0 8px rgba(13, 202, 240, 0.35)" : "none");"
                                                data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                                 <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
                                                     <div class="@iconClass fw-bold fs-4 flex-shrink-0">
@@ -800,6 +804,16 @@
         RelationshipSearchTerm = string.Empty;
         UsedBySearchTerm = string.Empty;
 
+        if (_schemaTabCache.TryGetValue(decoded, out var savedTab))
+            ActiveTab = savedTab;
+        else
+            ActiveTab = "Columns";
+
+        if (_schemaLastClickedCache.TryGetValue(decoded, out _glowTarget))
+            _hasScrolledToGlow = false;
+        else
+            _glowTarget = null;
+
         IsLoading = false;
     }
 
@@ -808,6 +822,22 @@
         if (firstRender)
         {
             try { await JS.InvokeVoidAsync("scrollToMainTop"); } catch { }
+        }
+
+        if (!IsLoading && !_hasScrolledToGlow && !string.IsNullOrEmpty(_glowTarget))
+        {
+            _hasScrolledToGlow = true;
+            var targetId = $"item-{_glowTarget.Replace("[", "").Replace("]", "")}";
+            try { 
+                await JS.InvokeVoidAsync("eval", $@"
+                    setTimeout(function() {{
+                        var el = document.getElementById('{targetId}');
+                        if (el) {{
+                            el.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                        }}
+                    }}, 150);
+                ");
+            } catch { }
         }
     }
 
@@ -844,6 +874,39 @@
 
     [CascadingParameter(Name = "IsPopoutRoot")]
     public bool IsPopoutRoot { get; set; }
+
+    private static readonly Dictionary<string, string> _schemaTabCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, string> _schemaLastClickedCache = new(StringComparer.OrdinalIgnoreCase);
+    private string? _glowTarget;
+    private bool _hasScrolledToGlow = false;
+    private IDisposable? _locationChangingRegistration;
+
+    protected override void OnInitialized()
+    {
+        _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    private ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        if (!string.IsNullOrEmpty(FullName))
+        {
+            var decoded = Uri.UnescapeDataString(FullName);
+            _schemaTabCache[decoded] = ActiveTab;
+            
+            var targetUri = new Uri(context.TargetLocation);
+            var targetSegment = targetUri.Segments.LastOrDefault()?.TrimEnd('/');
+            if (!string.IsNullOrEmpty(targetSegment) && targetSegment != "explorer" && targetSegment != "runner" && targetSegment != "history")
+            {
+                _schemaLastClickedCache[decoded] = Uri.UnescapeDataString(targetSegment);
+            }
+        }
+        return ValueTask.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _locationChangingRegistration?.Dispose();
+    }
 
     private void PopOutSchema()
     {
@@ -1210,4 +1273,5 @@
         return false;
     }
 }
+
 
