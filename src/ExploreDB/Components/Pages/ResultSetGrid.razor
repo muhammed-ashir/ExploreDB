@@ -3,6 +3,8 @@
 @using System.IO
 @using System.Threading
 @using ClosedXML.Excel
+@using BlazorMonaco.Editor
+@using BlazorMonaco
 @inject IJSRuntime JS
 
 <div class="position-relative">
@@ -104,12 +106,7 @@
                         {
                             var val = GetColumnValue(row, col);
                             <td style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis;" title="@val">
-                                @if (val == null)
-                                {
-                                    <span class="text-muted fst-italic">NULL</span>
-                                }
-                                else
-                                {
+                                @if (val == null) { <span class="text-muted fst-italic">NULL</span> } else if (IsJsonOrXml(val)) { <span class="text-info text-decoration-underline" style="cursor: pointer;" @onclick="() => OpenCodeViewer(val)" @onclick:stopPropagation>@val</span> } else {
                                     @val
                                 }
                             </td>
@@ -249,6 +246,27 @@ else
 
 
 
+
+@if (IsCodeViewerOpen)
+{
+    <style>.glass-card { backdrop-filter: none !important; }</style><div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); z-index: 999999;">
+        <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 90vh;">
+            <div class="modal-content bg-dark text-white border-secondary shadow-lg h-100 flex-column d-flex">
+                <div class="modal-header border-secondary py-2 flex-shrink-0">
+                    <h5 class="modal-title text-info d-flex align-items-center gap-2">
+                        <i class="bi bi-file-earmark-code"></i> Data Viewer (@CodeViewerLanguage.ToUpper())
+                    </h5>
+                    <div class="d-flex align-items-center gap-3 ms-auto">
+                        <button type="button" class="btn-close btn-close-white m-0" aria-label="Close" @onclick="CloseCodeViewer"></button>
+                    </div>
+                </div>
+                <div class="modal-body p-0 flex-grow-1 position-relative">
+                    <BlazorMonaco.Editor.StandaloneCodeEditor @ref="_codeEditor" Id="cellDataEditor" ConstructionOptions="EditorConstructionOptions" CssClass="w-100 h-100" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
 </div>
 
 @code {
@@ -673,4 +691,78 @@ else
             StateHasChanged();
         }
     }
+
+    private bool IsJsonOrXml(string? val)
+    {
+        if (string.IsNullOrWhiteSpace(val)) return false;
+        var trimmed = val.TrimStart();
+        if (trimmed.Length < 2) return false;
+        char first = trimmed[0];
+        return first == '{' || first == '[' || first == '<';
+    }
+
+    private bool IsCodeViewerOpen = false;
+    private string CodeViewerContent = "";
+    private string CodeViewerLanguage = "text";
+    private BlazorMonaco.Editor.StandaloneCodeEditor? _codeEditor;
+
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            AutomaticLayout = true,
+            Language = CodeViewerLanguage,
+            Value = CodeViewerContent,
+            Theme = "vs-dark",
+            ReadOnly = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            FormatOnPaste = true,
+            ScrollBeyondLastLine = false
+        };
+    }
+    
+    private void OpenCodeViewer(string content)
+    {
+        CodeViewerContent = content;
+        var trimmed = content.TrimStart();
+        
+        if (trimmed.StartsWith("{") || trimmed.StartsWith("[")) 
+        {
+            CodeViewerLanguage = "json";
+            try 
+            {
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<object>(content);
+                CodeViewerContent = System.Text.Json.JsonSerializer.Serialize(parsed, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            } 
+            catch { }
+        }
+        else if (trimmed.StartsWith("<")) 
+        {
+            CodeViewerLanguage = "xml";
+            try 
+            {
+                var doc = System.Xml.Linq.XDocument.Parse(content);
+                CodeViewerContent = doc.ToString();
+            } 
+            catch { }
+        }
+        else 
+        {
+            CodeViewerLanguage = "text";
+        }
+        
+        IsCodeViewerOpen = true;
+        StateHasChanged();
+    }
+    
+    private void CloseCodeViewer()
+    {
+        IsCodeViewerOpen = false;
+    }
+    }
 }
+
+
+
+
+
