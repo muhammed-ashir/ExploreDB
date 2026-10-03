@@ -76,12 +76,13 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
         provideCompletionItems: function(model, position) {
             var lineContent = model.getLineContent(position.lineNumber);
             var textBeforeCursor = lineContent.substring(0, position.column - 1);
-            var match = textBeforeCursor.match(/([a-zA-Z0-9_]*)$/);
-            var typedWord = match ? match[1] : "";
+            // Match something like "ou.id" or just "id"
+            var match = textBeforeCursor.match(/([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]*)?)$/);
+            var fullTypedWord = match ? match[1] : "";
             var replaceRange = {
                 startLineNumber: position.lineNumber,
                 endLineNumber: position.lineNumber,
-                startColumn: position.column - typedWord.length,
+                startColumn: position.column - fullTypedWord.length,
                 endColumn: position.column
             };
 
@@ -266,7 +267,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
                         suggestions.push({
                             label: c,
                             kind: monaco.languages.CompletionItemKind.Field,
-                            insertText: c,
+                            insertText: rawPrefix ? (rawPrefix + "." + c) : c,
                             filterText: rawPrefix ? (rawPrefix + "." + c) : c,
                             range: replaceRange,
                             detail: explicitTableName ? ('Column of ' + explicitTableName) : 'Column'
@@ -407,6 +408,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
         }
     }
 };
+
+
 
 
 
