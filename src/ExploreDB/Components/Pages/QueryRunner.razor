@@ -1510,6 +1510,10 @@
             cmd.CommandText = QueryStateService.CustomQuery;
             cmd.CommandTimeout = 0;
             
+            using var ctr = ActiveTab.QueryCts.Token.Register(() => {
+                try { cmd.Cancel(); } catch { }
+            });
+            
             using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
             int totalRows = 0;
             

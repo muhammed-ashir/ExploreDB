@@ -443,6 +443,10 @@
             cmd.CommandText = queryToRun;
             cmd.CommandTimeout = 0;
             
+            using var ctr = ActiveTab.QueryCts.Token.Register(() => {
+                try { cmd.Cancel(); } catch { }
+            });
+            
             ActiveTab.IsCurrentQuerySelect = queryToRun.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase);
 
             using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
