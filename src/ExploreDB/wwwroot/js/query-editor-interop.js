@@ -223,10 +223,22 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
 
     monaco.languages.registerHoverProvider('sql', {
         provideHover: async function(model, position) {
-            var word = model.getWordAtPosition(position);
-            if (!word) return null;
+            var lineContent = model.getLineContent(position.lineNumber);
+            var col = position.column - 1;
+            
+            var start = col;
+            while(start > 0 && /[\w\.\[\]]/.test(lineContent[start - 1])) {
+                start--;
+            }
+            var end = col;
+            while(end < lineContent.length && /[\w\.\[\]]/.test(lineContent[end])) {
+                end++;
+            }
+            var objectName = lineContent.substring(start, end);
+            if (!objectName) return null;
+
             try {
-                let doc = await window.sqlDotNetHelper.invokeMethodAsync('GetSchemaDocumentation', word.word);
+                let doc = await window.sqlDotNetHelper.invokeMethodAsync('GetSchemaDocumentation', objectName);
                 if (doc) {
                     return { contents: [ { value: doc } ] };
                 }
@@ -291,3 +303,4 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
         }
     }
 };
+

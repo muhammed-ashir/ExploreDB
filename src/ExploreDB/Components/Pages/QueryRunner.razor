@@ -1273,7 +1273,15 @@
     [JSInvokable]
     public string? GetSchemaDocumentation(string objectName)
     {
-        var table = SchemaService.Tables.FirstOrDefault(t => string.Equals(t.Name, objectName, StringComparison.OrdinalIgnoreCase) || string.Equals(t.FullName, objectName, StringComparison.OrdinalIgnoreCase));
+        string unbracketed = objectName.Replace("[", "").Replace("]", "");
+        var parts = unbracketed.Split('.');
+        string? schema = parts.Length > 1 ? parts[0] : null;
+        string name = parts.Length > 1 ? parts[1] : parts[0];
+
+        var table = SchemaService.Tables.FirstOrDefault(t => 
+            (schema == null || string.Equals(t.Schema, schema, StringComparison.OrdinalIgnoreCase)) &&
+            string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+            
         if (table != null)
         {
             var sb = new System.Text.StringBuilder();
@@ -1287,7 +1295,10 @@
             return sb.ToString();
         }
 
-        var view = SchemaService.Views.FirstOrDefault(v => string.Equals(v.Name, objectName, StringComparison.OrdinalIgnoreCase) || string.Equals(v.FullName, objectName, StringComparison.OrdinalIgnoreCase));
+        var view = SchemaService.Views.FirstOrDefault(v => 
+            (schema == null || string.Equals(v.Schema, schema, StringComparison.OrdinalIgnoreCase)) &&
+            string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase));
+            
         if (view != null)
         {
             var sb = new System.Text.StringBuilder();
@@ -1572,6 +1583,7 @@
         }
     }
 }
+
 
 
 
