@@ -1102,7 +1102,14 @@
     private async Task RegisterAutocompleteItemsAsync()
     {
         // Chunk 1: Tables and Views
-        var tables = SchemaService.Tables.Select(t => new { name = t.Name, fullName = t.FullName, columns = t.Columns.Select(c => c.Name).ToList() }).ToList();
+        var tables = SchemaService.Tables.Select(t => new { 
+            name = t.Name, 
+            fullName = t.FullName, 
+            columns = t.Columns.Select(c => c.Name).ToList(),
+            relations = t.OutgoingKeys.Select(k => new { fromCol = k.FromColumn, toTable = k.ToTable.ToLower(), toCol = k.ToColumn })
+                         .Concat(t.IncomingKeys.Select(k => new { fromCol = k.ToColumn, toTable = k.FromTable.ToLower(), toCol = k.FromColumn }))
+                         .ToList()
+        }).ToList();
         var views = SchemaService.Views.Select(v => new { name = v.Name, fullName = v.FullName, columns = v.Columns.Select(c => c.Name).ToList() }).ToList();
         await JS.InvokeVoidAsync("updateSqlAutocompleteData", tables, views, null, null);
         await Task.Delay(1); // Yield to keep UI responsive

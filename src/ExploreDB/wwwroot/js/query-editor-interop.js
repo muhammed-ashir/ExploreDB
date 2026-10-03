@@ -125,6 +125,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
             var suggestTables = true;
             var suggestColumns = true;
             var suggestSps = false;
+            var suggestKeywords = true;
 
             if (matches && matches.length > 0) {
                 var tableKeywords = new Set(['from', 'join', 'into', 'update', 'table']);
@@ -137,11 +138,13 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
                         suggestTables = false;
                         suggestColumns = false;
                         suggestSps = true;
+                        if (i >= matches.length - 2) suggestKeywords = false;
                         break;
                     } else if (tableKeywords.has(token)) {
                         suggestTables = true;
                         suggestColumns = false;
                         suggestSps = false;
+                        if (i >= matches.length - 2) suggestKeywords = false;
                         break;
                     } else if (columnKeywords.has(token)) {
                         suggestTables = false;
@@ -287,6 +290,49 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
                             });
                         });
                     }
+
+                    // Provide JOIN ON Relationship Snippets
+                    var onMatch = fullTextUntilPosition.match(/join\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)?([a-zA-Z0-9_]+)?\s+on\s*([a-zA-Z0-9_]*)$/i);
+                    if (onMatch && window.sqlTables) {
+                        var joinTableFull = onMatch[1].toLowerCase();
+                        var joinAlias = (onMatch[2] || "").toLowerCase();
+                        var typedRel = onMatch[3] || "";
+                        
+                        var matchedTable = window.sqlTables.find(x => x.fullName.toLowerCase() === joinTableFull);
+                        if (matchedTable && matchedTable.relations && Array.isArray(matchedTable.relations)) {
+                            matchedTable.relations.forEach(r => {
+                                var targetTableLower = (r.toTable || "").toLowerCase();
+                                var targetAlias = null;
+                                Object.keys(aliasMap).forEach(k => {
+                                    if (aliasMap[k] === targetTableLower && k !== joinAlias) {
+                                        targetAlias = k;
+                                    }
+                                });
+                                
+                                var leftSide = joinAlias || matchedTable.fullName;
+                                var rightSide = targetAlias || r.toTable;
+                                
+                                var conditionText = leftSide + "." + r.fromCol + " = " + rightSide + "." + r.toCol;
+                                
+                                var relReplaceRange = {
+                                    startLineNumber: position.lineNumber,
+                                    endLineNumber: position.lineNumber,
+                                    startColumn: position.column - typedRel.length,
+                                    endColumn: position.column
+                                };
+
+                                suggestions.push({
+                                    label: conditionText,
+                                    kind: monaco.languages.CompletionItemKind.Snippet,
+                                    insertText: conditionText,
+                                    filterText: typedRel ? (typedRel + conditionText) : conditionText,
+                                    sortText: '0000_' + conditionText,
+                                    range: relReplaceRange,
+                                    detail: 'Relationship'
+                                });
+                            });
+                        }
+                    }
                 }
             }
 
@@ -304,6 +350,27 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
                         sortText: String(sp.name.length).padStart(4, '0') + '_' + sp.name + '_' + sp.fullName,
                         range: replaceRange,
                         detail: 'Stored Procedure'
+                    });
+                });
+            }
+
+            if (suggestKeywords) {
+                var sqlKeywordsList = [
+                    'SELECT', 'FROM', 'WHERE', 'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN',
+                    'FULL OUTER JOIN', 'CROSS JOIN', 'ON', 'GROUP BY', 'ORDER BY',
+                    'HAVING', 'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE',
+                    'IS NULL', 'IS NOT NULL', 'AS', 'DESC', 'ASC', 'UNION', 'UNION ALL',
+                    'TOP', 'DISTINCT', 'INSERT INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
+                    'EXEC', 'DECLARE', 'CAST', 'CONVERT', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END'
+                ];
+                sqlKeywordsList.forEach(kw => {
+                    suggestions.push({
+                        label: kw,
+                        kind: monaco.languages.CompletionItemKind.Keyword,
+                        insertText: kw,
+                        filterText: kw,
+                        range: replaceRange,
+                        detail: 'Keyword'
                     });
                 });
             }
@@ -408,6 +475,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
         }
     }
 };
+
+
 
 
 
