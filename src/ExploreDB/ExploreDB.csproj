@@ -20,8 +20,8 @@
         <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
         <ApplicationManifest Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">Platforms\Windows\app.manifest</ApplicationManifest>
         <ApplicationVersion>7</ApplicationVersion>
-        <ApplicationDisplayVersion>2.1.1.0</ApplicationDisplayVersion>
-        <Version>2.1.1.0</Version>
+        <ApplicationDisplayVersion>2.1.2.0</ApplicationDisplayVersion>
+        <Version>2.1.2.0</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
         <ApplicationIcon>Platforms\Windows\Images\app.ico</ApplicationIcon>
