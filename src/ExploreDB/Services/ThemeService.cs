@@ -56,9 +56,6 @@ public class ThemeService
         catch { }
 
         await ApplyThemeAsync(_currentTheme);
-#if WINDOWS
-        MauiProgram.UpdateTitleBarTheme(IsDark);
-#endif
         OnThemeChanged?.Invoke();
     }
 

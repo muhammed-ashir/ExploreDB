@@ -20,35 +20,53 @@ public static class MauiProgram
     
     private static bool _isMainWindowCreated = false;
 #if WINDOWS
-    private static Microsoft.UI.Windowing.AppWindow? _mainAppWindow;
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
-    public static void UpdateTitleBarTheme(bool isDark)
-    {
-        if (_mainAppWindow != null)
-        {
-            ApplyTitleBarTheme(_mainAppWindow, isDark);
-        }
-    }
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
-    public static void ApplyTitleBarTheme(Microsoft.UI.Windowing.AppWindow appWindow, bool isDark)
+    public static void ApplyDarkTitleBar(Microsoft.UI.Windowing.AppWindow appWindow, IntPtr hwnd)
     {
         try
         {
+            if (hwnd != IntPtr.Zero)
+            {
+                int darkMode = 1;
+                if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int)) != 0)
+                {
+                    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref darkMode, sizeof(int));
+                }
+            }
+
             if (Microsoft.UI.Windowing.AppWindowTitleBar.IsCustomizationSupported())
             {
                 var titleBar = appWindow.TitleBar;
                 if (titleBar != null)
                 {
-                    var fg = isDark ? Windows.UI.Color.FromArgb(255, 255, 255, 255) : Windows.UI.Color.FromArgb(255, 33, 37, 41);
-                    var bg = isDark ? Windows.UI.Color.FromArgb(255, 33, 37, 41) : Windows.UI.Color.FromArgb(255, 243, 244, 246);
+                    var fg = Windows.UI.Color.FromArgb(255, 255, 255, 255);
+                    var transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+                    var inactiveFg = Windows.UI.Color.FromArgb(255, 128, 128, 128);
+                    var hoverBg = Windows.UI.Color.FromArgb(255, 45, 50, 56);
+                    var pressedBg = Windows.UI.Color.FromArgb(255, 60, 65, 72);
+
                     titleBar.ButtonForegroundColor = fg;
-                    titleBar.ButtonBackgroundColor = bg;
-                    titleBar.ButtonInactiveForegroundColor = Windows.UI.Color.FromArgb(255, 128, 128, 128);
-                    titleBar.ButtonInactiveBackgroundColor = bg;
+                    titleBar.ButtonBackgroundColor = transparent;
+                    titleBar.ButtonHoverForegroundColor = fg;
+                    titleBar.ButtonHoverBackgroundColor = hoverBg;
+                    titleBar.ButtonPressedForegroundColor = fg;
+                    titleBar.ButtonPressedBackgroundColor = pressedBg;
+                    titleBar.ButtonInactiveForegroundColor = inactiveFg;
+                    titleBar.ButtonInactiveBackgroundColor = transparent;
                 }
             }
         }
         catch { }
+    }
+
+    public static void UpdateTitleBarTheme(bool isDark)
+    {
+        // Title bar and caption buttons are kept permanently dark
     }
 #endif
 
@@ -117,14 +135,12 @@ public static class MauiProgram
                             var iconPath = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "Images\\app.ico");
                             appWindow.SetIcon(iconPath);
 
+                            // Permanently apply dark title bar and seamless caption buttons
+                            ApplyDarkTitleBar(appWindow, handle);
+
                             if (!_isMainWindowCreated)
                             {
                                 _isMainWindowCreated = true;
-                                _mainAppWindow = appWindow;
-
-                                // Apply initial titlebar theme
-                                var initialTheme = Microsoft.Maui.Storage.Preferences.Default.Get<string>("AppTheme", "dark");
-                                ApplyTitleBarTheme(appWindow, initialTheme == "dark");
 
                                 // Maximize the main window on startup
                                 if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
