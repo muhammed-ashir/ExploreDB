@@ -1,8 +1,8 @@
 @using System.Globalization
 
 <div class="custom-datepicker flex-grow-1" style="position: relative;">
-    <div class="form-control form-control-sm bg-dark text-white border-secondary d-flex justify-content-between align-items-center" 
-         style="cursor: pointer; font-size: 0.85rem;" @onclick="ToggleDropdown">
+    <div class="form-control form-control-sm shadow-sm d-flex justify-content-between align-items-center" 
+         style="cursor: pointer; font-size: 0.85rem; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @onclick="ToggleDropdown">
         <span>@(Value.HasValue ? Value.Value.ToString("MMM dd, yyyy") : "Filter by date...")</span>
         <i class="bi bi-calendar-event text-muted"></i>
     </div>
@@ -12,11 +12,11 @@
         <!-- Invisible overlay to close dropdown on outside click -->
         <div style="position: fixed; top: 0; bottom: 0; left: 0; right: 0; z-index: 1050;" @onclick="() => _isOpen = false"></div>
 
-        <div class="dropdown-menu shadow-lg border-secondary bg-dark p-3 show" style="position: absolute; top: 100%; left: 0; z-index: 1060; min-width: 260px; margin-top: 4px;">
+        <div class="dropdown-menu shadow-lg p-3 show" style="position: absolute; top: 100%; left: 0; z-index: 1060; min-width: 260px; margin-top: 4px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border);">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <button class="btn btn-sm btn-outline-secondary border-0 text-white" @onclick="PrevMonth"><i class="bi bi-chevron-left"></i></button>
-                <span class="fw-bold text-light" style="font-size: 0.95rem;">@_currentDisplay.ToString("MMMM yyyy")</span>
-                <button class="btn btn-sm btn-outline-secondary border-0 text-white" @onclick="NextMonth"><i class="bi bi-chevron-right"></i></button>
+                <button class="btn btn-sm btn-outline-secondary border-0" style="color: var(--app-text);" @onclick="PrevMonth"><i class="bi bi-chevron-left"></i></button>
+                <span class="fw-bold" style="font-size: 0.95rem; color: var(--app-text);">@_currentDisplay.ToString("MMMM yyyy")</span>
+                <button class="btn btn-sm btn-outline-secondary border-0" style="color: var(--app-text);" @onclick="NextMonth"><i class="bi bi-chevron-right"></i></button>
             </div>
             
             <div class="d-grid text-center mb-2 text-muted fw-bold" style="grid-template-columns: repeat(7, 1fr); font-size: 0.75rem;">
@@ -34,10 +34,10 @@
                     {
                         bool isSelected = Value.HasValue && Value.Value.Date == day.Value.Date;
                         bool isToday = day.Value.Date == DateTime.Today;
-                        string btnClass = isSelected ? "btn-primary" : (isToday ? "btn-outline-info border-0" : "btn-outline-secondary border-0 text-light");
+                        string btnClass = isSelected ? "btn-primary text-white" : (isToday ? "btn-outline-info border-0" : "btn-outline-secondary border-0");
                         
                         <button class="btn btn-sm p-1 @btnClass" 
-                                style="border-radius: 6px; font-size: 0.85rem;"
+                                style="border-radius: 6px; font-size: 0.85rem; @(isSelected ? "" : isToday ? "" : "color: var(--app-text);")"
                                 @onclick="() => SelectDate(day.Value)">
                             @day.Value.Day
                         </button>
@@ -45,7 +45,7 @@
                 }
             </div>
 
-            <div class="d-flex justify-content-between mt-3 pt-3 border-top border-secondary border-opacity-50">
+            <div class="d-flex justify-content-between mt-3 pt-3 border-top" style="border-color: var(--app-border) !important;">
                 <button class="btn btn-sm btn-outline-danger border-0" @onclick="ClearDate">Clear</button>
                 <button class="btn btn-sm btn-outline-info border-0" @onclick="SelectToday">Today</button>
             </div>

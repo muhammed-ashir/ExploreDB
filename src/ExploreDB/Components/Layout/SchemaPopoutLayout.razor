@@ -2,7 +2,7 @@
 @implements IDisposable
 @inject NavigationManager Nav
 
-<div class="h-100 bg-dark text-white d-flex flex-column p-3 pt-4" data-bs-theme="dark" style="height: 100vh; overflow-y: auto;">
+<div class="h-100 d-flex flex-column p-3 pt-4" style="height: 100vh; overflow-y: auto; background-color: var(--app-bg); color: var(--app-text);">
     <CascadingValue Value="true" Name="IsPopout">
         <CascadingValue Value="IsAtRoot" Name="IsPopoutRoot">
             @Body

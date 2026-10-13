@@ -5,7 +5,10 @@
 @using ClosedXML.Excel
 @using BlazorMonaco.Editor
 @using BlazorMonaco
+@using ExploreDB.Services
 @inject IJSRuntime JS
+@inject ThemeService ThemeService
+@implements IDisposable
 
 <div class="position-relative">
 @if (Columns.Count > 0)
@@ -15,17 +18,17 @@
         <div class="d-flex align-items-center">
             <label class="text-muted small mb-0 me-2">Show</label>
             <div class="position-relative">
-                <div class="form-control form-control-sm bg-dark text-white border-secondary shadow-sm cursor-pointer d-flex justify-content-between align-items-center" style="width: 75px;" @onclick="() => IsPageSizeDropdownOpen = !IsPageSizeDropdownOpen">
+                <div class="form-control form-control-sm shadow-sm cursor-pointer d-flex justify-content-between align-items-center" style="width: 75px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @onclick="() => IsPageSizeDropdownOpen = !IsPageSizeDropdownOpen">
                     <span>@(PageSize == -1 ? "All" : PageSize.ToString())</span>
                     <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem;"></i>
                 </div>
                 @if (IsPageSizeDropdownOpen)
                 {
                     <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsPageSizeDropdownOpen = false"></div>
-                    <div class="dropdown-menu show bg-dark border-secondary shadow-lg p-1 mt-1" style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 75px;">
+                    <div class="dropdown-menu show shadow-lg p-1 mt-1" style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 75px; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
                         @foreach (var size in new[] { 12, 24, 48, 96, -1 })
                         {
-                            <button class="dropdown-item text-white py-1 @(PageSize == size ? "bg-primary" : "")" type="button" @onclick="() => { PageSize = size; IsPageSizeDropdownOpen = false; }">
+                            <button class="dropdown-item py-1 @(PageSize == size ? "bg-primary text-white" : "")" style="@(PageSize == size ? "" : "color: var(--app-text);")" type="button" @onclick="() => { PageSize = size; IsPageSizeDropdownOpen = false; }">
                                 @(size == -1 ? "All" : size.ToString())
                             </button>
                         }
@@ -37,17 +40,18 @@
         <div class="d-flex align-items-center gap-2">
             <div class="input-group input-group-sm flex-grow-1" style="width: 350px;">
                 <input type="text"
-                       class="form-control bg-dark text-white border-secondary shadow-none"
+                       class="form-control shadow-none"
+                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
                        placeholder="Search in results..."
                        @bind="SearchTerm"
                        @bind:event="oninput" />
-                <button class="btn @(SearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => SearchCaseSensitive = !SearchCaseSensitive">
+                <button class="btn @(SearchCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Case" @onclick="() => SearchCaseSensitive = !SearchCaseSensitive">
                     <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                 </button>
-                <button class="btn @(SearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { SearchMatchWholeWord = !SearchMatchWholeWord; if (SearchMatchWholeWord) SearchExactMatch = false; }">
+                <button class="btn @(SearchMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchMatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Whole Word" @onclick="() => { SearchMatchWholeWord = !SearchMatchWholeWord; if (SearchMatchWholeWord) SearchExactMatch = false; }">
                     <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
                 </button>
-                <button class="btn @(SearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { SearchExactMatch = !SearchExactMatch; if (SearchExactMatch) SearchMatchWholeWord = false; }">
+                <button class="btn @(SearchExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Exact Match" @onclick="() => { SearchExactMatch = !SearchExactMatch; if (SearchExactMatch) SearchMatchWholeWord = false; }">
                     <i class="bi bi-bullseye fs-6"></i>
                 </button>
             </div>
@@ -66,16 +70,16 @@
         </div>
     </div>
 
-    <div class="table-responsive border border-secondary rounded">
-        <table class="table table-dark table-striped table-sm table-bordered border-secondary mb-0" style="min-width: 100%; width: max-content;">
+    <div class="table-responsive rounded" style="border: 1px solid var(--app-border);">
+        <table class="result-set-table" style="min-width: 100%; width: max-content;">
             <thead>
                 <tr>
-                    <th class="bg-black border-secondary p-0 align-middle text-center text-muted" style="width: 40px; min-width: 40px; user-select: none; border-right: 1px solid #555 !important;">
+                    <th class="col-index p-0 align-middle text-center">
                         <div class="px-2 py-2" style="font-size: 0.8rem;">#</div>
                     </th>
                     @foreach (var col in Columns)
                     {
-                        <th class="text-info bg-black border-secondary p-0 align-middle" style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px;">
+                        <th class="p-0 align-middle" style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px;">
                             <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2" style="cursor: pointer; user-select: none;" @onclick="() => SortBy(col)" @oncontextmenu="e => ShowHeaderContextMenu(e, col)" @oncontextmenu:preventDefault="true">
                                 <span class="text-truncate">@col</span>
                                 @if (SortColumn == col)
@@ -99,14 +103,14 @@
                 @foreach (var row in PagedRows)
                 {
                     <tr>
-                        <td class="bg-dark text-muted text-center align-middle border-secondary" style="border-right: 1px solid #555 !important; font-size: 0.8rem; user-select: none;">
+                        <td class="col-index text-center align-middle" style="font-size: 0.8rem;">
                             @(offset + rowIndex++)
                         </td>
                         @foreach (var col in Columns)
                         {
                             var val = GetColumnValue(row, col);
                             <td style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis;" title="@val">
-                                @if (val == null) { <span class="text-muted fst-italic">NULL</span> } else if (IsJsonOrXml(val)) { <span class="text-info text-decoration-underline" style="cursor: pointer;" @onclick="() => OpenCodeViewer(val)" @onclick:stopPropagation>@val</span> } else {
+                                @if (val == null) { <span class="text-muted fst-italic">NULL</span> } else if (IsJsonOrXml(val)) { <span style="color: var(--app-table-header-text); cursor: pointer; text-decoration: underline;" @onclick="() => OpenCodeViewer(val)" @onclick:stopPropagation>@val</span> } else {
                                     @val
                                 }
                             </td>
@@ -127,32 +131,32 @@
 
     @if (!string.IsNullOrEmpty(ActiveAggregateColumn))
     {
-        <div class="d-flex justify-content-between align-items-center bg-dark border border-secondary rounded mt-3 px-3 py-2 shadow-sm text-white" style="font-size: 0.85rem;">
+        <div class="d-flex justify-content-between align-items-center rounded mt-3 px-3 py-2 shadow-sm" style="font-size: 0.85rem; background-color: var(--app-surface-secondary); border: 1px solid var(--app-border); color: var(--app-text);">
             <div class="d-flex align-items-center gap-3 flex-wrap">
                 <span class="text-warning fw-bold">@ActiveAggregateColumn</span>
                 <span class="text-muted">|</span>
-                <span>COUNT : <strong class="text-info">@AggCount</strong></span>
+                <span>COUNT : <strong style="color: var(--app-table-header-text);">@AggCount</strong></span>
                 <span class="text-muted">|</span>
-                <span>DISTINCT : <strong class="text-info">@AggDistinct</strong></span>
+                <span>DISTINCT : <strong style="color: var(--app-table-header-text);">@AggDistinct</strong></span>
                 @if (AggSum.HasValue)
                 {
                     <span class="text-muted">|</span>
-                    <span>SUM : <strong class="text-info">@AggSum</strong></span>
+                    <span>SUM : <strong style="color: var(--app-table-header-text);">@AggSum</strong></span>
                 }
                 @if (AggAverage.HasValue)
                 {
                     <span class="text-muted">|</span>
-                    <span>AVERAGE : <strong class="text-info">@Math.Round(AggAverage.Value, 2)</strong></span>
+                    <span>AVERAGE : <strong style="color: var(--app-table-header-text);">@Math.Round(AggAverage.Value, 2)</strong></span>
                 }
                 @if (AggMin != null)
                 {
                     <span class="text-muted">|</span>
-                    <span>MIN : <strong class="text-info">@AggMin</strong></span>
+                    <span>MIN : <strong style="color: var(--app-table-header-text);">@AggMin</strong></span>
                 }
                 @if (AggMax != null)
                 {
                     <span class="text-muted">|</span>
-                    <span>MAX : <strong class="text-info">@AggMax</strong></span>
+                    <span>MAX : <strong style="color: var(--app-table-header-text);">@AggMax</strong></span>
                 }
             </div>
             <i class="bi bi-x-lg text-muted ms-3" style="cursor: pointer; font-size: 0.8rem;" @onclick="() => ActiveAggregateColumn = null" onmouseover="this.classList.replace('text-muted', 'text-white')" onmouseout="this.classList.replace('text-white', 'text-muted')"></i>
@@ -183,7 +187,7 @@
                 <nav>
                 <ul class="pagination pagination-sm mb-0">
                     <li class="page-item @(CurrentPage == 1 ? "disabled" : "")">
-                        <button class="page-link bg-dark text-white border-secondary" @onclick="() => SetPage(CurrentPage - 1)">Previous</button>
+                        <button class="page-link" style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SetPage(CurrentPage - 1)">Previous</button>
                     </li>
                     @for (int i = 1; i <= TotalPages; i++)
                     {
@@ -192,17 +196,17 @@
                         {
                             if (pageNum == CurrentPage - 2 || pageNum == CurrentPage + 2)
                             {
-                                <li class="page-item disabled"><span class="page-link bg-dark text-white border-secondary">...</span></li>
+                                <li class="page-item disabled"><span class="page-link" style="background-color: var(--app-surface); color: var(--app-text-muted); border-color: var(--app-border);">...</span></li>
                             }
                             continue;
                         }
                         
                         <li class="page-item @(pageNum == CurrentPage ? "active" : "")">
-                            <button class="page-link @(pageNum == CurrentPage ? "bg-primary border-primary" : "bg-dark text-white border-secondary")" @onclick="() => SetPage(pageNum)">@pageNum</button>
+                            <button class="page-link @(pageNum == CurrentPage ? "bg-primary border-primary text-white" : "")" style="@(pageNum == CurrentPage ? "" : "background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);")" @onclick="() => SetPage(pageNum)">@pageNum</button>
                         </li>
                     }
                     <li class="page-item @(CurrentPage == TotalPages ? "disabled" : "")">
-                        <button class="page-link bg-dark text-white border-secondary" @onclick="() => SetPage(CurrentPage + 1)">Next</button>
+                        <button class="page-link" style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SetPage(CurrentPage + 1)">Next</button>
                     </li>
                 </ul>
             </nav>
@@ -212,7 +216,7 @@
 }
 else
 {
-    <div class="alert alert-dark border-secondary text-muted">This result set is empty.</div>
+    <div class="alert border text-muted" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">This result set is empty.</div>
 }
 
 @if (ShowContextMenu)
@@ -222,16 +226,16 @@ else
     
     <!-- Top-centered menu relative to this grid -->
     <div class="position-absolute shadow-lg" style="top: 45px; left: 50%; transform: translateX(-50%); z-index: 1060; min-width: 280px;">
-        <div class="card bg-dark border-secondary" @onclick:stopPropagation>
+        <div class="card" style="background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text);" @onclick:stopPropagation>
             <div class="card-body p-2">
-                <div class="d-flex justify-content-between align-items-center text-info small fw-bold px-2 mb-2 border-bottom border-secondary pb-2" style="letter-spacing: 0.5px;">
+                <div class="d-flex justify-content-between align-items-center small fw-bold px-2 mb-2 pb-2" style="letter-spacing: 0.5px; color: var(--app-table-header-text); border-bottom: 1px solid var(--app-border);">
                     <span>@ContextMenuColumn</span>
-                    <i class="bi bi-x-lg text-muted" style="cursor: pointer; font-size: 0.8rem;" @onclick="HideContextMenu" onmouseover="this.classList.replace('text-muted', 'text-white')" onmouseout="this.classList.replace('text-white', 'text-muted')"></i>
+                    <i class="bi bi-x-lg text-muted" style="cursor: pointer; font-size: 0.8rem;" @onclick="HideContextMenu"></i>
                 </div>
-                <button class="btn w-100 text-start text-white copy-in-btn border-0 py-2 d-flex align-items-center gap-2" @onclick="CopyColumnAsInClause">
+                <button class="btn w-100 text-start copy-in-btn border-0 py-2 d-flex align-items-center gap-2" style="color: var(--app-text);" @onclick="CopyColumnAsInClause">
                     <i class="bi bi-clipboard text-muted"></i> Copy as IN clause
                 </button>
-                <button class="btn w-100 text-start text-white copy-in-btn border-0 py-2 d-flex align-items-center gap-2" @onclick="CalculateAggregates">
+                <button class="btn w-100 text-start copy-in-btn border-0 py-2 d-flex align-items-center gap-2" style="color: var(--app-text);" @onclick="CalculateAggregates">
                     <i class="bi bi-calculator text-muted"></i> Show aggregate result
                 </button>
             </div>
@@ -239,8 +243,8 @@ else
     </div>
     
     <style>
-        .copy-in-btn:hover { background-color: #0d6efd !important; }
-        .copy-in-btn:hover i { color: white !important; }
+        .copy-in-btn:hover { background-color: var(--primary-color) !important; color: #ffffff !important; }
+        .copy-in-btn:hover i { color: #ffffff !important; }
     </style>
 }
 
@@ -251,13 +255,13 @@ else
 {
     <style>.glass-card { backdrop-filter: none !important; }</style><div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); z-index: 999999;">
         <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 90vh;">
-            <div class="modal-content bg-dark text-white border-secondary shadow-lg h-100 flex-column d-flex">
-                <div class="modal-header border-secondary py-2 flex-shrink-0">
-                    <h5 class="modal-title text-info d-flex align-items-center gap-2">
+            <div class="modal-content shadow-lg h-100 flex-column d-flex" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header py-2 flex-shrink-0" style="border-bottom: 1px solid var(--app-border);">
+                    <h5 class="modal-title d-flex align-items-center gap-2" style="color: var(--app-table-header-text);">
                         <i class="bi bi-file-earmark-code"></i> Data Viewer (@CodeViewerLanguage.ToUpper())
                     </h5>
                     <div class="d-flex align-items-center gap-3 ms-auto">
-                        <button type="button" class="btn-close btn-close-white m-0" aria-label="Close" @onclick="CloseCodeViewer"></button>
+                        <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") m-0" aria-label="Close" @onclick="CloseCodeViewer"></button>
                     </div>
                 </div>
                 <div class="modal-body p-0 flex-grow-1 position-relative">
@@ -713,7 +717,7 @@ else
             AutomaticLayout = true,
             Language = CodeViewerLanguage,
             Value = CodeViewerContent,
-            Theme = "vs-dark",
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
             ReadOnly = true,
             Minimap = new EditorMinimapOptions { Enabled = false },
             FormatOnPaste = true,
@@ -758,6 +762,21 @@ else
     private void CloseCodeViewer()
     {
         IsCodeViewerOpen = false;
+    }
+
+    protected override void OnInitialized()
+    {
+        ThemeService.OnThemeChanged += HandleThemeChanged;
+    }
+
+    private async void HandleThemeChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
     }
 }
 

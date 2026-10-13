@@ -9,14 +9,15 @@
 @inject QueryStateService QueryStateService
 @inject IJSRuntime JS
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject ThemeService ThemeService
 
 <div class="container-fluid d-flex flex-column" style="height: calc(100vh - 140px); padding-bottom: 20px;">
     <div class="row mb-3 align-items-center">
         <div class="col">
-            <h4 class="m-0 text-light">Query History</h4>
+            <h4 class="m-0" style="color: var(--app-text);">Query History</h4>
         </div>
         <div class="col-auto">
-            <button class="btn btn-outline-secondary shadow-sm" @onclick='() => Nav.NavigateTo("/runner")'>
+            <button class="btn btn-outline-secondary shadow-sm" style="color: var(--app-text); border-color: var(--app-border);" @onclick='() => Nav.NavigateTo("/runner")'>
                 <i class="bi bi-arrow-left me-1"></i> Back
             </button>
         </div>
@@ -52,7 +53,7 @@
                         {
                             foreach (var item in FilteredHistoryItems)
                             {
-                                <button type="button" class="list-group-item list-group-item-action bg-transparent text-light border-secondary border-opacity-25 py-3 @(_selectedItem?.Id == item.Id ? "active bg-primary bg-opacity-25 border-primary" : "")" @onclick="() => SelectItem(item)">
+                                <button type="button" class="list-group-item list-group-item-action bg-transparent border-secondary border-opacity-25 py-3 @(_selectedItem?.Id == item.Id ? "active bg-primary bg-opacity-25 border-primary" : "")" style="@(_selectedItem?.Id == item.Id ? "" : "color: var(--app-text);")" @onclick="() => SelectItem(item)">
                                     <div class="d-flex align-items-center mb-1">
                                         @if (item.IsSuccess)
                                         {
@@ -81,13 +82,13 @@
                 <div class="card-header bg-secondary bg-opacity-25 border-bottom border-secondary py-2 d-flex justify-content-between align-items-center">
                     <h6 class="m-0">Query Details</h6>
                     <div class="d-flex align-items-center">
-                        <button class="btn btn-sm btn-outline-light me-2" disabled="@(_selectedItem == null)" @onclick="CopyQueryAsync">
+                        <button class="btn btn-sm btn-outline-secondary me-2" style="color: var(--app-text); border-color: var(--app-border);" disabled="@(_selectedItem == null)" @onclick="CopyQueryAsync">
                             <i class="bi bi-clipboard me-1"></i> Copy
                         </button>
                         <button class="btn btn-sm btn-primary me-2" disabled="@(_selectedItem == null)" @onclick="LoadAndRunQuery">
                             <i class="bi bi-play-fill me-1"></i> Load
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary text-light border-0" @onclick="() => IsFullScreen = !IsFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
+                        <button class="btn btn-sm btn-outline-secondary border-0" style="color: var(--app-text);" @onclick="() => IsFullScreen = !IsFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
                             <i class="bi @(IsFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
                         </button>
                     </div>
@@ -136,7 +137,7 @@
             <div class="modal-content bg-dark text-white border-secondary shadow-lg">
                 <div class="modal-header border-secondary">
                     <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
-                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowLimitAlert = false"></button>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowLimitAlert = false"></button>
                 </div>
                 <div class="modal-body">
                     <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
@@ -172,7 +173,7 @@
         return new StandaloneEditorConstructionOptions
         {
             Language = "sql",
-            Theme = "vs-dark",
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
             Value = _selectedItem?.QueryText ?? "",
             AutomaticLayout = true,
             Minimap = new EditorMinimapOptions { Enabled = false },

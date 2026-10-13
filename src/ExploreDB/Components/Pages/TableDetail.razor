@@ -8,6 +8,7 @@
 @inject QueryStateService QueryStateService
 @inject ConnectionService ConnectionService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject ThemeService ThemeService
 
 <div class="container-fluid">
     @if (IsLoading)
@@ -648,7 +649,7 @@
             <div class="modal-content bg-dark text-white border-secondary shadow-lg">
                 <div class="modal-header border-secondary">
                     <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
-                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowLimitAlert = false"></button>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowLimitAlert = false"></button>
                 </div>
                 <div class="modal-body">
                     <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
@@ -883,7 +884,13 @@
 
     protected override void OnInitialized()
     {
+        ThemeService.OnThemeChanged += HandleThemeChanged;
         _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    private void HandleThemeChanged()
+    {
+        InvokeAsync(StateHasChanged);
     }
 
     private ValueTask OnLocationChanging(LocationChangingContext context)
@@ -909,6 +916,7 @@
 
     public void Dispose()
     {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
         _locationChangingRegistration?.Dispose();
     }
 

@@ -6,23 +6,24 @@
     {
         <div class="row mb-4">
             <div class="col">
-                <h2 class="fw-bold text-white mb-0">Learning Hub</h2>
+                <h2 class="fw-bold mb-0">Learning Hub</h2>
             </div>
         </div>
         <div class="mb-4 d-flex justify-content-start">
             <div class="input-group shadow-sm w-50">
                 <input type="text"
-                       class="form-control bg-dark text-white border-secondary shadow-none"
+                       class="form-control shadow-none"
+                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
                        placeholder="Search topics..."
                        @bind="SearchTerm"
                        @bind:event="oninput" />
-                <button class="btn @(SearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => SearchCaseSensitive = !SearchCaseSensitive">
+                <button class="btn @(SearchCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Case" @onclick="() => SearchCaseSensitive = !SearchCaseSensitive">
                     <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                 </button>
-                <button class="btn @(SearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { SearchMatchWholeWord = !SearchMatchWholeWord; if (SearchMatchWholeWord) SearchExactMatch = false; }">
+                <button class="btn @(SearchMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchMatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Whole Word" @onclick="() => { SearchMatchWholeWord = !SearchMatchWholeWord; if (SearchMatchWholeWord) SearchExactMatch = false; }">
                     <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
                 </button>
-                <button class="btn @(SearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { SearchExactMatch = !SearchExactMatch; if (SearchExactMatch) SearchMatchWholeWord = false; }">
+                <button class="btn @(SearchExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Exact Match" @onclick="() => { SearchExactMatch = !SearchExactMatch; if (SearchExactMatch) SearchMatchWholeWord = false; }">
                     <i class="bi bi-bullseye fs-6"></i>
                 </button>
             </div>
@@ -40,14 +41,14 @@
                 @foreach (var topic in FilteredTopics)
                 {
                     <div class="col-12 col-xl-6">
-                        <div class="card glass-card text-white node-card py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale" style="cursor: pointer;" @onclick='() => SetTopic(topic.Id)'>
+                        <div class="card glass-card node-card py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale" style="cursor: pointer;" @onclick='() => SetTopic(topic.Id)'>
                             <div class="d-flex align-items-center gap-3 overflow-hidden">
                                 <div class="@topic.ColorClass fs-3 d-flex align-items-center justify-content-center" style="width: 40px;">
                                     <i class="bi @topic.Icon"></i>
                                 </div>
                                 <div class="overflow-hidden" style="min-width: 0;">
                                     <div class="text-secondary small fw-bold text-uppercase mb-1" style="font-size: 0.7rem; letter-spacing: 1px;">@topic.Category</div>
-                                    <h6 class="mb-0 fw-bold text-white text-wrap" style="letter-spacing: 0.5px; word-break: break-word;">@topic.Title</h6>
+                                    <h6 class="mb-0 fw-bold text-wrap" style="letter-spacing: 0.5px; word-break: break-word; color: var(--app-text);">@topic.Title</h6>
                                 </div>
                             </div>
                         </div>
@@ -61,7 +62,7 @@
         var activeTopic = AllTopics.FirstOrDefault(t => t.Id == ActiveTopicId);
         
         <div class="mt-4 flex-grow-1 overflow-auto custom-scrollbar-light pe-3">
-            <button class="btn btn-outline-secondary btn-sm mb-4 text-light border-secondary hover-bg-dark" @onclick='() => SetTopic("")'>
+            <button class="btn btn-outline-secondary btn-sm mb-4" style="color: var(--app-text); border-color: var(--app-border);" @onclick='() => SetTopic("")'>
                 <i class="bi bi-arrow-left me-2"></i> Back to Topics
             </button>
             

@@ -2,6 +2,8 @@
 @implements IDisposable
 @inject ConnectionService ConnectionService
 @inject SchemaService SchemaService
+@inject ThemeService ThemeService
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject ExploreDB.Services.GitHubUpdateService UpdateService
 @inject ExploreDB.Services.StoreUpdateService StoreUpdateService
@@ -142,8 +144,8 @@
         </aside>
 
         <main class="app-shell-main d-flex flex-column" style="height: 100vh; overflow-y: auto;">
-            <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top" style="background-color: rgba(33, 37, 41, 0.95); backdrop-filter: blur(5px); z-index: 1020;">
-                <button class="btn btn-sm btn-outline-secondary text-white border-0 me-3" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
+            <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top" style="background-color: var(--app-header-bg); border-color: var(--app-border) !important; backdrop-filter: blur(5px); z-index: 1020;">
+                <button class="btn btn-sm border-0 me-3" style="color: var(--app-text);" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
                     <span style="font-size: 1.2rem; line-height: 1;">☰</span>
                 </button>
                 <div class="ms-auto d-flex align-items-center gap-2 pe-3">
@@ -164,7 +166,7 @@
                     }
                     @if (!string.IsNullOrEmpty(connDisplay))
                     {
-                        <div class="small fw-bold" style="color: rgba(255,255,255,0.65);">
+                        <div class="small fw-bold" style="color: var(--app-text-muted);">
                             @connDisplay
                         </div>
                         <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="Refresh Schema" data-bs-tooltip="true" data-bs-placement="bottom" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
@@ -218,23 +220,23 @@
     {
         <div class="modal fade show d-block" style="background: rgba(0,0,0,0.8); z-index: 1050;">
             <div class="modal-dialog modal-dialog-centered modal-lg">
-                <div class="modal-content glass-card border-0 text-white" style="background-color: #2b3035;">
+                <div class="modal-content glass-card border-0" style="background-color: var(--app-surface-secondary); color: var(--app-text);">
                     <div class="modal-header border-bottom border-secondary">
                         <h5 class="modal-title fw-bold mb-0">Connection Manager</h5>
-                        <button type="button" class="btn-close btn-close-white" @onclick="() => ShowConnectionManager = false" style="font-size: 0.8rem;"></button>
+                        <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowConnectionManager = false" style="font-size: 0.8rem;"></button>
                     </div>
                     <div class="modal-body p-0">
                         <div class="d-flex flex-column" style="height: 450px;">
                             <div class="p-3 border-bottom border-secondary d-flex gap-2">
                                 <div class="input-group input-group-sm flex-grow-1 shadow-sm">
-                                    <input type="text" class="form-control bg-dark text-white border-secondary" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
-                                    <button class="btn @(FilterCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Match Case" @onclick="() => FilterCaseSensitive = !FilterCaseSensitive">
+                                    <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
+                                    <button class="btn @(FilterCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(FilterCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Case" @onclick="() => FilterCaseSensitive = !FilterCaseSensitive">
                                         <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                     </button>
-                                    <button class="btn @(FilterWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Match Whole Word" @onclick="() => { FilterWholeWord = !FilterWholeWord; if (FilterWholeWord) FilterExactMatch = false; }">
+                                    <button class="btn @(FilterWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(FilterWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Whole Word" @onclick="() => { FilterWholeWord = !FilterWholeWord; if (FilterWholeWord) FilterExactMatch = false; }">
                                         <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
                                     </button>
-                                    <button class="btn @(FilterExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Exact Match" @onclick="() => { FilterExactMatch = !FilterExactMatch; if (FilterExactMatch) FilterWholeWord = false; }">
+                                    <button class="btn @(FilterExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(FilterExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Exact Match" @onclick="() => { FilterExactMatch = !FilterExactMatch; if (FilterExactMatch) FilterWholeWord = false; }">
                                         <i class="bi bi-bullseye fs-6"></i>
                                     </button>
                                 </div>
@@ -252,11 +254,11 @@
                                     <div class="list-group list-group-flush">
                                         @foreach (var c in FilteredConnections)
                                         {
-                                            <div class="list-group-item bg-transparent border-secondary p-2 @(ActiveConnId == c.Id ? "bg-primary text-white" : "text-light")">
+                                            <div class="list-group-item bg-transparent border-secondary p-2 @(ActiveConnId == c.Id ? "bg-primary text-white" : "")" style="@(ActiveConnId == c.Id ? "" : "color: var(--app-text);")">
                                                 <div class="d-flex justify-content-between align-items-center">
                                                     <div class="cursor-pointer flex-grow-1 pe-2 overflow-hidden" @onclick="() => LoadConnection(c)">
                                                         <div class="fw-bold mb-1" style="font-size: 0.9em;">@(string.IsNullOrWhiteSpace(c.Name) ? "Unnamed Connection" : c.Name)</div>
-                                                        <div class="text-opacity-75 text-white" style="font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                                        <div class="text-opacity-75" style="font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--app-text-muted);">
                                                             @{
                                                                 string authType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType;
                                                                 string authDisplay = string.Equals(authType, "SqlServer", StringComparison.OrdinalIgnoreCase) 
@@ -288,28 +290,28 @@
         {
             <div class="modal fade show d-block" style="background: rgba(0,0,0,0.6); z-index: 1060;">
                 <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content glass-card border-secondary text-white shadow-lg" style="background-color: #2b3035;">
+                    <div class="modal-content glass-card border-secondary shadow-lg" style="background-color: var(--app-surface-secondary); color: var(--app-text);">
                         <div class="modal-header border-bottom border-secondary">
                             <h6 class="modal-title fw-bold text-info mb-0">@(string.IsNullOrEmpty(ActiveConnId) ? "New Connection" : "Edit Connection")</h6>
-                            <button type="button" class="btn-close btn-close-white" @onclick="() => IsDetailsVisible = false" style="font-size: 0.8rem;"></button>
+                            <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => IsDetailsVisible = false" style="font-size: 0.8rem;"></button>
                         </div>
                         <div class="modal-body p-4">
                                 
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Connection Name</label>
-                                    <input type="text" class="form-control bg-dark text-white border-secondary" @bind="ConnName" placeholder="e.g. Production DB" />
+                                    <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="ConnName" placeholder="e.g. Production DB" />
                                 </div>
                                 
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Server Name / IP</label>
-                                    <input type="text" class="form-control bg-dark text-white border-secondary" @bind="Server" placeholder="e.g. server.database.windows.net or 192.168.1.50" />
+                                    <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Server" placeholder="e.g. server.database.windows.net or 192.168.1.50" />
                                 </div>
 
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Authentication Type</label>
                                     <div class="position-relative">
-                                        <div class="form-control bg-dark text-white border-secondary pe-5 cursor-pointer d-flex align-items-center" 
-                                             style="cursor: pointer; min-height: 38px;"
+                                        <div class="form-control border-secondary pe-5 cursor-pointer d-flex align-items-center" 
+                                             style="cursor: pointer; min-height: 38px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
                                              @onclick="() => IsAuthDropdownOpen = !IsAuthDropdownOpen">
                                             <span style="pointer-events: none;">@(AuthType == "Windows" ? "Windows Authentication" : AuthType == "SqlServer" ? "SQL Server Authentication" : "Microsoft Entra MFA")</span>
                                             <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
@@ -319,10 +321,10 @@
                                         @if (IsAuthDropdownOpen)
                                         {
                                             <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsAuthDropdownOpen = false"></div>
-                                            <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
-                                                <button class="dropdown-item text-white @(AuthType == "Windows" ? "bg-primary" : "") py-2" type="button" @onclick='() => SetAuthType("Windows")'>Windows Authentication</button>
-                                                <button class="dropdown-item text-white @(AuthType == "SqlServer" ? "bg-primary" : "") py-2" type="button" @onclick='() => SetAuthType("SqlServer")'>SQL Server Authentication</button>
-                                                <button class="dropdown-item text-white @(AuthType == "EntraMfa" ? "bg-primary" : "") py-2" type="button" @onclick='() => SetAuthType("EntraMfa")'>Microsoft Entra MFA</button>
+                                            <div class="dropdown-menu show w-100 border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                                <button class="dropdown-item @(AuthType == "Windows" ? "bg-primary text-white" : "") py-2" style="@(AuthType == "Windows" ? "" : "color: var(--app-text);")" type="button" @onclick='() => SetAuthType("Windows")'>Windows Authentication</button>
+                                                <button class="dropdown-item @(AuthType == "SqlServer" ? "bg-primary text-white" : "") py-2" style="@(AuthType == "SqlServer" ? "" : "color: var(--app-text);")" type="button" @onclick='() => SetAuthType("SqlServer")'>SQL Server Authentication</button>
+                                                <button class="dropdown-item @(AuthType == "EntraMfa" ? "bg-primary text-white" : "") py-2" style="@(AuthType == "EntraMfa" ? "" : "color: var(--app-text);")" type="button" @onclick='() => SetAuthType("EntraMfa")'>Microsoft Entra MFA</button>
                                             </div>
                                         }
                                     </div>
@@ -333,13 +335,13 @@
                                     <div class="row mb-3">
                                         <div class="@(AuthType == "EntraMfa" ? "col-12" : "col-6")">
                                             <label class="form-label small text-muted">@(AuthType == "EntraMfa" ? "Email Address" : "Username")</label>
-                                            <input type="text" class="form-control bg-dark text-white border-secondary" @bind="Username" placeholder="@(AuthType == "EntraMfa" ? "email@domain.com" : "")" />
+                                            <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Username" placeholder="@(AuthType == "EntraMfa" ? "email@domain.com" : "")" />
                                         </div>
                                         @if (AuthType == "SqlServer")
                                         {
                                             <div class="col-6">
                                                 <label class="form-label small text-muted">Password</label>
-                                                <input type="password" class="form-control bg-dark text-white border-secondary" @bind="Password" />
+                                                <input type="password" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Password" />
                                             </div>
                                         }
                                     </div>
@@ -374,7 +376,7 @@
         {
             <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); z-index: 1070;">
                 <div class="modal-dialog modal-dialog-centered modal-sm">
-                    <div class="modal-content glass-card border-danger text-white shadow-lg text-center p-4" style="background-color: #2b3035;">
+                    <div class="modal-content glass-card border-danger shadow-lg text-center p-4" style="background-color: var(--app-surface-secondary); color: var(--app-text);">
                         <div class="mb-3 text-danger">
                             <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i>
                         </div>
@@ -393,7 +395,7 @@
         {
             <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); z-index: 1070;">
                 <div class="modal-dialog modal-dialog-centered modal-sm">
-                    <div class="modal-content glass-card border-primary text-white shadow-lg text-center p-4" style="background-color: #2b3035;">
+                    <div class="modal-content glass-card border-primary shadow-lg text-center p-4" style="background-color: var(--app-surface-secondary); color: var(--app-text);">
                         <div class="mb-3 text-primary">
                             <i class="bi bi-floppy-fill" style="font-size: 3rem;"></i>
                         </div>
@@ -413,7 +415,7 @@
     {
         <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); z-index: 1070;">
             <div class="modal-dialog modal-dialog-centered modal-sm">
-                <div class="modal-content glass-card border-info text-white shadow-lg text-center p-4" style="background-color: #2b3035;">
+                <div class="modal-content glass-card border-info shadow-lg text-center p-4" style="background-color: var(--app-surface-secondary); color: var(--app-text);">
                     <div class="mb-3 text-info">
                         <i class="bi bi-power" style="font-size: 3rem;"></i>
                     </div>
@@ -432,7 +434,7 @@
     {
         <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); z-index: 1070;">
             <div class="modal-dialog modal-dialog-centered modal-sm">
-                <div class="modal-content glass-card border-warning text-white shadow-lg text-center p-4" style="background-color: #2b3035;">
+                <div class="modal-content glass-card border-warning shadow-lg text-center p-4" style="background-color: var(--app-surface-secondary); color: var(--app-text);">
                     <div class="mb-3 text-warning">
                         <i class="bi bi-arrow-clockwise" style="font-size: 3rem;"></i>
                     </div>
@@ -450,13 +452,13 @@
     @if (ShowToast)
     {
         <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
-            <div class="toast show align-items-center text-white border-0 shadow-lg" role="alert" style="animation: slideInUp 0.3s ease; background-color: #2b3035; border-left: 4px solid var(--bs-@ToastThemeClass) !important;">
+            <div class="toast show align-items-center border-0 shadow-lg" role="alert" style="animation: slideInUp 0.3s ease; background-color: var(--app-surface-secondary); color: var(--app-text); border-left: 4px solid var(--bs-@ToastThemeClass) !important;">
                 <div class="d-flex">
                     <div class="toast-body d-flex align-items-center flex-grow-1 overflow-hidden" title="@ToastMessage">
                         <i class="bi @ToastIconClass me-3 fs-5 text-@ToastThemeClass flex-shrink-0"></i>
                         <span class="text-truncate">@ToastMessage</span>
                     </div>
-                    <button type="button" class="btn-close btn-close-white me-3 m-auto flex-shrink-0" @onclick="() => ShowToast = false"></button>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") me-3 m-auto flex-shrink-0" @onclick="() => ShowToast = false"></button>
                 </div>
             </div>
         </div>
@@ -574,6 +576,7 @@
         ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
         SchemaService.OnError += HandleSchemaError;
+        ThemeService.OnThemeChanged += HandleThemeChanged;
 
         if (!Config.GetValue<bool>("DisableAutoUpdates", false))
         {
@@ -606,11 +609,17 @@
         {
             try
             {
+                await ThemeService.InitializeAsync(JS);
                 // Signal to MAUI that the Blazor UI is ready
                 MauiProgram.InvokeAppReady(null);
             }
             catch { }
         }
+    }
+
+    private void HandleThemeChanged()
+    {
+        InvokeAsync(StateHasChanged);
     }
 
     private void HandleRequestAppExit()
@@ -629,6 +638,7 @@
 
     public void Dispose()
     {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
         MauiProgram.RequestAppExit -= HandleRequestAppExit;
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
@@ -984,5 +994,4 @@
     {
         InvokeAsync(StateHasChanged);
     }
-
 }

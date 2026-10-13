@@ -23,17 +23,17 @@ else
             <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
                 <label class="text-muted small mb-0">Show</label>
                 <div class="position-relative">
-                    <div class="form-control form-control-sm bg-dark text-white border-secondary shadow-sm cursor-pointer d-flex justify-content-between align-items-center" style="width: 75px;" @onclick="() => IsPageSizeDropdownOpen = !IsPageSizeDropdownOpen">
+                    <div class="form-control form-control-sm shadow-sm cursor-pointer d-flex justify-content-between align-items-center" style="width: 75px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @onclick="() => IsPageSizeDropdownOpen = !IsPageSizeDropdownOpen">
                         <span>@_pageSize</span>
                         <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem;"></i>
                     </div>
                     @if (IsPageSizeDropdownOpen)
                     {
                         <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsPageSizeDropdownOpen = false"></div>
-                        <div class="dropdown-menu show bg-dark border-secondary shadow-lg p-1 mt-1" style="position: absolute; top: 100%; right: 0; z-index: 1050; min-width: 75px;">
+                        <div class="dropdown-menu show shadow-lg p-1 mt-1" style="position: absolute; top: 100%; right: 0; z-index: 1050; min-width: 75px; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
                             @foreach (var size in new[] { 12, 24, 48, 96 })
                             {
-                                <button class="dropdown-item text-white py-1 @(_pageSize == size ? "bg-primary" : "")" type="button" @onclick="() => { SetPageSize(size); IsPageSizeDropdownOpen = false; }">
+                                <button class="dropdown-item py-1 @(_pageSize == size ? "bg-primary text-white" : "")" style="@(_pageSize == size ? "" : "color: var(--app-text);")" type="button" @onclick="() => { SetPageSize(size); IsPageSizeDropdownOpen = false; }">
                                     @size
                                 </button>
                             }
@@ -52,17 +52,17 @@ else
         <div class="col-md-6">
             <div class="input-group shadow-sm flex-nowrap">
                 <input type="text" 
-                       class="form-control bg-dark text-white border-secondary" style="min-width: 200px;" 
+                       class="form-control shadow-none" style="min-width: 200px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" 
                        placeholder="Search views..." 
                        @bind="SearchTerm" 
                        @bind:event="oninput" />
-                <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
+                <button class="btn @(CaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(CaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
                     <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                 </button>
-                <button class="btn @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
+                <button class="btn @(MatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(MatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
                     <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
                 </button>
-                <button class="btn @(ExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
+                <button class="btn @(ExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(ExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
                     <i class="bi bi-bullseye fs-6"></i>
                 </button>
             </div>
@@ -74,7 +74,7 @@ else
         @if (SchemaService.Views.Count == 0)
         {
             <div class="col-12">
-                <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid var(--app-border);">
                     <div class="text-muted">No views found.</div>
                 </div>
             </div>
@@ -82,7 +82,7 @@ else
         else if (!FilteredViews.Any())
         {
             <div class="col-12">
-                <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid #444;">
+                <div class="d-flex justify-content-center align-items-center bg-transparent rounded overflow-hidden position-relative" style="padding: 3rem 1rem; width: 100%; border: 1px solid var(--app-border);">
                     <div class="text-muted">No matching views found. Try a different search term.</div>
                 </div>
             </div>
@@ -94,13 +94,13 @@ else
                 <div class="col-12 col-xl-6 mb-3">
                     <a href="view/@Uri.EscapeDataString(view.FullName)" class="text-decoration-none"
                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> View<br/><b>Name:</b> @view.Name<br/><b>Schema:</b> @view.Schema.ToLower()" data-bs-placement="bottom">
-                        <div class="card glass-card text-white node-card h-100 py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale">
+                        <div class="card glass-card node-card h-100 py-3 px-4 d-flex flex-row align-items-center justify-content-between transition-transform hover-scale">
                             <div class="d-flex align-items-center gap-3 overflow-hidden w-100">
                                 <div class="text-success fs-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px;">
                                     <i class="bi bi-layout-text-window"></i>
                                 </div>
                                 <div class="overflow-hidden" style="min-width: 0;">
-                                    <h5 class="mb-1 fw-bold text-white text-truncate" style="letter-spacing: 0.5px;">@view.Name</h5>
+                                    <h5 class="mb-1 fw-bold text-truncate" style="letter-spacing: 0.5px; color: var(--app-text);">@view.Name</h5>
                                     <small class="text-muted fw-bold text-truncate d-block" style="font-size: 0.7em; letter-spacing: 1px;">SCHEMA: <span class="text-lowercase">@view.Schema</span></small>
                                 </div>
                             </div>
@@ -116,7 +116,7 @@ else
                     <nav>
                         <ul class="pagination pagination-sm">
                             <li class="page-item @(CurrentPage == 1 ? "disabled" : "")">
-                                <button class="page-link bg-dark text-white border-secondary" @onclick="() => SetPage(CurrentPage - 1)">Previous</button>
+                                <button class="page-link" style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SetPage(CurrentPage - 1)">Previous</button>
                             </li>
                             @for (int i = 1; i <= TotalPages; i++)
                             {
@@ -125,16 +125,16 @@ else
                                 {
                                     if (pageNum == CurrentPage - 3 || pageNum == CurrentPage + 3)
                                     {
-                                        <li class="page-item disabled"><span class="page-link bg-dark text-white border-secondary">...</span></li>
+                                        <li class="page-item disabled"><span class="page-link" style="background-color: var(--app-surface); color: var(--app-text-muted); border-color: var(--app-border);">...</span></li>
                                     }
                                     continue;
                                 }
                                 <li class="page-item @(pageNum == CurrentPage ? "active" : "")">
-                                    <button class="page-link @(pageNum == CurrentPage ? "bg-primary border-primary" : "bg-dark text-white border-secondary")" @onclick="() => SetPage(pageNum)">@pageNum</button>
+                                    <button class="page-link @(pageNum == CurrentPage ? "bg-primary border-primary text-white" : "")" style="@(pageNum == CurrentPage ? "" : "background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);")" @onclick="() => SetPage(pageNum)">@pageNum</button>
                                 </li>
                             }
                             <li class="page-item @(CurrentPage == TotalPages ? "disabled" : "")">
-                                <button class="page-link bg-dark text-white border-secondary" @onclick="() => SetPage(CurrentPage + 1)">Next</button>
+                                <button class="page-link" style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SetPage(CurrentPage + 1)">Next</button>
                             </li>
                         </ul>
                     </nav>

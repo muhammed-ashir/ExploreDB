@@ -2,6 +2,8 @@
 @inject NavigationManager Nav
 @inject ConnectionService ConnectionService
 @inject SchemaService SchemaService
+@inject ThemeService ThemeService
+@inject IJSRuntime JS
 @implements IDisposable
 
 <div class="d-flex flex-column h-100">
@@ -10,18 +12,18 @@
         {
             <div>
                 <div class="position-relative mb-2">
-                    <input class="form-control form-control-sm bg-dark text-white border-secondary pe-4 text-truncate" 
+                    <input class="form-control form-control-sm pe-4 text-truncate" 
                            @bind="ConnectionSearch" 
                            @bind:event="oninput"
                            placeholder="Search active connections..." 
                            @onfocus="OpenConnectionDropdown"
                            data-bs-tooltip="true" data-bs-placement="right" data-bs-html="true" data-bs-title="@GetActiveConnectionTooltipHtml()"
-                           style="cursor: pointer; font-size: 0.85rem;" />
+                           style="cursor: pointer; font-size: 0.85rem; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
                     
                     @if (IsConnectionDropdownOpen)
                     {
                         <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseConnectionDropdown"></div>
-                        <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
+                        <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
                             @{
                                 var filteredConns = ConnectionService.ActiveSessionConnections.Where(c => 
                                     string.IsNullOrWhiteSpace(ConnectionSearch) || 
@@ -34,7 +36,7 @@
                                         @foreach (var c in filteredConns)
                                         {
                                             string displayName = string.IsNullOrWhiteSpace(c.Name) ? c.Server : $"{c.Server} ({c.Name})";
-                                            <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid #333 !important; font-size: 0.85rem;" data-bs-tooltip="true" data-bs-placement="right" data-bs-html="true" data-bs-title="@GetConnectionTooltipHtml(c)" @onclick="() => OnConnectionSelected(c.ConnectionString)">
+                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: transparent; color: var(--app-text);" data-bs-tooltip="true" data-bs-placement="right" data-bs-html="true" data-bs-title="@GetConnectionTooltipHtml(c)" @onclick="() => OnConnectionSelected(c.ConnectionString)">
                                                 @displayName
                                             </button>
                                         }
@@ -53,18 +55,18 @@
                     </div>
                 </div>
                 <div class="position-relative">
-                    <input class="form-control form-control-sm bg-dark text-white border-secondary pe-4 text-truncate" 
+                    <input class="form-control form-control-sm pe-4 text-truncate" 
                            @bind="DatabaseSearch" 
                            @bind:event="oninput"
                            placeholder="Search database..." 
                            @onfocus="OpenDropdown"
                            data-bs-tooltip="true" data-bs-placement="right" data-bs-title="@DatabaseSearch"
-                           style="cursor: pointer;" />
+                           style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
                     
                     @if (IsDropdownOpen)
                     {
                         <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseDropdown"></div>
-                        <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
+                        <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 200px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
                             @if (IsLoadingDBs)
                             {
                                 <div class="p-3 text-center text-info">
@@ -80,7 +82,7 @@
                                     <div class="list-group list-group-flush">
                                         @foreach (var db in filtered)
                                         {
-                                            <button type="button" class="list-group-item list-group-item-action bg-dark text-light border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid #333 !important; font-size: 0.85rem;" data-bs-tooltip="true" data-bs-placement="right" data-bs-title="@db" @onclick="() => OnDatabaseSelected(db)">
+                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: transparent; color: var(--app-text);" data-bs-tooltip="true" data-bs-placement="right" data-bs-title="@db" @onclick="() => OnDatabaseSelected(db)">
                                                 @db
                                             </button>
                                         }
@@ -151,8 +153,17 @@
         </div>
     </div>
     
-    <div class="p-3 text-center border-top border-secondary mt-auto" style="opacity: 0.5;">
-        <small class="text-white">v @Microsoft.Maui.ApplicationModel.AppInfo.Current.VersionString</small>
+    <div class="px-3 py-2 d-flex justify-content-between align-items-center border-top border-secondary mt-auto" style="border-color: var(--app-border) !important;">
+        <small class="text-muted" style="font-size: 0.75rem;">v @Microsoft.Maui.ApplicationModel.AppInfo.Current.VersionString</small>
+        <button type="button" 
+                class="btn btn-sm d-flex align-items-center justify-content-center p-0 rounded-circle" 
+                style="width: 28px; height: 28px; border: 1px solid var(--app-border); background-color: var(--app-surface-secondary); color: var(--app-text);" 
+                @onclick="ToggleThemeAsync" 
+                title="@(ThemeService.IsDark ? "Switch to Light Mode" : "Switch to Dark Mode")"
+                data-bs-tooltip="true"
+                data-bs-placement="top">
+            <i class="bi @(ThemeService.IsDark ? "bi-sun-fill text-warning" : "bi-moon-stars-fill text-primary")" style="font-size: 0.85rem;"></i>
+        </button>
     </div>
 </div>
 
@@ -180,6 +191,7 @@
     {
         Nav.LocationChanged += OnLocationChanged;
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
+        ThemeService.OnThemeChanged += HandleThemeChanged;
         CurrentUrl = Nav.Uri;
         await LoadServerDatabases();
         ConnectionSearch = GetActiveConnectionDisplayName();
@@ -374,9 +386,20 @@
         StateHasChanged();
     }
 
+    private async Task ToggleThemeAsync()
+    {
+        await ThemeService.ToggleThemeAsync();
+    }
+
+    private void HandleThemeChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
         Nav.LocationChanged -= OnLocationChanged;
         ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
     }
 }

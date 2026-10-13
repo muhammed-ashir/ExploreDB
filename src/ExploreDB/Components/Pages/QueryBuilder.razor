@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject QueryStateService QueryStateService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject ThemeService ThemeService
 @implements IDisposable
 
 <style>
@@ -24,7 +25,7 @@
             <div class="modal-content bg-dark text-white border-secondary shadow-lg">
                 <div class="modal-header border-secondary">
                     <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
-                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowLimitAlert = false"></button>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowLimitAlert = false"></button>
                 </div>
                 <div class="modal-body">
                     <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
@@ -54,21 +55,21 @@ else
         <!-- Builder Panel -->
         <div class="col-md-4 d-flex flex-column gap-3" style="position: sticky; top: 20px; height: calc(100vh - 60px);">
             <div class="btn-group shadow-sm w-100 flex-shrink-0">
-                <button class="btn @(CurrentMode == QueryMode.Select ? "btn-primary" : "btn-dark border-secondary text-light")" @onclick="() => SetMode(QueryMode.Select)">SELECT</button>
-                <button class="btn @(CurrentMode == QueryMode.Update ? "btn-primary" : "btn-dark border-secondary text-light")" @onclick="() => SetMode(QueryMode.Update)">UPDATE</button>
-                <button class="btn @(CurrentMode == QueryMode.Delete ? "btn-primary" : "btn-dark border-secondary text-light")" @onclick="() => SetMode(QueryMode.Delete)">DELETE</button>
+                <button class="btn @(CurrentMode == QueryMode.Select ? "btn-primary" : (ThemeService.IsDark ? "btn-dark border-secondary text-light" : "btn-outline-secondary"))" @onclick="() => SetMode(QueryMode.Select)">SELECT</button>
+                <button class="btn @(CurrentMode == QueryMode.Update ? "btn-primary" : (ThemeService.IsDark ? "btn-dark border-secondary text-light" : "btn-outline-secondary"))" @onclick="() => SetMode(QueryMode.Update)">UPDATE</button>
+                <button class="btn @(CurrentMode == QueryMode.Delete ? "btn-primary" : (ThemeService.IsDark ? "btn-dark border-secondary text-light" : "btn-outline-secondary"))" @onclick="() => SetMode(QueryMode.Delete)">DELETE</button>
             </div>
             <div class="card bg-dark border-secondary shadow-sm d-flex flex-column" style="flex: 1; min-height: 0;">
                 <!-- Tab Header -->
-                <div class="card-header border-secondary p-0" style="position: sticky; top: 0; z-index: 30; background: #1a1d20; border-bottom: 1px solid #343a40 !important;">
+                <div class="card-header border-secondary p-0" style="position: sticky; top: 0; z-index: 30; background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border) !important;">
                     <div class="d-flex w-100">
                         <button class="btn flex-grow-1 rounded-0 py-2 text-uppercase d-flex justify-content-center align-items-center" 
-                                style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s ease-in-out; border: none; border-bottom: 3px solid @(ActiveBuilderTab == "Available" ? "#0d6efd" : "transparent"); color: @(ActiveBuilderTab == "Available" ? "#fff" : "#6c757d"); background: @(ActiveBuilderTab == "Available" ? "rgba(13, 110, 253, 0.05)" : "transparent"); box-shadow: none;"
+                                style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s ease-in-out; border: none; border-bottom: 3px solid @(ActiveBuilderTab == "Available" ? "#0d6efd" : "transparent"); color: @(ActiveBuilderTab == "Available" ? "var(--app-text)" : "var(--app-text-muted)"); background: @(ActiveBuilderTab == "Available" ? "rgba(13, 110, 253, 0.08)" : "transparent"); box-shadow: none;"
                                 @onclick='() => ActiveBuilderTab = "Available"'>
                             Available
                         </button>
                         <button class="btn flex-grow-1 rounded-0 py-2 text-uppercase d-flex justify-content-center align-items-center" 
-                                style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s ease-in-out; border: none; border-bottom: 3px solid @(ActiveBuilderTab == "Selected" ? "#0d6efd" : "transparent"); color: @(ActiveBuilderTab == "Selected" ? "#fff" : "#6c757d"); background: @(ActiveBuilderTab == "Selected" ? "rgba(13, 110, 253, 0.05)" : "transparent"); box-shadow: none;"
+                                style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s ease-in-out; border: none; border-bottom: 3px solid @(ActiveBuilderTab == "Selected" ? "#0d6efd" : "transparent"); color: @(ActiveBuilderTab == "Selected" ? "var(--app-text)" : "var(--app-text-muted)"); background: @(ActiveBuilderTab == "Selected" ? "rgba(13, 110, 253, 0.08)" : "transparent"); box-shadow: none;"
                                 @onclick='() => ActiveBuilderTab = "Selected"'>
                             Selected 
                             @if (SelectedColumns.Count > 0)
@@ -84,14 +85,14 @@ else
                     @if (ActiveBuilderTab == "Available")
                     {
                         <!-- Search header -->
-                        <div class="p-2 pt-3 border-bottom border-secondary" style="background: #1a1d20; z-index: 25; flex-shrink: 0;">
+                        <div class="p-2 pt-3 border-bottom border-secondary" style="background: var(--app-surface-secondary); z-index: 25; flex-shrink: 0;">
                             <div class="row g-2">
                                 @if (CurrentMode != QueryMode.Select)
                                 {
                                     <div class="col-12 mb-2">
                                         <label class="small text-warning fw-bold mb-1">Target Table (To @CurrentMode)</label>
                                         <div class="position-relative w-100">
-                                            <div class="form-control form-control-sm bg-black text-white border-warning position-relative cursor-pointer" @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
+                                            <div class="form-control form-control-sm bg-dark text-white border-warning position-relative cursor-pointer" @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
                                                 @{
                                                     var targetTableNameOnly = string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault();
                                                     var targetTooltipHtml = string.IsNullOrEmpty(TargetTable) ? null : GetTooltipHtml(TargetTable);
@@ -112,7 +113,7 @@ else
                                                 <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTargetTableDropdownOpen = false"></div>
                                                 <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 250px; overflow-y: auto; overflow-x: hidden;">
                                                     <div class="p-1 mb-1">
-                                                        <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
+                                                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
                                                     </div>
                                                     @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
                                                         {
@@ -131,19 +132,19 @@ else
                                 }
                                 <div class="col-12 d-flex flex-column gap-2 position-relative">
                                     <div class="input-group input-group-sm shadow-sm">
-                                        <input type="text" class="form-control bg-black text-white border-secondary" 
+                                        <input type="text" class="form-control bg-dark text-white border-secondary" 
                                                placeholder="Search... (Enter to filter)" 
                                                @bind="_searchColInput" 
                                                @bind:event="oninput"
                                                @onkeydown="OnSearchKeyDown"
                                                @onblur="(_ => ApplySearch())" />
-                                        <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
+                                        <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
                                             <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                         </button>
-                                        <button class="btn @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
+                                        <button class="btn @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
                                             <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
                                         </button>
-                                        <button class="btn @(ExactMatch ? "btn-primary" : "btn-outline-secondary bg-black text-muted") border-secondary px-2" style="z-index: 0;" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
+                                        <button class="btn @(ExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
                                             <i class="bi bi-bullseye"></i>
                                         </button>
                                     </div>
@@ -266,7 +267,7 @@ else
                                                 </div>
                                             </h2>
                                             <div id="collapse_@tableId" class="accordion-collapse collapse" aria-labelledby="heading_@tableId" data-bs-parent="#availableTablesAccordion">
-                                                <div class="accordion-body py-2 px-0 bg-black">
+                                                <div class="accordion-body py-2 px-0 bg-transparent">
                                                     <div class="list-group list-group-flush">
                                                         @foreach(var col in matchingColumns)
                                                         {
@@ -303,7 +304,7 @@ else
                     else if (ActiveBuilderTab == "Selected")
                     {
                         <!-- Selected Columns Content -->
-                        <div class="p-0 bg-black" style="overflow-y: auto; flex: 1; min-height: 0;">
+                        <div class="p-0 bg-transparent" style="overflow-y: auto; flex: 1; min-height: 0;">
                             @if (SelectedColumns.Count == 0)
                             {
                                 <div class="p-4 text-center text-muted mt-3 mb-3">Select columns from the Available tab to start building your query.</div>
@@ -391,7 +392,7 @@ else
                                                     </div>
                                                 </td>
                                                 <td class="border-secondary">
-                                                    <input type="text" class="form-control form-control-sm bg-black text-white border-secondary" 
+                                                    <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" 
                                                            value="@(mappedValue == $"@set_{targetColName}" ? "" : mappedValue)" 
                                                            placeholder="@($"@set_{targetColName}")"
                                                            @oninput="(e) => UpdateColumnMappingText(targetColName, e.Value?.ToString())" />
@@ -433,7 +434,7 @@ else
                              <i class="bi bi-exclamation-triangle-fill"></i>
                          </button>
                      }
-                     <textarea class="form-control bg-black text-success border-0 font-monospace p-3 d-block flex-grow-1" 
+                     <textarea class="form-control query-builder-sql border-0 font-monospace p-3 d-block flex-grow-1" 
                                style="resize: vertical; min-height: 150px;" readonly>@GeneratedSql</textarea>
                  </div>
                  @if ((LastJoinPlan != null && LastJoinPlan.Steps.Count > 0) || IgnoredRoutingTables.Count > 0 || IgnoredRoutingEdges.Count > 0)
@@ -538,7 +539,7 @@ else
             <div class="modal-content bg-dark border-secondary shadow-lg">
                 <div class="modal-header border-secondary border-opacity-50">
                     <h5 class="modal-title fw-bold text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i> Duplication Warning</h5>
-                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowWarningModal = false"></button>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowWarningModal = false"></button>
                 </div>
                 <div class="modal-body p-4">
                     @if (OptimalTableOrder != null)
@@ -710,7 +711,7 @@ else
     <div class="position-fixed top-0 start-0 h-100 bg-dark shadow-lg d-flex flex-column" style="z-index: 1050; width: 520px; max-width: 92vw; border-right: 1px solid #444; animation: slideInLeftRouting 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
         <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background-color: rgba(0,0,0,0.2);">
             <h5 class="mb-0 text-white fw-bold d-flex align-items-center">Routing Options</h5>
-            <button class="btn-close btn-close-white shadow-none" @onclick="() => ActiveOffcanvasTable = null"></button>
+            <button class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") shadow-none" @onclick="() => ActiveOffcanvasTable = null"></button>
         </div>
         <div class="p-4 flex-grow-1 d-flex flex-column overflow-hidden">
             <div class="mb-4 flex-shrink-0">
@@ -868,6 +869,7 @@ else
 
         await Task.Yield();
 
+        ThemeService.OnThemeChanged += HandleThemeChanged;
         SchemaService.OnTablesLoaded += Refresh;
         SchemaService.OnViewsLoaded += Refresh;
         
@@ -1301,8 +1303,14 @@ else
 
     public void Dispose()
     {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
         SchemaService.OnTablesLoaded -= Refresh;
         SchemaService.OnViewsLoaded -= Refresh;
+    }
+
+    private void HandleThemeChanged()
+    {
+        InvokeAsync(StateHasChanged);
     }
 
     private void MoveTable(string table, int direction)

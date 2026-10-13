@@ -19,6 +19,38 @@ public static class MauiProgram
     }
     
     private static bool _isMainWindowCreated = false;
+#if WINDOWS
+    private static Microsoft.UI.Windowing.AppWindow? _mainAppWindow;
+
+    public static void UpdateTitleBarTheme(bool isDark)
+    {
+        if (_mainAppWindow != null)
+        {
+            ApplyTitleBarTheme(_mainAppWindow, isDark);
+        }
+    }
+
+    public static void ApplyTitleBarTheme(Microsoft.UI.Windowing.AppWindow appWindow, bool isDark)
+    {
+        try
+        {
+            if (Microsoft.UI.Windowing.AppWindowTitleBar.IsCustomizationSupported())
+            {
+                var titleBar = appWindow.TitleBar;
+                if (titleBar != null)
+                {
+                    var fg = isDark ? Windows.UI.Color.FromArgb(255, 255, 255, 255) : Windows.UI.Color.FromArgb(255, 33, 37, 41);
+                    var bg = isDark ? Windows.UI.Color.FromArgb(255, 33, 37, 41) : Windows.UI.Color.FromArgb(255, 243, 244, 246);
+                    titleBar.ButtonForegroundColor = fg;
+                    titleBar.ButtonBackgroundColor = bg;
+                    titleBar.ButtonInactiveForegroundColor = Windows.UI.Color.FromArgb(255, 128, 128, 128);
+                    titleBar.ButtonInactiveBackgroundColor = bg;
+                }
+            }
+        }
+        catch { }
+    }
+#endif
 
 	public static MauiApp CreateMauiApp()
 	{
@@ -88,6 +120,11 @@ public static class MauiProgram
                             if (!_isMainWindowCreated)
                             {
                                 _isMainWindowCreated = true;
+                                _mainAppWindow = appWindow;
+
+                                // Apply initial titlebar theme
+                                var initialTheme = Microsoft.Maui.Storage.Preferences.Default.Get<string>("AppTheme", "dark");
+                                ApplyTitleBarTheme(appWindow, initialTheme == "dark");
 
                                 // Maximize the main window on startup
                                 if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
@@ -121,6 +158,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<GitHubUpdateService>();
         builder.Services.AddSingleton<StoreUpdateService>();
         builder.Services.AddSingleton<HistoryService>();
+        builder.Services.AddSingleton<ThemeService>();
 
 			return builder.Build();
 		} catch (Exception ex) {

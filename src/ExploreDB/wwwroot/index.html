@@ -7,6 +7,14 @@
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>ExploreDB</title>
     <base href="/" />
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('app_theme') || 'dark';
+                document.documentElement.setAttribute('data-bs-theme', theme);
+            } catch (e) { }
+        })();
+    </script>
     <link href="css/bootstrap.min.css" rel="stylesheet">
     <link href="css/inter-400.css" rel="stylesheet">
     <link href="css/inter-500.css" rel="stylesheet">
@@ -17,8 +25,17 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #212529;
             margin: 0;
+        }
+        html[data-bs-theme="dark"] body,
+        html[data-bs-theme="dark"] .blazor-loading {
+            background-color: #212529;
+            color: #f8f9fa;
+        }
+        html[data-bs-theme="light"] body,
+        html[data-bs-theme="light"] .blazor-loading {
+            background-color: #f3f4f6;
+            color: #1f2937;
         }
         .blazor-loading {
             display: flex;
@@ -26,7 +43,6 @@
             align-items: center;
             height: 100vh;
             width: 100vw;
-            background-color: #212529;
         }
         .blazor-spinner {
             width: 50px;
@@ -71,6 +87,17 @@
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/editor/editor.main.js"></script>
     <script src="js/query-editor-interop.js"></script>
     <script>
+        // Global Theme Switcher
+        window.setAppTheme = function (theme) {
+            try {
+                localStorage.setItem('app_theme', theme);
+                document.documentElement.setAttribute('data-bs-theme', theme);
+                if (window.monaco && window.monaco.editor) {
+                    window.monaco.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs');
+                }
+            } catch (e) { }
+        };
+
         // Global Bootstrap Tooltip Initializer - Bulletproof SPA Engine
         let currentTooltipTarget = null;
         
