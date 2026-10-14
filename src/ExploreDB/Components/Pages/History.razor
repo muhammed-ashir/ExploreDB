@@ -10,6 +10,7 @@
 @inject IJSRuntime JS
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject ThemeService ThemeService
+@implements IDisposable
 
 <div class="container-fluid d-flex flex-column" style="height: calc(100vh - 140px); padding-bottom: 20px;">
     <div class="row mb-3 align-items-center">
@@ -26,9 +27,9 @@
     <div class="row flex-grow-1 overflow-hidden" style="min-height: 500px;">
         <!-- Left Pane: List -->
         <div class="col-md-4 d-flex flex-column h-100">
-            <div class="card bg-dark text-white shadow-sm border-secondary h-100">
-                <div class="card-header bg-secondary bg-opacity-25 border-bottom border-secondary py-2">
-                    <h6 class="m-0 mb-2">Past Executions</h6>
+            <div class="card shadow-sm h-100" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="card-header py-2" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border); color: var(--app-text);">
+                    <h6 class="m-0 mb-2" style="color: var(--app-text);">Past Executions</h6>
                     <div class="d-flex align-items-center w-100">
                         <CustomDatePicker @bind-Value="_filterDate" />
                     </div>
@@ -53,7 +54,7 @@
                         {
                             foreach (var item in FilteredHistoryItems)
                             {
-                                <button type="button" class="list-group-item list-group-item-action bg-transparent border-secondary border-opacity-25 py-3 @(_selectedItem?.Id == item.Id ? "active bg-primary bg-opacity-25 border-primary" : "")" style="@(_selectedItem?.Id == item.Id ? "" : "color: var(--app-text);")" @onclick="() => SelectItem(item)">
+                                <button type="button" class="list-group-item list-group-item-action bg-transparent py-3 @(_selectedItem?.Id == item.Id ? "active bg-primary bg-opacity-25 border-primary" : "")" style="border-bottom: 1px solid var(--app-border) !important; @(_selectedItem?.Id == item.Id ? "" : "color: var(--app-text);")" @onclick="() => SelectItem(item)">
                                     <div class="d-flex align-items-center mb-1">
                                         @if (item.IsSuccess)
                                         {
@@ -78,9 +79,9 @@
 
         <!-- Right Pane: Viewer -->
         <div class="@(IsFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-4 p-md-5 d-flex flex-column" : "col-md-8 h-100 d-flex flex-column")" style="@(IsFullScreen ? "z-index: 1050; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);" : "")">
-            <div class="card bg-dark text-white shadow-sm border-secondary flex-grow-1 d-flex flex-column overflow-hidden @(IsFullScreen ? "shadow-lg border-2" : "")">
-                <div class="card-header bg-secondary bg-opacity-25 border-bottom border-secondary py-2 d-flex justify-content-between align-items-center">
-                    <h6 class="m-0">Query Details</h6>
+            <div class="card shadow-sm flex-grow-1 d-flex flex-column overflow-hidden @(IsFullScreen ? "shadow-lg border-2" : "")" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border); color: var(--app-text);">
+                    <h6 class="m-0" style="color: var(--app-text);">Query Details</h6>
                     <div class="d-flex align-items-center">
                         <button class="btn btn-sm btn-outline-secondary me-2" style="color: var(--app-text); border-color: var(--app-border);" disabled="@(_selectedItem == null)" @onclick="CopyQueryAsync">
                             <i class="bi bi-clipboard me-1"></i> Copy
@@ -118,7 +119,7 @@
                         
                         @if (!IsFullScreen)
                         {
-                            <div class="bg-dark border-top border-secondary p-2 text-muted d-flex justify-content-between align-items-center" style="flex-shrink: 0;">
+                            <div class="card-footer border-top p-2 d-flex justify-content-between align-items-center" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; color: var(--app-text-muted); flex-shrink: 0;">
                                 <small class="fw-semibold text-info"><i class="bi bi-server me-1"></i>@(string.IsNullOrWhiteSpace(_selectedItem.ServerName) ? "localhost" : _selectedItem.ServerName) <i class="bi bi-arrow-right mx-1"></i> @(string.IsNullOrWhiteSpace(_selectedItem.DatabaseName) ? "master" : _selectedItem.DatabaseName)</small>
                                 <small><i class="bi bi-stopwatch me-1"></i>@(_selectedItem.ExecutionTimeMs)ms</small>
                             </div>
@@ -134,8 +135,8 @@
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
-                <div class="modal-header border-secondary">
+            <div class="modal-content shadow-lg" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
                     <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
                     <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowLimitAlert = false"></button>
                 </div>
@@ -143,7 +144,7 @@
                     <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
                     <p class="text-muted small mt-2 mb-0">Please close some existing tabs before opening new ones.</p>
                 </div>
-                <div class="modal-footer border-secondary">
+                <div class="modal-footer" style="border-top: 1px solid var(--app-border);">
                     <button type="button" class="btn btn-primary px-4" @onclick="() => ShowLimitAlert = false">Got it</button>
                 </div>
             </div>
@@ -165,6 +166,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        ThemeService.OnThemeChanged += HandleThemeChanged;
         _historyItems = await HistoryService.GetHistoryAsync();
     }
 
@@ -242,5 +244,20 @@
         if (ts.TotalHours < 24) return $"{(int)ts.TotalHours}h ago";
         if (ts.TotalDays < 30) return $"{(int)ts.TotalDays}d ago";
         return executedAt.ToString("MMM dd");
+    }
+
+    private async void HandleThemeChanged()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("setAppTheme", ThemeService.CurrentTheme);
+        }
+        catch { }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
     }
 }

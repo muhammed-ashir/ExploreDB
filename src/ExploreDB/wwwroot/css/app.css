@@ -348,7 +348,9 @@ body {
 }
 
 [data-bs-theme="light"] .card-header.bg-secondary,
-[data-bs-theme="light"] .card-footer.bg-dark {
+[data-bs-theme="light"] .card-footer,
+[data-bs-theme="light"] .card-footer.bg-dark,
+[data-bs-theme="light"] .card > .bg-dark {
     background-color: var(--app-surface-secondary) !important;
     color: var(--app-text) !important;
     border-color: var(--app-border) !important;
@@ -394,6 +396,10 @@ body {
 
 [data-bs-theme="light"] .text-light {
     color: var(--app-text) !important;
+}
+
+[data-bs-theme="light"] .text-info {
+    color: #0284c7 !important;
 }
 
 [data-bs-theme="light"] .btn.bg-dark {
