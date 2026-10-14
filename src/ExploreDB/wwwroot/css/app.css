@@ -840,20 +840,46 @@ body {
 [data-bs-theme="light"] .btn-close-white {
     filter: none !important;
 }
-[data-bs-theme="light"] .btn.btn-dark {
-    background-color: var(--app-surface-secondary) !important;
-    color: var(--app-text) !important;
-    border-color: var(--app-border) !important;
-}
-[data-bs-theme="light"] .btn.btn-dark:hover {
-    background-color: var(--app-table-hover) !important;
-    color: var(--app-text) !important;
-}
+/* Secondary & Cancel Buttons in Light Mode: clean elevated surfaces with dark readable text */
+[data-bs-theme="light"] .btn-secondary,
+[data-bs-theme="light"] .btn-outline-secondary,
+[data-bs-theme="light"] .btn.btn-dark,
+[data-bs-theme="light"] .modal .btn-secondary,
+[data-bs-theme="light"] .modal .btn-outline-secondary,
 [data-bs-theme="light"] .modal .btn-dark,
+[data-bs-theme="light"] .modal-footer .btn-secondary,
+[data-bs-theme="light"] .modal-footer .btn-outline-secondary,
 [data-bs-theme="light"] .modal-footer .btn-dark {
     background-color: var(--app-surface-secondary) !important;
     color: var(--app-text) !important;
-    border-color: var(--app-border) !important;
+    border: 1px solid var(--app-border) !important;
+    box-shadow: none !important;
+}
+
+[data-bs-theme="light"] .btn-secondary:hover,
+[data-bs-theme="light"] .btn-secondary:focus,
+[data-bs-theme="light"] .btn-secondary:active,
+[data-bs-theme="light"] .btn-outline-secondary:hover,
+[data-bs-theme="light"] .btn-outline-secondary:focus,
+[data-bs-theme="light"] .btn-outline-secondary:active,
+[data-bs-theme="light"] .btn.btn-dark:hover,
+[data-bs-theme="light"] .btn.btn-dark:focus,
+[data-bs-theme="light"] .btn.btn-dark:active,
+[data-bs-theme="light"] .modal .btn-secondary:hover,
+[data-bs-theme="light"] .modal .btn-secondary:focus,
+[data-bs-theme="light"] .modal .btn-outline-secondary:hover,
+[data-bs-theme="light"] .modal .btn-outline-secondary:focus,
+[data-bs-theme="light"] .modal .btn-dark:hover,
+[data-bs-theme="light"] .modal .btn-dark:focus,
+[data-bs-theme="light"] .modal-footer .btn-secondary:hover,
+[data-bs-theme="light"] .modal-footer .btn-secondary:focus,
+[data-bs-theme="light"] .modal-footer .btn-outline-secondary:hover,
+[data-bs-theme="light"] .modal-footer .btn-outline-secondary:focus,
+[data-bs-theme="light"] .modal-footer .btn-dark:hover,
+[data-bs-theme="light"] .modal-footer .btn-dark:focus {
+    background-color: #e2e8f0 !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
 }
 [data-bs-theme="light"] .bg-black {
     background-color: var(--app-surface-secondary) !important;

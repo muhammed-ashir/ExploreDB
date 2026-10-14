@@ -282,8 +282,8 @@
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
-                <div class="modal-header border-secondary">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
                     <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
                     <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowLimitAlert = false"></button>
                 </div>
@@ -291,7 +291,7 @@
                     <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
                     <p class="text-muted small mt-2 mb-0">Please close some existing tabs before opening new ones.</p>
                 </div>
-                <div class="modal-footer border-secondary">
+                <div class="modal-footer" style="border-top: 1px solid var(--app-border);">
                     <button type="button" class="btn btn-primary px-4" @onclick="() => ShowLimitAlert = false">Got it</button>
                 </div>
             </div>
@@ -303,8 +303,8 @@
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
-                <div class="modal-header border-secondary">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
                     <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Popout Limit Reached</h5>
                     <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowPopoutLimitAlert = false"></button>
                 </div>
@@ -312,7 +312,7 @@
                     <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxPopoutTabs", 5))</strong> popped out tabs.</p>
                     <p class="text-muted small mt-2 mb-0">Please close some existing popout windows before opening new ones.</p>
                 </div>
-                <div class="modal-footer border-secondary">
+                <div class="modal-footer" style="border-top: 1px solid var(--app-border);">
                     <button type="button" class="btn btn-primary px-4" @onclick="() => ShowPopoutLimitAlert = false">Got it</button>
                 </div>
             </div>
@@ -324,14 +324,14 @@
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
-                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                    <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
                         Are you sure you want to <strong class="text-warning">clear the editor</strong>? This action cannot be undone.
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
-                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowClearConfirmation = false">Cancel</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => ShowClearConfirmation = false">Cancel</button>
                     <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm text-dark" @onclick="ClearQueryAsync">Clear</button>
                 </div>
             </div>
@@ -343,15 +343,15 @@
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
-                    <div class="fw-bold text-white mb-2" style="font-size: 1rem;">Confirm Execution</div>
-                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.9rem;">
+                    <div class="fw-bold mb-2" style="font-size: 1rem; color: var(--app-text);">Confirm Execution</div>
+                    <p class="mb-0" style="font-size: 0.9rem; color: var(--app-text);">
                         This query may modify the database. Are you sure you want to execute it?
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
-                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ResolveDangerousQueryWarning(false)">Cancel</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => ResolveDangerousQueryWarning(false)">Cancel</button>
                     <button type="button" class="btn btn-danger px-4 fw-bold shadow-sm" @onclick="() => ResolveDangerousQueryWarning(true)">
                         <i class="bi bi-play-fill me-1"></i>Execute
                     </button>
@@ -365,14 +365,14 @@
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
-                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                    <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
                         This tab has <strong class="text-warning">unsaved code</strong>. Do you want to save it before closing?
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
-                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowCloseTabConfirmation = false">Cancel</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => ShowCloseTabConfirmation = false">Cancel</button>
                     <button type="button" class="btn btn-danger text-white shadow-sm" @onclick="() => ConfirmCloseTabAsync()">Don't Save</button>
                     <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm text-dark" @onclick="SaveAndCloseTabAsync">Save & Close</button>
                 </div>
@@ -385,14 +385,14 @@
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
-                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                    <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
                         You have <strong class="text-warning">unsaved queries</strong>. Are you sure you want to close all tabs? Unsaved changes will be lost.
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
-                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowClearAllTabsConfirmation = false">Cancel</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => ShowClearAllTabsConfirmation = false">Cancel</button>
                     <button type="button" class="btn btn-danger text-white px-4 shadow-sm" @onclick="() => ConfirmClearAllTabsAsync()">Clear All</button>
                 </div>
             </div>
@@ -404,16 +404,16 @@
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
-                <div class="modal-header border-secondary">
-                    <h5 class="modal-title">Restore Session?</h5>
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
+                    <h5 class="modal-title" style="color: var(--app-text);">Restore Session?</h5>
                 </div>
                 <div class="modal-body">
-                    <p class="mb-0">Do you want to restore your previous query tabs?</p>
+                    <p class="mb-0" style="color: var(--app-text);">Do you want to restore your previous query tabs?</p>
                 </div>
-                <div class="modal-footer border-secondary">
+                <div class="modal-footer" style="border-top: 1px solid var(--app-border);">
                     <button type="button" class="btn btn-primary px-4" @onclick="() => HandleRestoreSessionAsync(true)">Yes</button>
-                    <button type="button" class="btn btn-outline-secondary px-4" style="color: var(--app-text); border-color: var(--app-border);" @onclick="() => HandleRestoreSessionAsync(false)">No, clear them</button>
+                    <button type="button" class="btn btn-secondary px-4" @onclick="() => HandleRestoreSessionAsync(false)">No, clear them</button>
                 </div>
             </div>
         </div>
