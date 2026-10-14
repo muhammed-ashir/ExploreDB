@@ -28,7 +28,7 @@
             <div class="col">
                 <div class="d-flex align-items-center gap-3">
                     <div class="d-flex flex-column overflow-hidden justify-content-center" style="min-width: 0;">
-                        <h5 class="text-white mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="letter-spacing: 0.5px; word-break: break-word;">
+                        <h5 class="mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="color: var(--app-text); letter-spacing: 0.5px; word-break: break-word;">
                             @Sp.Name
                             <span class="badge bg-warning text-dark fw-normal align-middle" style="font-size: 0.45em; padding: 0.35em 0.6em;">SP</span>
                         </h5>
@@ -37,7 +37,7 @@
                 </div>
             </div>
             <div class="col-auto">
-                @if (!string.IsNullOrEmpty(ReturnUrl)) { <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm border-secondary text-light">
+                @if (!string.IsNullOrEmpty(ReturnUrl)) { <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
                     <i class="bi bi-arrow-left"></i> Back </a> }
             </div>
         </div>
@@ -67,26 +67,26 @@
         <!-- Tabs Navigation -->
         <ul class="nav nav-tabs border-secondary mb-4">
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Parameters" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("Parameters")' style="cursor:pointer">
+                <a class="nav-link @(ActiveTab == "Parameters" ? "active bg-transparent border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent")"
+                   @onclick='() => SetActiveTab("Parameters")' style="cursor:pointer; @(ActiveTab == "Parameters" ? "color: var(--app-text) !important;" : "")">
                     Parameters
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Dependencies" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("Dependencies")' style="cursor:pointer">
+                <a class="nav-link @(ActiveTab == "Dependencies" ? "active bg-transparent border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent")"
+                   @onclick='() => SetActiveTab("Dependencies")' style="cursor:pointer; @(ActiveTab == "Dependencies" ? "color: var(--app-text) !important;" : "")">
                     Dependencies
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Execution" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("Execution")' style="cursor:pointer">
+                <a class="nav-link @(ActiveTab == "Execution" ? "active bg-transparent border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent")"
+                   @onclick='() => SetActiveTab("Execution")' style="cursor:pointer; @(ActiveTab == "Execution" ? "color: var(--app-text) !important;" : "")">
                     Execution
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Definition" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("Definition")' style="cursor:pointer">
+                <a class="nav-link @(ActiveTab == "Definition" ? "active bg-transparent border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent")"
+                   @onclick='() => SetActiveTab("Definition")' style="cursor:pointer; @(ActiveTab == "Definition" ? "color: var(--app-text) !important;" : "")">
                     Definition
                 </a>
             </li>
@@ -425,8 +425,8 @@
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
-                <div class="modal-header border-secondary">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
                     <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
                     <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowLimitAlert = false"></button>
                 </div>
@@ -434,7 +434,7 @@
                     <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
                     <p class="text-muted small mt-2 mb-0">Please close some existing tabs before opening new ones.</p>
                 </div>
-                <div class="modal-footer border-secondary">
+                <div class="modal-footer" style="border-top: 1px solid var(--app-border);">
                     <button type="button" class="btn btn-primary px-4" @onclick="() => ShowLimitAlert = false">Got it</button>
                 </div>
             </div>

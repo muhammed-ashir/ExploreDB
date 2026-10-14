@@ -22,15 +22,15 @@
             <div class="col">
                 <div class="d-flex align-items-center gap-3">
                     <div class="d-flex flex-column overflow-hidden justify-content-center" style="min-width: 0;">
-                        <h5 class="text-white mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="letter-spacing: 0.5px; word-break: break-word;">
+                        <h5 class="mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="color: var(--app-text); letter-spacing: 0.5px; word-break: break-word;">
                             @Type.Name
                             @if (Type.IsTableType)
                             {
-                                <span class="badge fw-normal align-middle" style="background-color: rgba(25, 135, 84, 0.15); color: #75b798; border: 1px solid rgba(25, 135, 84, 0.4); font-size: 0.45em; padding: 0.35em 0.6em;">TABLE TYPE</span>
+                                <span class="badge fw-normal align-middle object-badge-table-type" style="font-size: 0.45em; padding: 0.35em 0.6em;">TABLE TYPE</span>
                             }
                             else
                             {
-                                <span class="badge fw-normal align-middle" style="background-color: rgba(13, 202, 240, 0.15); color: #0dcaf0; border: 1px solid rgba(13, 202, 240, 0.4); font-size: 0.45em; padding: 0.35em 0.6em;">ALIAS TYPE</span>
+                                <span class="badge fw-normal align-middle object-badge-alias-type" style="font-size: 0.45em; padding: 0.35em 0.6em;">ALIAS TYPE</span>
                             }
                         </h5>
                         <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">
@@ -40,7 +40,7 @@
                 </div>
             </div>
             <div class="col-auto">
-                @if (!string.IsNullOrEmpty(ReturnUrl)) { <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm border-secondary text-light">
+                @if (!string.IsNullOrEmpty(ReturnUrl)) { <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
                     <i class="bi bi-arrow-left"></i> Back </a> }
             </div> 
         </div>
@@ -48,14 +48,14 @@
         <!-- Tabs Navigation -->
         <ul class="nav nav-tabs border-secondary mb-4">
             <li class="nav-item">
-                <a class="nav-link @(ActiveTab == "Columns" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("Columns")' style="cursor:pointer">
+                <a class="nav-link @(ActiveTab == "Columns" ? "active bg-transparent border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent")"
+                   @onclick='() => SetActiveTab("Columns")' style="cursor:pointer; @(ActiveTab == "Columns" ? "color: var(--app-text) !important;" : "")">
                     @(Type.IsTableType ? "Columns" : "Details")
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link d-inline-flex align-items-baseline gap-2 @(ActiveTab == "UsedBy" ? "active bg-transparent text-white border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent hover-text-white")"
-                   @onclick='() => SetActiveTab("UsedBy")' style="cursor:pointer">
+                <a class="nav-link d-inline-flex align-items-baseline gap-2 @(ActiveTab == "UsedBy" ? "active bg-transparent border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent")"
+                   @onclick='() => SetActiveTab("UsedBy")' style="cursor:pointer; @(ActiveTab == "UsedBy" ? "color: var(--app-text) !important;" : "")">
                     <span>Used By</span>
                     <i class="bi bi-info-circle text-muted" data-bs-tooltip="true" data-bs-title="objects that depend on this type" data-bs-placement="top" style="font-size: 0.85em; opacity: 0.8;"></i>
                 </a>
