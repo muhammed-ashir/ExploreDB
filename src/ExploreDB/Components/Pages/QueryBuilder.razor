@@ -10,20 +10,66 @@
 @implements IDisposable
 
 <style>
+    .compact-accordion .accordion-button {
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }
+    .compact-accordion .accordion-button:not(.collapsed) {
+        background-color: rgba(13, 110, 253, 0.08) !important;
+        box-shadow: none !important;
+    }
     .compact-accordion .accordion-button::after {
         background-size: 0.85rem;
         width: 0.85rem;
         height: 0.85rem;
     }
-
+    [data-bs-theme="light"] .compact-accordion .accordion-button::after {
+        filter: invert(0.2) !important;
+    }
+    [data-bs-theme="dark"] .compact-accordion .accordion-button::after {
+        filter: invert(1) grayscale(100%) !important;
+    }
+    .table-accordion-row {
+        background: var(--app-surface);
+        transition: background-color 0.15s ease;
+    }
+    .table-accordion-row:hover {
+        background: var(--app-sidebar-hover) !important;
+    }
+    .table-title-text {
+        color: #6ea8fe;
+    }
+    [data-bs-theme="light"] .table-title-text {
+        color: #0d6efd !important;
+    }
+    .selected-col-pill {
+        background-color: rgba(13, 110, 253, 0.12);
+        border: 1px solid rgba(13, 110, 253, 0.3);
+        color: #8bb9fe;
+        font-size: 0.7rem;
+    }
+    [data-bs-theme="light"] .selected-col-pill {
+        background-color: rgba(13, 110, 253, 0.1);
+        border-color: rgba(13, 110, 253, 0.25);
+        color: #0d6efd !important;
+    }
+    .join-path-badge {
+        background: var(--app-surface);
+        color: var(--app-text);
+        border: 1px solid var(--app-border);
+    }
+    .join-path-badge:hover {
+        background: var(--app-surface-secondary);
+        color: var(--primary-color);
+    }
 </style>
 
 @if (ShowLimitAlert)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark text-white border-secondary shadow-lg">
-                <div class="modal-header border-secondary">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
                     <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Tab Limit Reached</h5>
                     <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowLimitAlert = false"></button>
                 </div>
@@ -31,7 +77,7 @@
                     <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxOpenTabs", 20))</strong> open tabs.</p>
                     <p class="text-muted small mt-2 mb-0">Please close some existing tabs before opening new ones.</p>
                 </div>
-                <div class="modal-footer border-secondary">
+                <div class="modal-footer" style="border-top: 1px solid var(--app-border);">
                     <button type="button" class="btn btn-primary px-4" @onclick="() => ShowLimitAlert = false">Got it</button>
                 </div>
             </div>
@@ -59,9 +105,9 @@ else
                 <button class="btn @(CurrentMode == QueryMode.Update ? "btn-primary" : (ThemeService.IsDark ? "btn-dark border-secondary text-light" : "btn-outline-secondary"))" @onclick="() => SetMode(QueryMode.Update)">UPDATE</button>
                 <button class="btn @(CurrentMode == QueryMode.Delete ? "btn-primary" : (ThemeService.IsDark ? "btn-dark border-secondary text-light" : "btn-outline-secondary"))" @onclick="() => SetMode(QueryMode.Delete)">DELETE</button>
             </div>
-            <div class="card bg-dark border-secondary shadow-sm d-flex flex-column" style="flex: 1; min-height: 0;">
+            <div class="card shadow-sm d-flex flex-column" style="flex: 1; min-height: 0; background: var(--app-surface); border: 1px solid var(--app-border);">
                 <!-- Tab Header -->
-                <div class="card-header border-secondary p-0" style="position: sticky; top: 0; z-index: 30; background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border) !important;">
+                <div class="card-header p-0" style="position: sticky; top: 0; z-index: 30; background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border) !important;">
                     <div class="d-flex w-100">
                         <button class="btn flex-grow-1 rounded-0 py-2 text-uppercase d-flex justify-content-center align-items-center" 
                                 style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s ease-in-out; border: none; border-bottom: 3px solid @(ActiveBuilderTab == "Available" ? "#0d6efd" : "transparent"); color: @(ActiveBuilderTab == "Available" ? "var(--app-text)" : "var(--app-text-muted)"); background: @(ActiveBuilderTab == "Available" ? "rgba(13, 110, 253, 0.08)" : "transparent"); box-shadow: none;"
@@ -85,14 +131,16 @@ else
                     @if (ActiveBuilderTab == "Available")
                     {
                         <!-- Search header -->
-                        <div class="p-2 pt-3 border-bottom border-secondary" style="background: var(--app-surface-secondary); z-index: 25; flex-shrink: 0;">
+                        <div class="p-2 pt-3 border-bottom" style="background: var(--app-surface-secondary); border-color: var(--app-border) !important; z-index: 25; flex-shrink: 0;">
                             <div class="row g-2">
                                 @if (CurrentMode != QueryMode.Select)
                                 {
                                     <div class="col-12 mb-2">
                                         <label class="small text-warning fw-bold mb-1">Target Table (To @CurrentMode)</label>
                                         <div class="position-relative w-100">
-                                            <div class="form-control form-control-sm bg-dark text-white border-warning position-relative cursor-pointer" @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
+                                            <div class="form-control form-control-sm position-relative cursor-pointer" 
+                                                 style="background: var(--app-input-bg); color: var(--app-input-text); border: 1px solid var(--app-input-border);"
+                                                 @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
                                                 @{
                                                     var targetTableNameOnly = string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault();
                                                     var targetTooltipHtml = string.IsNullOrEmpty(TargetTable) ? null : GetTooltipHtml(TargetTable);
@@ -111,13 +159,14 @@ else
                                             @if (IsTargetTableDropdownOpen)
                                             {
                                                 <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTargetTableDropdownOpen = false"></div>
-                                                <div class="dropdown-menu show w-100 bg-dark border-secondary shadow-lg p-1 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 250px; overflow-y: auto; overflow-x: hidden;">
+                                                <div class="dropdown-menu show w-100 shadow-lg p-1 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 250px; overflow-y: auto; overflow-x: hidden; background: var(--app-dropdown-bg); border: 1px solid var(--app-border);">
                                                     <div class="p-1 mb-1">
-                                                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
+                                                        <input type="text" class="form-control form-control-sm" style="background: var(--app-input-bg); color: var(--app-input-text); border: 1px solid var(--app-input-border);" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
                                                     </div>
                                                     @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
                                                         {
-                                                            <button class="dropdown-item text-white py-1 text-truncate @(TargetTable == table.FullName ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" type="button" 
+                                                            <button class="dropdown-item py-1 text-truncate @(TargetTable == table.FullName ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" type="button" 
+                                                                    style="color: var(--app-text);"
                                                                     data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(table.FullName)" data-bs-placement="right" 
                                                                     @onclick="() => SelectTargetTable(table.FullName)">
                                                                 @table.Name
@@ -127,31 +176,32 @@ else
                                             }
                                         </div>
                                     </div>
-                                    <hr class="border-secondary mt-1 mb-2 opacity-50"/>
+                                    <hr class="mt-1 mb-2 opacity-50" style="border-color: var(--app-border);"/>
                                     <label class="small text-info fw-bold mb-1">Filter Tables (To JOIN)</label>
                                 }
                                 <div class="col-12 d-flex flex-column gap-2 position-relative">
                                     <div class="input-group input-group-sm shadow-sm">
-                                        <input type="text" class="form-control bg-dark text-white border-secondary" 
+                                        <input type="text" class="form-control" 
+                                               style="background: var(--app-input-bg); color: var(--app-input-text); border: 1px solid var(--app-input-border);"
                                                placeholder="Search... (Enter to filter)" 
                                                @bind="_searchColInput" 
                                                @bind:event="oninput"
                                                @onkeydown="OnSearchKeyDown"
                                                @onblur="(_ => ApplySearch())" />
-                                        <button class="btn @(CaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
+                                        <button class="btn btn-sm @(CaseSensitive ? "btn-primary" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(!CaseSensitive ? "background: var(--app-input-bg); color: var(--app-text-muted);" : "")" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
                                             <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                         </button>
-                                        <button class="btn @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
+                                        <button class="btn btn-sm @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(!MatchWholeWord ? "background: var(--app-input-bg); color: var(--app-text-muted);" : "")" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
                                             <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
                                         </button>
-                                        <button class="btn @(ExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-2" style="z-index: 0;" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
+                                        <button class="btn btn-sm @(ExactMatch ? "btn-primary" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(!ExactMatch ? "background: var(--app-input-bg); color: var(--app-text-muted);" : "")" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
                                             <i class="bi bi-bullseye"></i>
                                         </button>
                                     </div>
                                     
                                     <div class="d-flex align-items-center px-1">
                                         <div class="form-check form-check-inline mb-0">
-                                            <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="searchTable" 
+                                            <input class="form-check-input cursor-pointer" style="border-color: var(--app-input-border);" type="checkbox" id="searchTable" 
                                                    checked="@(SearchFilter == "All" || SearchFilter == "Table")" 
                                                    @onchange='(e) => { 
                                                        bool isChecked = (bool)(e.Value ?? false);
@@ -161,10 +211,10 @@ else
                                                        else if (isColumnChecked) SearchFilter = "Column";
                                                        else SearchFilter = "None";
                                                    }'>
-                                            <label class="form-check-label text-light small cursor-pointer user-select-none" for="searchTable">Table</label>
+                                            <label class="form-check-label small cursor-pointer user-select-none" style="color: var(--app-text);" for="searchTable">Table</label>
                                         </div>
                                         <div class="form-check form-check-inline mb-0">
-                                            <input class="form-check-input bg-dark border-secondary cursor-pointer" type="checkbox" id="searchColumn" 
+                                            <input class="form-check-input cursor-pointer" style="border-color: var(--app-input-border);" type="checkbox" id="searchColumn" 
                                                    checked="@(SearchFilter == "All" || SearchFilter == "Column")" 
                                                    @onchange='(e) => { 
                                                        bool isChecked = (bool)(e.Value ?? false);
@@ -174,7 +224,7 @@ else
                                                        else if (isTableChecked) SearchFilter = "Table";
                                                        else SearchFilter = "None";
                                                    }'>
-                                            <label class="form-check-label text-light small cursor-pointer user-select-none" for="searchColumn">Column</label>
+                                            <label class="form-check-label small cursor-pointer user-select-none" style="color: var(--app-text);" for="searchColumn">Column</label>
                                         </div>
                                     </div>
                                 </div>
@@ -242,43 +292,43 @@ else
                                     {
                                         hasResults = true;
                                         var tableId = "table_" + table.FullName.Replace(".", "_").Replace("\"", "");
-                                        <div class="accordion-item bg-transparent border-bottom border-secondary">
+                                        <div class="accordion-item bg-transparent" style="border-bottom: 1px solid var(--app-border) !important;">
                                             <h2 class="accordion-header" id="heading_@tableId">
-                                                <div class="d-flex align-items-center bg-dark">
+                                                <div class="d-flex align-items-center table-accordion-row">
                                                     <div class="ps-3 pe-1 py-0 d-flex align-items-center gap-2">
-                                                        <input class="form-check-input m-0"
+                                                        <input class="form-check-input m-0 cursor-pointer"
                                                                type="checkbox"
                                                                id="@GetTableCheckboxId(table)"
                                                                checked="@AreAllColumnsSelected(table)"
                                                                @onchange="(e) => ToggleTableColumns(table, e.Value is true)" 
                                                                @onclick:stopPropagation 
-                                                               style="width: 0.85rem; height: 0.85rem; cursor: pointer; margin-top: 2px !important;" />
+                                                               style="width: 0.85rem; height: 0.85rem; cursor: pointer; margin-top: 2px !important; border-color: var(--app-input-border);" />
                                                     </div>
-                                                    <button class="accordion-button collapsed bg-transparent text-light shadow-none fw-bold text-uppercase px-2" 
+                                                    <button class="accordion-button collapsed bg-transparent shadow-none fw-bold text-uppercase px-2" 
                                                             type="button" 
                                                             data-bs-toggle="collapse" 
                                                             data-bs-target="#collapse_@tableId" 
                                                             aria-expanded="false" 
                                                             aria-controls="collapse_@tableId"
-                                                            style="color: #6ea8fe !important; font-size: 0.75rem; min-height: 28px; padding-top: 0.35rem !important; padding-bottom: 0.35rem !important; flex: 1; min-width: 0;"
+                                                            style="font-size: 0.75rem; min-height: 28px; padding-top: 0.35rem !important; padding-bottom: 0.35rem !important; flex: 1; min-width: 0;"
                                                             data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @table.Name<br/><b>Schema:</b> @table.Schema.ToLower()" data-bs-placement="bottom">
-                                                        <span class="text-truncate text-start flex-grow-1 pe-2" style="min-width: 0;">@table.Name</span>
+                                                        <span class="text-truncate text-start flex-grow-1 pe-2 table-title-text" style="min-width: 0;">@table.Name</span>
                                                     </button>
                                                 </div>
                                             </h2>
                                             <div id="collapse_@tableId" class="accordion-collapse collapse" aria-labelledby="heading_@tableId" data-bs-parent="#availableTablesAccordion">
-                                                <div class="accordion-body py-2 px-0 bg-transparent">
+                                                <div class="accordion-body py-2 px-0" style="background: var(--app-surface-secondary);">
                                                     <div class="list-group list-group-flush">
                                                         @foreach(var col in matchingColumns)
                                                         {
                                                             var key = GetColumnKey(table, col.Name);
                                                             var isSelected = SelectedColumns.Contains(key);
-                                                            <div class="list-group-item bg-transparent border-0 py-1 ps-4 pe-2 text-light d-flex align-items-center" style="min-height: 28px;">
-                                                                <input class="form-check-input me-2 mt-0" type="checkbox" id="@key" 
+                                                            <div class="list-group-item bg-transparent border-0 py-1 ps-4 pe-2 d-flex align-items-center" style="min-height: 28px; color: var(--app-text);">
+                                                                <input class="form-check-input me-2 mt-0 cursor-pointer" type="checkbox" id="@key" 
                                                                        checked="@isSelected" 
                                                                        @onchange="(e) => ToggleColumn(key, table.FullName, e.Value is true)" 
-                                                                       style="width: 0.8rem; height: 0.8rem; cursor: pointer;" />
-                                                                <label class="form-check-label text-truncate cursor-pointer flex-grow-1" for="@key" style="font-size: 0.75rem; margin-top: 1px; min-width: 0;" title="@col.Name">
+                                                                       style="width: 0.8rem; height: 0.8rem; cursor: pointer; border-color: var(--app-input-border);" />
+                                                                <label class="form-check-label text-truncate cursor-pointer flex-grow-1" for="@key" style="font-size: 0.75rem; margin-top: 1px; min-width: 0; color: var(--app-text);" title="@col.Name">
                                                                     @col.Name
                                                                 </label>
                                                             </div>
@@ -293,7 +343,7 @@ else
                                 {
                                     <div class="p-4 text-center">
                                         <div class="text-muted mb-2"><i class="bi bi-search fs-3"></i></div>
-                                        <div class="text-light fw-bold">No results found</div>
+                                        <div class="fw-bold" style="color: var(--app-text);">No results found</div>
                                         <div class="text-muted small mt-1">Try adjusting your search criteria</div>
                                     </div>
                                 }
@@ -324,9 +374,9 @@ else
                                         var schemaName = parts.Length > 1 ? parts[0] : "dbo";
                                         var tableName = parts.Length > 1 ? parts[1] : cleanTable;
                                         
-                                        <div class="p-2 mb-2 border border-secondary rounded" style="background-color: rgba(255,255,255,0.03);">
-                                            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
-                                                <div class="text-light fw-bold text-truncate cursor-pointer" style="font-size: 0.85rem;" 
+                                        <div class="p-2 mb-2 rounded" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border) !important;">
+                                            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: var(--app-border) !important;">
+                                                <div class="fw-bold text-truncate cursor-pointer" style="font-size: 0.85rem; color: var(--app-text);" 
                                                      data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @tableName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom"
                                                      @onclick="() => NavigateToDetails(table)">
                                                     @tableName
@@ -341,7 +391,7 @@ else
                                                 @foreach (var key in group)
                                                 {
                                                     var col = key.Substring(key.LastIndexOf('.') + 1);
-                                                    <div class="d-flex align-items-center rounded-pill ps-2 pe-1" style="background-color: rgba(13, 110, 253, 0.1); border: 1px solid rgba(13, 110, 253, 0.2); font-size: 0.7rem; color: #8bb9fe; padding-top: 0.15rem; padding-bottom: 0.15rem;">
+                                                    <div class="d-flex align-items-center rounded-pill ps-2 pe-1 selected-col-pill" style="padding-top: 0.15rem; padding-bottom: 0.15rem;">
                                                         <span class="text-truncate d-inline-block" style="max-width: 120px; vertical-align: middle;" title="@col">@col</span>
                                                         <i class="bi bi-x fs-6 ms-1" style="cursor: pointer; line-height: 0.5; opacity: 0.7;" title="Remove" @onclick="() => ToggleColumn(key, table, false)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'"></i>
                                                     </div>
@@ -361,8 +411,8 @@ else
         <div class="col-md-8 d-flex flex-column gap-4">
                 @if (CurrentMode == QueryMode.Update && !string.IsNullOrEmpty(TargetTable))
                 {
-                    <div class="card bg-dark border-secondary shadow-sm">
-                        <div class="card-header border-secondary fw-bold text-warning d-flex justify-content-between align-items-center cursor-pointer" @onclick="() => IsColumnMappingOpen = !IsColumnMappingOpen">
+                    <div class="card shadow-sm" style="background: var(--app-surface); border: 1px solid var(--app-border);">
+                        <div class="card-header fw-bold text-warning d-flex justify-content-between align-items-center cursor-pointer" style="background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);" @onclick="() => IsColumnMappingOpen = !IsColumnMappingOpen">
                             <span><i class="bi @(IsColumnMappingOpen ? "bi-chevron-down" : "bi-chevron-right") pe-1"></i> Update Column Mapping</span>
                             <button class="btn btn-sm btn-outline-secondary" @onclick="() => ShowResetModal = true" @onclick:stopPropagation="true">Reset</button>
                         </div>
@@ -370,7 +420,7 @@ else
                         {
                             <div class="card-body p-0">
                             <div class="table-responsive custom-scrollbar-light" style="max-height: 65vh; overflow-y: auto; overflow-x: visible;">
-                                <table class="table table-dark table-hover mb-0 align-middle">
+                                <table class="table table-hover mb-0 align-middle" style="background: var(--app-surface); color: var(--app-text);">
                                     <colgroup>
                                         <col style="width: 40%;">
                                         <col style="width: 60%;">
@@ -381,18 +431,18 @@ else
                                             var targetColName = col.Name;
                                             UpdateMappings.TryGetValue(targetColName, out var mappedValue);
                                             <tr>
-                                                <td class="border-secondary font-monospace small">
+                                                <td class="font-monospace small" style="border-color: var(--app-border); color: var(--app-text);">
                                                     <div class="form-check form-check-inline mb-0 d-flex align-items-center">
-                                                        <input class="form-check-input bg-dark border-secondary cursor-pointer mt-0" type="checkbox" id="chk_@targetColName"
+                                                        <input class="form-check-input cursor-pointer mt-0" style="border-color: var(--app-input-border);" type="checkbox" id="chk_@targetColName"
                                                                checked="@(!string.IsNullOrEmpty(mappedValue))" 
                                                                @onchange="(e) => ToggleColumnMapping(targetColName, (bool)(e.Value ?? false))" />
-                                                        <label class="form-check-label text-white cursor-pointer ms-2" for="chk_@targetColName">
+                                                        <label class="form-check-label cursor-pointer ms-2" style="color: var(--app-text);" for="chk_@targetColName">
                                                             @targetColName
                                                         </label>
                                                     </div>
                                                 </td>
-                                                <td class="border-secondary">
-                                                    <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" 
+                                                <td style="border-color: var(--app-border);">
+                                                    <input type="text" class="form-control form-control-sm" style="background: var(--app-input-bg); color: var(--app-input-text); border: 1px solid var(--app-input-border);"
                                                            value="@(mappedValue == $"@set_{targetColName}" ? "" : mappedValue)" 
                                                            placeholder="@($"@set_{targetColName}")"
                                                            @oninput="(e) => UpdateColumnMappingText(targetColName, e.Value?.ToString())" />
@@ -408,8 +458,8 @@ else
                 }
 
              <!-- Generated SQL Box -->
-             <div class="card bg-dark border-secondary shadow-sm" style="flex: 1;">
-                 <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+             <div class="card shadow-sm" style="flex: 1; background: var(--app-surface); border: 1px solid var(--app-border);">
+                 <div class="card-header d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border); color: var(--app-text);">
                      <span class="fw-bold">Generated SQL</span>
                      <div class="d-flex gap-2">
                          <button class="btn btn-sm btn-outline-warning" @onclick="() => ShowClearConfirmation = true" title="Clear all selections">
@@ -439,7 +489,7 @@ else
                  </div>
                  @if ((LastJoinPlan != null && LastJoinPlan.Steps.Count > 0) || IgnoredRoutingTables.Count > 0 || IgnoredRoutingEdges.Count > 0)
                  {
-                     <div class="card-footer bg-dark border-secondary p-3 border-top-0 border-top mt-2">
+                     <div class="card-footer p-3 border-top-0 border-top mt-2" style="background: var(--app-surface-secondary); border-color: var(--app-border) !important;">
                          @if (LastJoinPlan != null && LastJoinPlan.Steps.Count > 0)
                          {
                              <div class="d-flex align-items-center mb-3">
@@ -448,7 +498,7 @@ else
                              </div>
                              <div class="d-flex flex-wrap gap-2 align-items-center small mb-3">
                                  <div class="btn-group btn-group-sm shadow-sm">
-                                     <span class="btn btn-dark border-secondary py-1 text-light fw-bold cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(LastJoinPlan.RootTable)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(LastJoinPlan.RootTable)">
+                                     <span class="btn btn-sm py-1 fw-bold cursor-pointer text-truncate d-inline-block align-middle join-path-badge" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(LastJoinPlan.RootTable)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(LastJoinPlan.RootTable)">
                                          @LastJoinPlan.RootTable.Split('.').Last().Replace("[", "").Replace("]", "")
                                      </span>
                                  </div>
@@ -457,7 +507,7 @@ else
                                      <span class="text-secondary fw-bold fs-5">➔</span>
                                      var isIgnored = IgnoredRoutingTables.Contains(step.FullName);
                                      <div class="btn-group btn-group-sm shadow-sm @(!step.IsSelectedTable ? "dropdown" : "")">
-                                         <span class="btn btn-dark border-secondary py-1 text-light fw-bold cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(step.FullName)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(step.FullName)">
+                                         <span class="btn btn-sm py-1 fw-bold cursor-pointer text-truncate d-inline-block align-middle join-path-badge" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(step.FullName)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(step.FullName)">
                                              @step.FullName.Split('.').Last().Replace("[", "").Replace("]", "")
                                          </span>
                                          @if (!step.IsSelectedTable)
@@ -479,7 +529,7 @@ else
                                      <div>
                                          <div class="d-flex align-items-center mb-3 mt-1">
                                              <span class="text-danger small fw-bold me-2" style="letter-spacing: 0.5px;">Blocked Hubs</span>
-                                             <hr class="flex-grow-1 border-secondary m-0 me-2" style="opacity: 0.3;">
+                                             <hr class="flex-grow-1 m-0 me-2" style="opacity: 0.3; border-color: var(--app-border) !important;">
                                              <button type="button" class="btn btn-sm flex-shrink-0" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; background-color: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.35); color: #ff98a3; border-radius: 0.375rem;" @onclick="() => ShowClearBlockedHubsConfirmation = true" onmouseover="this.style.backgroundColor='rgba(220,53,69,0.25)'" onmouseout="this.style.backgroundColor='rgba(220,53,69,0.12)'">Clear All</button>
                                          </div>
                                          <div class="d-flex flex-wrap gap-2">
@@ -502,7 +552,7 @@ else
                                      <div>
                                          <div class="d-flex align-items-center mb-3 mt-1">
                                              <span class="text-danger small fw-bold me-2" style="letter-spacing: 0.5px;">Blocked Paths</span>
-                                             <hr class="flex-grow-1 border-secondary m-0 me-2" style="opacity: 0.3;">
+                                             <hr class="flex-grow-1 m-0 me-2" style="opacity: 0.3; border-color: var(--app-border) !important;">
                                              <button type="button" class="btn btn-sm flex-shrink-0" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; background-color: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.35); color: #ff98a3; border-radius: 0.375rem;" @onclick="() => ShowClearBlockedPathsConfirmation = true" onmouseover="this.style.backgroundColor='rgba(220,53,69,0.25)'" onmouseout="this.style.backgroundColor='rgba(220,53,69,0.12)'">Clear All</button>
                                          </div>
                                          <div class="d-flex flex-wrap gap-2">
@@ -536,8 +586,8 @@ else
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(2px);">
         <div class="modal-dialog modal-dialog-centered modal-lg">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
-                <div class="modal-header border-secondary border-opacity-50">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
                     <h5 class="modal-title fw-bold text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i> Duplication Warning</h5>
                     <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowWarningModal = false"></button>
                 </div>
@@ -546,20 +596,20 @@ else
                     {
                         <!-- Main Warning Header -->
                         <div class="mb-4">
-                            <h5 class="fw-bold text-white mb-2">One-to-Many Join Detected</h5>
-                            <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                            <h5 class="fw-bold mb-2" style="color: var(--app-text);">One-to-Many Join Detected</h5>
+                            <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text); opacity: 0.85;">
                                 Rows may multiply because multiple matching child rows exist for a single parent row. <br/>
-                                A <code class="text-warning bg-black bg-opacity-50 px-2 py-1 rounded border border-warning border-opacity-25 shadow-sm">SELECT DISTINCT</code> has been applied automatically to suppress exact duplicates.
+                                A <code class="text-warning bg-black bg-opacity-25 px-2 py-1 rounded border border-warning border-opacity-25 shadow-sm">SELECT DISTINCT</code> has been applied automatically to suppress exact duplicates.
                             </p>
                         </div>
                         
                         <!-- Optimal Order Card -->
-                        <div class="card bg-black border-success border-opacity-25 shadow-sm">
+                        <div class="card border-success border-opacity-25 shadow-sm" style="background: var(--app-surface-secondary);">
                             <div class="card-body p-4">
                                 <div class="d-flex justify-content-between align-items-start gap-3">
                                     <div class="flex-grow-1 overflow-hidden">
                                         <h6 class="fw-bold text-success mb-2">Optimal Join Order Available</h6>
-                                        <p class="text-light text-opacity-75 mb-0 small">
+                                        <p class="mb-0 small" style="color: var(--app-text); opacity: 0.85;">
                                             Start from the most granular table to avoid row duplication entirely:
                                         </p>
                                         <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
@@ -569,7 +619,7 @@ else
                                                 var parts = table.Replace("[", "").Replace("]", "").Split('.');
                                                 var schemaName = parts.Length > 1 ? parts[0] : "dbo";
                                                 var cleanName = parts.Length > 1 ? parts[1] : parts[0];
-                                                <span class="badge bg-dark border border-secondary px-2 py-1 fs-6 text-light cursor-pointer text-truncate d-inline-block align-middle" style="max-width: 300px;" 
+                                                <span class="badge border px-2 py-1 fs-6 cursor-pointer text-truncate d-inline-block align-middle join-path-badge" style="max-width: 300px;" 
                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @cleanName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom" 
                                                       @onclick="() => NavigateToDetails(table)">@cleanName</span>
                                                 
@@ -589,12 +639,11 @@ else
                     {
                         <!-- Integrated Cartesian Product Warning -->
                         <div class="mt-2">
-
-                            <p class="text-light text-opacity-75 mb-3" style="font-size: 0.95rem; line-height: 1.6;">
+                            <p class="mb-3" style="font-size: 0.95rem; line-height: 1.6; color: var(--app-text); opacity: 0.85;">
                                 Rows may multiply because multiple matching child rows exist for a single parent row (e.g., parallel sibling paths). Reordering the tables cannot mathematically prevent duplication here.
                             </p>
-                            <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
-                                A <code class="text-warning bg-black bg-opacity-50 px-2 py-1 rounded border border-warning border-opacity-25 shadow-sm">SELECT DISTINCT</code> has been applied automatically to suppress exact duplicates.
+                            <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text); opacity: 0.85;">
+                                A <code class="text-warning bg-black bg-opacity-25 px-2 py-1 rounded border border-warning border-opacity-25 shadow-sm">SELECT DISTINCT</code> has been applied automatically to suppress exact duplicates.
                             </p>
                         </div>
                     }
@@ -608,14 +657,14 @@ else
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1060;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
-                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                    <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
                         Are you sure you want to <strong class="text-warning">clear all selections</strong>? This action cannot be undone.
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
-                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowClearConfirmation = false">Cancel</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => ShowClearConfirmation = false">Cancel</button>
                     <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm text-dark" @onclick="ClearAll">Clear All</button>
                 </div>
             </div>
@@ -627,14 +676,14 @@ else
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1060;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
-                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                    <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
                         Are you sure you want to <strong class="text-danger">clear all blocked paths</strong>? This action cannot be undone.
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
-                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowClearBlockedPathsConfirmation = false">Cancel</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => ShowClearBlockedPathsConfirmation = false">Cancel</button>
                     <button type="button" class="btn btn-danger px-4 fw-bold shadow-sm text-white" @onclick="ClearAllBlockedPaths">Clear All</button>
                 </div>
             </div>
@@ -646,14 +695,14 @@ else
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1060;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
-                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                    <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
                         Are you sure you want to <strong class="text-danger">clear all blocked hubs</strong>? This action cannot be undone.
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
-                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowClearBlockedHubsConfirmation = false">Cancel</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => ShowClearBlockedHubsConfirmation = false">Cancel</button>
                     <button type="button" class="btn btn-danger px-4 fw-bold shadow-sm text-white" @onclick="ClearAllBlockedHubs">Clear All</button>
                 </div>
             </div>
@@ -665,14 +714,14 @@ else
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1060;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
-                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
-                        Are you sure you want to remove <strong class="text-white">@(TableToDelete?.Replace("[", "").Replace("]", ""))</strong> and all its selected columns?
+                    <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
+                        Are you sure you want to remove <strong>@(TableToDelete?.Replace("[", "").Replace("]", ""))</strong> and all its selected columns?
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
-                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowDeleteModal = false">Cancel</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => ShowDeleteModal = false">Cancel</button>
                     <button type="button" class="btn btn-danger px-4 fw-bold shadow-sm" @onclick="ConfirmDelete">Remove</button>
                 </div>
             </div>
@@ -684,14 +733,14 @@ else
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1060;">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark border-secondary shadow-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
-                    <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
+                    <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
                         Are you sure you want to reset all column mappings?
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
-                    <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowResetModal = false">Cancel</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => ShowResetModal = false">Cancel</button>
                     <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm text-dark" @onclick="ConfirmResetMappings">Reset</button>
                 </div>
             </div>
@@ -708,9 +757,9 @@ else
         }
     </style>
     <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040; background: rgba(0,0,0,0.5);" @onclick="() => ActiveOffcanvasTable = null"></div>
-    <div class="position-fixed top-0 start-0 h-100 bg-dark shadow-lg d-flex flex-column" style="z-index: 1050; width: 520px; max-width: 92vw; border-right: 1px solid #444; animation: slideInLeftRouting 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
-        <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background-color: rgba(0,0,0,0.2);">
-            <h5 class="mb-0 text-white fw-bold d-flex align-items-center">Routing Options</h5>
+    <div class="position-fixed top-0 start-0 h-100 shadow-lg d-flex flex-column" style="z-index: 1050; width: 520px; max-width: 92vw; background: var(--app-surface); color: var(--app-text); border-right: 1px solid var(--app-border); animation: slideInLeftRouting 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+        <div class="p-3 border-bottom d-flex justify-content-between align-items-center" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+            <h5 class="mb-0 fw-bold d-flex align-items-center" style="color: var(--app-text);">Routing Options</h5>
             <button class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") shadow-none" @onclick="() => ActiveOffcanvasTable = null"></button>
         </div>
         <div class="p-4 flex-grow-1 d-flex flex-column overflow-hidden">
@@ -726,7 +775,7 @@ else
             </div>
             
             <div class="d-flex flex-column flex-grow-1 overflow-hidden">
-                <h6 class="text-light border-bottom pb-2 mb-3 flex-shrink-0" style="border-color: rgba(255, 255, 255, 0.1) !important;">Alternative Routes</h6>
+                <h6 class="border-bottom pb-2 mb-3 flex-shrink-0" style="color: var(--app-text); border-color: var(--app-border) !important;">Alternative Routes</h6>
                 <div class="overflow-y-auto overflow-x-hidden custom-scrollbar-light pe-2 pb-3" style="overflow-x: hidden !important;">
                     @if (IsCalculatingRoutes)
                     {
@@ -741,7 +790,7 @@ else
                         <div class="d-flex flex-column gap-2">
                             @foreach(var route in routes)
                             {
-                                <div class="card bg-dark border-secondary hover-bg-secondary" style="cursor: pointer; transition: all 0.2s;" onmouseover="this.classList.add('bg-secondary', 'border-primary')" onmouseout="this.classList.remove('bg-secondary', 'border-primary')" @onclick="() => { SelectAlternativeRoute(route, ActiveOffcanvasTable); ActiveOffcanvasTable = null; }">
+                                <div class="card" style="cursor: pointer; transition: all 0.2s; background: var(--app-surface-secondary); border: 1px solid var(--app-border);" onmouseover="this.style.borderColor='var(--primary-color)'" onmouseout="this.style.borderColor='var(--app-border)'" @onclick="() => { SelectAlternativeRoute(route, ActiveOffcanvasTable); ActiveOffcanvasTable = null; }">
                                     <div class="card-body p-3">
                                         <div class="d-flex align-items-center justify-content-between gap-2">
                                             <div class="text-info fw-bold" style="font-size: 0.8rem; word-break: break-word; white-space: normal; min-width: 0; flex: 1 1 auto;">
@@ -756,7 +805,7 @@ else
                     }
                     else
                     {
-                        <div class="alert border-secondary p-3 small text-muted mb-0 d-flex align-items-start" style="background-color: rgba(255, 255, 255, 0.02);">
+                        <div class="alert p-3 small text-muted mb-0 d-flex align-items-start" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border);">
                             <div style="font-size: 0.9em; line-height: 1.5;">No alternative routes exist that bypass this table. You can manually block it using the button above.</div>
                         </div>
                     }
