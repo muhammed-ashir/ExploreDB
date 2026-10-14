@@ -124,14 +124,14 @@
     {
         <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 5000;">
             <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content bg-dark border-secondary shadow-lg">
+                <div class="modal-content shadow-lg" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                     <div class="modal-body p-4 pb-2">
-                        <p class="text-light text-opacity-75 mb-0" style="font-size: 0.95rem;">
-                            Are you sure you want to <strong class="text-warning">exit ExploreDB</strong>?
+                        <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
+                            Are you sure you want to <strong class="text-warning">exit</strong> ExploreDB?
                         </p>
                     </div>
                     <div class="modal-footer border-0 p-4 pt-2">
-                        <button type="button" class="btn btn-dark border-secondary" @onclick="() => ShowExitConfirmation = false">Cancel</button>
+                        <button type="button" class="btn btn-secondary px-3" style="background-color: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border);" @onclick="() => ShowExitConfirmation = false">Cancel</button>
                         <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm text-dark" @onclick="ConfirmExit">Exit</button>
                     </div>
                 </div>
