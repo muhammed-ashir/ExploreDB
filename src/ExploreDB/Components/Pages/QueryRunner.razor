@@ -80,43 +80,43 @@
                 {
                     @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
                     {
-                        <button class="btn btn-sm btn-outline-info shadow-sm ms-3" data-bs-tooltip="true" data-bs-title="Pop Out" data-bs-placement="bottom" @onclick="() => PopoutTabAsync(ActiveTab.Id)">
-                            <i class="bi bi-box-arrow-up-right"></i>
+                        <button class="btn btn-sm toolbar-icon-btn shadow-sm ms-3" data-bs-tooltip="true" data-bs-title="Pop Out" data-bs-placement="bottom" @onclick="() => PopoutTabAsync(ActiveTab.Id)">
+                            <i class="bi bi-box-arrow-up-right text-info"></i>
                         </button>
                     }
-                    <button class="btn btn-sm shadow-sm ms-2" style="border: 1px solid var(--app-border); color: var(--app-text); background-color: var(--app-surface);" data-bs-tooltip="true" data-bs-title="New Query" data-bs-placement="bottom" @onclick="NewTabAsync">
+                    <button class="btn btn-sm toolbar-icon-btn shadow-sm ms-2" data-bs-tooltip="true" data-bs-title="New Query" data-bs-placement="bottom" @onclick="NewTabAsync">
                         <i class="bi bi-plus-lg"></i>
                     </button>
                 }
             </div>
-            <div class="d-flex gap-2 flex-shrink-0">
-                <button class="btn btn-sm shadow-sm" style="border: 1px solid var(--app-border); color: var(--app-text); background-color: var(--app-surface);" data-bs-tooltip="true" data-bs-title="Open File" data-bs-placement="bottom" @onclick="OpenFileAsync">
+            <div class="d-flex gap-2 flex-shrink-0 align-items-center">
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Open File" data-bs-placement="bottom" @onclick="OpenFileAsync">
                     <i class="bi bi-folder2-open"></i>
                 </button>
-                <button class="btn btn-sm shadow-sm" style="border: 1px solid var(--app-border); color: var(--app-text); background-color: var(--app-surface);" data-bs-tooltip="true" data-bs-title="Save Query" data-bs-placement="bottom" @onclick="SaveActiveQueryAsync">
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save Query" data-bs-placement="bottom" @onclick="SaveActiveQueryAsync">
                     <i class="bi bi-floppy"></i>
                 </button>
-                <button class="btn btn-sm shadow-sm" style="border: 1px solid var(--app-border); color: var(--app-text); background-color: var(--app-surface);" data-bs-tooltip="true" data-bs-title="Save As..." data-bs-placement="bottom" @onclick="SaveAsQueryAsync">
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save As..." data-bs-placement="bottom" @onclick="SaveAsQueryAsync">
                     <i class="bi bi-file-earmark-plus"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-warning shadow-sm" data-bs-tooltip="true" data-bs-title="Clear Editor" data-bs-placement="bottom" @onclick="() => ShowClearConfirmation = true">
-                    <i class="bi bi-eraser-fill"></i>
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Clear Editor" data-bs-placement="bottom" @onclick="() => ShowClearConfirmation = true">
+                    <i class="bi bi-eraser text-warning"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-info shadow-sm" data-bs-tooltip="true" data-bs-title="Format SQL" data-bs-placement="bottom" @onclick="FormatSqlAsync">
-                    <i class="bi bi-magic"></i>
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Format SQL" data-bs-placement="bottom" @onclick="FormatSqlAsync">
+                    <i class="bi bi-magic text-info"></i>
                 </button>
-                <button class="btn btn-sm shadow-sm" style="border: 1px solid var(--app-border); color: var(--app-text); background-color: var(--app-surface);" data-bs-tooltip="true" data-bs-title="View History" data-bs-placement="bottom" @onclick='() => Nav.NavigateTo("/history")'>
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="View History" data-bs-placement="bottom" @onclick='() => Nav.NavigateTo("/history")'>
                     <i class="bi bi-clock-history"></i>
                 </button>
                 @if (ActiveTab.IsExecuting)
                 {
-                    <button class="btn btn-sm btn-danger shadow-sm" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
+                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
                         <i class="bi bi-stop-fill me-1"></i><span>Stop</span>
                     </button>
                 }
                 else
                 {
-                    <button class="btn btn-sm btn-primary shadow-sm" data-bs-tooltip="true" data-bs-title="Execute Query" data-bs-placement="bottom" @onclick="ExecuteAsync">
+                    <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Execute Query" data-bs-placement="bottom" @onclick="ExecuteAsync">
                         <i class="bi bi-play-fill me-1"></i><span>Execute</span>
                     </button>
                 }
