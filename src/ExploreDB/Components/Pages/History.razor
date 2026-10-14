@@ -54,7 +54,11 @@
                         {
                             foreach (var item in FilteredHistoryItems)
                             {
-                                <button type="button" class="list-group-item list-group-item-action bg-transparent py-3 @(_selectedItem?.Id == item.Id ? "active bg-primary bg-opacity-25 border-primary" : "")" style="border-bottom: 1px solid var(--app-border) !important; @(_selectedItem?.Id == item.Id ? "" : "color: var(--app-text);")" @onclick="() => SelectItem(item)">
+                                bool isSelected = _selectedItem?.Id == item.Id;
+                                <button type="button" 
+                                        class="list-group-item list-group-item-action py-3 history-item @(isSelected ? "history-item-selected" : "")" 
+                                        style="border-bottom: 1px solid var(--app-border) !important;" 
+                                        @onclick="() => SelectItem(item)">
                                     <div class="d-flex align-items-center mb-1">
                                         @if (item.IsSuccess)
                                         {
@@ -64,9 +68,9 @@
                                         {
                                             <i class="bi bi-x-circle-fill text-danger me-2" title="Failed"></i>
                                         }
-                                        <span class="fw-bold" style="font-size: 0.95rem;">@item.ExecutedAt.ToString("MMM dd, yyyy")</span>
+                                        <span class="fw-bold history-item-title" style="font-size: 0.95rem;">@item.ExecutedAt.ToString("MMM dd, yyyy")</span>
                                     </div>
-                                    <div class="text-muted text-truncate" style="font-size: 0.85rem; margin-left: 1.5rem;" title="@($"{item.ExecutedAt:h:mm tt} - {GetRelativeTime(item.ExecutedAt)}")">
+                                    <div class="history-item-subtitle text-truncate" style="font-size: 0.85rem; margin-left: 1.5rem;" title="@($"{item.ExecutedAt:h:mm tt} - {GetRelativeTime(item.ExecutedAt)}")">
                                         @item.ExecutedAt.ToString("h:mm tt") - @GetRelativeTime(item.ExecutedAt)
                                     </div>
                                 </button>
