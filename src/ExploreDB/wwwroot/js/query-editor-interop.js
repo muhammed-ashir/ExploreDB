@@ -451,7 +451,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 
                 // Parse Aliases (e.g., FROM [hr].[Settings] s)
                 var aliasMap = {};
-                var sqlKw = new Set(['where', 'on', 'join', 'inner', 'left', 'right', 'outer', 'group', 'order', 'having', 'select', 'as', 'cross', 'apply', 'from', 'and', 'or', 'is', 'not', 'set']);
+                var sqlKw = new Set(['where', 'on', 'join', 'inner', 'left', 'right', 'outer', 'group', 'order', 'having', 'select', 'as', 'cross', 'apply', 'from', 'set']);
                 var tableRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)([a-zA-Z0-9_]+)/gi;
                 var match;
                 while ((match = tableRegex.exec(allText)) !== null) {
@@ -590,6 +590,11 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 };
 
                                 var leftDisplayName = joinAlias || (matchedTable.name || matchedTable.fullName);
+                                // Also try aliasMap reverse lookup for joinTable in case joinAlias wasn't captured
+                                if (!joinAlias) {
+                                    var joinRevAlias = Object.keys(aliasMap).find(k => tablesMatch(aliasMap[k], joinTableRaw));
+                                    if (joinRevAlias) leftDisplayName = joinRevAlias;
+                                }
                                 var seenConds = new Set();
 
                                 matchedTable.relations.forEach(r => {
@@ -597,7 +602,12 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                     var targetEntry = queryTables.find(qt => tablesMatch(qt.rawTable, r.toTable));
                                     if (!targetEntry) return;
 
-                                    var rightDisplayName = targetEntry.alias || targetEntry.rawTable;
+                                    var rightDisplayName = targetEntry.alias;
+                                    if (!rightDisplayName) {
+                                        // Use aliasMap reverse lookup — handles aliases that are SQL keywords (e.g. 'or', 'and')
+                                        var revAlias = Object.keys(aliasMap).find(k => tablesMatch(aliasMap[k], targetEntry.rawTable));
+                                        rightDisplayName = revAlias || targetEntry.rawTable;
+                                    }
 
                                     // Direction 1: Joined table first (e.g. ot.OrderId = tof.Id)
                                     var cond1 = leftDisplayName + "." + r.fromCol + " = " + rightDisplayName + "." + r.toCol;
@@ -826,10 +836,11 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             if (ctx) {
                                 editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
                             }
-                        } else if (e.browserEvent.key === ' ' || e.browserEvent.code === 'Space') {
+                        } else if (e.browserEvent.key === ' ' || e.browserEvent.code === 'Space' || /^[a-zA-Z0-9_.]$/.test(e.browserEvent.key)) {
                             var lineContent = model.getLineContent(pos.lineNumber);
                             var textBefore = lineContent.substring(0, pos.column - 1);
-                            if (/\bon\s+$/i.test(textBefore)) {
+                            // Trigger on Space after ON, or on any character typed while still in the ON <partial> context
+                            if (/\bon\s+[a-zA-Z0-9_.]*$/i.test(textBefore)) {
                                 editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
                             }
                         }
