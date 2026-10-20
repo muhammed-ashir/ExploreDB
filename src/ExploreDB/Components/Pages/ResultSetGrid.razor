@@ -313,7 +313,7 @@ else
     
     <!-- Unified context menu positioned at cursor -->
     <div class="position-fixed shadow-lg rounded" 
-         style="top: min(@(RowContextMenuY)px, calc(100vh - @(IsColumnContextMenu ? 230 : 160)px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); overflow: hidden;" 
+         style="top: min(@(RowContextMenuY)px, calc(100vh - 230px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); overflow: hidden;" 
          @onclick:stopPropagation>
         <div class="py-1">
             <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedAsync">
@@ -338,13 +338,13 @@ else
                 <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+A</span>
             </button>
 
-            @if (IsColumnContextMenu && !string.IsNullOrEmpty(ContextMenuColumn))
+            <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
+            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CopyColumnAsInClause">
+                <i class="bi bi-clipboard text-muted"></i>
+                <span>Copy as IN clause</span>
+            </button>
+            @if (IsColumnContextMenu || !string.IsNullOrEmpty(ContextMenuColumn))
             {
-                <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
-                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CopyColumnAsInClause">
-                    <i class="bi bi-clipboard text-muted"></i>
-                    <span>Copy as IN clause</span>
-                </button>
                 <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CalculateAggregates">
                     <i class="bi bi-calculator text-muted"></i>
                     <span>Show aggregate result</span>
@@ -1006,6 +1006,10 @@ else
     {
         HideContextMenu();
         IsColumnContextMenu = false;
+        if (colIndex >= 0 && colIndex < Columns.Count)
+        {
+            ContextMenuColumn = Columns[colIndex];
+        }
 
         var coord = (rowIndex, colIndex);
         if (!SelectedCells.Contains(coord))
@@ -1024,6 +1028,7 @@ else
     {
         HideContextMenu();
         IsColumnContextMenu = false;
+        ContextMenuColumn = "";
 
         if (rowIndex >= 0)
         {
@@ -1220,12 +1225,42 @@ else
     private async Task CopyColumnAsInClause()
     {
         HideContextMenu();
-        if (string.IsNullOrEmpty(ContextMenuColumn)) return;
 
-        var values = FilteredRows
-            .Select(r => GetColumnValue(r, ContextMenuColumn))
-            .Where(v => v != null)
-            .Select(v => v.ToString())
+        List<string?> rawList;
+
+        if (IsColumnContextMenu && !string.IsNullOrEmpty(ContextMenuColumn))
+        {
+            // Right-clicked column header: all filtered rows in this column
+            rawList = FilteredRows
+                .Select(r => GetColumnValue(r, ContextMenuColumn))
+                .Where(v => v != null)
+                .ToList();
+        }
+        else if (SelectedCells.Count > 0)
+        {
+            // Right-clicked cell area: take values of the selected cells
+            var paged = PagedRows;
+            rawList = SelectedCells
+                .Where(coord => coord.Row >= 0 && coord.Row < paged.Count && coord.Col >= 0 && coord.Col < Columns.Count)
+                .Select(coord => GetColumnValue(paged[coord.Row], Columns[coord.Col]))
+                .Where(v => v != null)
+                .ToList();
+        }
+        else if (!string.IsNullOrEmpty(ContextMenuColumn))
+        {
+            rawList = FilteredRows
+                .Select(r => GetColumnValue(r, ContextMenuColumn))
+                .Where(v => v != null)
+                .ToList();
+        }
+        else
+        {
+            return;
+        }
+
+        var values = rawList
+            .Select(v => v?.ToString())
+            .Where(v => !string.IsNullOrEmpty(v))
             .Distinct()
             .ToList();
 
@@ -1237,10 +1272,10 @@ else
             var formattedValues = values.Select(v => {
                 if (useQuotes)
                 {
-                    string escaped = v.Replace("'", "''");
+                    string escaped = v!.Replace("'", "''");
                     return string.Format("N'{0}'", escaped);
                 }
-                return v;
+                return v!;
             });
             var inClause = $"IN ({string.Join(", ", formattedValues)})";
 
