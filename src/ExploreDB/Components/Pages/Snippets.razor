@@ -7,7 +7,7 @@
 @inject IJSRuntime JS
 @inject ThemeService ThemeService
 
-<div class="container-fluid d-flex flex-column" style="height: calc(100vh - 140px); padding-bottom: 20px;">
+<div class="container-fluid d-flex flex-column" style="height: calc(100vh - 90px);">
     <!-- Top Header -->
     <div class="row mb-3 align-items-center">
         <div class="col">
@@ -77,7 +77,7 @@
         </div>
 
         <!-- Snippets Table -->
-        <div class="card-body p-0 overflow-auto custom-scrollbar-light">
+        <div class="card-body p-0 overflow-auto custom-scrollbar-light flex-grow-1">
             <table class="table table-hover mb-0 align-middle" style="color: var(--app-text); font-size: 0.88rem;">
                 <thead style="background-color: var(--app-surface-secondary); position: sticky; top: 0; z-index: 2;">
                     <tr>
@@ -158,18 +158,13 @@
                 <div class="modal-body p-0" style="height: 380px; width: 100%; position: relative;">
                     <StandaloneCodeEditor @ref="_viewerEditor" Id="@_viewEditorId" ConstructionOptions="ViewerConstructionOptions" OnDidInit="OnViewerEditorInit" CssClass="w-100 h-100" />
                 </div>
-                <div class="modal-footer py-2 px-3 d-flex justify-content-between align-items-center" style="border-top: 1px solid var(--app-border);">
-                    <div class="text-muted small" style="font-size: 0.75rem;">
-                        (Optional) Jump with Tab: <code>$1</code>, <code>$2...</code> | Final cursor: <code>$0</code>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-secondary shadow-sm" @onclick="() => CopySnippetAsync(_viewingSnippet.Code)" title="Copy">
-                            <i class="bi bi-clipboard me-1"></i> Copy
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-info shadow-sm" @onclick="SwitchFromViewToEdit" title="Edit snippet">
-                            <i class="bi bi-pencil-square me-1"></i> Edit
-                        </button>
-                    </div>
+                <div class="modal-footer py-2 px-3 d-flex justify-content-end align-items-center gap-2" style="border-top: 1px solid var(--app-border);">
+                    <button type="button" class="btn btn-sm btn-outline-secondary shadow-sm" @onclick="() => CopySnippetAsync(_viewingSnippet.Code)" title="Copy">
+                        <i class="bi bi-clipboard me-1"></i> Copy
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-info shadow-sm" @onclick="SwitchFromViewToEdit" title="Edit snippet">
+                        <i class="bi bi-pencil-square me-1"></i> Edit
+                    </button>
                 </div>
             </div>
         </div>
