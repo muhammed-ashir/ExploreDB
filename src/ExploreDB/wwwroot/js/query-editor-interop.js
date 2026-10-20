@@ -829,7 +829,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             });
         }
 
-        function configureEditor(editor) {
+        window.setupEditorInstance = function(editor) {
+            if (!editor) return;
+
             try {
                 editor.updateOptions({
                     quickSuggestions: {
@@ -843,66 +845,138 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         showWords: false
                     }
                 });
-
-                editor.addAction({
-                    id: 'save-as-snippet',
-                    label: 'Save as Snippet (Alt+S)',
-                    keybindings: [
-                        monaco.KeyMod.Alt | monaco.KeyCode.KeyS
-                    ],
-                    contextMenuGroupId: 'navigation',
-                    contextMenuOrder: 1.5,
-                    run: function(ed) {
-                        if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
-                            window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('OpenSaveSnippetModal');
-                        }
-                    }
-                });
             } catch (e) { }
 
-            editor.onKeyUp(function(e) {
+            // Working Paste in context menu (supported across WebView2)
+            if (!editor.getAction('custom-paste-action')) {
                 try {
-                    var pos = editor.getPosition();
-                    var model = editor.getModel();
-                    if (model && model.getLanguageId() === 'sql') {
-                        if (e.browserEvent.key === 'Backspace' || e.browserEvent.key === 'Delete') {
+                    editor.addAction({
+                        id: 'custom-paste-action',
+                        label: 'Paste',
+                        keybindings: [
+                            monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV
+                        ],
+                        contextMenuGroupId: '9_cutcopypaste',
+                        contextMenuOrder: 3,
+                        run: async function(ed) {
+                            var text = await window.readClipboardText();
+                            if (text) {
+                                var selection = ed.getSelection();
+                                ed.executeEdits('custom-paste', [{
+                                    range: selection,
+                                    text: text,
+                                    forceMoveMarkers: true
+                                }]);
+                            }
+                        }
+                    });
+                } catch (e) { }
+            }
+
+            // Save as Snippet in context menu
+            if (!editor.getAction('save-as-snippet')) {
+                try {
+                    editor.addAction({
+                        id: 'save-as-snippet',
+                        label: 'Save as Snippet (Alt+S)',
+                        keybindings: [
+                            monaco.KeyMod.Alt | monaco.KeyCode.KeyS
+                        ],
+                        contextMenuGroupId: '9_cutcopypaste',
+                        contextMenuOrder: 4,
+                        run: function(ed) {
+                            if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                                window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('OpenSaveSnippetModal');
+                            }
+                        }
+                    });
+                } catch (e) { }
+            }
+
+            if (!editor.__listenersAttached) {
+                editor.__listenersAttached = true;
+
+                editor.onKeyUp(function(e) {
+                    try {
+                        var pos = editor.getPosition();
+                        var model = editor.getModel();
+                        if (model && model.getLanguageId() === 'sql') {
+                            if (e.browserEvent.key === 'Backspace' || e.browserEvent.key === 'Delete') {
+                                var ctx = getSpHelptextContext(model, pos);
+                                if (ctx) {
+                                    editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
+                                }
+                            } else if (e.browserEvent.key === ' ' || e.browserEvent.code === 'Space' || /^[a-zA-Z0-9_.]$/.test(e.browserEvent.key)) {
+                                var lineContent = model.getLineContent(pos.lineNumber);
+                                var textBefore = lineContent.substring(0, pos.column - 1);
+                                if (/\bon\s+[a-zA-Z0-9_.]*$/i.test(textBefore)) {
+                                    editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
+                                }
+                            }
+                        }
+                    } catch (err) { }
+                });
+
+                editor.onDidFocusEditorText(function() {
+                    try {
+                        var pos = editor.getPosition();
+                        var model = editor.getModel();
+                        if (model && model.getLanguageId() === 'sql') {
                             var ctx = getSpHelptextContext(model, pos);
                             if (ctx) {
-                                editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
-                            }
-                        } else if (e.browserEvent.key === ' ' || e.browserEvent.code === 'Space' || /^[a-zA-Z0-9_.]$/.test(e.browserEvent.key)) {
-                            var lineContent = model.getLineContent(pos.lineNumber);
-                            var textBefore = lineContent.substring(0, pos.column - 1);
-                            // Trigger on Space after ON, or on any character typed while still in the ON <partial> context
-                            if (/\bon\s+[a-zA-Z0-9_.]*$/i.test(textBefore)) {
-                                editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
+                                editor.trigger('focus', 'editor.action.triggerSuggest', {});
                             }
                         }
-                    }
-                } catch (err) { }
-            });
+                    } catch (err) { }
+                });
 
-            editor.onDidFocusEditorText(function() {
-                try {
-                    var pos = editor.getPosition();
-                    var model = editor.getModel();
-                    if (model && model.getLanguageId() === 'sql') {
-                        var ctx = getSpHelptextContext(model, pos);
-                        if (ctx) {
-                            editor.trigger('focus', 'editor.action.triggerSuggest', {});
-                        }
-                    }
-                } catch (err) { }
-            });
+                attachAutoCapitalize(editor);
+            }
+        };
 
-            attachAutoCapitalize(editor);
-        }
-
-        monaco.editor.onDidCreateEditor(configureEditor);
+        monaco.editor.onDidCreateEditor(window.setupEditorInstance);
         var editors = monaco.editor.getEditors();
         if (editors) {
-            editors.forEach(configureEditor);
+            editors.forEach(window.setupEditorInstance);
         }
+    }
+};
+
+window.readClipboardText = async function() {
+    try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            var text = await navigator.clipboard.readText();
+            if (text) return text;
+        }
+    } catch (e) { }
+
+    if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+        try {
+            var text = await window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('GetClipboardTextAsync');
+            if (text) return text;
+        } catch (e) { }
+    }
+    return '';
+};
+
+window.configureQueryEditor = function(editorId) {
+    if (typeof monaco === 'undefined' || !monaco.editor) return;
+    var editors = monaco.editor.getEditors();
+    var editor = null;
+    if (editorId) {
+        for (var i = 0; i < editors.length; i++) {
+            var c = editors[i].getContainerDomNode();
+            if (c && (c.id === editorId || (c.closest && c.closest('#' + editorId)))) {
+                editor = editors[i];
+                break;
+            }
+        }
+    }
+    if (!editor && editors.length > 0) {
+        editor = editors[0];
+    }
+    if (editor && window.setupEditorInstance) {
+        window.setupEditorInstance(editor);
     }
 };
 

@@ -1270,6 +1270,7 @@
         {
             _objRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("window.globalShortcuts.registerQueryRunner", _objRef);
+            await JS.InvokeVoidAsync("configureQueryEditor", "query-editor");
             await UpdateEditorSnippetsAsync();
             
             // Register what we have immediately (Tables, Views, Columns)
@@ -1698,6 +1699,20 @@
         await UpdateEditorSnippetsAsync();
         IsSaveSnippetModalOpen = false;
         StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task<string> GetClipboardTextAsync()
+    {
+        try
+        {
+            if (Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.HasText)
+            {
+                return await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.GetTextAsync() ?? "";
+            }
+        }
+        catch { }
+        return "";
     }
 
     [JSInvokable]
