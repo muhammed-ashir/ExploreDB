@@ -175,6 +175,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<StoreUpdateService>();
         builder.Services.AddSingleton<HistoryService>();
         builder.Services.AddSingleton<ThemeService>();
+        builder.Services.AddSingleton<SnippetService>();
 
 			return builder.Build();
 		} catch (Exception ex) {

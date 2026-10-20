@@ -208,6 +208,14 @@
                 }
             }
 
+            // Intercept Alt+S (Save as Snippet)
+            if (e.altKey && !e.ctrlKey && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                    window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('OpenSaveSnippetModal');
+                }
+            }
+
             // Intercept Ctrl+A when focused inside result set table or container
             if (e.ctrlKey && (e.key === 'a' || e.key === 'A')) {
                 if (e.target && e.target.closest && e.target.closest('.table-responsive, .result-set-table')) {

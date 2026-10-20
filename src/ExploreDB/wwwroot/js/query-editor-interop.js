@@ -66,6 +66,10 @@ window.updateSqlAutocompleteData = (tables, views, columns, sps, functions) => {
     window.sqlFunctions = functions || window.sqlFunctions;
 };
 
+window.updateSqlSnippets = (snippets) => {
+    window.sqlSnippets = snippets || [];
+};
+
 window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNetHelper) => {
     if (functions && typeof functions.invokeMethodAsync === 'function') {
         dotNetHelper = functions;
@@ -296,13 +300,28 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
             var suggestions = [];
             
-            suggestions.push({
-                label: 'ssf',
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertText: 'SELECT * FROM ',
-                documentation: 'SELECT * FROM snippet',
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
-            });
+            if (window.sqlSnippets && window.sqlSnippets.length > 0) {
+                window.sqlSnippets.forEach(function(s) {
+                    suggestions.push({
+                        label: s.shortcut,
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: s.code,
+                        detail: s.shortcut + ' \u2192 ' + (s.description || 'Snippet'),
+                        documentation: s.code,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0000_0_' + s.shortcut
+                    });
+                });
+            } else {
+                suggestions.push({
+                    label: 'ssf',
+                    kind: monaco.languages.CompletionItemKind.Snippet,
+                    insertText: 'SELECT * FROM $0',
+                    documentation: 'SELECT * FROM snippet',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    sortText: '0000_0_ssf'
+                });
+            }
 
             // Intelligent context detection
             var fullTextUntilPosition = model.getValueInRange({
@@ -822,6 +841,21 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     wordBasedSuggestions: 'off',
                     suggest: {
                         showWords: false
+                    }
+                });
+
+                editor.addAction({
+                    id: 'save-as-snippet',
+                    label: 'Save as Snippet (Alt+S)',
+                    keybindings: [
+                        monaco.KeyMod.Alt | monaco.KeyCode.KeyS
+                    ],
+                    contextMenuGroupId: 'navigation',
+                    contextMenuOrder: 1.5,
+                    run: function(ed) {
+                        if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                            window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('OpenSaveSnippetModal');
+                        }
                     }
                 });
             } catch (e) { }

@@ -191,6 +191,8 @@
                     string relativePath = Nav.ToBaseRelativePath(Nav.Uri);
                     bool isLearningHub = relativePath.Contains("learning", StringComparison.OrdinalIgnoreCase);
                     bool isQueryRunner = string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("runner", StringComparison.OrdinalIgnoreCase);
+                    bool isHistory = relativePath.StartsWith("history", StringComparison.OrdinalIgnoreCase);
+                    bool isSnippets = relativePath.StartsWith("snippets", StringComparison.OrdinalIgnoreCase);
 
                     if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
                     {
@@ -202,7 +204,7 @@
                         catch { }
                     }
                 }
-                @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner)
+                @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner && !isHistory && !isSnippets)
                 {
                     <div class="w-100 h-100 d-flex justify-content-center align-items-center" style="min-height: 80vh;">
                         <ExploreDB.Components.Shared.NoDatabaseBanner Height="100%" />

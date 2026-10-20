@@ -1,0 +1,331 @@
+@page "/snippets"
+@using ExploreDB.Services
+@inject SnippetService SnippetService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ThemeService ThemeService
+
+<div class="container-fluid d-flex flex-column" style="height: calc(100vh - 140px); padding-bottom: 20px;">
+    <!-- Top Header -->
+    <div class="row mb-3 align-items-center">
+        <div class="col d-flex align-items-center gap-2">
+            <h4 class="m-0 d-flex align-items-center gap-2" style="color: var(--app-text);">
+                <i class="bi bi-bookmarks text-info"></i> SQL Snippet Manager
+            </h4>
+            <span class="badge bg-secondary rounded-pill ms-2" style="font-size: 0.75rem;">@FilteredSnippets.Count snippets</span>
+        </div>
+        <div class="col-auto d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary shadow-sm" type="button" @onclick="ResetDefaultsAsync" title="Restore default Redgate snippets" style="color: var(--app-text); border-color: var(--app-border);">
+                <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Defaults
+            </button>
+            <button class="btn btn-sm btn-primary shadow-sm" type="button" @onclick="OpenCreateSnippetModal">
+                <i class="bi bi-plus-lg me-1"></i> New Snippet
+            </button>
+            <button class="btn btn-sm btn-outline-secondary shadow-sm ms-2" style="color: var(--app-text); border-color: var(--app-border);" @onclick='() => Nav.NavigateTo("/runner")'>
+                <i class="bi bi-arrow-left me-1"></i> Back
+            </button>
+        </div>
+    </div>
+
+    <!-- How-to Info Banner -->
+    <div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-start gap-2 shadow-sm flex-shrink-0" style="font-size: 0.85rem; background-color: rgba(13, 202, 240, 0.1); border-color: rgba(13, 202, 240, 0.3); color: var(--app-text);">
+        <i class="bi bi-info-circle-fill text-info mt-1 flex-shrink-0"></i>
+        <div class="flex-grow-1">
+            <strong>How to add &amp; use SQL Snippets:</strong>
+            <ul class="mb-0 ps-3 mt-1" style="line-height: 1.5;">
+                <li><strong>Save quickly:</strong> Select any SQL in the Query Runner and press <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Alt+S</kbd> or right-click &rarr; <em>Save as Snippet</em>.</li>
+                <li><strong>Expand in editor:</strong> Type the shortcut keyword (e.g. <code>ssf</code>) in the Query Editor and press <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Tab</kbd> or <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Enter</kbd>.</li>
+                <li><strong>Cursor placement:</strong> Use <code>$0</code> in your code for the cursor position, and <code>$1</code>, <code>$2</code> for tab stops.</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Main Card -->
+    <div class="card shadow-sm flex-grow-1 d-flex flex-column overflow-hidden" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+        <!-- Search & Filter Controls -->
+        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border); color: var(--app-text);">
+            <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 450px;">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" class="form-control" placeholder="Search by shortcut, description, or SQL..." 
+                           @bind="_searchTerm" @bind:event="oninput" 
+                           style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+                    @if (!string.IsNullOrEmpty(_searchTerm))
+                    {
+                        <button class="btn btn-outline-secondary" type="button" @onclick="() => _searchTerm = string.Empty" style="border-color: var(--app-input-border);">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <!-- Filter Chips -->
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn @(_filterType == "all" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => _filterType = "all"' style="@(_filterType != "all" ? "color: var(--app-text); border-color: var(--app-border);" : "")">
+                    All (@_allSnippets.Count)
+                </button>
+                <button type="button" class="btn @(_filterType == "custom" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => _filterType = "custom"' style="@(_filterType != "custom" ? "color: var(--app-text); border-color: var(--app-border);" : "")">
+                    Custom (@_allSnippets.Count(s => !s.IsBuiltIn))
+                </button>
+                <button type="button" class="btn @(_filterType == "builtin" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => _filterType = "builtin"' style="@(_filterType != "builtin" ? "color: var(--app-text); border-color: var(--app-border);" : "")">
+                    Built-in (@_allSnippets.Count(s => s.IsBuiltIn))
+                </button>
+            </div>
+        </div>
+
+        <!-- Snippets Table -->
+        <div class="card-body p-0 overflow-auto custom-scrollbar-light">
+            <table class="table table-hover mb-0 align-middle" style="color: var(--app-text); font-size: 0.88rem;">
+                <thead style="background-color: var(--app-surface-secondary); position: sticky; top: 0; z-index: 2;">
+                    <tr>
+                        <th style="width: 130px; border-bottom-color: var(--app-border);">Shortcut</th>
+                        <th style="width: 250px; border-bottom-color: var(--app-border);">Description</th>
+                        <th style="border-bottom-color: var(--app-border);">SQL Snippet</th>
+                        <th style="width: 100px; border-bottom-color: var(--app-border);" class="text-center">Type</th>
+                        <th style="width: 110px; border-bottom-color: var(--app-border);" class="text-end pe-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (FilteredSnippets.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-5">
+                                <i class="bi bi-bookmarks fs-2 d-block mb-2 text-secondary opacity-50"></i>
+                                <span>No snippets match your filter.</span>
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var snippet in FilteredSnippets)
+                    {
+                        <tr style="border-bottom: 1px solid var(--app-border);">
+                            <td class="align-middle">
+                                <span class="badge bg-secondary font-monospace" style="font-size: 0.85rem; letter-spacing: 0.5px;">@snippet.Shortcut</span>
+                            </td>
+                            <td class="align-middle">
+                                <div class="fw-medium">@snippet.Description</div>
+                            </td>
+                            <td class="align-middle">
+                                <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border); font-family: Consolas, monospace; font-size: 0.82rem; white-space: pre-wrap; word-break: break-all; max-height: 80px; overflow-y: auto;">
+                                    <code>@snippet.Code</code>
+                                    <button class="btn btn-sm btn-link text-muted p-0 ms-2 flex-shrink-0" title="Copy SQL" @onclick="() => CopySnippetAsync(snippet.Code)">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </div>
+                            </td>
+                            <td class="align-middle text-center">
+                                @if (snippet.IsBuiltIn)
+                                {
+                                    <span class="badge bg-dark border text-muted" style="font-size: 0.72rem;">Built-in</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success bg-opacity-25 text-success border border-success" style="font-size: 0.72rem;">Custom</span>
+                                }
+                            </td>
+                            <td class="align-middle text-end pe-3">
+                                <button class="btn btn-sm btn-outline-info me-1" title="Edit snippet" @onclick="() => OpenEditSnippetModal(snippet)">
+                                    <i class="bi bi-pencil-square"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="Delete snippet" @onclick="() => DeleteSnippetAsync(snippet.Id)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Create / Edit Snippet -->
+@if (IsEditModalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(2px); z-index: 2100;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header py-2 px-3" style="border-bottom: 1px solid var(--app-border);">
+                    <h5 class="modal-title d-flex align-items-center gap-2 fs-6 mb-0">
+                        <i class="bi bi-file-earmark-code text-info"></i> @(string.IsNullOrEmpty(_editingSnippet.Id) || _allSnippets.All(s => s.Id != _editingSnippet.Id) ? "New SQL Snippet" : "Edit Snippet")
+                    </h5>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => IsEditModalOpen = false"></button>
+                </div>
+                <div class="modal-body p-3">
+                    @if (!string.IsNullOrEmpty(_validationMessage))
+                    {
+                        <div class="alert alert-danger py-1 px-2 mb-2" style="font-size: 0.8rem;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> @_validationMessage
+                        </div>
+                    }
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold mb-1">Shortcut / Trigger Code <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm font-monospace" placeholder="e.g. ssf, top10, cnt, myquery" @bind="_editingSnippet.Shortcut" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+                        <div class="form-text small" style="color: var(--app-text-muted); font-size: 0.75rem;">
+                            The keyword typed in the Query Editor followed by Tab or Enter.
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold mb-1">Description</label>
+                        <input type="text" class="form-control form-control-sm" placeholder="e.g. Select top 10 records" @bind="_editingSnippet.Description" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold mb-1">SQL Snippet Code <span class="text-danger">*</span></label>
+                        <textarea class="form-control form-control-sm font-monospace" rows="6" placeholder="Enter SQL code here..." @bind="_editingSnippet.Code" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); resize: vertical; font-size: 0.85rem;"></textarea>
+                        <div class="form-text small" style="color: var(--app-text-muted); font-size: 0.75rem;">
+                            Tip: Use <code>$0</code> for final cursor position, and <code>$1</code>, <code>$2</code> for tab stops.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 px-3" style="border-top: 1px solid var(--app-border);">
+                    <button type="button" class="btn btn-sm btn-secondary" @onclick="() => IsEditModalOpen = false">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary px-3" @onclick="SaveSnippetAsync">Save Snippet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Toast Feedback Message -->
+@if (!string.IsNullOrEmpty(_toastMessage))
+{
+    <div class="position-fixed bottom-0 start-50 translate-middle-x mb-4 px-3 py-2 rounded-pill shadow-lg d-flex align-items-center gap-2 text-white" 
+         style="background-color: rgba(25, 135, 84, 0.95); z-index: 3000; font-size: 0.85rem; border: 1px solid rgba(255,255,255,0.2);">
+        <i class="bi bi-check2-circle fs-6"></i>
+        <span>@_toastMessage</span>
+    </div>
+}
+
+@code {
+    private List<SqlSnippet> _allSnippets = new();
+    private string _searchTerm = "";
+    private string _filterType = "all"; // all, custom, builtin
+    private bool IsEditModalOpen = false;
+    private SqlSnippet _editingSnippet = new();
+    private string? _validationMessage = null;
+    private string? _toastMessage = null;
+    private CancellationTokenSource? _toastCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSnippetsAsync();
+    }
+
+    private async Task LoadSnippetsAsync()
+    {
+        _allSnippets = await SnippetService.GetSnippetsAsync();
+    }
+
+    private List<SqlSnippet> FilteredSnippets
+    {
+        get
+        {
+            var list = _allSnippets.AsEnumerable();
+
+            if (_filterType == "custom")
+                list = list.Where(s => !s.IsBuiltIn);
+            else if (_filterType == "builtin")
+                list = list.Where(s => s.IsBuiltIn);
+
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+            {
+                list = list.Where(s =>
+                    s.Shortcut.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    s.Description.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    s.Code.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return list.OrderBy(s => s.Shortcut).ToList();
+        }
+    }
+
+    private void OpenCreateSnippetModal()
+    {
+        _editingSnippet = new SqlSnippet();
+        _validationMessage = null;
+        IsEditModalOpen = true;
+    }
+
+    private void OpenEditSnippetModal(SqlSnippet snippet)
+    {
+        _editingSnippet = new SqlSnippet
+        {
+            Id = snippet.Id,
+            Shortcut = snippet.Shortcut,
+            Description = snippet.Description,
+            Code = snippet.Code,
+            IsBuiltIn = snippet.IsBuiltIn
+        };
+        _validationMessage = null;
+        IsEditModalOpen = true;
+    }
+
+    private async Task SaveSnippetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_editingSnippet.Shortcut))
+        {
+            _validationMessage = "Shortcut cannot be empty.";
+            return;
+        }
+        if (_editingSnippet.Shortcut.Contains(" "))
+        {
+            _validationMessage = "Shortcut cannot contain spaces.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editingSnippet.Code))
+        {
+            _validationMessage = "Snippet code cannot be empty.";
+            return;
+        }
+
+        await SnippetService.SaveSnippetAsync(_editingSnippet);
+        await LoadSnippetsAsync();
+        IsEditModalOpen = false;
+        ShowToast("Snippet saved successfully.");
+    }
+
+    private async Task DeleteSnippetAsync(string id)
+    {
+        await SnippetService.DeleteSnippetAsync(id);
+        await LoadSnippetsAsync();
+        ShowToast("Snippet deleted.");
+    }
+
+    private async Task ResetDefaultsAsync()
+    {
+        await SnippetService.ResetToDefaultsAsync();
+        await LoadSnippetsAsync();
+        ShowToast("Default snippets restored.");
+    }
+
+    private async Task CopySnippetAsync(string code)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", code);
+            ShowToast("Snippet copied to clipboard.");
+        }
+        catch { }
+    }
+
+    private void ShowToast(string message)
+    {
+        _toastCts?.Cancel();
+        _toastCts = new CancellationTokenSource();
+        var token = _toastCts.Token;
+        _toastMessage = message;
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(2500, token);
+                _toastMessage = null;
+                await InvokeAsync(StateHasChanged);
+            }
+            catch { }
+        }, token);
+    }
+}
