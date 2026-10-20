@@ -235,12 +235,12 @@
                                             </div>
                                             @if (!isCollapsed)
                                             {
-                                                <ResultSetGrid Data="rs" OnExportStateChanged="HandleExportStateChanged" />
+                                                <ResultSetGrid Data="rs" OnExportStateChanged="HandleExportStateChanged" OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
                                             }
                                         }
                                         else
                                         {
-                                            <ResultSetGrid Data="rs" OnExportStateChanged="HandleExportStateChanged" />
+                                            <ResultSetGrid Data="rs" OnExportStateChanged="HandleExportStateChanged" OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
                                         }
                                         rsIndex++;
                                     }
@@ -495,6 +495,69 @@
         }
         StateHasChanged();
     }
+    private async Task HandleOpenCodeInNewTab(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return;
+
+        var maxTabs = Config.GetValue<int>("MaxOpenTabs", 20);
+        if (QueryStateService.Tabs.Count >= maxTabs)
+        {
+            ShowLimitAlert = true;
+            return;
+        }
+
+        var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
+        if (currentTab != null && _editor != null)
+        {
+            currentTab.Content = await _editor.GetValue();
+        }
+
+        string tabName = "Definition.sql";
+        var match = System.Text.RegularExpressions.Regex.Match(
+            code,
+            @"CREATE\s+(?:OR\s+ALTER\s+)?(?:PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER)\s+([^\s\(\r\n]+)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (match.Success)
+        {
+            string raw = match.Groups[1].Value.Trim();
+            var parts = raw.Split('.');
+            string cleanName = parts.Last().Trim('[', ']');
+            if (!string.IsNullOrWhiteSpace(cleanName))
+            {
+                tabName = $"{cleanName}.sql";
+            }
+        }
+        else
+        {
+            int count = 1;
+            while (QueryStateService.Tabs.Any(t => t.Name == $"Definition{count}.sql"))
+            {
+                count++;
+            }
+            tabName = $"Definition{count}.sql";
+        }
+
+        var newTab = new ExploreDB.Services.QueryTab
+        {
+            Name = tabName,
+            Content = code,
+            OriginalContent = code,
+            ConnectionString = ConnectionService.ConnectionString
+        };
+
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+        await QueryStateService.SaveTabsAsync();
+
+        if (_editor != null)
+        {
+            await _editor.SetValue(code);
+        }
+
+        StateHasChanged();
+    }
+
     private bool IsFullScreen = false;
     private bool IsMinimized = false;
 
@@ -535,6 +598,7 @@
         SchemaService.OnTablesLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnViewsLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded -= OnSchemaLoadedHandler;
+        SchemaService.OnFunctionsLoaded -= OnSchemaLoadedHandler;
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
     }
@@ -726,6 +790,7 @@
         SchemaService.OnTablesLoaded += OnSchemaLoadedHandler;
         SchemaService.OnViewsLoaded += OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded += OnSchemaLoadedHandler;
+        SchemaService.OnFunctionsLoaded += OnSchemaLoadedHandler;
         QueryStateService.OnTabUpdated += HandleTabUpdated;
         ThemeService.OnThemeChanged += HandleThemeChanged;
         
@@ -1120,6 +1185,7 @@
             try
             {
                 await SchemaService.LoadStoredProceduresAsync();
+                await SchemaService.LoadFunctionsAsync();
                 await InvokeAsync(RegisterAutocompleteItemsAsync);
             }
             catch { }
@@ -1138,7 +1204,7 @@
                          .ToList()
         }).ToList();
         var views = SchemaService.Views.Select(v => new { name = v.Name, fullName = v.FullName, columns = v.Columns.Select(c => c.Name).ToList() }).ToList();
-        await JS.InvokeVoidAsync("updateSqlAutocompleteData", tables, views, null, null);
+        await JS.InvokeVoidAsync("updateSqlAutocompleteData", tables, views, null, null, null);
         await Task.Delay(1); // Yield to keep UI responsive
 
         // Chunk 2: Columns (Heavy CPU operation)
@@ -1147,7 +1213,7 @@
                         .Select(c => c.Name)
                         .Distinct()
                         .ToList();
-        await JS.InvokeVoidAsync("updateSqlAutocompleteData", null, null, columns, null);
+        await JS.InvokeVoidAsync("updateSqlAutocompleteData", null, null, columns, null, null);
         await Task.Delay(1); // Yield
 
         // Chunk 3: Stored Procedures
@@ -1158,7 +1224,14 @@
         }).ToList();
         
         // Register the provider and set dotNetHelper, retaining existing data
-        await JS.InvokeVoidAsync("registerSqlAutocomplete", null, null, null, sps, _objRef);
+        var functions = SchemaService.Functions.Select(f => new {
+            name = f.Name,
+            fullName = f.FullName,
+            functionType = f.FunctionType,
+            parameters = f.Parameters.Select(p => new { name = p.Name, type = p.DisplayType }).ToList()
+        }).ToList();
+        
+        await JS.InvokeVoidAsync("registerSqlAutocomplete", null, null, null, sps, functions, _objRef);
     }
 
     private void EditorOnDidChangeModelContent(ModelContentChangedEvent e)
@@ -1348,6 +1421,54 @@
             foreach(var col in view.Columns)
             {
                 sb.AppendLine($"| {col.Name} | {col.DataType} |");
+            }
+            return sb.ToString();
+        }
+
+        var sp = SchemaService.StoredProcedures.FirstOrDefault(s =>
+            (schema == null || string.Equals(s.Schema, schema, StringComparison.OrdinalIgnoreCase)) &&
+            string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (sp != null)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"**Stored Procedure:** `{sp.FullName}`\n");
+            if (sp.Parameters.Any())
+            {
+                sb.AppendLine("| Parameter | Type | Mode |");
+                sb.AppendLine("|---|---|---|");
+                foreach (var p in sp.Parameters)
+                {
+                    sb.AppendLine($"| {p.Name} | {p.DisplayType} | {(p.IsOutput ? "OUTPUT" : "INPUT")} |");
+                }
+            }
+            else
+            {
+                sb.AppendLine("*No parameters*");
+            }
+            return sb.ToString();
+        }
+
+        var fn = SchemaService.Functions.FirstOrDefault(f =>
+            (schema == null || string.Equals(f.Schema, schema, StringComparison.OrdinalIgnoreCase)) &&
+            string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (fn != null)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"**Function:** `{fn.FullName}` ({fn.FunctionType})\n");
+            if (fn.Parameters.Any())
+            {
+                sb.AppendLine("| Parameter | Type |");
+                sb.AppendLine("|---|---|");
+                foreach (var p in fn.Parameters)
+                {
+                    sb.AppendLine($"| {p.Name} | {p.DisplayType} |");
+                }
+            }
+            else
+            {
+                sb.AppendLine("*No parameters*");
             }
             return sb.ToString();
         }

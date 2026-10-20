@@ -58,24 +58,152 @@ window.formatSqlEditor = (editorId) => {
     editor.pushUndoStop();
 };
 
-window.updateSqlAutocompleteData = (tables, views, columns, sps) => {
+window.updateSqlAutocompleteData = (tables, views, columns, sps, functions) => {
     window.sqlTables = tables || window.sqlTables;
     window.sqlViews = views || window.sqlViews;
     window.sqlColumns = columns || window.sqlColumns;
     window.sqlSps = sps || window.sqlSps;
+    window.sqlFunctions = functions || window.sqlFunctions;
 };
 
-window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => {
-    window.sqlDotNetHelper = dotNetHelper;
-    window.updateSqlAutocompleteData(tables, views, columns, sps);
+window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNetHelper) => {
+    if (functions && typeof functions.invokeMethodAsync === 'function') {
+        dotNetHelper = functions;
+        functions = null;
+    }
+    window.sqlDotNetHelper = dotNetHelper || window.sqlDotNetHelper;
+    window.updateSqlAutocompleteData(tables, views, columns, sps, functions);
     if (window.sqlAutocompleteRegistered) return;
     window.sqlAutocompleteRegistered = true;
 
+    var systemProcedures = [
+        {
+            name: 'sp_helptext',
+            fullName: 'sp_helptext',
+            snippet: "sp_helptext '${1:[schema].[object_name]}'",
+            detail: 'System Stored Procedure',
+            doc: 'Displays the definition of a user-defined rule, default, unencrypted stored procedure, user-defined function, trigger, computed column, CHECK constraint, view, or system object.'
+        },
+        {
+            name: 'sp_help',
+            fullName: 'sp_help',
+            snippet: "sp_help '${1:[schema].[object_name]}'",
+            detail: 'System Stored Procedure',
+            doc: 'Reports information about a database object, a user-defined data type, or a data type.'
+        },
+        {
+            name: 'sp_spaceused',
+            fullName: 'sp_spaceused',
+            snippet: "sp_spaceused '${1:[schema].[table_name]}'",
+            detail: 'System Stored Procedure',
+            doc: 'Displays the number of rows, disk space reserved, and disk space used by a table, indexed view, or Service Broker queue.'
+        },
+        {
+            name: 'sp_who2',
+            fullName: 'sp_who2',
+            snippet: "sp_who2",
+            detail: 'System Stored Procedure',
+            doc: 'Provides information about current SQL Server users, sessions, and processes.'
+        },
+        {
+            name: 'sp_columns',
+            fullName: 'sp_columns',
+            snippet: "sp_columns '${1:table_name}'",
+            detail: 'System Stored Procedure',
+            doc: 'Returns column information for the specified tables or views.'
+        }
+    ];
+
     monaco.languages.registerCompletionItemProvider('sql', {
-        triggerCharacters: ['.'],
+        triggerCharacters: ['.', "'", '['],
         provideCompletionItems: function(model, position) {
             var lineContent = model.getLineContent(position.lineNumber);
             var textBeforeCursor = lineContent.substring(0, position.column - 1);
+
+            // Check if cursor is in an sp_helptext parameter context (e.g. EXEC sp_helptext '... or sp_helptext ...)
+            var spHelptextParamMatch = textBeforeCursor.match(/(?:(?:exec|execute)\s+)?sp_helptext\s+(?:(?:@objname\s*=\s*)?N?(['"]?))([^'"\r\n]*)$/i);
+            if (!spHelptextParamMatch) {
+                var fullTextUntilPosition = model.getValueInRange({
+                    startLineNumber: 1,
+                    startColumn: 1,
+                    endLineNumber: position.lineNumber,
+                    endColumn: position.column
+                });
+                spHelptextParamMatch = fullTextUntilPosition.match(/(?:(?:exec|execute)\s+)?sp_helptext\s+(?:(?:@objname\s*=\s*)?N?(['"]?))([^'"\r\n]*)$/i);
+            }
+
+            if (spHelptextParamMatch) {
+                var quoteChar = spHelptextParamMatch[1] || "";
+                var typedParam = spHelptextParamMatch[2] || "";
+                var textAfterCursor = lineContent.substring(position.column - 1);
+                var hasClosingQuote = textAfterCursor.startsWith("'") || textAfterCursor.startsWith('"');
+
+                var paramReplaceRange = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: position.column - typedParam.length,
+                    endColumn: position.column
+                };
+
+                var getParamInsertText = function(fullName) {
+                    if (quoteChar === "'" || quoteChar === '"') {
+                        return hasClosingQuote ? fullName : (fullName + quoteChar);
+                    }
+                    return "'" + fullName + "'";
+                };
+
+                var helpTextSuggestions = [];
+
+                // 1. Stored Procedures
+                if (window.sqlSps) {
+                    window.sqlSps.forEach(sp => {
+                        var unbracketed = sp.fullName.replace(/[\[\]]/g, "");
+                        helpTextSuggestions.push({
+                            label: sp.fullName,
+                            kind: monaco.languages.CompletionItemKind.Method,
+                            insertText: getParamInsertText(sp.fullName),
+                            filterText: sp.fullName + " " + sp.name + " " + unbracketed,
+                            sortText: '1_' + sp.name,
+                            range: paramReplaceRange,
+                            detail: 'Stored Procedure'
+                        });
+                    });
+                }
+
+                // 2. Views
+                if (window.sqlViews) {
+                    window.sqlViews.forEach(v => {
+                        var unbracketed = v.fullName.replace(/[\[\]]/g, "");
+                        helpTextSuggestions.push({
+                            label: v.fullName,
+                            kind: monaco.languages.CompletionItemKind.Class,
+                            insertText: getParamInsertText(v.fullName),
+                            filterText: v.fullName + " " + v.name + " " + unbracketed,
+                            sortText: '2_' + v.name,
+                            range: paramReplaceRange,
+                            detail: 'View'
+                        });
+                    });
+                }
+
+                // 3. Functions
+                if (window.sqlFunctions) {
+                    window.sqlFunctions.forEach(f => {
+                        var unbracketed = f.fullName.replace(/[\[\]]/g, "");
+                        helpTextSuggestions.push({
+                            label: f.fullName,
+                            kind: monaco.languages.CompletionItemKind.Function,
+                            insertText: getParamInsertText(f.fullName),
+                            filterText: f.fullName + " " + f.name + " " + unbracketed,
+                            sortText: '3_' + f.name,
+                            range: paramReplaceRange,
+                            detail: f.functionType ? ('Function (' + f.functionType + ')') : 'Function'
+                        });
+                    });
+                }
+
+                return { suggestions: helpTextSuggestions };
+            }
             // Match something like "ou.id" or just "id"
             var match = textBeforeCursor.match(/([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]*)?)$/);
             var fullTypedWord = match ? match[1] : "";
@@ -354,6 +482,22 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
                 });
             }
 
+            if (suggestSps || suggestKeywords || fullTypedWord.toLowerCase().startsWith('sp')) {
+                systemProcedures.forEach(sp => {
+                    suggestions.push({
+                        label: sp.fullName,
+                        kind: monaco.languages.CompletionItemKind.Method,
+                        insertText: sp.snippet,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        filterText: sp.name + " " + sp.fullName,
+                        sortText: '0_' + sp.name,
+                        range: replaceRange,
+                        detail: sp.detail,
+                        documentation: { value: sp.doc }
+                    });
+                });
+            }
+
             if (suggestKeywords) {
                 var sqlKeywordsList = [
                     'SELECT', 'FROM', 'WHERE', 'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN',
@@ -378,7 +522,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
             return { suggestions: suggestions };
         },
         resolveCompletionItem: async function(item, token) {
-            if (item.detail === 'Table' || item.detail === 'View') {
+            if (window.sqlDotNetHelper && (item.detail === 'Table' || item.detail === 'View' || item.detail === 'Stored Procedure' || (item.detail && item.detail.startsWith('Function')))) {
                 try {
                     let doc = await window.sqlDotNetHelper.invokeMethodAsync('GetSchemaDocumentation', item.label);
                     if (doc) {
@@ -408,6 +552,15 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, dotNetHelper) => 
             }
             var objectName = lineContent.substring(start, end);
             if (!objectName) return null;
+
+            if (objectName.toLowerCase() === 'sp_helptext') {
+                return {
+                    contents: [
+                        { value: '**System Stored Procedure:** `sp_helptext`' },
+                        { value: 'Displays the definition of a user-defined rule, default, unencrypted stored procedure, user-defined function, trigger, computed column, CHECK constraint, view, or system object.' }
+                    ]
+                };
+            }
 
             try {
                 let doc = await window.sqlDotNetHelper.invokeMethodAsync('GetSchemaDocumentation', objectName);

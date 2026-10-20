@@ -157,7 +157,7 @@
                                             <hr class="flex-grow-1 m-0" style="border-color: var(--app-border); opacity: 0.5;">
                                         </div>
                                     }
-                                    <ExploreDB.Components.Pages.ResultSetGrid Data="rs" />
+                                    <ExploreDB.Components.Pages.ResultSetGrid Data="rs" OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
                                     rsIndex++;
                                 }
                             }
@@ -389,7 +389,50 @@
         await Task.Delay(1);
 
         var sps = schema.Sps.Select(s => new { name = s.Split('.').Last().Trim('[', ']'), fullName = s, parameters = new List<object>() }).ToList();
-        await JS.InvokeVoidAsync("registerSqlAutocomplete", null, null, null, sps, null);
+        var functions = schema.Functions.Select(f => new { name = f.Split('.').Last().Trim('[', ']'), fullName = f, functionType = "", parameters = new List<object>() }).ToList();
+        await JS.InvokeVoidAsync("registerSqlAutocomplete", null, null, null, sps, functions, null);
+    }
+
+    private async Task HandleOpenCodeInNewTab(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return;
+
+        string tabName = "Definition.sql";
+        var match = System.Text.RegularExpressions.Regex.Match(
+            code,
+            @"CREATE\s+(?:OR\s+ALTER\s+)?(?:PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER)\s+([^\s\(\r\n]+)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (match.Success)
+        {
+            string raw = match.Groups[1].Value.Trim();
+            var parts = raw.Split('.');
+            string cleanName = parts.Last().Trim('[', ']');
+            if (!string.IsNullOrWhiteSpace(cleanName))
+            {
+                tabName = $"{cleanName}.sql";
+            }
+        }
+        else
+        {
+            int count = 1;
+            while (QueryStateService.Tabs.Any(t => t.Name == $"Definition{count}.sql"))
+            {
+                count++;
+            }
+            tabName = $"Definition{count}.sql";
+        }
+
+        var newTab = new ExploreDB.Services.QueryTab
+        {
+            Name = tabName,
+            Content = code,
+            OriginalContent = code,
+            ConnectionString = ActiveTab.ConnectionString
+        };
+
+        QueryStateService.Tabs.Add(newTab);
+        await QueryStateService.SaveTabsAsync();
     }
 
     private async Task ExecuteAsync()

@@ -255,7 +255,7 @@ public class SchemaService
         _maxCacheSize = _config.GetValue<int>("MaxSchemaCacheCount", 10);
     }
 
-    public (List<string> Tables, List<string> Views, List<string> Columns, List<string> Sps) GetCachedSchema(string connectionString)
+    public (List<string> Tables, List<string> Views, List<string> Columns, List<string> Sps, List<string> Functions) GetCachedSchema(string connectionString)
     {
         if (!string.IsNullOrEmpty(connectionString) && _schemaCache.TryGetValue(connectionString, out var entry))
         {
@@ -268,10 +268,11 @@ public class SchemaService
                 entry.Tables.Select(t => t.FullName).ToList(),
                 entry.Views.Select(v => v.FullName).ToList(),
                 cols,
-                entry.StoredProcedures.Select(sp => sp.FullName).ToList()
+                entry.StoredProcedures.Select(sp => sp.FullName).ToList(),
+                entry.Functions.Select(f => f.FullName).ToList()
             );
         }
-        return (new(), new(), new(), new());
+        return (new(), new(), new(), new(), new());
     }
 
     public async Task<string?> GetStoredProcedureDefinitionAsync(string fullName)
