@@ -202,6 +202,13 @@
                     window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('SaveQueryFromShortcut');
                 }
             }
+
+            // Intercept Ctrl+A when focused inside result set table or container
+            if (e.ctrlKey && (e.key === 'a' || e.key === 'A')) {
+                if (e.target && e.target.closest && e.target.closest('.table-responsive, .result-set-table')) {
+                    e.preventDefault();
+                }
+            }
         });
     </script>
 </body>

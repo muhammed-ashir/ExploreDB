@@ -104,12 +104,23 @@
         </div>
     </div>
 
-    <div class="table-responsive rounded" style="border: 1px solid var(--app-border);">
+    <div class="table-responsive rounded position-relative" tabindex="0" style="border: 1px solid var(--app-border); outline: none;" @onkeydown="HandleKeyDown">
         <table class="result-set-table" style="min-width: 100%; width: max-content;">
             <thead>
                 <tr>
-                    <th class="col-index p-0 align-middle text-center">
-                        <div class="px-2 py-2" style="font-size: 0.8rem;">#</div>
+                    <th class="col-index p-0 align-middle text-center" 
+                        style="cursor: pointer; user-select: none;" 
+                        @onclick="ToggleSelectAll" 
+                        @oncontextmenu="e => ShowRowContextMenu(e, -1)" 
+                        @oncontextmenu:preventDefault="true"
+                        title="@(SelectedRowIndices.Count == PagedRows.Count && PagedRows.Count > 0 ? "Click to deselect all" : "Click to select all")">
+                        <div class="px-2 py-2 d-flex align-items-center justify-content-center gap-1" style="font-size: 0.8rem;">
+                            <span>#</span>
+                            @if (PagedRows.Count > 0 && SelectedRowIndices.Count == PagedRows.Count)
+                            {
+                                <i class="bi bi-check-square-fill text-primary" style="font-size: 0.75rem;"></i>
+                            }
+                        </div>
                     </th>
                     @foreach (var col in Columns)
                     {
@@ -131,14 +142,33 @@
             </thead>
             <tbody>
                 @{
+                    var paged = PagedRows;
                     int offset = PageSize == -1 ? 0 : (CurrentPage - 1) * PageSize;
-                    int rowIndex = 1;
                 }
-                @foreach (var row in PagedRows)
+                @for (int i = 0; i < paged.Count; i++)
                 {
-                    <tr>
-                        <td class="col-index text-center align-middle" style="font-size: 0.8rem;">
-                            @(offset + rowIndex++)
+                    var row = paged[i];
+                    int localIndex = i;
+                    bool isSelected = SelectedRowIndices.Contains(localIndex);
+                    <tr class="@(isSelected ? "selected-row" : "")"
+                        @oncontextmenu="e => ShowRowContextMenu(e, localIndex)"
+                        @oncontextmenu:preventDefault="true">
+                        <td class="col-index text-center align-middle" 
+                            style="font-size: 0.8rem; cursor: pointer; user-select: none;"
+                            title="Click to select row (Ctrl+Click to toggle, Shift+Click for range)"
+                            @onclick="e => HandleRowHeaderClick(e, localIndex)"
+                            @onclick:stopPropagation="true">
+                            @if (isSelected)
+                            {
+                                <span class="d-inline-flex align-items-center justify-content-center gap-1">
+                                    <i class="bi bi-caret-right-fill text-primary" style="font-size: 0.65rem;"></i>
+                                    @(offset + localIndex + 1)
+                                </span>
+                            }
+                            else
+                            {
+                                @(offset + localIndex + 1)
+                            }
                         </td>
                         @foreach (var col in Columns)
                         {
@@ -151,7 +181,7 @@
                         }
                     </tr>
                 }
-                @if (PagedRows.Count == 0)
+                @if (paged.Count == 0)
                 {
                     <tr>
                         <td colspan="@(Columns.Count + 1)" class="text-center text-muted py-4">
@@ -283,6 +313,82 @@ else
     </style>
 }
 
+@if (ShowRowContextMenuState)
+{
+    <!-- Invisible overlay to close row context menu -->
+    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 2050;" @onclick="HideRowContextMenu" @oncontextmenu="HideRowContextMenu" @oncontextmenu:preventDefault="true"></div>
+    
+    <!-- Row context menu positioned at cursor -->
+    <div class="position-fixed shadow-lg rounded" 
+         style="top: min(@(RowContextMenuY)px, calc(100vh - 160px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); overflow: hidden;" 
+         @onclick:stopPropagation>
+        <div class="py-1">
+            <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedAsync">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-copy text-muted"></i>
+                    <span>Copy</span>
+                </div>
+                <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+C</span>
+            </button>
+            <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedWithHeadersAsync">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-file-earmark-spreadsheet text-muted"></i>
+                    <span>Copy with Headers</span>
+                </div>
+                <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+Shift+C</span>
+            </button>
+            <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
+            <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="SelectAllCurrentPage">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-check2-all text-muted"></i>
+                    <span>Select All</span>
+                </div>
+                <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+A</span>
+            </button>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_copyFeedbackMessage))
+{
+    <div class="position-absolute bottom-0 start-50 translate-middle-x mb-4 px-3 py-2 rounded-pill shadow-lg d-flex align-items-center gap-2 text-white" 
+         style="background-color: rgba(25, 135, 84, 0.95); z-index: 2100; font-size: 0.82rem; pointer-events: none; border: 1px solid rgba(255,255,255,0.2);">
+        <i class="bi bi-check2-circle fs-6"></i>
+        <span class="fw-medium">@_copyFeedbackMessage</span>
+    </div>
+}
+
+<style>
+    .grid-ctx-btn {
+        color: var(--app-text) !important;
+        background: transparent;
+        border: none;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        transition: background-color 0.1s ease;
+    }
+    .grid-ctx-btn:hover {
+        background-color: var(--primary-color) !important;
+        color: #ffffff !important;
+    }
+    .grid-ctx-btn:hover i,
+    .grid-ctx-btn:hover span {
+        color: #ffffff !important;
+    }
+    .result-set-table tbody tr.selected-row {
+        background-color: rgba(13, 110, 253, 0.22) !important;
+    }
+    .result-set-table tbody tr.selected-row:hover {
+        background-color: rgba(13, 110, 253, 0.32) !important;
+    }
+    .result-set-table tbody tr.selected-row td.col-index {
+        background-color: rgba(13, 110, 253, 0.45) !important;
+        color: #ffffff !important;
+        font-weight: 600;
+    }
+</style>
+
 
 
 
@@ -411,6 +517,21 @@ else
     private double ContextMenuX = 0;
     private double ContextMenuY = 0;
     private string ContextMenuColumn = "";
+
+    // Row Selection & Context Menu State
+    private HashSet<int> SelectedRowIndices = new();
+    private int _lastSelectedRowIndex = -1;
+    private bool ShowRowContextMenuState = false;
+    private double RowContextMenuX = 0;
+    private double RowContextMenuY = 0;
+    private string? _copyFeedbackMessage = null;
+    private CancellationTokenSource? _copyFeedbackCts;
+
+    private void ClearRowSelection()
+    {
+        SelectedRowIndices.Clear();
+        _lastSelectedRowIndex = -1;
+    }
     
     // Aggregates State
     private string? ActiveAggregateColumn = null;
@@ -429,6 +550,7 @@ else
         set
         {
             _searchTerm = value;
+            ClearRowSelection();
             CurrentPage = 1;
         }
     }
@@ -437,21 +559,21 @@ else
     private bool SearchCaseSensitive
     {
         get => _searchCaseSensitive;
-        set { _searchCaseSensitive = value; CurrentPage = 1; }
+        set { _searchCaseSensitive = value; ClearRowSelection(); CurrentPage = 1; }
     }
     
     private bool _searchMatchWholeWord = false;
     private bool SearchMatchWholeWord
     {
         get => _searchMatchWholeWord;
-        set { _searchMatchWholeWord = value; CurrentPage = 1; }
+        set { _searchMatchWholeWord = value; ClearRowSelection(); CurrentPage = 1; }
     }
     
     private bool _searchExactMatch = false;
     private bool SearchExactMatch
     {
         get => _searchExactMatch;
-        set { _searchExactMatch = value; CurrentPage = 1; }
+        set { _searchExactMatch = value; ClearRowSelection(); CurrentPage = 1; }
     }
 
     private int _pageSize = 24;
@@ -462,6 +584,7 @@ else
         set
         {
             _pageSize = value;
+            ClearRowSelection();
             CurrentPage = 1;
         }
     }
@@ -470,6 +593,7 @@ else
 
     protected override void OnParametersSet()
     {
+        ClearRowSelection();
         Rows = Data.Select(d => (IDictionary<string, object>)d).ToList();
         if (Rows.Any())
         {
@@ -587,6 +711,7 @@ else
 
     private void SortBy(string column)
     {
+        ClearRowSelection();
         if (SortColumn == column)
         {
             if (SortAscending)
@@ -616,11 +741,13 @@ else
     private void SetPage(int page)
     {
         if (page < 1 || page > TotalPages) return;
+        ClearRowSelection();
         CurrentPage = page;
     }
 
     private void ShowHeaderContextMenu(MouseEventArgs e, string column)
     {
+        HideRowContextMenu();
         ContextMenuColumn = column;
         ContextMenuX = e.ClientX;
         ContextMenuY = e.ClientY;
@@ -630,6 +757,227 @@ else
     private void HideContextMenu()
     {
         ShowContextMenu = false;
+        ShowRowContextMenuState = false;
+    }
+
+    private void HandleRowHeaderClick(MouseEventArgs e, int rowIndex)
+    {
+        HideRowContextMenu();
+        HideContextMenu();
+
+        if (e.CtrlKey || e.MetaKey)
+        {
+            if (SelectedRowIndices.Contains(rowIndex))
+            {
+                SelectedRowIndices.Remove(rowIndex);
+            }
+            else
+            {
+                SelectedRowIndices.Add(rowIndex);
+                _lastSelectedRowIndex = rowIndex;
+            }
+        }
+        else if (e.ShiftKey && _lastSelectedRowIndex >= 0)
+        {
+            SelectedRowIndices.Clear();
+            int start = Math.Min(_lastSelectedRowIndex, rowIndex);
+            int end = Math.Max(_lastSelectedRowIndex, rowIndex);
+            for (int i = start; i <= end; i++)
+            {
+                SelectedRowIndices.Add(i);
+            }
+        }
+        else
+        {
+            SelectedRowIndices.Clear();
+            SelectedRowIndices.Add(rowIndex);
+            _lastSelectedRowIndex = rowIndex;
+        }
+    }
+
+    private void ToggleSelectAll()
+    {
+        HideRowContextMenu();
+        HideContextMenu();
+        var count = PagedRows.Count;
+        if (count == 0) return;
+
+        if (SelectedRowIndices.Count == count)
+        {
+            ClearRowSelection();
+        }
+        else
+        {
+            SelectedRowIndices.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                SelectedRowIndices.Add(i);
+            }
+            _lastSelectedRowIndex = 0;
+        }
+        StateHasChanged();
+    }
+
+    private void SelectAllCurrentPage()
+    {
+        HideRowContextMenu();
+        SelectedRowIndices.Clear();
+        var count = PagedRows.Count;
+        for (int i = 0; i < count; i++)
+        {
+            SelectedRowIndices.Add(i);
+        }
+        _lastSelectedRowIndex = 0;
+        StateHasChanged();
+    }
+
+    private void ShowRowContextMenu(MouseEventArgs e, int rowIndex)
+    {
+        HideContextMenu();
+        if (rowIndex >= 0)
+        {
+            if (!SelectedRowIndices.Contains(rowIndex))
+            {
+                SelectedRowIndices.Clear();
+                SelectedRowIndices.Add(rowIndex);
+                _lastSelectedRowIndex = rowIndex;
+            }
+        }
+        else
+        {
+            // Right-clicked the # header: if no selection, select all
+            if (SelectedRowIndices.Count == 0)
+            {
+                SelectAllCurrentPage();
+            }
+        }
+
+        RowContextMenuX = e.ClientX;
+        RowContextMenuY = e.ClientY;
+        ShowRowContextMenuState = true;
+    }
+
+    private void HideRowContextMenu()
+    {
+        ShowRowContextMenuState = false;
+    }
+
+    private string BuildClipboardText(bool includeHeaders)
+    {
+        var paged = PagedRows;
+        if (paged.Count == 0) return string.Empty;
+
+        var targetIndices = SelectedRowIndices.Count > 0
+            ? SelectedRowIndices.Where(i => i >= 0 && i < paged.Count).OrderBy(i => i).ToList()
+            : Enumerable.Range(0, paged.Count).ToList();
+
+        if (targetIndices.Count == 0) return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+
+        if (includeHeaders && Columns.Count > 0)
+        {
+            sb.Append(string.Join("\t", Columns));
+            sb.Append("\r\n");
+        }
+
+        for (int i = 0; i < targetIndices.Count; i++)
+        {
+            var row = paged[targetIndices[i]];
+            var rowValues = new List<string>(Columns.Count);
+            foreach (var col in Columns)
+            {
+                var val = GetColumnValue(row, col);
+                rowValues.Add(val ?? "NULL");
+            }
+            sb.Append(string.Join("\t", rowValues));
+            if (i < targetIndices.Count - 1)
+            {
+                sb.Append("\r\n");
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private async Task CopySelectedAsync()
+    {
+        HideRowContextMenu();
+        var text = BuildClipboardText(includeHeaders: false);
+        if (!string.IsNullOrEmpty(text))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+                int count = SelectedRowIndices.Count > 0 ? SelectedRowIndices.Count : PagedRows.Count;
+                ShowCopyFeedback($"{count} row{(count > 1 ? "s" : "")} copied");
+            }
+            catch { }
+        }
+    }
+
+    private async Task CopySelectedWithHeadersAsync()
+    {
+        HideRowContextMenu();
+        var text = BuildClipboardText(includeHeaders: true);
+        if (!string.IsNullOrEmpty(text))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+                int count = SelectedRowIndices.Count > 0 ? SelectedRowIndices.Count : PagedRows.Count;
+                ShowCopyFeedback($"{count} row{(count > 1 ? "s" : "")} copied with headers");
+            }
+            catch { }
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.CtrlKey || e.MetaKey)
+        {
+            if (e.Key.Equals("c", StringComparison.OrdinalIgnoreCase))
+            {
+                if (e.ShiftKey)
+                {
+                    await CopySelectedWithHeadersAsync();
+                }
+                else
+                {
+                    await CopySelectedAsync();
+                }
+            }
+            else if (e.Key.Equals("a", StringComparison.OrdinalIgnoreCase))
+            {
+                SelectAllCurrentPage();
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            HideRowContextMenu();
+            HideContextMenu();
+            ClearRowSelection();
+            StateHasChanged();
+        }
+    }
+
+    private void ShowCopyFeedback(string message)
+    {
+        _copyFeedbackCts?.Cancel();
+        _copyFeedbackCts = new CancellationTokenSource();
+        var token = _copyFeedbackCts.Token;
+
+        _copyFeedbackMessage = message;
+        StateHasChanged();
+
+        _ = Task.Delay(2000, token).ContinueWith(t =>
+        {
+            if (!t.IsCanceled)
+            {
+                _copyFeedbackMessage = null;
+                InvokeAsync(StateHasChanged);
+            }
+        });
     }
 
     private async Task CopyColumnAsInClause()
@@ -908,6 +1256,8 @@ else
     public void Dispose()
     {
         ThemeService.OnThemeChanged -= HandleThemeChanged;
+        _copyFeedbackCts?.Cancel();
+        _copyFeedbackCts?.Dispose();
     }
 }
 
