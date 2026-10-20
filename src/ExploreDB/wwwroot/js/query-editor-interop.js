@@ -479,16 +479,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
 
                 if (suggestColumns) {
-                    // Pre-detect ON context so we can apply priority sortText across all suggestion types
-                    var inOnContext = false;
-                    var lastJoinIdxPre = fullTextUntilPosition.toLowerCase().lastIndexOf('join');
-                    if (lastJoinIdxPre >= 0 && window.sqlTables) {
-                        var joinSegPre = fullTextUntilPosition.substring(lastJoinIdxPre);
-                        if (/^join\s+[a-zA-Z0-9_\[\]\.]+(?:\s+as\s+|\s+)?[a-zA-Z0-9_]+\s+on\s*[a-zA-Z0-9_.]*$/i.test(joinSegPre)) {
-                            inOnContext = true;
-                        }
-                    }
-
                     var allTokens = allText.match(/[a-zA-Z0-9_\[\]\.]+/g) || [];
                     var tokenSet = new Set(allTokens.map(x => x.toLowerCase()));
                     
@@ -545,7 +535,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             kind: monaco.languages.CompletionItemKind.Field,
                             insertText: rawPrefix ? (rawPrefix + "." + c) : c,
                             filterText: rawPrefix ? (rawPrefix + "." + c) : c,
-                            sortText: inOnContext ? ('3_' + c) : undefined,
                             range: replaceRange,
                             detail: explicitTableName ? ('Column of ' + explicitTableName) : 'Column'
                         });
@@ -559,7 +548,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 kind: monaco.languages.CompletionItemKind.Variable,
                                 insertText: alias,
                                 filterText: alias,
-                                sortText: inOnContext ? ('1_' + alias) : alias,
                                 range: replaceRange,
                                 detail: 'Alias for ' + aliasMap[alias]
                             });
@@ -630,7 +618,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                             kind: monaco.languages.CompletionItemKind.Snippet,
                                             insertText: cond1,
                                             filterText: typedRel ? (typedRel + " " + cond1 + " " + r.fromCol) : (cond1 + " " + r.fromCol),
-                                            sortText: '2_1_' + cond1,
+                                            sortText: '0000_1_' + cond1,
                                             range: relReplaceRange,
                                             detail: 'Relationship (' + (matchedTable.name || matchedTable.fullName) + ' -> ' + targetEntry.rawTable + ')'
                                         });
@@ -645,7 +633,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                             kind: monaco.languages.CompletionItemKind.Snippet,
                                             insertText: cond2,
                                             filterText: typedRel ? (typedRel + " " + cond2 + " " + r.toCol) : (cond2 + " " + r.toCol),
-                                            sortText: '2_2_' + cond2,
+                                            sortText: '0000_2_' + cond2,
                                             range: relReplaceRange,
                                             detail: 'Relationship (' + targetEntry.rawTable + ' -> ' + (matchedTable.name || matchedTable.fullName) + ')'
                                         });
@@ -714,7 +702,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         kind: monaco.languages.CompletionItemKind.Keyword,
                         insertText: kw,
                         filterText: kw,
-                        sortText: inOnContext ? ('4_' + kw) : kw,
                         range: replaceRange,
                         detail: 'Keyword'
                     });
