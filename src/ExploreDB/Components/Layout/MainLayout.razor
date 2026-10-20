@@ -269,11 +269,12 @@
                                     <div class="list-group list-group-flush">
                                         @foreach (var c in FilteredConnections)
                                         {
-                                            <div class="list-group-item bg-transparent border-secondary p-2 @(ActiveConnId == c.Id ? "bg-primary text-white" : "")" style="@(ActiveConnId == c.Id ? "" : "color: var(--app-text);")">
+                                            bool isActive = ActiveConnId == c.Id;
+                                            <div class="list-group-item conn-mgr-item p-2 @(isActive ? "conn-mgr-item-active" : "")" @onclick="() => LoadConnection(c)">
                                                 <div class="d-flex justify-content-between align-items-center">
-                                                    <div class="cursor-pointer flex-grow-1 pe-2 overflow-hidden" @onclick="() => LoadConnection(c)">
-                                                        <div class="fw-bold mb-1" style="font-size: 0.9em;">@(string.IsNullOrWhiteSpace(c.Name) ? "Unnamed Connection" : c.Name)</div>
-                                                        <div class="text-opacity-75" style="font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--app-text-muted);">
+                                                    <div class="flex-grow-1 pe-2 overflow-hidden">
+                                                        <div class="fw-bold mb-1 conn-mgr-item-title" style="font-size: 0.9em;">@(string.IsNullOrWhiteSpace(c.Name) ? "Unnamed Connection" : c.Name)</div>
+                                                        <div style="font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--app-text-muted);">
                                                             @{
                                                                 string authType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType;
                                                                 string authDisplay = string.Equals(authType, "SqlServer", StringComparison.OrdinalIgnoreCase) 
@@ -286,7 +287,7 @@
                                                             @coreDetails
                                                         </div>
                                                     </div>
-                                                    <button class="btn p-0 text-danger ms-2 shadow-none bg-transparent border-0" style="flex-shrink: 0;" title="Delete" @onclick="() => ConfirmDelete(c)">
+                                                    <button class="btn p-0 text-danger ms-2 shadow-none bg-transparent border-0" style="flex-shrink: 0;" title="Delete" @onclick="() => ConfirmDelete(c)" @onclick:stopPropagation>
                                                         <i class="bi bi-trash3-fill" style="font-size: 1.15rem;"></i>
                                                     </button>
                                                 </div>
