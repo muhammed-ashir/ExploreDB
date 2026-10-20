@@ -1,4 +1,4 @@
-@page "/proc/{FullName}"
+﻿@page "/proc/{FullName}"
 @using ExploreDB.Services
 @using BlazorMonaco.Editor
 @using BlazorMonaco
@@ -768,15 +768,16 @@
                 var isLast = i == allParams.Count - 1;
                 var comma = isLast ? "" : ",";
 
-                string placeholder;
+                string paramExpr;
                 if (p.IsOutput)
-                    placeholder = $"{p.Name} OUTPUT";
+                    paramExpr = $"{p.Name} OUTPUT";
                 else if (p.HasDefault && p.DefaultValue != null)
-                    placeholder = $"{p.Name} = {p.DefaultValue}";
+                    paramExpr = $"{p.Name} = {p.DefaultValue}";
                 else
-                    placeholder = $"{p.Name} = NULL  -- {p.DisplayType}";
+                    paramExpr = $"{p.Name} = NULL";
 
-                lines.AppendLine($"    {placeholder}{comma}");
+                string comment = string.IsNullOrWhiteSpace(p.DisplayType) ? "" : $"  -- {p.DisplayType}";
+                lines.AppendLine($"    {paramExpr}{comma}{comment}");
             }
 
             return lines.ToString().TrimEnd();
