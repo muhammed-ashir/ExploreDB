@@ -847,6 +847,30 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 });
             } catch (e) { }
 
+            // Working Paste in context menu (supported across WebView2)
+            if (!editor.getAction('custom-paste-action')) {
+                try {
+                    editor.addAction({
+                        id: 'custom-paste-action',
+                        label: 'Paste',
+                        keybindings: [
+                            monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV
+                        ],
+                        run: async function(ed) {
+                            var text = await window.readClipboardText();
+                            if (text) {
+                                var selection = ed.getSelection();
+                                ed.executeEdits('custom-paste', [{
+                                    range: selection,
+                                    text: text,
+                                    forceMoveMarkers: true
+                                }]);
+                            }
+                        }
+                    });
+                } catch (e) { }
+            }
+
             // Save as Snippet in context menu
             if (!editor.getAction('save-as-snippet')) {
                 try {
