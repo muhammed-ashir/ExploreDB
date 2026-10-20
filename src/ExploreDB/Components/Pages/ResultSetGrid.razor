@@ -111,12 +111,12 @@
                     <th class="col-index p-0 align-middle text-center" 
                         style="cursor: pointer; user-select: none;" 
                         @onclick="ToggleSelectAll" 
-                        @oncontextmenu="e => ShowRowContextMenu(e, -1)" 
+                        @oncontextmenu="e => ShowRowHeaderContextMenu(e, -1)" 
                         @oncontextmenu:preventDefault="true"
-                        title="@(SelectedRowIndices.Count == PagedRows.Count && PagedRows.Count > 0 ? "Click to deselect all" : "Click to select all")">
+                        title="@(PagedRows.Count > 0 && Columns.Count > 0 && SelectedCells.Count == PagedRows.Count * Columns.Count ? "Click to deselect all" : "Click to select all")">
                         <div class="px-2 py-2 d-flex align-items-center justify-content-center gap-1" style="font-size: 0.8rem;">
                             <span>#</span>
-                            @if (PagedRows.Count > 0 && SelectedRowIndices.Count == PagedRows.Count)
+                            @if (PagedRows.Count > 0 && Columns.Count > 0 && SelectedCells.Count == PagedRows.Count * Columns.Count)
                             {
                                 <i class="bi bi-check-square-fill text-primary" style="font-size: 0.75rem;"></i>
                             }
@@ -149,16 +149,15 @@
                 {
                     var row = paged[i];
                     int localIndex = i;
-                    bool isSelected = SelectedRowIndices.Contains(localIndex);
-                    <tr class="@(isSelected ? "selected-row" : "")"
-                        @oncontextmenu="e => ShowRowContextMenu(e, localIndex)"
-                        @oncontextmenu:preventDefault="true">
-                        <td class="col-index text-center align-middle" 
+                    bool isFullRowSelected = IsRowFullySelected(localIndex);
+                    <tr>
+                        <td class="col-index text-center align-middle @(isFullRowSelected ? "selected-row-header" : "")" 
                             style="font-size: 0.8rem; cursor: pointer; user-select: none;"
                             title="Click to select row (Ctrl+Click to toggle, Shift+Click for range)"
                             @onclick="e => HandleRowHeaderClick(e, localIndex)"
-                            @onclick:stopPropagation="true">
-                            @if (isSelected)
+                            @oncontextmenu="e => ShowRowHeaderContextMenu(e, localIndex)"
+                            @oncontextmenu:preventDefault="true">
+                            @if (isFullRowSelected)
                             {
                                 <span class="d-inline-flex align-items-center justify-content-center gap-1">
                                     <i class="bi bi-caret-right-fill text-primary" style="font-size: 0.65rem;"></i>
@@ -170,10 +169,18 @@
                                 @(offset + localIndex + 1)
                             }
                         </td>
-                        @foreach (var col in Columns)
+                        @for (int colIdx = 0; colIdx < Columns.Count; colIdx++)
                         {
+                            var col = Columns[colIdx];
+                            int localCol = colIdx;
                             var val = GetColumnValue(row, col);
-                            <td style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis;" title="@val">
+                            bool isCellSelected = SelectedCells.Contains((localIndex, localCol));
+                            <td class="@(isCellSelected ? "selected-cell" : "")"
+                                style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis; cursor: default;" 
+                                title="@val"
+                                @onclick="e => HandleCellClick(e, localIndex, localCol)"
+                                @oncontextmenu="e => ShowCellContextMenu(e, localIndex, localCol)"
+                                @oncontextmenu:preventDefault="true">
                                 @if (val == null) { <span class="text-muted fst-italic">NULL</span> } else if (IsJsonOrXml(val)) { <span style="color: var(--app-table-header-text); cursor: pointer; text-decoration: underline;" @onclick="() => OpenCodeViewer(val)" @onclick:stopPropagation>@val</span> } else {
                                     @val
                                 }
@@ -376,13 +383,14 @@ else
     .grid-ctx-btn:hover span {
         color: #ffffff !important;
     }
-    .result-set-table tbody tr.selected-row {
-        background-color: rgba(13, 110, 253, 0.22) !important;
+    .result-set-table td.selected-cell {
+        background-color: rgba(13, 110, 253, 0.28) !important;
+        box-shadow: inset 0 0 0 1px rgba(13, 110, 253, 0.6) !important;
     }
-    .result-set-table tbody tr.selected-row:hover {
-        background-color: rgba(13, 110, 253, 0.32) !important;
+    .result-set-table td.selected-cell:hover {
+        background-color: rgba(13, 110, 253, 0.38) !important;
     }
-    .result-set-table tbody tr.selected-row td.col-index {
+    .result-set-table td.col-index.selected-row-header {
         background-color: rgba(13, 110, 253, 0.45) !important;
         color: #ffffff !important;
         font-weight: 600;
@@ -518,19 +526,19 @@ else
     private double ContextMenuY = 0;
     private string ContextMenuColumn = "";
 
-    // Row Selection & Context Menu State
-    private HashSet<int> SelectedRowIndices = new();
-    private int _lastSelectedRowIndex = -1;
+    // Cell/Row Selection & Context Menu State
+    private HashSet<(int Row, int Col)> SelectedCells = new();
+    private (int Row, int Col) _lastSelectedCell = (-1, -1);
     private bool ShowRowContextMenuState = false;
     private double RowContextMenuX = 0;
     private double RowContextMenuY = 0;
     private string? _copyFeedbackMessage = null;
     private CancellationTokenSource? _copyFeedbackCts;
 
-    private void ClearRowSelection()
+    private void ClearCellSelection()
     {
-        SelectedRowIndices.Clear();
-        _lastSelectedRowIndex = -1;
+        SelectedCells.Clear();
+        _lastSelectedCell = (-1, -1);
     }
     
     // Aggregates State
@@ -550,7 +558,7 @@ else
         set
         {
             _searchTerm = value;
-            ClearRowSelection();
+            ClearCellSelection();
             CurrentPage = 1;
         }
     }
@@ -559,21 +567,21 @@ else
     private bool SearchCaseSensitive
     {
         get => _searchCaseSensitive;
-        set { _searchCaseSensitive = value; ClearRowSelection(); CurrentPage = 1; }
+        set { _searchCaseSensitive = value; ClearCellSelection(); CurrentPage = 1; }
     }
     
     private bool _searchMatchWholeWord = false;
     private bool SearchMatchWholeWord
     {
         get => _searchMatchWholeWord;
-        set { _searchMatchWholeWord = value; ClearRowSelection(); CurrentPage = 1; }
+        set { _searchMatchWholeWord = value; ClearCellSelection(); CurrentPage = 1; }
     }
     
     private bool _searchExactMatch = false;
     private bool SearchExactMatch
     {
         get => _searchExactMatch;
-        set { _searchExactMatch = value; ClearRowSelection(); CurrentPage = 1; }
+        set { _searchExactMatch = value; ClearCellSelection(); CurrentPage = 1; }
     }
 
     private int _pageSize = 24;
@@ -584,7 +592,7 @@ else
         set
         {
             _pageSize = value;
-            ClearRowSelection();
+            ClearCellSelection();
             CurrentPage = 1;
         }
     }
@@ -593,7 +601,7 @@ else
 
     protected override void OnParametersSet()
     {
-        ClearRowSelection();
+        ClearCellSelection();
         Rows = Data.Select(d => (IDictionary<string, object>)d).ToList();
         if (Rows.Any())
         {
@@ -711,7 +719,7 @@ else
 
     private void SortBy(string column)
     {
-        ClearRowSelection();
+        ClearCellSelection();
         if (SortColumn == column)
         {
             if (SortAscending)
@@ -741,7 +749,7 @@ else
     private void SetPage(int page)
     {
         if (page < 1 || page > TotalPages) return;
-        ClearRowSelection();
+        ClearCellSelection();
         CurrentPage = page;
     }
 
@@ -760,38 +768,107 @@ else
         ShowRowContextMenuState = false;
     }
 
+    private bool IsRowFullySelected(int rowIndex)
+    {
+        if (Columns.Count == 0) return false;
+        for (int c = 0; c < Columns.Count; c++)
+        {
+            if (!SelectedCells.Contains((rowIndex, c))) return false;
+        }
+        return true;
+    }
+
     private void HandleRowHeaderClick(MouseEventArgs e, int rowIndex)
     {
         HideRowContextMenu();
         HideContextMenu();
 
+        if (Columns.Count == 0) return;
+
         if (e.CtrlKey || e.MetaKey)
         {
-            if (SelectedRowIndices.Contains(rowIndex))
+            bool allSelected = IsRowFullySelected(rowIndex);
+            for (int c = 0; c < Columns.Count; c++)
             {
-                SelectedRowIndices.Remove(rowIndex);
+                if (allSelected)
+                {
+                    SelectedCells.Remove((rowIndex, c));
+                }
+                else
+                {
+                    SelectedCells.Add((rowIndex, c));
+                }
             }
-            else
+            if (!allSelected)
             {
-                SelectedRowIndices.Add(rowIndex);
-                _lastSelectedRowIndex = rowIndex;
+                _lastSelectedCell = (rowIndex, 0);
             }
         }
-        else if (e.ShiftKey && _lastSelectedRowIndex >= 0)
+        else if (e.ShiftKey && _lastSelectedCell.Row >= 0)
         {
-            SelectedRowIndices.Clear();
-            int start = Math.Min(_lastSelectedRowIndex, rowIndex);
-            int end = Math.Max(_lastSelectedRowIndex, rowIndex);
-            for (int i = start; i <= end; i++)
+            SelectedCells.Clear();
+            int startR = Math.Min(_lastSelectedCell.Row, rowIndex);
+            int endR = Math.Max(_lastSelectedCell.Row, rowIndex);
+
+            for (int r = startR; r <= endR; r++)
             {
-                SelectedRowIndices.Add(i);
+                for (int c = 0; c < Columns.Count; c++)
+                {
+                    SelectedCells.Add((r, c));
+                }
             }
         }
         else
         {
-            SelectedRowIndices.Clear();
-            SelectedRowIndices.Add(rowIndex);
-            _lastSelectedRowIndex = rowIndex;
+            SelectedCells.Clear();
+            for (int c = 0; c < Columns.Count; c++)
+            {
+                SelectedCells.Add((rowIndex, c));
+            }
+            _lastSelectedCell = (rowIndex, 0);
+        }
+    }
+
+    private void HandleCellClick(MouseEventArgs e, int rowIndex, int colIndex)
+    {
+        HideRowContextMenu();
+        HideContextMenu();
+
+        var coord = (rowIndex, colIndex);
+
+        if (e.CtrlKey || e.MetaKey)
+        {
+            if (SelectedCells.Contains(coord))
+            {
+                SelectedCells.Remove(coord);
+            }
+            else
+            {
+                SelectedCells.Add(coord);
+                _lastSelectedCell = coord;
+            }
+        }
+        else if (e.ShiftKey && _lastSelectedCell.Row >= 0 && _lastSelectedCell.Col >= 0)
+        {
+            SelectedCells.Clear();
+            int startR = Math.Min(_lastSelectedCell.Row, rowIndex);
+            int endR = Math.Max(_lastSelectedCell.Row, rowIndex);
+            int startC = Math.Min(_lastSelectedCell.Col, colIndex);
+            int endC = Math.Max(_lastSelectedCell.Col, colIndex);
+
+            for (int r = startR; r <= endR; r++)
+            {
+                for (int c = startC; c <= endC; c++)
+                {
+                    SelectedCells.Add((r, c));
+                }
+            }
+        }
+        else
+        {
+            SelectedCells.Clear();
+            SelectedCells.Add(coord);
+            _lastSelectedCell = coord;
         }
     }
 
@@ -799,21 +876,26 @@ else
     {
         HideRowContextMenu();
         HideContextMenu();
-        var count = PagedRows.Count;
-        if (count == 0) return;
+        var pagedCount = PagedRows.Count;
+        var colCount = Columns.Count;
+        if (pagedCount == 0 || colCount == 0) return;
 
-        if (SelectedRowIndices.Count == count)
+        int totalCells = pagedCount * colCount;
+        if (SelectedCells.Count == totalCells)
         {
-            ClearRowSelection();
+            ClearCellSelection();
         }
         else
         {
-            SelectedRowIndices.Clear();
-            for (int i = 0; i < count; i++)
+            SelectedCells.Clear();
+            for (int r = 0; r < pagedCount; r++)
             {
-                SelectedRowIndices.Add(i);
+                for (int c = 0; c < colCount; c++)
+                {
+                    SelectedCells.Add((r, c));
+                }
             }
-            _lastSelectedRowIndex = 0;
+            _lastSelectedCell = (0, 0);
         }
         StateHasChanged();
     }
@@ -821,32 +903,56 @@ else
     private void SelectAllCurrentPage()
     {
         HideRowContextMenu();
-        SelectedRowIndices.Clear();
-        var count = PagedRows.Count;
-        for (int i = 0; i < count; i++)
+        SelectedCells.Clear();
+        var pagedCount = PagedRows.Count;
+        var colCount = Columns.Count;
+        for (int r = 0; r < pagedCount; r++)
         {
-            SelectedRowIndices.Add(i);
+            for (int c = 0; c < colCount; c++)
+            {
+                SelectedCells.Add((r, c));
+            }
         }
-        _lastSelectedRowIndex = 0;
+        _lastSelectedCell = (0, 0);
         StateHasChanged();
     }
 
-    private void ShowRowContextMenu(MouseEventArgs e, int rowIndex)
+    private void ShowCellContextMenu(MouseEventArgs e, int rowIndex, int colIndex)
+    {
+        HideContextMenu();
+        var coord = (rowIndex, colIndex);
+        if (!SelectedCells.Contains(coord))
+        {
+            SelectedCells.Clear();
+            SelectedCells.Add(coord);
+            _lastSelectedCell = coord;
+        }
+
+        RowContextMenuX = e.ClientX;
+        RowContextMenuY = e.ClientY;
+        ShowRowContextMenuState = true;
+    }
+
+    private void ShowRowHeaderContextMenu(MouseEventArgs e, int rowIndex)
     {
         HideContextMenu();
         if (rowIndex >= 0)
         {
-            if (!SelectedRowIndices.Contains(rowIndex))
+            bool allSelected = IsRowFullySelected(rowIndex);
+            if (!allSelected)
             {
-                SelectedRowIndices.Clear();
-                SelectedRowIndices.Add(rowIndex);
-                _lastSelectedRowIndex = rowIndex;
+                SelectedCells.Clear();
+                for (int c = 0; c < Columns.Count; c++)
+                {
+                    SelectedCells.Add((rowIndex, c));
+                }
+                _lastSelectedCell = (rowIndex, 0);
             }
         }
         else
         {
             // Right-clicked the # header: if no selection, select all
-            if (SelectedRowIndices.Count == 0)
+            if (SelectedCells.Count == 0)
             {
                 SelectAllCurrentPage();
             }
@@ -865,39 +971,79 @@ else
     private string BuildClipboardText(bool includeHeaders)
     {
         var paged = PagedRows;
-        if (paged.Count == 0) return string.Empty;
+        if (paged.Count == 0 || Columns.Count == 0 || SelectedCells.Count == 0) return string.Empty;
 
-        var targetIndices = SelectedRowIndices.Count > 0
-            ? SelectedRowIndices.Where(i => i >= 0 && i < paged.Count).OrderBy(i => i).ToList()
-            : Enumerable.Range(0, paged.Count).ToList();
+        // Single cell special case: clean raw copy
+        if (SelectedCells.Count == 1)
+        {
+            var (r, c) = SelectedCells.First();
+            if (r >= 0 && r < paged.Count && c >= 0 && c < Columns.Count)
+            {
+                var val = GetColumnValue(paged[r], Columns[c]) ?? "NULL";
+                if (includeHeaders)
+                {
+                    return $"{Columns[c]}\r\n{val}";
+                }
+                return val;
+            }
+        }
 
-        if (targetIndices.Count == 0) return string.Empty;
+        var targetRows = SelectedCells.Select(x => x.Row).Where(r => r >= 0 && r < paged.Count).Distinct().OrderBy(r => r).ToList();
+        var targetCols = SelectedCells.Select(x => x.Col).Where(c => c >= 0 && c < Columns.Count).Distinct().OrderBy(c => c).ToList();
+
+        if (targetRows.Count == 0 || targetCols.Count == 0) return string.Empty;
 
         var sb = new System.Text.StringBuilder();
 
-        if (includeHeaders && Columns.Count > 0)
+        if (includeHeaders)
         {
-            sb.Append(string.Join("\t", Columns));
+            var headerNames = targetCols.Select(c => Columns[c]);
+            sb.Append(string.Join("\t", headerNames));
             sb.Append("\r\n");
         }
 
-        for (int i = 0; i < targetIndices.Count; i++)
+        for (int rIdx = 0; rIdx < targetRows.Count; rIdx++)
         {
-            var row = paged[targetIndices[i]];
-            var rowValues = new List<string>(Columns.Count);
-            foreach (var col in Columns)
+            var row = paged[targetRows[rIdx]];
+            var rowValues = new List<string>(targetCols.Count);
+
+            foreach (var c in targetCols)
             {
-                var val = GetColumnValue(row, col);
-                rowValues.Add(val ?? "NULL");
+                if (SelectedCells.Contains((targetRows[rIdx], c)))
+                {
+                    var val = GetColumnValue(row, Columns[c]);
+                    rowValues.Add(val ?? "NULL");
+                }
+                else
+                {
+                    rowValues.Add("");
+                }
             }
+
             sb.Append(string.Join("\t", rowValues));
-            if (i < targetIndices.Count - 1)
+            if (rIdx < targetRows.Count - 1)
             {
                 sb.Append("\r\n");
             }
         }
 
         return sb.ToString();
+    }
+
+    private string GetCopySummary()
+    {
+        if (SelectedCells.Count == 1) return "1 cell";
+        if (Columns.Count == 0) return $"{SelectedCells.Count} cells";
+
+        var targetRows = SelectedCells.Select(x => x.Row).Distinct().Count();
+        var targetCols = SelectedCells.Select(x => x.Col).Distinct().Count();
+
+        if (targetCols == Columns.Count && SelectedCells.Count == targetRows * Columns.Count)
+        {
+            return $"{targetRows} row{(targetRows > 1 ? "s" : "")}";
+        }
+
+        return $"{SelectedCells.Count} cells";
     }
 
     private async Task CopySelectedAsync()
@@ -909,8 +1055,7 @@ else
             try
             {
                 await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
-                int count = SelectedRowIndices.Count > 0 ? SelectedRowIndices.Count : PagedRows.Count;
-                ShowCopyFeedback($"{count} row{(count > 1 ? "s" : "")} copied");
+                ShowCopyFeedback($"{GetCopySummary()} copied");
             }
             catch { }
         }
@@ -925,8 +1070,7 @@ else
             try
             {
                 await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
-                int count = SelectedRowIndices.Count > 0 ? SelectedRowIndices.Count : PagedRows.Count;
-                ShowCopyFeedback($"{count} row{(count > 1 ? "s" : "")} copied with headers");
+                ShowCopyFeedback($"{GetCopySummary()} copied with headers");
             }
             catch { }
         }
@@ -938,13 +1082,23 @@ else
         {
             if (e.Key.Equals("c", StringComparison.OrdinalIgnoreCase))
             {
-                if (e.ShiftKey)
+                bool hasTextSelection = false;
+                try
                 {
-                    await CopySelectedWithHeadersAsync();
+                    hasTextSelection = await JS.InvokeAsync<bool>("hasTextSelection");
                 }
-                else
+                catch { }
+
+                if (!hasTextSelection && SelectedCells.Count > 0)
                 {
-                    await CopySelectedAsync();
+                    if (e.ShiftKey)
+                    {
+                        await CopySelectedWithHeadersAsync();
+                    }
+                    else
+                    {
+                        await CopySelectedAsync();
+                    }
                 }
             }
             else if (e.Key.Equals("a", StringComparison.OrdinalIgnoreCase))
@@ -956,7 +1110,7 @@ else
         {
             HideRowContextMenu();
             HideContextMenu();
-            ClearRowSelection();
+            ClearCellSelection();
             StateHasChanged();
         }
     }
