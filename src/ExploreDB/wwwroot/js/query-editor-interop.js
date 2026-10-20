@@ -80,21 +80,24 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         {
             name: 'sp_helptext',
             fullName: 'sp_helptext',
-            snippet: "sp_helptext '${1:[schema].[object_name]}'",
+            snippet: "sp_helptext '$1'",
+            triggerSuggest: true,
             detail: 'System Stored Procedure',
             doc: 'Displays the definition of a user-defined rule, default, unencrypted stored procedure, user-defined function, trigger, computed column, CHECK constraint, view, or system object.'
         },
         {
             name: 'sp_help',
             fullName: 'sp_help',
-            snippet: "sp_help '${1:[schema].[object_name]}'",
+            snippet: "sp_help '$1'",
+            triggerSuggest: true,
             detail: 'System Stored Procedure',
             doc: 'Reports information about a database object, a user-defined data type, or a data type.'
         },
         {
             name: 'sp_spaceused',
             fullName: 'sp_spaceused',
-            snippet: "sp_spaceused '${1:[schema].[table_name]}'",
+            snippet: "sp_spaceused '$1'",
+            triggerSuggest: true,
             detail: 'System Stored Procedure',
             doc: 'Displays the number of rows, disk space reserved, and disk space used by a table, indexed view, or Service Broker queue.'
         },
@@ -102,13 +105,15 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             name: 'sp_who2',
             fullName: 'sp_who2',
             snippet: "sp_who2",
+            triggerSuggest: false,
             detail: 'System Stored Procedure',
             doc: 'Provides information about current SQL Server users, sessions, and processes.'
         },
         {
             name: 'sp_columns',
             fullName: 'sp_columns',
-            snippet: "sp_columns '${1:table_name}'",
+            snippet: "sp_columns '$1'",
+            triggerSuggest: true,
             detail: 'System Stored Procedure',
             doc: 'Returns column information for the specified tables or views.'
         }
@@ -163,7 +168,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             kind: monaco.languages.CompletionItemKind.Method,
                             insertText: getParamInsertText(sp.fullName),
                             filterText: sp.fullName + " " + sp.name + " " + unbracketed,
-                            sortText: '1_' + sp.name,
+                            sortText: String(sp.name.length).padStart(4, '0') + '_' + sp.name,
                             range: paramReplaceRange,
                             detail: 'Stored Procedure'
                         });
@@ -179,7 +184,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             kind: monaco.languages.CompletionItemKind.Class,
                             insertText: getParamInsertText(v.fullName),
                             filterText: v.fullName + " " + v.name + " " + unbracketed,
-                            sortText: '2_' + v.name,
+                            sortText: String(v.name.length).padStart(4, '0') + '_' + v.name,
                             range: paramReplaceRange,
                             detail: 'View'
                         });
@@ -195,7 +200,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             kind: monaco.languages.CompletionItemKind.Function,
                             insertText: getParamInsertText(f.fullName),
                             filterText: f.fullName + " " + f.name + " " + unbracketed,
-                            sortText: '3_' + f.name,
+                            sortText: String(f.name.length).padStart(4, '0') + '_' + f.name,
                             range: paramReplaceRange,
                             detail: f.functionType ? ('Function (' + f.functionType + ')') : 'Function'
                         });
@@ -484,7 +489,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
             if (suggestSps || suggestKeywords || fullTypedWord.toLowerCase().startsWith('sp')) {
                 systemProcedures.forEach(sp => {
-                    suggestions.push({
+                    var item = {
                         label: sp.fullName,
                         kind: monaco.languages.CompletionItemKind.Method,
                         insertText: sp.snippet,
@@ -494,7 +499,14 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         range: replaceRange,
                         detail: sp.detail,
                         documentation: { value: sp.doc }
-                    });
+                    };
+                    if (sp.triggerSuggest) {
+                        item.command = {
+                            id: 'editor.action.triggerSuggest',
+                            title: 'Trigger Suggest'
+                        };
+                    }
+                    suggestions.push(item);
                 });
             }
 
