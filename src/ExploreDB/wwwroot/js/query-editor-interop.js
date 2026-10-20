@@ -809,7 +809,10 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         strings: true
                     },
                     acceptSuggestionOnEnter: 'on',
-                    wordBasedSuggestions: 'off'
+                    wordBasedSuggestions: 'off',
+                    suggest: {
+                        showWords: false
+                    }
                 });
             } catch (e) { }
 
