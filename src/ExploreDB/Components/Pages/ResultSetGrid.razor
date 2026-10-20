@@ -122,19 +122,34 @@
                             }
                         </div>
                     </th>
-                    @foreach (var col in Columns)
+                    @for (int cIdx = 0; cIdx < Columns.Count; cIdx++)
                     {
-                        <th class="p-0 align-middle" style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px;">
-                            <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2" style="cursor: pointer; user-select: none;" @onclick="() => SortBy(col)" @oncontextmenu="e => ShowHeaderContextMenu(e, col)" @oncontextmenu:preventDefault="true">
-                                <span class="text-truncate">@col</span>
-                                @if (SortColumn == col)
-                                {
-                                    <i class="bi @(SortAscending ? "bi-sort-up" : "bi-sort-down") ms-2 text-warning flex-shrink-0"></i>
-                                }
-                                else
-                                {
-                                    <i class="bi bi-arrow-down-up ms-2 text-muted flex-shrink-0" style="opacity: 0.3;"></i>
-                                }
+                        var col = Columns[cIdx];
+                        int localCol = cIdx;
+                        bool isColSelected = IsColumnFullySelected(localCol);
+                        <th class="p-0 align-middle @(isColSelected ? "selected-col-header" : "")" 
+                            style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px;">
+                            <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2" 
+                                 style="cursor: pointer; user-select: none;" 
+                                 title="Click to select column (Ctrl+Click to toggle, Shift+Click for range)"
+                                 @onclick="e => HandleColumnHeaderClick(e, localCol)" 
+                                 @oncontextmenu="e => ShowColumnHeaderContextMenu(e, localCol, col)" 
+                                 @oncontextmenu:preventDefault="true">
+                                <span class="text-truncate flex-grow-1">@col</span>
+                                <button class="btn btn-link p-0 px-1 ms-1 d-inline-flex align-items-center justify-content-center sort-btn text-decoration-none border-0 shadow-none" 
+                                        type="button"
+                                        title="Sort by @col"
+                                        @onclick="() => SortBy(col)" 
+                                        @onclick:stopPropagation="true">
+                                    @if (SortColumn == col)
+                                    {
+                                        <i class="bi @(SortAscending ? "bi-sort-up text-warning" : "bi-sort-down text-warning")" style="font-size: 0.95rem;"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-arrow-down-up text-muted" style="opacity: 0.45; font-size: 0.85rem;"></i>
+                                    }
+                                </button>
                             </div>
                         </th>
                     }
@@ -291,45 +306,22 @@ else
     <div class="alert border text-muted" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">This result set is empty.</div>
 }
 
-@if (ShowContextMenu)
+@if (ShowContextMenuState)
 {
-    <!-- Invisible overlay to close menu -->
-    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1050;" @onclick="HideContextMenu" @oncontextmenu="HideContextMenu" @oncontextmenu:preventDefault="true"></div>
+    <!-- Invisible overlay to close context menu -->
+    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 2050;" @onclick="HideContextMenu" @oncontextmenu="HideContextMenu" @oncontextmenu:preventDefault="true"></div>
     
-    <!-- Top-centered menu relative to this grid -->
-    <div class="position-absolute shadow-lg" style="top: 45px; left: 50%; transform: translateX(-50%); z-index: 1060; min-width: 280px;">
-        <div class="card" style="background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text);" @onclick:stopPropagation>
-            <div class="card-body p-2">
-                <div class="d-flex justify-content-between align-items-center small fw-bold px-2 mb-2 pb-2" style="letter-spacing: 0.5px; color: var(--app-table-header-text); border-bottom: 1px solid var(--app-border);">
-                    <span>@ContextMenuColumn</span>
-                    <i class="bi bi-x-lg text-muted" style="cursor: pointer; font-size: 0.8rem;" @onclick="HideContextMenu"></i>
-                </div>
-                <button class="btn w-100 text-start copy-in-btn border-0 py-2 d-flex align-items-center gap-2" style="color: var(--app-text);" @onclick="CopyColumnAsInClause">
-                    <i class="bi bi-clipboard text-muted"></i> Copy as IN clause
-                </button>
-                <button class="btn w-100 text-start copy-in-btn border-0 py-2 d-flex align-items-center gap-2" style="color: var(--app-text);" @onclick="CalculateAggregates">
-                    <i class="bi bi-calculator text-muted"></i> Show aggregate result
-                </button>
-            </div>
-        </div>
-    </div>
-    
-    <style>
-        .copy-in-btn:hover { background-color: var(--primary-color) !important; color: #ffffff !important; }
-        .copy-in-btn:hover i { color: #ffffff !important; }
-    </style>
-}
-
-@if (ShowRowContextMenuState)
-{
-    <!-- Invisible overlay to close row context menu -->
-    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 2050;" @onclick="HideRowContextMenu" @oncontextmenu="HideRowContextMenu" @oncontextmenu:preventDefault="true"></div>
-    
-    <!-- Row context menu positioned at cursor -->
+    <!-- Unified context menu positioned at cursor -->
     <div class="position-fixed shadow-lg rounded" 
-         style="top: min(@(RowContextMenuY)px, calc(100vh - 160px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); overflow: hidden;" 
+         style="top: min(@(RowContextMenuY)px, calc(100vh - @(IsColumnContextMenu ? 230 : 160)px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); overflow: hidden;" 
          @onclick:stopPropagation>
         <div class="py-1">
+            @if (IsColumnContextMenu && !string.IsNullOrEmpty(ContextMenuColumn))
+            {
+                <div class="px-3 py-1 text-muted small fw-bold text-truncate border-bottom" style="font-size: 0.75rem; letter-spacing: 0.5px; border-bottom-color: var(--app-border) !important;">
+                    @ContextMenuColumn
+                </div>
+            }
             <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedAsync">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-copy text-muted"></i>
@@ -344,7 +336,6 @@ else
                 </div>
                 <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+Shift+C</span>
             </button>
-            <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
             <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="SelectAllCurrentPage">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-check2-all text-muted"></i>
@@ -352,6 +343,19 @@ else
                 </div>
                 <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+A</span>
             </button>
+
+            @if (IsColumnContextMenu && !string.IsNullOrEmpty(ContextMenuColumn))
+            {
+                <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
+                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CopyColumnAsInClause">
+                    <i class="bi bi-clipboard text-muted"></i>
+                    <span>Copy as IN clause</span>
+                </button>
+                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CalculateAggregates">
+                    <i class="bi bi-calculator text-muted"></i>
+                    <span>Show aggregate result</span>
+                </button>
+            }
         </div>
     </div>
 }
@@ -394,6 +398,24 @@ else
         background-color: rgba(13, 110, 253, 0.45) !important;
         color: #ffffff !important;
         font-weight: 600;
+    }
+    .result-set-table thead th.selected-col-header {
+        background-color: rgba(13, 110, 253, 0.4) !important;
+        color: #ffffff !important;
+    }
+    .result-set-table thead th.selected-col-header span {
+        color: #ffffff !important;
+        font-weight: 600;
+    }
+    .sort-btn {
+        opacity: 0.7;
+        transition: opacity 0.15s ease, background-color 0.15s ease;
+        border-radius: 4px;
+        line-height: 1;
+    }
+    .sort-btn:hover {
+        opacity: 1 !important;
+        background-color: rgba(255, 255, 255, 0.18);
     }
 </style>
 
@@ -520,18 +542,14 @@ else
     private bool ShowExportSuccess = false;
     private CancellationTokenSource? _exportCts;
 
-    // Context Menu State
-    private bool ShowContextMenu = false;
-    private double ContextMenuX = 0;
-    private double ContextMenuY = 0;
-    private string ContextMenuColumn = "";
-
-    // Cell/Row Selection & Context Menu State
+    // Selection & Context Menu State
     private HashSet<(int Row, int Col)> SelectedCells = new();
     private (int Row, int Col) _lastSelectedCell = (-1, -1);
-    private bool ShowRowContextMenuState = false;
+    private bool ShowContextMenuState = false;
+    private bool IsColumnContextMenu = false;
     private double RowContextMenuX = 0;
     private double RowContextMenuY = 0;
+    private string ContextMenuColumn = "";
     private string? _copyFeedbackMessage = null;
     private CancellationTokenSource? _copyFeedbackCts;
 
@@ -753,19 +771,10 @@ else
         CurrentPage = page;
     }
 
-    private void ShowHeaderContextMenu(MouseEventArgs e, string column)
-    {
-        HideRowContextMenu();
-        ContextMenuColumn = column;
-        ContextMenuX = e.ClientX;
-        ContextMenuY = e.ClientY;
-        ShowContextMenu = true;
-    }
-
     private void HideContextMenu()
     {
-        ShowContextMenu = false;
-        ShowRowContextMenuState = false;
+        ShowContextMenuState = false;
+        IsColumnContextMenu = false;
     }
 
     private bool IsRowFullySelected(int rowIndex)
@@ -780,7 +789,6 @@ else
 
     private void HandleRowHeaderClick(MouseEventArgs e, int rowIndex)
     {
-        HideRowContextMenu();
         HideContextMenu();
 
         if (Columns.Count == 0) return;
@@ -831,7 +839,6 @@ else
 
     private void HandleCellClick(MouseEventArgs e, int rowIndex, int colIndex)
     {
-        HideRowContextMenu();
         HideContextMenu();
 
         var coord = (rowIndex, colIndex);
@@ -874,7 +881,6 @@ else
 
     private void ToggleSelectAll()
     {
-        HideRowContextMenu();
         HideContextMenu();
         var pagedCount = PagedRows.Count;
         var colCount = Columns.Count;
@@ -902,7 +908,7 @@ else
 
     private void SelectAllCurrentPage()
     {
-        HideRowContextMenu();
+        HideContextMenu();
         SelectedCells.Clear();
         var pagedCount = PagedRows.Count;
         var colCount = Columns.Count;
@@ -917,9 +923,96 @@ else
         StateHasChanged();
     }
 
+    private bool IsColumnFullySelected(int colIndex)
+    {
+        var pagedCount = PagedRows.Count;
+        if (pagedCount == 0) return false;
+        for (int r = 0; r < pagedCount; r++)
+        {
+            if (!SelectedCells.Contains((r, colIndex))) return false;
+        }
+        return true;
+    }
+
+    private void HandleColumnHeaderClick(MouseEventArgs e, int colIndex)
+    {
+        HideContextMenu();
+
+        var pagedCount = PagedRows.Count;
+        if (pagedCount == 0) return;
+
+        if (e.CtrlKey || e.MetaKey)
+        {
+            bool allSelected = IsColumnFullySelected(colIndex);
+            for (int r = 0; r < pagedCount; r++)
+            {
+                if (allSelected)
+                {
+                    SelectedCells.Remove((r, colIndex));
+                }
+                else
+                {
+                    SelectedCells.Add((r, colIndex));
+                }
+            }
+            if (!allSelected)
+            {
+                _lastSelectedCell = (0, colIndex);
+            }
+        }
+        else if (e.ShiftKey && _lastSelectedCell.Col >= 0)
+        {
+            SelectedCells.Clear();
+            int startC = Math.Min(_lastSelectedCell.Col, colIndex);
+            int endC = Math.Max(_lastSelectedCell.Col, colIndex);
+
+            for (int r = 0; r < pagedCount; r++)
+            {
+                for (int c = startC; c <= endC; c++)
+                {
+                    SelectedCells.Add((r, c));
+                }
+            }
+        }
+        else
+        {
+            SelectedCells.Clear();
+            for (int r = 0; r < pagedCount; r++)
+            {
+                SelectedCells.Add((r, colIndex));
+            }
+            _lastSelectedCell = (0, colIndex);
+        }
+    }
+
+    private void ShowColumnHeaderContextMenu(MouseEventArgs e, int colIndex, string colName)
+    {
+        HideContextMenu();
+        ContextMenuColumn = colName;
+        IsColumnContextMenu = true;
+
+        bool allSelected = IsColumnFullySelected(colIndex);
+        if (!allSelected)
+        {
+            SelectedCells.Clear();
+            var pagedCount = PagedRows.Count;
+            for (int r = 0; r < pagedCount; r++)
+            {
+                SelectedCells.Add((r, colIndex));
+            }
+            _lastSelectedCell = (0, colIndex);
+        }
+
+        RowContextMenuX = e.ClientX;
+        RowContextMenuY = e.ClientY;
+        ShowContextMenuState = true;
+    }
+
     private void ShowCellContextMenu(MouseEventArgs e, int rowIndex, int colIndex)
     {
         HideContextMenu();
+        IsColumnContextMenu = false;
+
         var coord = (rowIndex, colIndex);
         if (!SelectedCells.Contains(coord))
         {
@@ -930,12 +1023,14 @@ else
 
         RowContextMenuX = e.ClientX;
         RowContextMenuY = e.ClientY;
-        ShowRowContextMenuState = true;
+        ShowContextMenuState = true;
     }
 
     private void ShowRowHeaderContextMenu(MouseEventArgs e, int rowIndex)
     {
         HideContextMenu();
+        IsColumnContextMenu = false;
+
         if (rowIndex >= 0)
         {
             bool allSelected = IsRowFullySelected(rowIndex);
@@ -960,12 +1055,7 @@ else
 
         RowContextMenuX = e.ClientX;
         RowContextMenuY = e.ClientY;
-        ShowRowContextMenuState = true;
-    }
-
-    private void HideRowContextMenu()
-    {
-        ShowRowContextMenuState = false;
+        ShowContextMenuState = true;
     }
 
     private string BuildClipboardText(bool includeHeaders)
@@ -1048,7 +1138,7 @@ else
 
     private async Task CopySelectedAsync()
     {
-        HideRowContextMenu();
+        HideContextMenu();
         var text = BuildClipboardText(includeHeaders: false);
         if (!string.IsNullOrEmpty(text))
         {
@@ -1063,7 +1153,7 @@ else
 
     private async Task CopySelectedWithHeadersAsync()
     {
-        HideRowContextMenu();
+        HideContextMenu();
         var text = BuildClipboardText(includeHeaders: true);
         if (!string.IsNullOrEmpty(text))
         {
@@ -1108,7 +1198,6 @@ else
         }
         else if (e.Key == "Escape")
         {
-            HideRowContextMenu();
             HideContextMenu();
             ClearCellSelection();
             StateHasChanged();
@@ -1136,6 +1225,7 @@ else
 
     private async Task CopyColumnAsInClause()
     {
+        HideContextMenu();
         if (string.IsNullOrEmpty(ContextMenuColumn)) return;
 
         var values = FilteredRows
@@ -1163,14 +1253,13 @@ else
             try
             {
                 await JS.InvokeVoidAsync("navigator.clipboard.writeText", inClause);
+                ShowCopyFeedback("IN clause copied");
             }
             catch
             {
                 // Clipboard API might fail if not in secure context, silently handle for now
             }
         }
-        
-        HideContextMenu();
     }
 
     private void CalculateAggregates()
