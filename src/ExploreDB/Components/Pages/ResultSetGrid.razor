@@ -316,12 +316,6 @@ else
          style="top: min(@(RowContextMenuY)px, calc(100vh - @(IsColumnContextMenu ? 230 : 160)px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); overflow: hidden;" 
          @onclick:stopPropagation>
         <div class="py-1">
-            @if (IsColumnContextMenu && !string.IsNullOrEmpty(ContextMenuColumn))
-            {
-                <div class="px-3 py-1 text-muted small fw-bold text-truncate border-bottom" style="font-size: 0.75rem; letter-spacing: 0.5px; border-bottom-color: var(--app-border) !important;">
-                    @ContextMenuColumn
-                </div>
-            }
             <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedAsync">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-copy text-muted"></i>
