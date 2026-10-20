@@ -358,43 +358,41 @@
             }
             else if (ActiveTab == "Execution")
             {
-                <div class="card glass-card text-white">
-                    <div class="card-body p-0 position-relative">
-                        <div class="p-3 d-flex justify-content-between align-items-center border-bottom border-secondary bg-dark bg-opacity-50">
-                            <div>
-                                <span class="fw-bold">Execution Statement</span>
-                            </div>
-                            <div class="d-flex gap-2">
-                                <button class="btn btn-sm @(Copied ? "btn-success" : "btn-outline-light")"
-                                        @onclick="CopyExecStatement"
-                                        title="Copy to clipboard">
-                                    <i class="bi @(Copied ? "bi-check2" : "bi-clipboard")"></i> @(Copied ? "Copied" : "Copy")
-                                </button>
-                                <button type="button" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" @onclick="@(() => LoadAndRunQuery(ExecStatement, $"Exec_{Fn.Name}.sql"))">
-                                    <i class="bi bi-play-fill"></i> Run
-                                </button>
-                            </div>
+                <div class="card glass-card mb-4" style="border: 1px solid var(--app-border); color: var(--app-text);">
+                    <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center detail-card-header">
+                        <div>
+                            <span class="fw-bold" style="font-size: 0.95rem;">Execution Statement</span>
                         </div>
-                        <div class="p-4" style="background: rgba(0, 0, 0, 0.3);">
-                            <pre class="m-0 text-success query-preview" style="background: transparent; border: none; font-size: 0.85em;">@ExecStatement</pre>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 @(Copied ? "btn-success text-white" : "")"
+                                    @onclick="CopyExecStatement"
+                                    title="Copy to clipboard">
+                                <i class="bi @(Copied ? "bi-check2" : "bi-clipboard")"></i> @(Copied ? "Copied" : "Copy")
+                            </button>
+                            <button type="button" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1 shadow-sm" @onclick="@(() => LoadAndRunQuery(ExecStatement, $"Exec_{Fn.Name}.sql"))">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
                         </div>
+                    </div>
+                    <div class="card-body p-3">
+                        <pre class="m-0 query-preview" style="font-size: 0.85em;">@ExecStatement</pre>
                     </div>
                 </div>
             }
             else if (ActiveTab == "Definition")
             {
-                <div class="card glass-card text-white">
+                <div class="card glass-card mb-4" style="border: 1px solid var(--app-border); color: var(--app-text);">
+                    <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center detail-card-header">
+                        <span class="fw-bold" style="font-size: 0.95rem;">Function Definition</span>
+                        @if (!IsDefinitionLoading && !string.IsNullOrEmpty(Fn?.Definition))
+                        {
+                            <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 @(DefinitionCopied ? "btn-success text-white" : "")"
+                                    @onclick="CopyDefinition" title="Copy to clipboard">
+                                <i class="bi @(DefinitionCopied ? "bi-check2" : "bi-clipboard")"></i> @(DefinitionCopied ? "Copied" : "Copy")
+                            </button>
+                        }
+                    </div>
                     <div class="card-body p-0 position-relative">
-                        <div class="p-3 d-flex justify-content-between align-items-center border-bottom border-secondary bg-dark bg-opacity-50">
-                            <span class="fw-bold">Function Definition</span>
-                            @if (!IsDefinitionLoading && !string.IsNullOrEmpty(Fn?.Definition))
-                            {
-                                <button class="btn btn-sm @(DefinitionCopied ? "btn-success" : "btn-outline-light")"
-                                        @onclick="CopyDefinition" title="Copy to clipboard">
-                                    <i class="bi @(DefinitionCopied ? "bi-check2" : "bi-clipboard")"></i> @(DefinitionCopied ? "Copied" : "Copy")
-                                </button>
-                            }
-                        </div>
                         @if (IsDefinitionLoading)
                         {
                             <div class="d-flex justify-content-center align-items-center" style="padding: 4rem 1rem;">

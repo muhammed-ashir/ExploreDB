@@ -1130,3 +1130,23 @@ a.card.glow-highlight:hover,
     color: #60a5fa !important;
 }
 
+/* Object Detail Card Headers (SP, Function, View, etc.) */
+.detail-card-header {
+    background-color: var(--app-surface-secondary) !important;
+    border-bottom: 1px solid var(--app-border) !important;
+    color: var(--app-text) !important;
+}
+
+[data-bs-theme="light"] .detail-card-header {
+    background-color: #f1f5f9 !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+    color: #1e293b !important;
+}
+
+[data-bs-theme="dark"] .detail-card-header {
+    background-color: #262a2e !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #f8f9fa !important;
+}
+
+
