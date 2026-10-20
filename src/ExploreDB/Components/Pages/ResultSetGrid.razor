@@ -364,6 +364,12 @@ else
 }
 
 <style>
+    .result-set-table,
+    .result-set-table th,
+    .result-set-table td {
+        user-select: none !important;
+        -webkit-user-select: none !important;
+    }
     .grid-ctx-btn {
         color: var(--app-text) !important;
         background: transparent;
@@ -1171,14 +1177,7 @@ else
         {
             if (e.Key.Equals("c", StringComparison.OrdinalIgnoreCase))
             {
-                bool hasTextSelection = false;
-                try
-                {
-                    hasTextSelection = await JS.InvokeAsync<bool>("hasTextSelection");
-                }
-                catch { }
-
-                if (!hasTextSelection && SelectedCells.Count > 0)
+                if (SelectedCells.Count > 0)
                 {
                     if (e.ShiftKey)
                     {
