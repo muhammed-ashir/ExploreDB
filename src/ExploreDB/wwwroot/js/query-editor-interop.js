@@ -332,10 +332,29 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         if (i >= matches.length - 2) suggestKeywords = false;
                         break;
                     } else if (tableKeywords.has(token)) {
-                        suggestTables = true;
-                        suggestColumns = false;
-                        suggestSps = false;
-                        if (i >= matches.length - 2) suggestKeywords = false;
+                        // Check if a table name is already specified after this FROM or JOIN
+                        // e.g. "FROM [tenant].[Orders] s" or "JOIN Orders AS o"
+                        var isAfterTableRegex = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?([a-zA-Z0-9_]*)$/i;
+                        var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_]*)$/i.test(fullTextUntilPosition);
+                        var afterTableMatch = fullTextUntilPosition.match(isAfterTableRegex);
+
+                        if (afterTableMatch && !hasCommaAfter) {
+                            // Check if user is typing a dot property/column access (e.g. "s.")
+                            var hasDot = textBeforeCursor.match(/\.[a-zA-Z0-9_]*$/);
+                            if (!hasDot) {
+                                // User is actively defining the table alias: suppress suggestions so Enter inserts newline
+                                return { suggestions: [] };
+                            }
+                            suggestTables = false;
+                            suggestColumns = true;
+                            suggestSps = false;
+                            suggestKeywords = false;
+                        } else {
+                            suggestTables = true;
+                            suggestColumns = false;
+                            suggestSps = false;
+                            if (i >= matches.length - 2) suggestKeywords = false;
+                        }
                         break;
                     } else if (columnKeywords.has(token)) {
                         suggestTables = false;
@@ -377,17 +396,45 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             if (suggestColumns || suggestTables) {
                 var allText = model.getValue();
                 
-                // Parse Aliases (e.g., FROM [hr].[Settings] s)
+                // Parse All Tables and Aliases in the Query
+                var queryTables = [];
                 var aliasMap = {};
                 var sqlKw = new Set(['where', 'on', 'join', 'inner', 'left', 'right', 'outer', 'group', 'order', 'having', 'select', 'as', 'cross', 'apply', 'from', 'and', 'or', 'is', 'not', 'set']);
-                var tableRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)([a-zA-Z0-9_]+)/gi;
-                var match;
-                while ((match = tableRegex.exec(allText)) !== null) {
-                    var tableName = match[1];
-                    var possibleAlias = match[2].toLowerCase().trim();
-                    if (!sqlKw.has(possibleAlias)) {
-                        aliasMap[possibleAlias] = tableName.toLowerCase().trim();
+                var tableExtractRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+(?:as\s+)?\[?([a-zA-Z0-9_]+)\]?)?/gi;
+                var tMatch;
+                while ((tMatch = tableExtractRegex.exec(allText)) !== null) {
+                    var rawTable = tMatch[1];
+                    var rawAlias = tMatch[2] ? tMatch[2].trim() : null;
+                    if (rawAlias && sqlKw.has(rawAlias.toLowerCase())) {
+                        rawAlias = null;
                     }
+                    var normT = rawTable.toLowerCase().replace(/[\[\]\s]/g, "");
+                    queryTables.push({
+                        rawTable: rawTable,
+                        normTable: normT,
+                        baseName: normT.includes('.') ? normT.split('.').pop() : normT,
+                        alias: rawAlias
+                    });
+                    if (rawAlias) {
+                        aliasMap[rawAlias.toLowerCase()] = rawTable.toLowerCase().trim();
+                    }
+                }
+
+                function findTableInQuery(targetTable, currentJoinNormTable) {
+                    if (!targetTable) return null;
+                    var normTarget = targetTable.toLowerCase().replace(/[\[\]\s]/g, "");
+                    var targetBase = normTarget.includes('.') ? normTarget.split('.').pop() : normTarget;
+
+                    for (var i = 0; i < queryTables.length; i++) {
+                        var q = queryTables[i];
+                        if (currentJoinNormTable && q.normTable === currentJoinNormTable) {
+                            continue;
+                        }
+                        if (q.normTable === normTarget || q.baseName === targetBase) {
+                            return q;
+                        }
+                    }
+                    return null;
                 }
                 
                 // Check if user is typing an alias dot (e.g., "ou.")
@@ -442,14 +489,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     if (explicitTableName) {
                         columnsToSuggest = Array.from(activeColumns);
                         if (columnsToSuggest.length === 0) {
-                            // Debug fallback:
-                            var availableTables = window.sqlTables ? window.sqlTables.map(x => x.fullName).join(',') : 'none';
-                            suggestions.push({
-                                label: 'DEBUG_' + explicitTableName,
-                                kind: monaco.languages.CompletionItemKind.Text,
-                                insertText: 'DEBUG',
-                                detail: 'Tables: ' + availableTables.substring(0, 50)
-                            });
                             // Fallback to all columns just in case
                             columnsToSuggest = window.sqlColumns || [];
                         }
@@ -483,28 +522,32 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     }
 
                     // Provide JOIN ON Relationship Snippets
-                    var onMatch = fullTextUntilPosition.match(/join\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)?([a-zA-Z0-9_]+)?\s+on\s*([a-zA-Z0-9_]*)$/i);
+                    var onMatch = fullTextUntilPosition.match(/(?:join\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+(?:as\s+)?\[?([a-zA-Z0-9_]+)\]?)?[\s\S]*?(?:on|and))\s*([a-zA-Z0-9_\.]*)$/i);
                     if (onMatch && window.sqlTables) {
-                        var joinTableFull = onMatch[1].toLowerCase();
+                        var rawJoinTable = onMatch[1];
+                        var normJoinTable = rawJoinTable.toLowerCase().replace(/[\[\]\s]/g, "");
+                        var joinTableBase = normJoinTable.includes('.') ? normJoinTable.split('.').pop() : normJoinTable;
                         var joinAlias = (onMatch[2] || "").toLowerCase();
                         var typedRel = onMatch[3] || "";
                         
-                        var matchedTable = window.sqlTables.find(x => x.fullName.toLowerCase() === joinTableFull);
+                        var matchedTable = window.sqlTables.find(x => {
+                            var n = x.fullName.toLowerCase().replace(/[\[\]\s]/g, "");
+                            return n === normJoinTable || x.name.toLowerCase() === joinTableBase;
+                        });
+
                         if (matchedTable && matchedTable.relations && Array.isArray(matchedTable.relations)) {
+                            var addedConditions = new Set();
                             matchedTable.relations.forEach(r => {
-                                var targetTableLower = (r.toTable || "").toLowerCase();
-                                var targetAlias = null;
-                                Object.keys(aliasMap).forEach(k => {
-                                    if (aliasMap[k] === targetTableLower && k !== joinAlias) {
-                                        targetAlias = k;
-                                    }
-                                });
-                                
-                                var leftSide = joinAlias || matchedTable.fullName;
-                                var rightSide = targetAlias || r.toTable;
-                                
-                                var conditionText = leftSide + "." + r.fromCol + " = " + rightSide + "." + r.toCol;
-                                
+                                var targetInfo = findTableInQuery(r.toTable, normJoinTable);
+                                // Only suggest relationships between tables that actually exist in the current query!
+                                if (!targetInfo) return;
+
+                                var leftSide = joinAlias || matchedTable.name;
+                                var rightSide = targetInfo.alias || targetInfo.rawTable;
+
+                                var cond1 = leftSide + "." + r.fromCol + " = " + rightSide + "." + r.toCol;
+                                var cond2 = rightSide + "." + r.toCol + " = " + leftSide + "." + r.fromCol;
+
                                 var relReplaceRange = {
                                     startLineNumber: position.lineNumber,
                                     endLineNumber: position.lineNumber,
@@ -512,14 +555,19 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                     endColumn: position.column
                                 };
 
-                                suggestions.push({
-                                    label: conditionText,
-                                    kind: monaco.languages.CompletionItemKind.Snippet,
-                                    insertText: conditionText,
-                                    filterText: typedRel ? (typedRel + conditionText) : conditionText,
-                                    sortText: '0000_' + conditionText,
-                                    range: relReplaceRange,
-                                    detail: 'Relationship'
+                                [cond1, cond2].forEach(cond => {
+                                    if (addedConditions.has(cond)) return;
+                                    addedConditions.add(cond);
+
+                                    suggestions.push({
+                                        label: cond,
+                                        kind: monaco.languages.CompletionItemKind.Snippet,
+                                        insertText: cond,
+                                        filterText: cond,
+                                        sortText: '0000_' + cond,
+                                        range: relReplaceRange,
+                                        detail: 'Relationship'
+                                    });
                                 });
                             });
                         }
@@ -545,7 +593,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 });
             }
 
-            if (suggestSps || suggestKeywords || fullTypedWord.toLowerCase().startsWith('sp')) {
+            var isExplicitSpPrefix = fullTypedWord.toLowerCase().startsWith('sp_') || fullTypedWord.toLowerCase() === 'sp';
+            if (suggestSps || isExplicitSpPrefix) {
                 systemProcedures.forEach(sp => {
                     var item = {
                         label: sp.fullName,
@@ -698,7 +747,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         other: true,
                         comments: false,
                         strings: true
-                    }
+                    },
+                    acceptSuggestionOnEnter: 'on',
+                    wordBasedSuggestions: 'off'
                 });
             } catch (e) { }
 
