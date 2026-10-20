@@ -13,27 +13,15 @@
 <div class="position-relative">
 @if (Columns.Count > 0)
 {
-    @if (IsTextDefinition && ViewMode == "code")
+    @if (IsTextDefinition)
     {
         <div class="code-view-container d-flex flex-column mb-3" style="border: 1px solid var(--app-border); border-radius: 6px; overflow: hidden; background-color: var(--app-surface);">
             <!-- Header Toolbar -->
             <div class="d-flex justify-content-between align-items-center px-3 py-2" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
                 <div class="d-flex align-items-center gap-2">
-                    <!-- Mode Switcher Pill -->
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-primary text-white" style="font-size: 0.8rem;" @onclick='() => _userViewModePreference = "code"'>
-                            <i class="bi bi-code-slash me-1"></i> Editor View
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary" style="font-size: 0.8rem; color: var(--app-text);" @onclick='() => _userViewModePreference = "grid"'>
-                            <i class="bi bi-grid-3x3 me-1"></i> Grid View
-                        </button>
-                    </div>
-                    <span class="badge bg-secondary-subtle text-muted border ms-2" style="font-weight: 500;">
-                        @Rows.Count lines
-                    </span>
                     @if (ExecutionTimeMs.HasValue)
                     {
-                        <span class="text-muted small ms-2"><i class="bi bi-stopwatch me-1"></i>@(ExecutionTimeMs.Value)ms</span>
+                        <span class="text-muted small"><i class="bi bi-stopwatch me-1"></i>@(ExecutionTimeMs.Value)ms</span>
                     }
                 </div>
                 
@@ -49,17 +37,6 @@
                             <span>Open in New Tab</span>
                         </button>
                     }
-                    <button class="btn btn-sm btn-outline-success px-2 d-flex align-items-center gap-1 flex-shrink-0 shadow-sm" style="font-size: 0.8rem;" @onclick="ExportToExcelAsync" disabled="@IsExporting" title="Export to Excel">
-                        @if (IsExporting)
-                        {
-                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        }
-                        else
-                        {
-                            <i class="bi bi-file-earmark-excel"></i>
-                            <span>Export</span>
-                        }
-                    </button>
                 </div>
             </div>
 
@@ -73,17 +50,6 @@
     {
     <div class="mb-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center">
-            @if (IsTextDefinition)
-            {
-                <div class="btn-group btn-group-sm me-3" role="group">
-                    <button type="button" class="btn btn-outline-secondary" style="font-size: 0.8rem; color: var(--app-text);" @onclick='() => _userViewModePreference = "code"'>
-                        <i class="bi bi-code-slash me-1"></i> Editor View
-                    </button>
-                    <button type="button" class="btn btn-primary text-white" style="font-size: 0.8rem;" @onclick='() => _userViewModePreference = "grid"'>
-                        <i class="bi bi-grid-3x3 me-1"></i> Grid View
-                    </button>
-                </div>
-            }
             <label class="text-muted small mb-0 me-2">Show</label>
             <div class="position-relative">
                 <div class="form-control form-control-sm shadow-sm cursor-pointer d-flex justify-content-between align-items-center" style="width: 75px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @onclick="() => IsPageSizeDropdownOpen = !IsPageSizeDropdownOpen">
@@ -123,13 +89,6 @@
                     <i class="bi bi-bullseye fs-6"></i>
                 </button>
             </div>
-            @if (IsTextDefinition && OnOpenCodeInNewTab.HasDelegate)
-            {
-                <button class="btn btn-sm btn-primary d-flex align-items-center gap-1 shadow-sm px-2 flex-shrink-0" style="font-size: 0.8rem;" @onclick="HandleOpenInNewTab" title="Open code in a new query tab">
-                    <i class="bi bi-box-arrow-up-right"></i>
-                    <span>Open in New Tab</span>
-                </button>
-            }
             <button class="btn btn-sm btn-outline-success px-3 d-flex align-items-center gap-2 flex-shrink-0" @onclick="ExportToExcelAsync" disabled="@IsExporting">
                 @if (IsExporting)
                 {
@@ -367,9 +326,6 @@ else
         Columns[0].Equals("Text", StringComparison.OrdinalIgnoreCase) &&
         Rows.Count > 0;
 
-    private string? _userViewModePreference = null;
-    private string ViewMode => _userViewModePreference ?? (IsTextDefinition ? "code" : "grid");
-
     private string _definitionEditorId = "def-editor-" + Guid.NewGuid().ToString("N");
     private StandaloneCodeEditor? _definitionEditor;
     private bool _isCodeCopied = false;
@@ -523,12 +479,11 @@ else
         {
             Columns.Clear();
         }
-        _userViewModePreference = null;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (IsTextDefinition && ViewMode == "code" && _definitionEditor != null)
+        if (IsTextDefinition && _definitionEditor != null)
         {
             try
             {

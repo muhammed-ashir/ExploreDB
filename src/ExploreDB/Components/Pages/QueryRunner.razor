@@ -698,6 +698,38 @@
         return s.ToString();
     }
 
+    private static bool IsReadOnlyQuery(string queryText)
+    {
+        var q = StripLeadingComments(queryText).TrimStart();
+        if (q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
+            q.StartsWith("with", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var stripped = q;
+        if (stripped.StartsWith("execute", StringComparison.OrdinalIgnoreCase))
+        {
+            stripped = stripped.Substring(7).TrimStart();
+        }
+        else if (stripped.StartsWith("exec", StringComparison.OrdinalIgnoreCase))
+        {
+            stripped = stripped.Substring(4).TrimStart();
+        }
+
+        if (stripped.StartsWith("sp_helptext", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_help", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_spaceused", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_depends", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_who", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_columns", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     private Task<bool> ConfirmDangerousQueryAsync()
     {
         _dangerousQueryTcs = new TaskCompletionSource<bool>();
@@ -1585,9 +1617,7 @@
             return;
         }
 
-        var q = StripLeadingComments(queryText);
-        ActiveTab.IsCurrentQuerySelect = q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
-                                q.StartsWith("with", StringComparison.OrdinalIgnoreCase);
+        ActiveTab.IsCurrentQuerySelect = IsReadOnlyQuery(queryText);
 
         ActiveTab.IsExecuting = true;
         ActiveTab.HasExecuted = true;

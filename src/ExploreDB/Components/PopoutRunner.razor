@@ -435,6 +435,38 @@
         await QueryStateService.SaveTabsAsync();
     }
 
+    private static bool IsReadOnlyQuery(string queryText)
+    {
+        var q = queryText.TrimStart();
+        if (q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
+            q.StartsWith("with", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var stripped = q;
+        if (stripped.StartsWith("execute", StringComparison.OrdinalIgnoreCase))
+        {
+            stripped = stripped.Substring(7).TrimStart();
+        }
+        else if (stripped.StartsWith("exec", StringComparison.OrdinalIgnoreCase))
+        {
+            stripped = stripped.Substring(4).TrimStart();
+        }
+
+        if (stripped.StartsWith("sp_helptext", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_help", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_spaceused", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_depends", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_who", StringComparison.OrdinalIgnoreCase) ||
+            stripped.StartsWith("sp_columns", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     private async Task ExecuteAsync()
     {
         if (ActiveTab.IsExecuting || string.IsNullOrEmpty(ActiveTab.ConnectionString)) return;
@@ -503,7 +535,7 @@
                 try { cmd.Cancel(); } catch { }
             });
             
-            ActiveTab.IsCurrentQuerySelect = queryToRun.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase);
+            ActiveTab.IsCurrentQuerySelect = IsReadOnlyQuery(queryToRun);
 
             using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
             int totalRows = 0;
