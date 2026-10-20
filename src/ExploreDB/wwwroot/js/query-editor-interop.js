@@ -312,6 +312,18 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 endColumn: position.column
             });
 
+            // 1. Suppress autocomplete when actively typing a table alias after FROM or JOIN
+            // e.g. "FROM [tenant].[Orders] ord" or "INNER JOIN [tenant].[OrderItems] or"
+            var isAfterTableRegex = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?([a-zA-Z0-9_]*)$/i;
+            var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_]*)$/i.test(fullTextUntilPosition);
+            var afterTableMatch = fullTextUntilPosition.match(isAfterTableRegex);
+            var hasDot = textBeforeCursor.match(/\.[a-zA-Z0-9_]*$/);
+
+            if (afterTableMatch && !hasCommaAfter && !hasDot) {
+                // User is defining a table alias name: suppress suggestions completely so Enter creates a newline
+                return { suggestions: [] };
+            }
+
             var matches = fullTextUntilPosition.match(/\b[a-z_][a-z0-9_]*\b/ig);
             var suggestTables = true;
             var suggestColumns = true;
@@ -332,29 +344,10 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         if (i >= matches.length - 2) suggestKeywords = false;
                         break;
                     } else if (tableKeywords.has(token)) {
-                        // Check if a table name is already specified after this FROM or JOIN
-                        // e.g. "FROM [tenant].[Orders] s" or "JOIN Orders AS o"
-                        var isAfterTableRegex = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?([a-zA-Z0-9_]*)$/i;
-                        var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_]*)$/i.test(fullTextUntilPosition);
-                        var afterTableMatch = fullTextUntilPosition.match(isAfterTableRegex);
-
-                        if (afterTableMatch && !hasCommaAfter) {
-                            // Check if user is typing a dot property/column access (e.g. "s.")
-                            var hasDot = textBeforeCursor.match(/\.[a-zA-Z0-9_]*$/);
-                            if (!hasDot) {
-                                // User is actively defining the table alias: suppress suggestions so Enter inserts newline
-                                return { suggestions: [] };
-                            }
-                            suggestTables = false;
-                            suggestColumns = true;
-                            suggestSps = false;
-                            suggestKeywords = false;
-                        } else {
-                            suggestTables = true;
-                            suggestColumns = false;
-                            suggestSps = false;
-                            if (i >= matches.length - 2) suggestKeywords = false;
-                        }
+                        suggestTables = true;
+                        suggestColumns = false;
+                        suggestSps = false;
+                        if (i >= matches.length - 2) suggestKeywords = false;
                         break;
                     } else if (columnKeywords.has(token)) {
                         suggestTables = false;
