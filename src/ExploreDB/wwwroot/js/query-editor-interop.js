@@ -312,6 +312,21 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 endColumn: position.column
             });
 
+            // PRIORITY CHECK: Suppress suggestions when typing a table alias on the same line.
+            // Must run BEFORE the keyword scan because an alias like 'or', 'and', 'on', 'as' etc.
+            // would be misidentified as an SQL keyword in the backward token scan below.
+            var currentLineUntilCursor = model.getValueInRange({
+                startLineNumber: position.lineNumber,
+                startColumn: 1,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column
+            });
+            var hasDotOnCurrentLine = /\.[a-zA-Z0-9_]*$/.test(currentLineUntilCursor);
+            var isTypingAlias = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(currentLineUntilCursor);
+            if (isTypingAlias && !hasDotOnCurrentLine) {
+                return { suggestions: [] };
+            }
+
             var matches = fullTextUntilPosition.match(/\b[a-z_][a-z0-9_]*\b/ig);
             var suggestTables = true;
             var suggestColumns = true;
