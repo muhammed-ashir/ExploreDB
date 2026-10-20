@@ -430,8 +430,8 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-header py-2 px-3" style="border-bottom: 1px solid var(--app-border);">
-                    <h5 class="modal-title d-flex align-items-center gap-2 fs-6 mb-0">
-                        <i class="bi bi-file-earmark-code text-success"></i> Save as Snippet
+                    <h5 class="modal-title fs-6 mb-0">
+                        Save as Snippet
                     </h5>
                     <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => IsSaveSnippetModalOpen = false"></button>
                 </div>
@@ -457,18 +457,13 @@
                         <label class="form-label small fw-semibold mb-1">SQL Snippet Code <span class="text-danger">*</span></label>
                         <textarea class="form-control form-control-sm font-monospace" rows="6" placeholder="Enter SQL code here..." @bind="_editingSnippet.Code" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); resize: vertical; font-size: 0.85rem;"></textarea>
                         <div class="form-text small" style="color: var(--app-text-muted); font-size: 0.75rem;">
-                            Tip: Use <code>$0</code> for final cursor position, and <code>$1</code>, <code>$2</code> for tab stops.
+                            Tip (Optional): Use <code>$1</code>, <code>$2</code>, <code>$3...</code> to jump with Tab, and <code>$0</code> for final cursor position.
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer py-2 px-3 d-flex justify-content-between" style="border-top: 1px solid var(--app-border);">
-                    <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 text-muted" @onclick='() => { IsSaveSnippetModalOpen = false; Nav.NavigateTo("/snippets"); }'>
-                        <i class="bi bi-bookmarks me-1"></i> Open Snippet Manager &rarr;
-                    </button>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-sm btn-secondary" @onclick="() => IsSaveSnippetModalOpen = false">Cancel</button>
-                        <button type="button" class="btn btn-sm btn-primary px-3" @onclick="SaveCurrentSnippetAsync">Save Snippet</button>
-                    </div>
+                <div class="modal-footer py-2 px-3 d-flex justify-content-end gap-2" style="border-top: 1px solid var(--app-border);">
+                    <button type="button" class="btn btn-sm btn-secondary" @onclick="() => IsSaveSnippetModalOpen = false">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary px-3" @onclick="SaveCurrentSnippetAsync">Save Snippet</button>
                 </div>
             </div>
         </div>

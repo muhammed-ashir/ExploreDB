@@ -1,5 +1,7 @@
 @page "/snippets"
 @using ExploreDB.Services
+@using BlazorMonaco
+@using BlazorMonaco.Editor
 @inject SnippetService SnippetService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -8,11 +10,10 @@
 <div class="container-fluid d-flex flex-column" style="height: calc(100vh - 140px); padding-bottom: 20px;">
     <!-- Top Header -->
     <div class="row mb-3 align-items-center">
-        <div class="col d-flex align-items-center gap-2">
-            <h4 class="m-0 d-flex align-items-center gap-2" style="color: var(--app-text);">
-                <i class="bi bi-bookmarks text-info"></i> SQL Snippet Manager
+        <div class="col">
+            <h4 class="m-0" style="color: var(--app-text);">
+                SQL Snippet Manager
             </h4>
-            <span class="badge bg-secondary rounded-pill ms-2" style="font-size: 0.75rem;">@FilteredSnippets.Count snippets</span>
         </div>
         <div class="col-auto d-flex align-items-center gap-2">
             <button class="btn btn-sm btn-outline-secondary shadow-sm" type="button" @onclick="ResetDefaultsAsync" title="Restore default Redgate snippets" style="color: var(--app-text); border-color: var(--app-border);">
@@ -28,16 +29,16 @@
     </div>
 
     <!-- How-to Info Banner -->
-    <div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-start gap-2 shadow-sm flex-shrink-0" style="font-size: 0.85rem; background-color: rgba(13, 202, 240, 0.1); border-color: rgba(13, 202, 240, 0.3); color: var(--app-text);">
-        <i class="bi bi-info-circle-fill text-info mt-1 flex-shrink-0"></i>
-        <div class="flex-grow-1">
+    <div class="alert alert-info py-2 px-3 mb-3 shadow-sm flex-shrink-0" style="font-size: 0.85rem; background-color: rgba(13, 202, 240, 0.1); border-color: rgba(13, 202, 240, 0.3); color: var(--app-text);">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <i class="bi bi-info-circle-fill text-info"></i>
             <strong>How to add &amp; use SQL Snippets:</strong>
-            <ul class="mb-0 ps-3 mt-1" style="line-height: 1.5;">
-                <li><strong>Save quickly:</strong> Select any SQL in the Query Runner and press <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Alt+S</kbd> or right-click &rarr; <em>Save as Snippet</em>.</li>
-                <li><strong>Expand in editor:</strong> Type the shortcut keyword (e.g. <code>ssf</code>) in the Query Editor and press <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Tab</kbd> or <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Enter</kbd>.</li>
-                <li><strong>Cursor placement:</strong> Use <code>$0</code> in your code for the cursor position, and <code>$1</code>, <code>$2</code> for tab stops.</li>
-            </ul>
         </div>
+        <ul class="mb-0 ps-3" style="line-height: 1.5;">
+            <li><strong>Save quickly:</strong> Select any SQL in the Query Runner and press <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Alt+S</kbd> or right-click &rarr; <em>Save as Snippet</em>.</li>
+            <li><strong>Expand in editor:</strong> Type the shortcut keyword (e.g. <code>ssf</code>) in the Query Editor and press <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Tab</kbd> or <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Enter</kbd>.</li>
+            <li><strong>Tab stops &amp; cursor (optional):</strong> Use <code>$1</code>, <code>$2</code>, <code>$3...</code> to jump between placeholders with <kbd style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); padding: 1px 4px; border-radius: 3px;">Tab</kbd>, and <code>$0</code> for the final cursor exit position.</li>
+        </ul>
     </div>
 
     <!-- Main Card -->
@@ -80,18 +81,17 @@
             <table class="table table-hover mb-0 align-middle" style="color: var(--app-text); font-size: 0.88rem;">
                 <thead style="background-color: var(--app-surface-secondary); position: sticky; top: 0; z-index: 2;">
                     <tr>
-                        <th style="width: 130px; border-bottom-color: var(--app-border);">Shortcut</th>
-                        <th style="width: 250px; border-bottom-color: var(--app-border);">Description</th>
-                        <th style="border-bottom-color: var(--app-border);">SQL Snippet</th>
-                        <th style="width: 100px; border-bottom-color: var(--app-border);" class="text-center">Type</th>
-                        <th style="width: 110px; border-bottom-color: var(--app-border);" class="text-end pe-3">Actions</th>
+                        <th style="width: 160px; border-bottom-color: var(--app-border);">Shortcut</th>
+                        <th style="border-bottom-color: var(--app-border);">Description</th>
+                        <th style="width: 120px; border-bottom-color: var(--app-border);" class="text-center">Type</th>
+                        <th style="width: 145px; border-bottom-color: var(--app-border);" class="text-end pe-3">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (FilteredSnippets.Count == 0)
                     {
                         <tr>
-                            <td colspan="5" class="text-center text-muted py-5">
+                            <td colspan="4" class="text-center text-muted py-5">
                                 <i class="bi bi-bookmarks fs-2 d-block mb-2 text-secondary opacity-50"></i>
                                 <span>No snippets match your filter.</span>
                             </td>
@@ -99,20 +99,12 @@
                     }
                     @foreach (var snippet in FilteredSnippets)
                     {
-                        <tr style="border-bottom: 1px solid var(--app-border);">
+                        <tr style="border-bottom: 1px solid var(--app-border);" @ondblclick="() => OpenViewSnippetModal(snippet)">
                             <td class="align-middle">
                                 <span class="badge bg-secondary font-monospace" style="font-size: 0.85rem; letter-spacing: 0.5px;">@snippet.Shortcut</span>
                             </td>
                             <td class="align-middle">
                                 <div class="fw-medium">@snippet.Description</div>
-                            </td>
-                            <td class="align-middle">
-                                <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border); font-family: Consolas, monospace; font-size: 0.82rem; white-space: pre-wrap; word-break: break-all; max-height: 80px; overflow-y: auto;">
-                                    <code>@snippet.Code</code>
-                                    <button class="btn btn-sm btn-link text-muted p-0 ms-2 flex-shrink-0" title="Copy SQL" @onclick="() => CopySnippetAsync(snippet.Code)">
-                                        <i class="bi bi-clipboard"></i>
-                                    </button>
-                                </div>
                             </td>
                             <td class="align-middle text-center">
                                 @if (snippet.IsBuiltIn)
@@ -125,6 +117,9 @@
                                 }
                             </td>
                             <td class="align-middle text-end pe-3">
+                                <button class="btn btn-sm btn-outline-secondary me-1" title="View in Monaco editor" @onclick="() => OpenViewSnippetModal(snippet)">
+                                    <i class="bi bi-eye"></i>
+                                </button>
                                 <button class="btn btn-sm btn-outline-info me-1" title="Edit snippet" @onclick="() => OpenEditSnippetModal(snippet)">
                                     <i class="bi bi-pencil-square"></i>
                                 </button>
@@ -140,6 +135,47 @@
     </div>
 </div>
 
+<!-- Modal: View Snippet in Monaco Window -->
+@if (IsViewModalOpen && _viewingSnippet != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(2px); z-index: 2100;">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header py-2 px-3" style="border-bottom: 1px solid var(--app-border);">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-secondary font-monospace" style="font-size: 0.85rem;">@_viewingSnippet.Shortcut</span>
+                        @if (_viewingSnippet.IsBuiltIn)
+                        {
+                            <span class="badge bg-dark border text-muted" style="font-size: 0.7rem;">Built-in</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success bg-opacity-25 text-success border border-success" style="font-size: 0.7rem;">Custom</span>
+                        }
+                    </div>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="CloseViewSnippetModal"></button>
+                </div>
+                <div class="modal-body p-0" style="height: 380px; width: 100%; position: relative;">
+                    <StandaloneCodeEditor @ref="_viewerEditor" Id="@_viewEditorId" ConstructionOptions="ViewerConstructionOptions" OnDidInit="OnViewerEditorInit" CssClass="w-100 h-100" />
+                </div>
+                <div class="modal-footer py-2 px-3 d-flex justify-content-between align-items-center" style="border-top: 1px solid var(--app-border);">
+                    <div class="text-muted small" style="font-size: 0.75rem;">
+                        (Optional) Jump with Tab: <code>$1</code>, <code>$2...</code> | Final cursor: <code>$0</code>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary shadow-sm" @onclick="() => CopySnippetAsync(_viewingSnippet.Code)" title="Copy">
+                            <i class="bi bi-clipboard me-1"></i> Copy
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info shadow-sm" @onclick="SwitchFromViewToEdit" title="Edit snippet">
+                            <i class="bi bi-pencil-square me-1"></i> Edit
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <!-- Modal: Create / Edit Snippet -->
 @if (IsEditModalOpen)
 {
@@ -147,8 +183,8 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-header py-2 px-3" style="border-bottom: 1px solid var(--app-border);">
-                    <h5 class="modal-title d-flex align-items-center gap-2 fs-6 mb-0">
-                        <i class="bi bi-file-earmark-code text-info"></i> @(string.IsNullOrEmpty(_editingSnippet.Id) || _allSnippets.All(s => s.Id != _editingSnippet.Id) ? "New SQL Snippet" : "Edit Snippet")
+                    <h5 class="modal-title fs-6 mb-0">
+                        @(string.IsNullOrEmpty(_editingSnippet.Id) || _allSnippets.All(s => s.Id != _editingSnippet.Id) ? "New SQL Snippet" : "Edit Snippet")
                     </h5>
                     <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => IsEditModalOpen = false"></button>
                 </div>
@@ -174,7 +210,7 @@
                         <label class="form-label small fw-semibold mb-1">SQL Snippet Code <span class="text-danger">*</span></label>
                         <textarea class="form-control form-control-sm font-monospace" rows="6" placeholder="Enter SQL code here..." @bind="_editingSnippet.Code" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); resize: vertical; font-size: 0.85rem;"></textarea>
                         <div class="form-text small" style="color: var(--app-text-muted); font-size: 0.75rem;">
-                            Tip: Use <code>$0</code> for final cursor position, and <code>$1</code>, <code>$2</code> for tab stops.
+                            Tip (Optional): Use <code>$1</code>, <code>$2</code>, <code>$3...</code> to jump with Tab, and <code>$0</code> for final cursor position.
                         </div>
                     </div>
                 </div>
@@ -203,6 +239,10 @@
     private string _filterType = "all"; // all, custom, builtin
     private bool IsEditModalOpen = false;
     private SqlSnippet _editingSnippet = new();
+    private bool IsViewModalOpen = false;
+    private SqlSnippet? _viewingSnippet;
+    private StandaloneCodeEditor? _viewerEditor;
+    private string _viewEditorId = "snippet-viewer-" + Guid.NewGuid().ToString("N");
     private string? _validationMessage = null;
     private string? _toastMessage = null;
     private CancellationTokenSource? _toastCts;
@@ -290,6 +330,59 @@
         await SnippetService.DeleteSnippetAsync(id);
         await LoadSnippetsAsync();
         ShowToast("Snippet deleted.");
+    }
+
+    private void OpenViewSnippetModal(SqlSnippet snippet)
+    {
+        _viewingSnippet = snippet;
+        _viewEditorId = "snippet-viewer-" + Guid.NewGuid().ToString("N");
+        IsViewModalOpen = true;
+    }
+
+    private void CloseViewSnippetModal()
+    {
+        IsViewModalOpen = false;
+        _viewingSnippet = null;
+    }
+
+    private void SwitchFromViewToEdit()
+    {
+        if (_viewingSnippet != null)
+        {
+            var snip = _viewingSnippet;
+            CloseViewSnippetModal();
+            OpenEditSnippetModal(snip);
+        }
+    }
+
+    private StandaloneEditorConstructionOptions ViewerConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            AutomaticLayout = true,
+            Language = "sql",
+            Value = _viewingSnippet?.Code ?? "",
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
+            ReadOnly = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            ScrollBeyondLastLine = false,
+            WordWrap = "on",
+            LineNumbers = "on",
+            FontSize = 13,
+            RenderLineHighlight = "all"
+        };
+    }
+
+    private async Task OnViewerEditorInit()
+    {
+        try
+        {
+            if (_viewerEditor != null && _viewingSnippet != null)
+            {
+                await _viewerEditor.SetValue(_viewingSnippet.Code);
+            }
+        }
+        catch { }
     }
 
     private async Task ResetDefaultsAsync()
