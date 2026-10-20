@@ -1,4 +1,4 @@
-﻿@page "/proc/{FullName}"
+@page "/proc/{FullName}"
 @using ExploreDB.Services
 @using BlazorMonaco.Editor
 @using BlazorMonaco
@@ -747,37 +747,43 @@
                 return $"EXEC {Sp.FullName};";
 
             var lines = new System.Text.StringBuilder();
-            lines.AppendLine($"EXEC {Sp.FullName}");
-
             var outputParams = Sp.Parameters.Where(p => p.IsOutput).ToList();
-
-            foreach (var p in outputParams)
-            {
-                lines.AppendLine($"    -- DECLARE {p.Name} {p.DisplayType};");
-            }
 
             if (outputParams.Any())
             {
+                foreach (var p in outputParams)
+                {
+                    lines.AppendLine($"DECLARE {p.Name} {p.DisplayType};");
+                }
                 lines.AppendLine();
             }
+
+            lines.AppendLine($"EXEC {Sp.FullName}");
 
             var allParams = Sp.Parameters.ToList();
             for (int i = 0; i < allParams.Count; i++)
             {
                 var p = allParams[i];
                 var isLast = i == allParams.Count - 1;
-                var comma = isLast ? "" : ",";
+                var suffix = isLast ? (outputParams.Any() ? ";" : "") : ",";
 
                 string paramExpr;
                 if (p.IsOutput)
-                    paramExpr = $"{p.Name} OUTPUT";
+                    paramExpr = $"{p.Name} = {p.Name} OUTPUT";
                 else if (p.HasDefault && p.DefaultValue != null)
                     paramExpr = $"{p.Name} = {p.DefaultValue}";
                 else
                     paramExpr = $"{p.Name} = NULL";
 
                 string comment = string.IsNullOrWhiteSpace(p.DisplayType) ? "" : $"  -- {p.DisplayType}";
-                lines.AppendLine($"    {paramExpr}{comma}{comment}");
+                lines.AppendLine($"    {paramExpr}{suffix}{comment}");
+            }
+
+            if (outputParams.Any())
+            {
+                lines.AppendLine();
+                var selectCols = string.Join(", ", outputParams.Select(p => $"{p.Name} AS [{p.Name}]"));
+                lines.AppendLine($"SELECT {selectCols};");
             }
 
             return lines.ToString().TrimEnd();
