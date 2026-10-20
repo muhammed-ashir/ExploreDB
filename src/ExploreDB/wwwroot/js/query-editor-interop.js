@@ -119,40 +119,92 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         }
     ];
 
+    function getSpHelptextContext(model, position) {
+        var lineContent = model.getLineContent(position.lineNumber);
+        var col = position.column;
+        var textBeforeCursor = lineContent.substring(0, col - 1);
+
+        // Match sp_helptext or sp_help before cursor on current line
+        var match = textBeforeCursor.match(/(?:(?:exec|execute)\s+)?(sp_helptext|sp_help)\s+(?:@objname\s*=\s*)?N?(['"]?)/i);
+        if (!match) {
+            var fullTextUntilPosition = model.getValueInRange({
+                startLineNumber: 1,
+                startColumn: 1,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column
+            });
+            match = fullTextUntilPosition.match(/(?:(?:exec|execute)\s+)?(sp_helptext|sp_help)\s+(?:@objname\s*=\s*)?N?(['"]?)$/i);
+            if (!match) return null;
+        }
+
+        var matchIndex = match.index;
+        var fullMatch = match[0];
+        var quoteChar = match[2] || "";
+        var argStartCol = matchIndex + fullMatch.length + 1;
+
+        if (col < argStartCol) return null;
+
+        if (quoteChar) {
+            var textAfterArgStart = lineContent.substring(argStartCol - 1);
+            var closingQuoteRelIndex = textAfterArgStart.indexOf(quoteChar);
+            var argEndCol;
+            var hasClosingQuote = false;
+
+            if (closingQuoteRelIndex >= 0) {
+                hasClosingQuote = true;
+                argEndCol = argStartCol + closingQuoteRelIndex;
+                if (col > argEndCol + 1) {
+                    return null;
+                }
+            } else {
+                argEndCol = lineContent.length + 1;
+            }
+
+            var typedPrefix = lineContent.substring(argStartCol - 1, col - 1);
+
+            return {
+                quoteChar: quoteChar,
+                hasClosingQuote: hasClosingQuote,
+                typedPrefix: typedPrefix,
+                replaceRange: {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: argStartCol,
+                    endColumn: hasClosingQuote ? argEndCol : col
+                }
+            };
+        } else {
+            var textFromArg = lineContent.substring(argStartCol - 1);
+            var spaceMatch = textFromArg.match(/\s/);
+            var argEndCol = spaceMatch ? (argStartCol + spaceMatch.index) : (lineContent.length + 1);
+            if (col > argEndCol) return null;
+
+            var typedPrefix = lineContent.substring(argStartCol - 1, col - 1);
+            return {
+                quoteChar: "",
+                hasClosingQuote: false,
+                typedPrefix: typedPrefix,
+                replaceRange: {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: argStartCol,
+                    endColumn: argEndCol
+                }
+            };
+        }
+    }
+
     monaco.languages.registerCompletionItemProvider('sql', {
         triggerCharacters: ['.', "'", '['],
         provideCompletionItems: function(model, position) {
             var lineContent = model.getLineContent(position.lineNumber);
             var textBeforeCursor = lineContent.substring(0, position.column - 1);
 
-            // Check if cursor is in an sp_helptext parameter context (e.g. EXEC sp_helptext '... or sp_helptext ...)
-            var spHelptextParamMatch = textBeforeCursor.match(/(?:(?:exec|execute)\s+)?sp_helptext\s+(?:(?:@objname\s*=\s*)?N?(['"]?))([^'"\r\n]*)$/i);
-            if (!spHelptextParamMatch) {
-                var fullTextUntilPosition = model.getValueInRange({
-                    startLineNumber: 1,
-                    startColumn: 1,
-                    endLineNumber: position.lineNumber,
-                    endColumn: position.column
-                });
-                spHelptextParamMatch = fullTextUntilPosition.match(/(?:(?:exec|execute)\s+)?sp_helptext\s+(?:(?:@objname\s*=\s*)?N?(['"]?))([^'"\r\n]*)$/i);
-            }
-
-            if (spHelptextParamMatch) {
-                var quoteChar = spHelptextParamMatch[1] || "";
-                var typedParam = spHelptextParamMatch[2] || "";
-                var textAfterCursor = lineContent.substring(position.column - 1);
-                var hasClosingQuote = textAfterCursor.startsWith("'") || textAfterCursor.startsWith('"');
-
-                var paramReplaceRange = {
-                    startLineNumber: position.lineNumber,
-                    endLineNumber: position.lineNumber,
-                    startColumn: position.column - typedParam.length,
-                    endColumn: position.column
-                };
-
+            var ctx = getSpHelptextContext(model, position);
+            if (ctx) {
                 var getParamInsertText = function(fullName) {
-                    if (quoteChar === "'" || quoteChar === '"') {
-                        return hasClosingQuote ? fullName : (fullName + quoteChar);
+                    if (ctx.quoteChar === "'" || ctx.quoteChar === '"') {
+                        return ctx.hasClosingQuote ? fullName : (fullName + ctx.quoteChar);
                     }
                     return "'" + fullName + "'";
                 };
@@ -169,7 +221,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             insertText: getParamInsertText(sp.fullName),
                             filterText: sp.fullName + " " + sp.name + " " + unbracketed,
                             sortText: String(sp.name.length).padStart(4, '0') + '_' + sp.name,
-                            range: paramReplaceRange,
+                            range: ctx.replaceRange,
                             detail: 'Stored Procedure'
                         });
                     });
@@ -185,7 +237,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             insertText: getParamInsertText(v.fullName),
                             filterText: v.fullName + " " + v.name + " " + unbracketed,
                             sortText: String(v.name.length).padStart(4, '0') + '_' + v.name,
-                            range: paramReplaceRange,
+                            range: ctx.replaceRange,
                             detail: 'View'
                         });
                     });
@@ -201,13 +253,19 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             insertText: getParamInsertText(f.fullName),
                             filterText: f.fullName + " " + f.name + " " + unbracketed,
                             sortText: String(f.name.length).padStart(4, '0') + '_' + f.name,
-                            range: paramReplaceRange,
+                            range: ctx.replaceRange,
                             detail: f.functionType ? ('Function (' + f.functionType + ')') : 'Function'
                         });
                     });
                 }
 
                 return { suggestions: helpTextSuggestions };
+            }
+
+            // Suppress SQL keyword completions inside normal string literals (not sp_helptext)
+            var quoteCount = (textBeforeCursor.match(/'/g) || []).length;
+            if (quoteCount % 2 === 1) {
+                return { suggestions: [] };
             }
             // Match something like "ou.id" or just "id"
             var match = textBeforeCursor.match(/([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]*)?)$/);
@@ -633,10 +691,52 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             });
         }
 
-        monaco.editor.onDidCreateEditor(attachAutoCapitalize);
+        function configureEditor(editor) {
+            try {
+                editor.updateOptions({
+                    quickSuggestions: {
+                        other: true,
+                        comments: false,
+                        strings: true
+                    }
+                });
+            } catch (e) { }
+
+            editor.onKeyUp(function(e) {
+                if (e.browserEvent.key === 'Backspace' || e.browserEvent.key === 'Delete') {
+                    try {
+                        var pos = editor.getPosition();
+                        var model = editor.getModel();
+                        if (model && model.getLanguageId() === 'sql') {
+                            var ctx = getSpHelptextContext(model, pos);
+                            if (ctx) {
+                                editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
+                            }
+                        }
+                    } catch (err) { }
+                }
+            });
+
+            editor.onDidFocusEditorText(function() {
+                try {
+                    var pos = editor.getPosition();
+                    var model = editor.getModel();
+                    if (model && model.getLanguageId() === 'sql') {
+                        var ctx = getSpHelptextContext(model, pos);
+                        if (ctx) {
+                            editor.trigger('focus', 'editor.action.triggerSuggest', {});
+                        }
+                    }
+                } catch (err) { }
+            });
+
+            attachAutoCapitalize(editor);
+        }
+
+        monaco.editor.onDidCreateEditor(configureEditor);
         var editors = monaco.editor.getEditors();
         if (editors) {
-            editors.forEach(attachAutoCapitalize);
+            editors.forEach(configureEditor);
         }
     }
 };
