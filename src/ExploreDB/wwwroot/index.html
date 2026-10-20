@@ -208,6 +208,14 @@
                 }
             }
 
+            // Intercept Ctrl+W (Close Tab)
+            if (e.ctrlKey && (e.key === 'w' || e.key === 'W')) {
+                e.preventDefault();
+                if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                    window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('CloseActiveTabFromShortcut');
+                }
+            }
+
             // Intercept Alt+S (Save as Snippet)
             if (e.altKey && !e.ctrlKey && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
                 e.preventDefault();

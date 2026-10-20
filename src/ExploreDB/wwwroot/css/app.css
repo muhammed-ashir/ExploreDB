@@ -1079,3 +1079,16 @@ a.card.glow-highlight:hover,
     opacity: 0.85;
 }
 
+
+
+/* Tab Close Button in Tab Pill */
+.tab-close-btn {
+    opacity: 0.6;
+    color: var(--app-text-muted) !important;
+}
+
+.tab-close-btn:hover {
+    opacity: 1;
+    background-color: rgba(220, 53, 69, 0.2) !important;
+    color: #dc3545 !important;
+}
