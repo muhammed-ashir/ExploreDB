@@ -332,24 +332,41 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         if (i >= matches.length - 2) suggestKeywords = false;
                         break;
                     } else if (tableKeywords.has(token)) {
-                        // Check if a table name is already specified after this FROM or JOIN
-                        // e.g. "FROM [tenant].[Orders] s" or "JOIN Orders AS o"
-                        var isAfterTableRegex = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?([a-zA-Z0-9_]*)$/i;
-                        var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_]*)$/i.test(fullTextUntilPosition);
-                        var afterTableMatch = fullTextUntilPosition.match(isAfterTableRegex);
+                        // Find the text from this table keyword up to the cursor
+                        var lastTableKwIndex = fullTextUntilPosition.toLowerCase().lastIndexOf(token);
+                        var textAfterTableKw = lastTableKwIndex >= 0 ? fullTextUntilPosition.substring(lastTableKwIndex) : fullTextUntilPosition;
 
-                        if (afterTableMatch && !hasCommaAfter) {
-                            // Check if user is typing a dot property/column access (e.g. "s.")
+                        // A table is only considered completed if followed by whitespace (e.g. "FROM [Orders] ")
+                        var completedTableRegex = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+/i;
+                        var tableCompletedMatch = textAfterTableKw.match(completedTableRegex);
+                        var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_]*)$/i.test(textAfterTableKw);
+
+                        if (tableCompletedMatch && !hasCommaAfter) {
+                            // Table is already provided and finished! Do NOT suggest tables.
+                            suggestTables = false;
+                            
+                            // Check if user is on the SAME line actively typing the alias name:
+                            // e.g. "FROM [tenant].[Orders] s" or "JOIN [tenant].[OrderItems] oiy"
+                            var lineUntilCursor = model.getValueInRange({
+                                startLineNumber: position.lineNumber,
+                                startColumn: 1,
+                                endLineNumber: position.lineNumber,
+                                endColumn: position.column
+                            });
+                            var isTypingAliasOnSameLine = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(lineUntilCursor);
                             var hasDot = textBeforeCursor.match(/\.[a-zA-Z0-9_]*$/);
-                            if (!hasDot) {
-                                // User is actively defining the table alias: suppress suggestions so Enter inserts newline
+
+                            if (isTypingAliasOnSameLine && !hasDot) {
+                                // Suppress suggestions while typing the alias name on the table line
                                 return { suggestions: [] };
                             }
-                            suggestTables = false;
-                            suggestColumns = true;
+
+                            // If on next line or after alias, suggest clause keywords (ON, WHERE, JOIN, etc.)
+                            suggestColumns = false;
                             suggestSps = false;
-                            suggestKeywords = false;
+                            suggestKeywords = true;
                         } else {
+                            // User is actively typing the table name (e.g. "FROM or"), or after comma in FROM:
                             suggestTables = true;
                             suggestColumns = false;
                             suggestSps = false;
@@ -395,6 +412,27 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
             if (suggestColumns || suggestTables) {
                 var allText = model.getValue();
+
+                function normalizeTableName(tbl) {
+                    if (!tbl) return "";
+                    return tbl.toLowerCase().replace(/[\[\]]/g, "").trim();
+                }
+
+                function tablesMatch(t1, t2) {
+                    var n1 = normalizeTableName(t1);
+                    var n2 = normalizeTableName(t2);
+                    if (!n1 || !n2) return false;
+                    if (n1 === n2) return true;
+                    var parts1 = n1.split('.');
+                    var parts2 = n2.split('.');
+                    var name1 = parts1[parts1.length - 1];
+                    var name2 = parts2[parts2.length - 1];
+                    if (name1 === name2) {
+                        if (parts1.length === 1 || parts2.length === 1) return true;
+                        if (parts1[0] === parts2[0]) return true;
+                    }
+                    return false;
+                }
                 
                 // Parse Aliases (e.g., FROM [hr].[Settings] s)
                 var aliasMap = {};
@@ -438,7 +476,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         var bracketName = "[" + nameLower + "]";
                         
                         if (explicitTableName) {
-                            if (tLower === explicitTableName || nameLower === explicitTableName || bracketName === explicitTableName) {
+                            if (tablesMatch(t.fullName, explicitTableName) || tLower === explicitTableName || nameLower === explicitTableName || bracketName === explicitTableName) {
                                 hasMatchedTables = true;
                                 if (t.columns && Array.isArray(t.columns)) {
                                     t.columns.forEach(c => activeColumns.add(c));
@@ -502,28 +540,33 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     }
 
                     // Provide JOIN ON Relationship Snippets
-                    var onMatch = fullTextUntilPosition.match(/join\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)?([a-zA-Z0-9_]+)?\s+on\s*([a-zA-Z0-9_]*)$/i);
-                    if (onMatch && window.sqlTables) {
-                        var joinTableFull = onMatch[1].toLowerCase();
-                        var joinAlias = (onMatch[2] || "").toLowerCase();
-                        var typedRel = onMatch[3] || "";
-                        
-                        var matchedTable = window.sqlTables.find(x => x.fullName.toLowerCase() === joinTableFull);
-                        if (matchedTable && matchedTable.relations && Array.isArray(matchedTable.relations)) {
-                            matchedTable.relations.forEach(r => {
-                                var targetTableLower = (r.toTable || "").toLowerCase();
-                                var targetAlias = null;
-                                Object.keys(aliasMap).forEach(k => {
-                                    if (aliasMap[k] === targetTableLower && k !== joinAlias) {
-                                        targetAlias = k;
+                    var lastJoinIndex = fullTextUntilPosition.toLowerCase().lastIndexOf('join');
+                    if (lastJoinIndex >= 0 && window.sqlTables) {
+                        var joinSegment = fullTextUntilPosition.substring(lastJoinIndex);
+                        var onMatch = joinSegment.match(/^join\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)?([a-zA-Z0-9_]+)?\s+on\s*([a-zA-Z0-9_\.]*)$/i);
+                        if (onMatch) {
+                            var joinTableRaw = onMatch[1];
+                            var joinAlias = (onMatch[2] || "").toLowerCase();
+                            var typedRel = onMatch[3] || "";
+
+                            var matchedTable = window.sqlTables.find(x => tablesMatch(x.fullName, joinTableRaw));
+                            if (matchedTable && matchedTable.relations && Array.isArray(matchedTable.relations)) {
+                                var textPriorToJoin = fullTextUntilPosition.substring(0, lastJoinIndex);
+                                var queryTables = [];
+                                var tableDefRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)?([a-zA-Z0-9_]+)?/gi;
+                                var tMatch;
+                                while ((tMatch = tableDefRegex.exec(textPriorToJoin)) !== null) {
+                                    var rawTbl = tMatch[1];
+                                    var alias = tMatch[2];
+                                    if (alias && sqlKw.has(alias.toLowerCase())) {
+                                        alias = null;
                                     }
-                                });
-                                
-                                var leftSide = joinAlias || matchedTable.fullName;
-                                var rightSide = targetAlias || r.toTable;
-                                
-                                var conditionText = leftSide + "." + r.fromCol + " = " + rightSide + "." + r.toCol;
-                                
+                                    queryTables.push({
+                                        rawTable: rawTbl,
+                                        alias: alias
+                                    });
+                                }
+
                                 var relReplaceRange = {
                                     startLineNumber: position.lineNumber,
                                     endLineNumber: position.lineNumber,
@@ -531,16 +574,47 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                     endColumn: position.column
                                 };
 
-                                suggestions.push({
-                                    label: conditionText,
-                                    kind: monaco.languages.CompletionItemKind.Snippet,
-                                    insertText: conditionText,
-                                    filterText: typedRel ? (typedRel + conditionText) : conditionText,
-                                    sortText: '0000_' + conditionText,
-                                    range: relReplaceRange,
-                                    detail: 'Relationship'
+                                var leftDisplayName = joinAlias || (matchedTable.name || matchedTable.fullName);
+                                var seenConds = new Set();
+
+                                matchedTable.relations.forEach(r => {
+                                    // Only suggest relationships to tables that are ALREADY in the query!
+                                    var targetEntry = queryTables.find(qt => tablesMatch(qt.rawTable, r.toTable));
+                                    if (!targetEntry) return;
+
+                                    var rightDisplayName = targetEntry.alias || targetEntry.rawTable;
+
+                                    // Direction 1: Joined table first (e.g. ot.OrderId = tof.Id)
+                                    var cond1 = leftDisplayName + "." + r.fromCol + " = " + rightDisplayName + "." + r.toCol;
+                                    if (!seenConds.has(cond1)) {
+                                        seenConds.add(cond1);
+                                        suggestions.push({
+                                            label: cond1,
+                                            kind: monaco.languages.CompletionItemKind.Snippet,
+                                            insertText: cond1,
+                                            filterText: typedRel ? (typedRel + " " + cond1 + " " + r.fromCol) : (cond1 + " " + r.fromCol),
+                                            sortText: '0000_1_' + cond1,
+                                            range: relReplaceRange,
+                                            detail: 'Relationship (' + (matchedTable.name || matchedTable.fullName) + ' -> ' + targetEntry.rawTable + ')'
+                                        });
+                                    }
+
+                                    // Direction 2: Other table first (e.g. tof.Id = ot.OrderId)
+                                    var cond2 = rightDisplayName + "." + r.toCol + " = " + leftDisplayName + "." + r.fromCol;
+                                    if (!seenConds.has(cond2)) {
+                                        seenConds.add(cond2);
+                                        suggestions.push({
+                                            label: cond2,
+                                            kind: monaco.languages.CompletionItemKind.Snippet,
+                                            insertText: cond2,
+                                            filterText: typedRel ? (typedRel + " " + cond2 + " " + r.toCol) : (cond2 + " " + r.toCol),
+                                            sortText: '0000_2_' + cond2,
+                                            range: relReplaceRange,
+                                            detail: 'Relationship (' + targetEntry.rawTable + ' -> ' + (matchedTable.name || matchedTable.fullName) + ')'
+                                        });
+                                    }
                                 });
-                            });
+                            }
                         }
                     }
                 }
@@ -725,18 +799,24 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             } catch (e) { }
 
             editor.onKeyUp(function(e) {
-                if (e.browserEvent.key === 'Backspace' || e.browserEvent.key === 'Delete') {
-                    try {
-                        var pos = editor.getPosition();
-                        var model = editor.getModel();
-                        if (model && model.getLanguageId() === 'sql') {
+                try {
+                    var pos = editor.getPosition();
+                    var model = editor.getModel();
+                    if (model && model.getLanguageId() === 'sql') {
+                        if (e.browserEvent.key === 'Backspace' || e.browserEvent.key === 'Delete') {
                             var ctx = getSpHelptextContext(model, pos);
                             if (ctx) {
                                 editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
                             }
+                        } else if (e.browserEvent.key === ' ' || e.browserEvent.code === 'Space') {
+                            var lineContent = model.getLineContent(pos.lineNumber);
+                            var textBefore = lineContent.substring(0, pos.column - 1);
+                            if (/\bon\s+$/i.test(textBefore)) {
+                                editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
+                            }
                         }
-                    } catch (err) { }
-                }
+                    }
+                } catch (err) { }
             });
 
             editor.onDidFocusEditorText(function() {
