@@ -20,8 +20,8 @@
         <AppxPackageSigningEnabled Condition="'$(AppxPackageSigningEnabled)' == ''">false</AppxPackageSigningEnabled>
         <ApplicationManifest Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">Platforms\Windows\app.manifest</ApplicationManifest>
         <ApplicationVersion>7</ApplicationVersion>
-        <ApplicationDisplayVersion>2.1.4.0</ApplicationDisplayVersion>
-        <Version>2.1.4.0</Version>
+        <ApplicationDisplayVersion>2.1.5.0</ApplicationDisplayVersion>
+        <Version>2.1.5.0</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
         <ApplicationIcon>Platforms\Windows\Images\app.ico</ApplicationIcon>
@@ -56,5 +56,14 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
+
+    <!-- Exclude development-only staticwebassets.runtime.json from MSIX package payload -->
+    <Target Name="RemoveDevStaticWebAssetsFromPackage" AfterTargets="_ComputeAppxPackagePayload" BeforeTargets="_GenerateAppxPackageRecipe;_GenerateAppxManifest">
+        <ItemGroup>
+            <AppxPackagePayload Remove="@(AppxPackagePayload)" Condition="'%(Filename)%(Extension)' == '$(AssemblyName).staticwebassets.runtime.json'" />
+            <AppxPackagePayload Remove="@(AppxPackagePayload)" Condition="'%(TargetPath)' == '$(AssemblyName).staticwebassets.runtime.json'" />
+            <AppxPackagePayload Remove="@(AppxPackagePayload)" Condition="$([System.String]::Copy('%(Identity)').Contains('staticwebassets.runtime.json'))" />
+        </ItemGroup>
+    </Target>
 
 </Project>
