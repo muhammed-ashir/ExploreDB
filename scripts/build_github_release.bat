@@ -10,6 +10,7 @@ copy /Y src\ExploreDB\Platforms\Windows\Package.GitHub.appxmanifest src\ExploreD
 echo 2. Cleaning previous builds (Hard Clean)...
 if exist src\ExploreDB\bin rmdir /s /q src\ExploreDB\bin
 if exist src\ExploreDB\obj rmdir /s /q src\ExploreDB\obj
+if exist src\ExploreDB\AppPackages rmdir /s /q src\ExploreDB\AppPackages
 dotnet clean
 
 echo 3. Building and Signing Package...
@@ -18,6 +19,9 @@ dotnet publish -f net8.0-windows10.0.19041.0 -c Release -r win-x64 /p:Platform=x
 echo 4. Copying to GitHubRelease folder...
 if not exist GitHubRelease mkdir GitHubRelease
 for /d %%D in (src\ExploreDB\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_*) do (
+    copy /Y "%%D\*.msix" GitHubRelease\
+)
+for /d %%D in (src\ExploreDB\AppPackages\ExploreDB_*) do (
     copy /Y "%%D\*.msix" GitHubRelease\
 )
 

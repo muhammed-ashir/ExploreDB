@@ -20,8 +20,8 @@
         <AppxPackageSigningEnabled Condition="'$(AppxPackageSigningEnabled)' == ''">false</AppxPackageSigningEnabled>
         <ApplicationManifest Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">Platforms\Windows\app.manifest</ApplicationManifest>
         <ApplicationVersion>7</ApplicationVersion>
-        <ApplicationDisplayVersion>2.1.2.0</ApplicationDisplayVersion>
-        <Version>2.1.2.0</Version>
+        <ApplicationDisplayVersion>2.1.4.0</ApplicationDisplayVersion>
+        <Version>2.1.4.0</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
         <ApplicationIcon>Platforms\Windows\Images\app.ico</ApplicationIcon>
@@ -40,6 +40,7 @@
         <PackageReference Include="BlazorMonaco" Version="3.5.0" />
         <PackageReference Include="ClosedXML" Version="0.105.1" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.251221100" />
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="8.0.100" />
         <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.0" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.0" />
@@ -48,6 +49,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <AppxManifest Include="Platforms\Windows\Package.appxmanifest" />
         <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include="Platforms\Windows\Images\**">
             <Link>Images\%(RecursiveDir)%(Filename)%(Extension)</Link>

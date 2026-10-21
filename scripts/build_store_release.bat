@@ -10,6 +10,7 @@ copy /Y src\ExploreDB\Platforms\Windows\Package.Store.appxmanifest src\ExploreDB
 echo 2. Cleaning previous builds (Hard Clean)...
 if exist src\ExploreDB\bin rmdir /s /q src\ExploreDB\bin
 if exist src\ExploreDB\obj rmdir /s /q src\ExploreDB\obj
+if exist src\ExploreDB\AppPackages rmdir /s /q src\ExploreDB\AppPackages
 dotnet clean
 
 echo 3. Building Store Package...
@@ -18,6 +19,9 @@ dotnet publish -f net8.0-windows10.0.19041.0 -c Release -r win-x64 /p:Platform=x
 echo 4. Copying to StoreRelease folder...
 if not exist StoreRelease mkdir StoreRelease
 for /d %%D in (src\ExploreDB\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\AppPackages\ExploreDB_*) do (
+    copy /Y "%%D\*.msix" StoreRelease\
+)
+for /d %%D in (src\ExploreDB\AppPackages\ExploreDB_*) do (
     copy /Y "%%D\*.msix" StoreRelease\
 )
 
