@@ -29,9 +29,19 @@ public partial class MainWindow : Window
         blazorWebView.Services = services;
     }
 
+    public static bool IsExitingConfirmed { get; set; } = false;
+
     protected override void OnClosing(CancelEventArgs e)
     {
         base.OnClosing(e);
+
+        if (IsExitingConfirmed)
+        {
+            return;
+        }
+
+        // Cancel the immediate window close so the Blazor confirmation modal can be displayed
+        e.Cancel = true;
 
         // Ensure open tabs are persisted when closing the main window
         if (_queryStateService != null)
