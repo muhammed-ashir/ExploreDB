@@ -65,6 +65,7 @@ public partial class App : Application
             {
                 Log.Error(args.Exception, "Dispatcher Unhandled Exception");
                 // Log and keep application alive if possible
+                args.Handled = true;
             };
 
             // Configure Dependency Injection

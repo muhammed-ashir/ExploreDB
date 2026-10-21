@@ -79,6 +79,13 @@
                         {
                             <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
                         }
+                        else
+                        {
+                            <div class="d-flex justify-content-center align-items-center h-100" style="min-height: 150px;">
+                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                <span class="text-muted small">Loading editor...</span>
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -228,7 +235,7 @@
         if (IsMinimized) IsFullScreen = false;
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         QueryStateService.OnTabUpdated += HandleTabUpdated;
         SchemaService.OnTablesLoaded += OnSchemaLoadedHandler;
@@ -236,21 +243,29 @@
         SchemaService.OnStoredProceduresLoaded += OnSchemaLoadedHandler;
         ThemeService.OnThemeChanged += HandleThemeChanged;
         _objRef = DotNetObjectReference.Create(this);
-        
-        // Small delay to ensure MAUI WebView is fully initialized and DOM is ready for Monaco
-        await Task.Delay(100);
-        _isReady = true;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _objRef != null)
+        if (firstRender)
         {
+            if (_objRef != null)
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("window.globalShortcuts.registerQueryRunner", _objRef);
+                }
+                catch { }
+            }
+
             try
             {
-                await JS.InvokeVoidAsync("window.globalShortcuts.registerQueryRunner", _objRef);
+                await JS.InvokeAsync<bool>("waitForMonaco", 5000);
             }
             catch { }
+
+            _isReady = true;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -328,6 +343,11 @@
 
     private async Task EditorOnDidInit()
     {
+        try
+        {
+            await JS.InvokeVoidAsync("configureQueryEditor", "query-editor");
+        }
+        catch { }
         await RegisterAutocompleteItemsAsync();
     }
 
@@ -611,8 +631,16 @@
         }
     }
 
-    private void DockTab()
+    private async Task DockTab()
     {
+        if (_editor != null)
+        {
+            try
+            {
+                ActiveTab.Content = await _editor.GetValue();
+            }
+            catch { }
+        }
         WindowManager.DockQueryTab(TabId);
     }
 

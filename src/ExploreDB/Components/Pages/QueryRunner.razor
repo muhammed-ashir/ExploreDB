@@ -929,7 +929,7 @@
             }
 
             // Add a slight delay to allow the DOM (e.g. modals) to stabilize before rendering Monaco
-            await Task.Delay(50);
+            try { await JS.InvokeAsync<bool>("waitForMonaco", 5000); } catch { }
             QueryStateService.Initialized = true;
             StateHasChanged();
         }
@@ -963,7 +963,7 @@
             }
         }
         
-        await Task.Delay(50);
+        try { await JS.InvokeAsync<bool>("waitForMonaco", 5000); } catch { }
         QueryStateService.Initialized = true;
         
         var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);

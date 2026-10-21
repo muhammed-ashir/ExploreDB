@@ -1,3 +1,26 @@
+window.isMonacoLoaded = function () {
+    return typeof monaco !== 'undefined' && typeof monaco.editor !== 'undefined';
+};
+
+window.waitForMonaco = function (timeoutMs) {
+    return new Promise(function (resolve) {
+        if (typeof monaco !== 'undefined' && typeof monaco.editor !== 'undefined') {
+            resolve(true);
+            return;
+        }
+        var start = Date.now();
+        var timer = setInterval(function () {
+            if (typeof monaco !== 'undefined' && typeof monaco.editor !== 'undefined') {
+                clearInterval(timer);
+                resolve(true);
+            } else if (Date.now() - start > (timeoutMs || 5000)) {
+                clearInterval(timer);
+                resolve(false);
+            }
+        }, 30);
+    });
+};
+
 window.formatSql = (code) => {
     if (!window.sqlFormatter) {
         throw new Error("SQL Formatter is not loaded correctly.");
