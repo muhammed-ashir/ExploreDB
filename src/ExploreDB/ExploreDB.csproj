@@ -49,10 +49,10 @@
 
     <ItemGroup>
         <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
-        <Content Update="Platforms\Windows\Images\**">
+        <None Include="Platforms\Windows\Images\**">
             <Link>Images\%(RecursiveDir)%(Filename)%(Extension)</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
+        </None>
     </ItemGroup>
 
 </Project>
