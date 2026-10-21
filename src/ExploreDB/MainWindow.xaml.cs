@@ -32,5 +32,7 @@ public partial class MainWindow : Window
             }
             catch { }
         }
+
+        App.TriggerRequestAppExit();
     }
 }

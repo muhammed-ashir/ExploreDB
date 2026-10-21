@@ -1,9 +1,6 @@
 {
   "profiles": {
-    "ExploreDB (Package)": {
-      "commandName": "MsixPackage"
-    },
-    "ExploreDB (Unpackaged)": {
+    "ExploreDB": {
       "commandName": "Project"
     }
   }

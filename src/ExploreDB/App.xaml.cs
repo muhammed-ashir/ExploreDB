@@ -12,6 +12,7 @@ namespace ExploreDB;
 public partial class App : Application
 {
     public static event Action? RequestAppExit;
+    public static void TriggerRequestAppExit() => RequestAppExit?.Invoke();
     public static IServiceProvider Services { get; private set; } = null!;
 
     protected override void OnStartup(StartupEventArgs e)
