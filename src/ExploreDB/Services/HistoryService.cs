@@ -6,8 +6,6 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage;
-
 namespace ExploreDB.Services
 {
     public class QueryHistoryItem
@@ -34,7 +32,7 @@ namespace ExploreDB.Services
         {
             _config = config;
             _logger = logger;
-            _historyFilePath = Path.Combine(FileSystem.AppDataDirectory, "query_history.json");
+            _historyFilePath = Path.Combine(AppEnvironmentService.AppDataDirectory, "query_history.json");
         }
 
         public async Task<List<QueryHistoryItem>> GetHistoryAsync()

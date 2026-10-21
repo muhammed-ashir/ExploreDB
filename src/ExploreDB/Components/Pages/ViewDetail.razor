@@ -9,6 +9,7 @@
 @inject ConnectionService ConnectionService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject ThemeService ThemeService
+@inject WindowManagerService WindowManager
 <div class="container-fluid">
     @if (IsLoading)
     {
@@ -649,21 +650,14 @@
 
     private void PopOutSchema()
     {
-        var maxSchemaPopouts = Config.GetValue<int>("MaxSchemaPopouts", 5);
-        var popouts = Microsoft.Maui.Controls.Application.Current?.Windows.OfType<Microsoft.Maui.Controls.Window>().Where(w => w.Page is SchemaPopoutPage).Count() ?? 0;
-        if (popouts >= maxSchemaPopouts)
-        {
-            JS.InvokeVoidAsync("alert", $"Maximum schema popouts ({maxSchemaPopouts}) reached.");
-            return;
-        }
-
         var startPath = $"/view/{Uri.EscapeDataString(FullName)}";
         var windowTitle = $"{View.Schema}.{View.Name} (View)";
-        var popoutWindow = new Microsoft.Maui.Controls.Window(new SchemaPopoutPage(startPath, windowTitle, ConnectionService))
+        bool opened = WindowManager.OpenSchemaPopout(startPath, windowTitle);
+        if (!opened)
         {
-            Title = windowTitle
-        };
-        Microsoft.Maui.Controls.Application.Current?.OpenWindow(popoutWindow);
+            var maxSchemaPopouts = Config.GetValue<int>("MaxSchemaPopouts", 5);
+            JS.InvokeVoidAsync("alert", $"Maximum schema popouts ({maxSchemaPopouts}) reached.");
+        }
     }
 
     private async Task NavigateBack()

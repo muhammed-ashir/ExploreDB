@@ -7,16 +7,4 @@
 @code {
     [Parameter]
     public Guid TabId { get; set; }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            try
-            {
-                MauiProgram.InvokeAppReady(TabId);
-            }
-            catch { }
-        }
-    }
 }

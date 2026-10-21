@@ -29,11 +29,10 @@ public class StoreUpdateService
         {
             var storeContext = StoreContext.GetDefault();
             
-            // In WinUI 3 / MAUI Desktop, we must associate the StoreContext with the main window handle
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
-            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            var mainWindow = System.Windows.Application.Current?.MainWindow;
+            if (mainWindow != null)
             {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(mainWindow).Handle;
                 WinRT.Interop.InitializeWithWindow.Initialize(storeContext, hwnd);
             }
 
@@ -63,17 +62,16 @@ public class StoreUpdateService
         {
             var storeContext = StoreContext.GetDefault();
             
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
-            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            var mainWindow = System.Windows.Application.Current?.MainWindow;
+            if (mainWindow != null)
             {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(mainWindow).Handle;
                 WinRT.Interop.InitializeWithWindow.Initialize(storeContext, hwnd);
             }
 
             var updates = await storeContext.GetAppAndOptionalStorePackageUpdatesAsync();
             if (updates != null && updates.Count > 0)
             {
-                // This will show a system UI to download and install the update
                 var operation = storeContext.RequestDownloadAndInstallStorePackageUpdatesAsync(updates);
                 
                 operation.Progress = (asyncInfo, progressInfo) =>
@@ -89,7 +87,6 @@ public class StoreUpdateService
                 
                 if (result.OverallState == StorePackageUpdateState.Completed)
                 {
-                    // The app usually restarts automatically upon completion, but if we reach here:
                     return true;
                 }
                 else

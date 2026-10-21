@@ -1,3 +1,4 @@
+@using System.IO
 @page "/"
 @page "/runner"
 @using BlazorMonaco.Editor
@@ -15,6 +16,7 @@
 @inject HistoryService HistoryService
 @inject ThemeService ThemeService
 @inject SnippetService SnippetService
+@inject WindowManagerService WindowManager
 @implements IDisposable
 
 <div class="container-fluid d-flex flex-column h-100">
@@ -1038,16 +1040,13 @@
         await QueryStateService.SaveTabsAsync();
     }
 
-    private async Task OpenFileAsync()
+        private async Task OpenFileAsync()
     {
         try
         {
-            var result = await Microsoft.Maui.Storage.FilePicker.Default.PickAsync(new Microsoft.Maui.Storage.PickOptions
-            {
-                PickerTitle = "Select a SQL file",
-            });
+            var chosenPath = WindowManager.ShowOpenFileDialog("SQL Script (*.sql)|*.sql|All Files (*.*)|*.*");
 
-            if (result != null)
+            if (!string.IsNullOrEmpty(chosenPath))
             {
                 var maxTabs = Config.GetValue<int>("MaxOpenTabs", 20);
                 if (QueryStateService.Tabs.Count >= maxTabs)
@@ -1056,7 +1055,7 @@
                     return;
                 }
 
-                var text = await File.ReadAllTextAsync(result.FullPath);
+                var text = await File.ReadAllTextAsync(chosenPath);
                 
                 var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
                 if (currentTab != null && _editor != null)
@@ -1066,10 +1065,10 @@
 
                 var newTab = new ExploreDB.Services.QueryTab
                 {
-                    Name = result.FileName,
+                    Name = Path.GetFileName(chosenPath),
                     Content = text,
                     OriginalContent = text,
-                    FilePath = result.FullPath,
+                    FilePath = chosenPath,
                     ConnectionString = ConnectionService.ConnectionString
                 };
                 QueryStateService.Tabs.Add(newTab);
@@ -1104,15 +1103,7 @@
 
         tabToPop.IsPoppedOut = true;
         
-        // Open native window via MAUI
-        var windowTitle = string.IsNullOrEmpty(tabToPop.FilePath) ? tabToPop.Name : System.IO.Path.GetFileName(tabToPop.FilePath);
-        if (tabToPop.IsDirty) windowTitle += " *";
-        if (windowTitle.Length > 100) windowTitle = windowTitle.Substring(0, 97) + "...";
-        var popoutWindow = new Microsoft.Maui.Controls.Window(new PopoutPage(tabId, QueryStateService))
-        {
-            Title = windowTitle
-        };
-        Microsoft.Maui.Controls.Application.Current?.OpenWindow(popoutWindow);
+        WindowManager.OpenQueryPopout(tabId);
 
         if (QueryStateService.ActiveTabId == tabId)
         {
@@ -1411,33 +1402,20 @@
                 queryText = tabToSave.Content;
             }
 
-            if (!string.IsNullOrEmpty(tabToSave.FilePath))
+                        if (!string.IsNullOrEmpty(tabToSave.FilePath))
             {
-                await Windows.Storage.FileIO.WriteTextAsync(await Windows.Storage.StorageFile.GetFileFromPathAsync(tabToSave.FilePath), queryText);
+                await File.WriteAllTextAsync(tabToSave.FilePath, queryText);
                 tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 return true;
             }
 
-            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
-            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
-            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
-            savePicker.SuggestedFileName = tabToSave.Name;
-
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
-            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            var chosenPath = WindowManager.ShowSaveFileDialog(tabToSave.Name);
+            if (!string.IsNullOrEmpty(chosenPath))
             {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
-            }
-
-            var file = await savePicker.PickSaveFileAsync();
-            if (file != null)
-            {
-                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
-                tabToSave.FilePath = file.Path;
-                tabToSave.Name = file.Name;
+                await File.WriteAllTextAsync(chosenPath, queryText);
+                tabToSave.FilePath = chosenPath;
+                tabToSave.Name = Path.GetFileName(chosenPath);
                 tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 StateHasChanged();
@@ -1461,25 +1439,12 @@
             if (activeTab == null) return;
             activeTab.Content = queryText;
 
-            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
-            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
-            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
-            savePicker.SuggestedFileName = activeTab.Name;
-
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
-            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+                        var chosenPath = WindowManager.ShowSaveFileDialog(activeTab.Name);
+            if (!string.IsNullOrEmpty(chosenPath))
             {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
-            }
-
-            var file = await savePicker.PickSaveFileAsync();
-            if (file != null)
-            {
-                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
-                activeTab.FilePath = file.Path;
-                activeTab.Name = file.Name;
+                await File.WriteAllTextAsync(chosenPath, queryText);
+                activeTab.FilePath = chosenPath;
+                activeTab.Name = Path.GetFileName(chosenPath);
                 activeTab.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 StateHasChanged();
@@ -1710,17 +1675,17 @@
     }
 
     [JSInvokable]
-    public async Task<string> GetClipboardTextAsync()
+    public Task<string> GetClipboardTextAsync()
     {
         try
         {
-            if (Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.HasText)
+            if (System.Windows.Clipboard.ContainsText())
             {
-                return await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.GetTextAsync() ?? "";
+                return Task.FromResult(System.Windows.Clipboard.GetText());
             }
         }
         catch { }
-        return "";
+        return Task.FromResult("");
     }
 
     [JSInvokable]

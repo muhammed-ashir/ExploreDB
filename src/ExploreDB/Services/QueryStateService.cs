@@ -1,5 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.Json;
-using Microsoft.Maui.Storage;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ExploreDB.Services;
 
@@ -70,7 +75,7 @@ public class QueryStateService
     // Tracks if the session prompt has already been shown this app lifecycle
     public bool Initialized { get; set; } = false;
 
-    private string _tabsFilePath => Path.Combine(FileSystem.AppDataDirectory, "tabs_state.json");
+    private string _tabsFilePath => Path.Combine(AppEnvironmentService.AppDataDirectory, "tabs_state.json");
 
     public bool HasSavedTabs() => File.Exists(_tabsFilePath);
 

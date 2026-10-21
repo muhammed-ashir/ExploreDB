@@ -574,7 +574,7 @@
     protected override async Task OnInitializedAsync()
     {
         ShowConnectionManager = !IsConnected;
-        MauiProgram.RequestAppExit += HandleRequestAppExit;
+        App.RequestAppExit += HandleRequestAppExit;
         Nav.LocationChanged += OnLocationChanged;
 
         ConnString = ConnectionService.ConnectionString;
@@ -627,7 +627,7 @@
             {
                 await ThemeService.InitializeAsync(JS);
                 // Signal to MAUI that the Blazor UI is ready
-                MauiProgram.InvokeAppReady(null);
+                // App ready
             }
             catch { }
         }
@@ -660,7 +660,7 @@
     public void Dispose()
     {
         ThemeService.OnThemeChanged -= HandleThemeChanged;
-        MauiProgram.RequestAppExit -= HandleRequestAppExit;
+        App.RequestAppExit -= HandleRequestAppExit;
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
         ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
@@ -742,7 +742,11 @@
 
     private async Task FallbackUpdate()
     {
-        await Microsoft.Maui.ApplicationModel.Launcher.OpenAsync("https://zerinapps.web.app/app/dbexplorer");
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://zerinapps.web.app/app/dbexplorer") { UseShellExecute = true });
+        }
+        catch { }
     }
 
     private void SetAuthType(string type)

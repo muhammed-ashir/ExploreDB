@@ -1,3 +1,4 @@
+@using System.IO
 @using BlazorMonaco.Editor
 @using BlazorMonaco
 @using ExploreDB.Services
@@ -10,6 +11,7 @@
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject IJSRuntime JS
 @inject ThemeService ThemeService
+@inject WindowManagerService WindowManager
 @implements IDisposable
 
 <div class="container-fluid d-flex flex-column h-100 p-4" style="background-color: var(--app-bg); color: var(--app-text);">
@@ -369,11 +371,7 @@
 
     private void UpdateMauiWindowTitle()
     {
-        var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => w.Page is PopoutPage pp && pp.TabId == TabId);
-        if (mauiWindow != null)
-        {
-            mauiWindow.Title = GetTabDisplayName(ActiveTab);
-        }
+        WindowManager.SetPopoutTitle(TabId, GetTabDisplayName(ActiveTab));
     }
 
     private async Task RegisterAutocompleteItemsAsync()
@@ -615,17 +613,7 @@
 
     private void DockTab()
     {
-        var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => 
-            w.Page is PopoutPage pp && pp.TabId == TabId);
-            
-        if (mauiWindow != null)
-        {
-            if (mauiWindow.Page is PopoutPage pp)
-            {
-                pp.IsDocking = true;
-            }
-            Microsoft.Maui.Controls.Application.Current?.CloseWindow(mauiWindow);
-        }
+        WindowManager.DockQueryTab(TabId);
     }
 
     private async Task ClearQueryAsync()
@@ -677,33 +665,21 @@
 
             if (!string.IsNullOrEmpty(tabToSave.FilePath))
             {
-                await Windows.Storage.FileIO.WriteTextAsync(await Windows.Storage.StorageFile.GetFileFromPathAsync(tabToSave.FilePath), queryText);
+                await System.IO.File.WriteAllTextAsync(tabToSave.FilePath, queryText);
                 tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 return true;
             }
 
-            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
-            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
-            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
-            savePicker.SuggestedFileName = tabToSave.Name;
-
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => w.Page is PopoutPage pp && pp.TabId == TabId);
-            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            var chosenPath = WindowManager.ShowSaveFileDialog(tabToSave.Name);
+            if (!string.IsNullOrEmpty(chosenPath))
             {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
-            }
-
-            var file = await savePicker.PickSaveFileAsync();
-            if (file != null)
-            {
-                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
-                tabToSave.FilePath = file.Path;
-                tabToSave.Name = file.Name;
+                await System.IO.File.WriteAllTextAsync(chosenPath, queryText);
+                tabToSave.FilePath = chosenPath;
+                tabToSave.Name = System.IO.Path.GetFileName(chosenPath);
                 tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
+                UpdateMauiWindowTitle();
                 StateHasChanged();
                 return true;
             }
@@ -724,27 +700,15 @@
             if (ActiveTab == null) return;
             ActiveTab.Content = queryText;
 
-            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
-            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
-            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
-            savePicker.SuggestedFileName = ActiveTab.Name;
-
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => w.Page is PopoutPage pp && pp.TabId == TabId);
-            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            var chosenPath = WindowManager.ShowSaveFileDialog(ActiveTab.Name);
+            if (!string.IsNullOrEmpty(chosenPath))
             {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
-            }
-
-            var file = await savePicker.PickSaveFileAsync();
-            if (file != null)
-            {
-                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
-                ActiveTab.FilePath = file.Path;
-                ActiveTab.Name = file.Name;
+                await System.IO.File.WriteAllTextAsync(chosenPath, queryText);
+                ActiveTab.FilePath = chosenPath;
+                ActiveTab.Name = System.IO.Path.GetFileName(chosenPath);
                 ActiveTab.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
+                UpdateMauiWindowTitle();
                 StateHasChanged();
             }
         }
