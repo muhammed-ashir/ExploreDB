@@ -4,6 +4,7 @@
         xmlns:blazor="clr-namespace:Microsoft.AspNetCore.Components.WebView.Wpf;assembly=Microsoft.AspNetCore.Components.WebView.Wpf"
         Title="ExploreDB" Height="750" Width="1100"
         WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
         Background="#212529">
     <Grid Background="#212529">
         <blazor:BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" />

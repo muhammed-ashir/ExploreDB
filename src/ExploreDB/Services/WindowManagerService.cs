@@ -31,7 +31,7 @@ public class WindowManagerService
             {
                 if (existingWindow.WindowState == WindowState.Minimized)
                 {
-                    existingWindow.WindowState = WindowState.Normal;
+                    existingWindow.WindowState = WindowState.Maximized;
                 }
                 existingWindow.Activate();
                 return;
