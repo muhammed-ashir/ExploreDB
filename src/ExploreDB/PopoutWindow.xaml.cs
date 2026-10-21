@@ -18,6 +18,16 @@ public partial class PopoutWindow : Window
 
         DarkModeHelper.ApplyDarkTitleBar(this);
 
+        try
+        {
+            var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "app.ico");
+            if (System.IO.File.Exists(iconPath))
+            {
+                Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(iconPath));
+            }
+        }
+        catch { }
+
         blazorWebView.Services = services;
         blazorWebView.RootComponents.Add(new RootComponent
         {
