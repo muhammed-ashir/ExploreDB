@@ -25,7 +25,7 @@
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
         <ApplicationIcon>Platforms\Windows\Images\app.ico</ApplicationIcon>
-		<GitHubRelease>true</GitHubRelease>
+		<StoreBuild>true</StoreBuild>
 	</PropertyGroup>
 
     <PropertyGroup Condition="'$(StoreBuild)' == 'true'">

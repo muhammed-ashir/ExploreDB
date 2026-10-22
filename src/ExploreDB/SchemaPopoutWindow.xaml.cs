@@ -21,16 +21,7 @@ public partial class SchemaPopoutWindow : Window
         _connectionService.OnConnectionChanged += HandleConnectionChanged;
 
         DarkModeHelper.ApplyDarkTitleBar(this);
-
-        try
-        {
-            var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "app.ico");
-            if (System.IO.File.Exists(iconPath))
-            {
-                Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(iconPath));
-            }
-        }
-        catch { }
+        WindowIconHelper.ApplyWindowIcon(this);
 
         blazorWebView.Services = services;
         blazorWebView.RootComponents.Add(new RootComponent
