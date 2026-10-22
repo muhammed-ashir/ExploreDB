@@ -51,18 +51,27 @@
     <ItemGroup>
         <AppxManifest Include="Platforms\Windows\Package.appxmanifest" />
         <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="Platforms\Windows\Images\**">
+        <Content Include="Platforms\Windows\Images\**">
             <Link>Images\%(RecursiveDir)%(Filename)%(Extension)</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
+        </Content>
     </ItemGroup>
 
-    <!-- Exclude development-only staticwebassets.runtime.json from MSIX package payload -->
-    <Target Name="RemoveDevStaticWebAssetsFromPackage" AfterTargets="_ComputeAppxPackagePayload" BeforeTargets="_GenerateAppxPackageRecipe;_GenerateAppxManifest">
+    <!-- Fix MSIX package payload for static web assets -->
+    <Target Name="FixAppxPackagePayloadAssets" AfterTargets="_ComputeAppxPackagePayload" BeforeTargets="_GenerateAppxPackageRecipe;_GenerateAppxManifest">
         <ItemGroup>
+            <!-- 1. Exclude development-only staticwebassets.runtime.json from MSIX package payload -->
             <AppxPackagePayload Remove="@(AppxPackagePayload)" Condition="'%(Filename)%(Extension)' == '$(AssemblyName).staticwebassets.runtime.json'" />
             <AppxPackagePayload Remove="@(AppxPackagePayload)" Condition="'%(TargetPath)' == '$(AssemblyName).staticwebassets.runtime.json'" />
             <AppxPackagePayload Remove="@(AppxPackagePayload)" Condition="$([System.String]::Copy('%(Identity)').Contains('staticwebassets.runtime.json'))" />
+
+            <!-- 2. Include all external static web assets (such as BlazorMonaco) in wwwroot\_content\... and _content\... in the MSIX payload with normalized backslashes -->
+            <AppxPackagePayload Include="@(StaticWebAsset)" Condition="'%(StaticWebAsset.SourceId)' != '$(AssemblyName)' and '%(StaticWebAsset.SourceId)' != ''">
+                <TargetPath>$([System.String]::Copy('wwwroot\%(StaticWebAsset.BasePath)\%(StaticWebAsset.RelativePath)').Replace('/', '\'))</TargetPath>
+            </AppxPackagePayload>
+            <AppxPackagePayload Include="@(StaticWebAsset)" Condition="'%(StaticWebAsset.SourceId)' != '$(AssemblyName)' and '%(StaticWebAsset.SourceId)' != ''">
+                <TargetPath>$([System.String]::Copy('%(StaticWebAsset.BasePath)\%(StaticWebAsset.RelativePath)').Replace('/', '\'))</TargetPath>
+            </AppxPackagePayload>
         </ItemGroup>
     </Target>
 

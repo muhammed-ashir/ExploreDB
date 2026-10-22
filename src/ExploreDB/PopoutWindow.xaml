@@ -5,7 +5,8 @@
         Title="ExploreDB" Height="750" Width="1100"
         WindowStartupLocation="CenterScreen"
         WindowState="Maximized"
-        Background="#212529">
+        Background="#212529"
+        Icon="Images\app.ico">
     <Grid Background="#212529">
         <blazor:BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" />
     </Grid>

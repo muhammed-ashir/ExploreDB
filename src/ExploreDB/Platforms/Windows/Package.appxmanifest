@@ -6,13 +6,13 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="ZerinApps.ExploreDB"
-    Publisher="CN=84A3598C-821D-4FE9-A623-4DA9811C30A8"
+    Name="ExploreDB.App"
+    Publisher="CN=ExploreDB"
     Version="2.1.6.0" />
 
   <Properties>
     <DisplayName>ExploreDB</DisplayName>
-    <PublisherDisplayName>ZerinApps</PublisherDisplayName>
+    <PublisherDisplayName>ExploreDB</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
   </Properties>
 
@@ -32,7 +32,7 @@
       <uap:VisualElements
         DisplayName="ExploreDB"
         Description="ExploreDB"
-        BackgroundColor="transparent"
+        BackgroundColor="#0f172a"
         Square150x150Logo="Images\Square150x150Logo.png"
         Square44x44Logo="Images\Square44x44Logo.png">
         <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png" />
