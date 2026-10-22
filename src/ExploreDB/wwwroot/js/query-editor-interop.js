@@ -93,7 +93,7 @@ window.updateSqlSnippets = (snippets) => {
     window.sqlSnippets = snippets || [];
 };
 
-window.registerSqlAutocomplete = async (tables, views, columns, sps, functions, dotNetHelper) => {
+window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNetHelper) => {
     if (functions && typeof functions.invokeMethodAsync === 'function') {
         dotNetHelper = functions;
         functions = null;
@@ -103,14 +103,9 @@ window.registerSqlAutocomplete = async (tables, views, columns, sps, functions, 
     if (window.sqlAutocompleteRegistered) return;
 
     if (typeof monaco === 'undefined' || typeof monaco.languages === 'undefined') {
-        var ready = await window.waitForMonaco(5000);
-        if (!ready || typeof monaco === 'undefined' || typeof monaco.languages === 'undefined') {
-            console.warn("Monaco editor not available yet for autocomplete provider registration.");
-            return;
-        }
+        return;
     }
 
-    if (window.sqlAutocompleteRegistered) return;
     window.sqlAutocompleteRegistered = true;
 
     var systemProcedures = [

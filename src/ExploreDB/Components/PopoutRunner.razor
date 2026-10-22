@@ -217,6 +217,7 @@
     private System.Timers.Timer? _saveDebounceTimer;
 
     private bool _isReady = false;
+    private bool _isEditorReady = false;
     private bool ShowClearConfirmation = false;
     private string? FormatError;
 
@@ -281,6 +282,7 @@
 
     public void Dispose()
     {
+        _isEditorReady = false;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
         SchemaService.OnTablesLoaded -= OnSchemaLoadedHandler;
@@ -309,6 +311,7 @@
 
     private async void OnSchemaLoadedHandler()
     {
+        if (!_isEditorReady) return;
         await InvokeAsync(RegisterAutocompleteItemsAsync);
     }
 
@@ -343,6 +346,7 @@
 
     private async Task EditorOnDidInit()
     {
+        _isEditorReady = true;
         try
         {
             await JS.InvokeVoidAsync("configureQueryEditor", "query-editor");
@@ -396,6 +400,7 @@
 
     private async Task RegisterAutocompleteItemsAsync()
     {
+        if (!_isEditorReady) return;
         var schema = SchemaService.GetCachedSchema(ActiveTab.ConnectionString);
         
         var tables = schema.Tables.Select(t => new { name = t.Split('.').Last().Trim('[', ']'), fullName = t }).ToList();

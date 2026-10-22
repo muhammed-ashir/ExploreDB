@@ -656,9 +656,11 @@
     private TaskCompletionSource<bool>? _dangerousQueryTcs;
     private Guid? TabIdToClose = null;
     private System.Timers.Timer? _saveDebounceTimer;
+    private bool _isEditorReady = false;
 
     public void Dispose()
     {
+        _isEditorReady = false;
         try { _ = JS.InvokeVoidAsync("window.globalShortcuts.unregisterQueryRunner"); } catch { }
         _objRef?.Dispose();
         _saveDebounceTimer?.Dispose();
@@ -725,6 +727,7 @@
 
     private async Task ClearAutocompleteItemsAsync()
     {
+        if (!_isEditorReady) return;
         await JS.InvokeVoidAsync("updateSqlAutocompleteData", new List<object>(), new List<object>(), new List<object>(), new List<object>(), new List<object>());
     }
 
@@ -732,6 +735,7 @@
     {
         try
         {
+            if (!_isEditorReady) return;
             await InvokeAsync(RegisterAutocompleteItemsAsync);
         }
         catch { }
@@ -1267,6 +1271,7 @@
     {
         try
         {
+            _isEditorReady = true;
             _objRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("window.globalShortcuts.registerQueryRunner", _objRef);
             await JS.InvokeVoidAsync("configureQueryEditor", "query-editor");
@@ -1292,6 +1297,8 @@
 
     private async Task RegisterAutocompleteItemsAsync()
     {
+        if (!_isEditorReady) return;
+
         // Chunk 1: Tables and Views
         var tables = SchemaService.Tables.Select(t => new { 
             name = t.Name, 
