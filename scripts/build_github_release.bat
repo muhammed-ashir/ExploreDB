@@ -19,7 +19,7 @@ if exist src\ExploreDB\AppPackages rmdir /s /q src\ExploreDB\AppPackages 2>nul
 dotnet clean
 
 echo 3. Building and Signing Package...
-dotnet publish -f net8.0-windows10.0.19041.0 -c Release -r win-x64 /p:Platform=x64 /p:GenerateAppxPackageOnBuild=true /p:AppxPackageSigningEnabled=true /p:GitHubRelease=true
+dotnet publish -f net8.0-windows10.0.19041.0 -c Release -r win-x64 /p:Platform=x64 /p:StoreBuild=false /p:GenerateAppxPackageOnBuild=true /p:AppxPackageSigningEnabled=true /p:GitHubRelease=true
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] GitHub package build failed with exit code %ERRORLEVEL%!

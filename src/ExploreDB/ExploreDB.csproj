@@ -25,8 +25,7 @@
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
         <ApplicationIcon>Platforms\Windows\Images\app.ico</ApplicationIcon>
-		<StoreBuild>true</StoreBuild>
-	</PropertyGroup>
+    </PropertyGroup>
 
     <PropertyGroup Condition="'$(StoreBuild)' == 'true'">
         <DefineConstants>$(DefineConstants);STORE_BUILD</DefineConstants>
