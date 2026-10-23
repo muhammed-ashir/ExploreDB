@@ -492,7 +492,7 @@
             <div class="d-flex align-items-center gap-3 pe-4">
                 <div class="spinner-border spinner-border-sm text-success" role="status"></div>
                 <div>
-                    <strong class="text-white d-block mb-1" style="font-size: 0.9rem;">Exporting to Excel...</strong>
+                    <strong class="text-white d-block mb-1" style="font-size: 0.9rem;">Exporting to @ExportFormatName...</strong>
                     <span class="text-light opacity-75" style="font-size: 0.75rem;">Preparing your data for download...</span>
                 </div>
             </div>
@@ -535,6 +535,7 @@
     private ExploreDB.Services.QueryTab ActiveTab => QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId) ?? _fallbackTab;
     
     // Global Export State
+    private string ExportFormatName = "Excel";
     private bool IsExportingToExcel = false;
     private bool ShowExportSuccess = false;
     private Action? CancelExportAction;
@@ -543,6 +544,7 @@
     {
         if (status.IsExporting)
         {
+            ExportFormatName = string.IsNullOrEmpty(status.Format) ? "Excel" : status.Format;
             IsExportingToExcel = true;
             ShowExportSuccess = false;
             CancelExportAction = status.CancelAction;

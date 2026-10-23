@@ -89,18 +89,43 @@
                     <i class="bi bi-bullseye fs-6"></i>
                 </button>
             </div>
-            <button class="btn btn-sm btn-outline-success px-3 d-flex align-items-center gap-2 flex-shrink-0" @onclick="ExportToExcelAsync" disabled="@IsExporting">
-                @if (IsExporting)
+            <div class="position-relative">
+                <button class="btn btn-sm btn-outline-success px-3 d-flex align-items-center gap-2 flex-shrink-0" 
+                        @onclick="() => IsExportDropdownOpen = !IsExportDropdownOpen" 
+                        disabled="@IsExporting"
+                        title="Export results">
+                    @if (IsExporting)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>Exporting...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-download"></i>
+                        <span>Export</span>
+                        <i class="bi bi-chevron-down ms-1" style="font-size: 0.75rem;"></i>
+                    }
+                </button>
+                @if (IsExportDropdownOpen)
                 {
-                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                    <span>Exporting...</span>
+                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsExportDropdownOpen = false"></div>
+                    <div class="dropdown-menu dropdown-menu-end show shadow-lg p-1 mt-1" 
+                         style="position: absolute; top: 100%; right: 0; z-index: 1050; min-width: 170px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border);">
+                        <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" 
+                                type="button" 
+                                @onclick="async () => { IsExportDropdownOpen = false; await ExportToExcelAsync(); }">
+                            <i class="bi bi-file-earmark-excel text-success fs-6"></i>
+                            <span>Excel (.xlsx)</span>
+                        </button>
+                        <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" 
+                                type="button" 
+                                @onclick="async () => { IsExportDropdownOpen = false; await ExportToCsvAsync(); }">
+                            <i class="bi bi-file-earmark-text text-primary fs-6"></i>
+                            <span>CSV (.csv)</span>
+                        </button>
+                    </div>
                 }
-                else
-                {
-                    <i class="bi bi-file-earmark-excel"></i>
-                    <span>Export</span>
-                }
-            </button>
+            </div>
         </div>
     </div>
 
@@ -698,12 +723,13 @@ else
         }
     }
 
-    public record ExportStatus(bool IsExporting, bool IsSuccess, Action CancelAction);
+    public record ExportStatus(bool IsExporting, bool IsSuccess, Action CancelAction, string Format = "Excel");
 
     private List<IDictionary<string, object>> Rows = new();
     
     // Export State
     private bool IsExporting = false;
+    private bool IsExportDropdownOpen = false;
     private bool ShowExportSuccess = false;
     private CancellationTokenSource? _exportCts;
 
@@ -1579,7 +1605,7 @@ else
         _exportCts = new CancellationTokenSource();
         if (OnExportStateChanged.HasDelegate)
         {
-            await OnExportStateChanged.InvokeAsync(new ExportStatus(true, false, CancelExport));
+            await OnExportStateChanged.InvokeAsync(new ExportStatus(true, false, CancelExport, "Excel"));
         }
         StateHasChanged();
         
@@ -1660,7 +1686,7 @@ else
             ShowExportSuccess = true;
             if (OnExportStateChanged.HasDelegate)
             {
-                await OnExportStateChanged.InvokeAsync(new ExportStatus(false, true, null!));
+                await OnExportStateChanged.InvokeAsync(new ExportStatus(false, true, null!, "Excel"));
             }
         }
         catch (OperationCanceledException)
@@ -1676,12 +1702,140 @@ else
             IsExporting = false;
             if (OnExportStateChanged.HasDelegate && !ShowExportSuccess)
             {
-                _ = OnExportStateChanged.InvokeAsync(new ExportStatus(false, false, null!));
+                _ = OnExportStateChanged.InvokeAsync(new ExportStatus(false, false, null!, "Excel"));
             }
             _exportCts?.Dispose();
             _exportCts = null;
             StateHasChanged();
         }
+    }
+
+    private async Task ExportToCsvAsync()
+    {
+        if (FilteredRows == null || FilteredRows.Count == 0) return;
+
+        // Take snapshot for thread safety in case the user runs another query
+        var rowsSnapshot = FilteredRows.ToList();
+        var colsSnapshot = Columns.ToList();
+
+        IsExporting = true;
+        _exportCts = new CancellationTokenSource();
+        if (OnExportStateChanged.HasDelegate)
+        {
+            await OnExportStateChanged.InvokeAsync(new ExportStatus(true, false, CancelExport, "CSV"));
+        }
+        StateHasChanged();
+        
+        // Small delay to ensure the UI renders the loading spinner before the CPU-bound task blocks the thread
+        await Task.Delay(50);
+
+        try
+        {
+            var token = _exportCts.Token;
+            byte[] fileBytes = await Task.Run(() =>
+            {
+                using var memoryStream = new MemoryStream();
+                // Write UTF-8 BOM so Microsoft Excel automatically recognizes UTF-8 without mangling characters
+                using (var writer = new StreamWriter(memoryStream, new System.Text.UTF8Encoding(true)))
+                {
+                    // Write Headers
+                    for (int i = 0; i < colsSnapshot.Count; i++)
+                    {
+                        if (i > 0) writer.Write(",");
+                        writer.Write(EscapeCsvCell(colsSnapshot[i]));
+                    }
+                    writer.Write("\r\n");
+
+                    // Write Rows
+                    for (int rowIdx = 0; rowIdx < rowsSnapshot.Count; rowIdx++)
+                    {
+                        if (token.IsCancellationRequested) return Array.Empty<byte>();
+
+                        var row = rowsSnapshot[rowIdx];
+                        for (int colIdx = 0; colIdx < colsSnapshot.Count; colIdx++)
+                        {
+                            if (colIdx > 0) writer.Write(",");
+
+                            if (row.TryGetValue(colsSnapshot[colIdx], out var val) && val != null)
+                            {
+                                if (val is byte[] bytes)
+                                {
+                                    // Full database saved value as raw 0x... hex string (untruncated)
+                                    writer.Write(BinaryDataHelper.ToHexString(bytes, prefix: true));
+                                }
+                                else if (val is DateTime dt)
+                                {
+                                    writer.Write(EscapeCsvCell(dt.ToString("M/d/yyyy h:mm:ss.fff tt")));
+                                }
+                                else if (val is DateTimeOffset dto)
+                                {
+                                    writer.Write(EscapeCsvCell(dto.ToString("M/d/yyyy h:mm:ss.fff tt zzz")));
+                                }
+                                else if (val is bool b)
+                                {
+                                    writer.Write(b ? "True" : "False");
+                                }
+                                else
+                                {
+                                    writer.Write(EscapeCsvCell(val.ToString() ?? ""));
+                                }
+                            }
+                        }
+                        writer.Write("\r\n");
+                    }
+
+                    writer.Flush();
+                }
+
+                if (token.IsCancellationRequested) return Array.Empty<byte>();
+                return memoryStream.ToArray();
+            }, token);
+
+            if (token.IsCancellationRequested || fileBytes == null || fileBytes.Length == 0)
+            {
+                return;
+            }
+
+            using var stream = new MemoryStream(fileBytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", $"Export_{DateTime.Now:yyyyMMdd_HHmmss}.csv", streamRef);
+            
+            ShowExportSuccess = true;
+            if (OnExportStateChanged.HasDelegate)
+            {
+                await OnExportStateChanged.InvokeAsync(new ExportStatus(false, true, null!, "CSV"));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Export was cancelled by the user, do nothing
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting to CSV: {ex.Message}");
+        }
+        finally
+        {
+            IsExporting = false;
+            if (OnExportStateChanged.HasDelegate && !ShowExportSuccess)
+            {
+                _ = OnExportStateChanged.InvokeAsync(new ExportStatus(false, false, null!, "CSV"));
+            }
+            _exportCts?.Dispose();
+            _exportCts = null;
+            StateHasChanged();
+        }
+    }
+
+    private static string EscapeCsvCell(string? str)
+    {
+        if (string.IsNullOrEmpty(str)) return "";
+        bool needsQuotes = str.Contains(',') || str.Contains('"') || str.Contains('\n') || str.Contains('\r');
+        if (needsQuotes)
+        {
+            return "\"" + str.Replace("\"", "\"\"") + "\"";
+        }
+        return str;
     }
 
     private bool IsJsonOrXml(string? val)
