@@ -188,6 +188,7 @@
                         {
                             var col = Columns[colIdx];
                             int localCol = colIdx;
+                            row.TryGetValue(col, out var rawCellVal);
                             var val = GetColumnValue(row, col);
                             bool isCellSelected = SelectedCells.Contains((localIndex, localCol));
                             <td class="@(isCellSelected ? "selected-cell" : "")"
@@ -196,7 +197,37 @@
                                 @onclick="e => HandleCellClick(e, localIndex, localCol)"
                                 @oncontextmenu="e => ShowCellContextMenu(e, localIndex, localCol)"
                                 @oncontextmenu:preventDefault="true">
-                                @if (val == null) { <span class="text-muted fst-italic">NULL</span> } else if (IsJsonOrXml(val)) { <span style="color: var(--app-table-header-text); cursor: pointer; text-decoration: underline;" @onclick="() => OpenCodeViewer(val)" @onclick:stopPropagation>@val</span> } else {
+                                @if (val == null) {
+                                    <span class="text-muted fst-italic">NULL</span>
+                                } else if (rawCellVal is byte[] rawBytes && rawBytes.Length > BinaryDataHelper.ShortBinaryThreshold) {
+                                    @if (BinaryDataHelper.IsImage(rawBytes, out var imgFormat, out _)) {
+                                        <span class="badge rounded-pill text-info border border-info bg-dark-subtle cursor-pointer d-inline-flex align-items-center gap-1"
+                                              style="cursor: pointer; font-size: 0.72rem; padding: 1px 7px; line-height: 1.25;"
+                                              @onclick="() => OpenBinaryViewer(rawBytes, col)"
+                                              @onclick:stopPropagation
+                                              title="Click to view image">
+                                            <i class="bi bi-image" style="font-size: 0.7rem;"></i> Image: @imgFormat, @BinaryDataHelper.FormatFileSize(rawBytes.Length)
+                                        </span>
+                                    } else if (BinaryDataHelper.IsPdf(rawBytes)) {
+                                        <span class="badge rounded-pill text-danger border border-danger bg-dark-subtle cursor-pointer d-inline-flex align-items-center gap-1"
+                                              style="cursor: pointer; font-size: 0.72rem; padding: 1px 7px; line-height: 1.25;"
+                                              @onclick="() => OpenBinaryViewer(rawBytes, col)"
+                                              @onclick:stopPropagation
+                                              title="Click to view PDF document">
+                                            <i class="bi bi-file-earmark-pdf" style="font-size: 0.7rem;"></i> PDF: @BinaryDataHelper.FormatFileSize(rawBytes.Length)
+                                        </span>
+                                    } else {
+                                        <span class="badge rounded-pill text-secondary border border-secondary bg-dark-subtle cursor-pointer d-inline-flex align-items-center gap-1"
+                                              style="cursor: pointer; font-size: 0.72rem; padding: 1px 7px; line-height: 1.25;"
+                                              @onclick="() => OpenBinaryViewer(rawBytes, col)"
+                                              @onclick:stopPropagation
+                                              title="Click to view binary data">
+                                            <i class="bi bi-file-earmark-binary" style="font-size: 0.7rem;"></i> Binary: @BinaryDataHelper.FormatFileSize(rawBytes.Length)
+                                        </span>
+                                    }
+                                } else if (IsJsonOrXml(val)) {
+                                    <span style="color: var(--app-table-header-text); cursor: pointer; text-decoration: underline;" @onclick="() => OpenCodeViewer(val)" @onclick:stopPropagation>@val</span>
+                                } else {
                                     @val
                                 }
                             </td>
@@ -316,6 +347,22 @@ else
          style="top: min(@(RowContextMenuY)px, calc(100vh - 230px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); overflow: hidden;" 
          @onclick:stopPropagation>
         <div class="py-1">
+            @if (SelectedSingleCellByteValue is byte[] selectedBytes)
+            {
+                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = OpenBinaryViewer(selectedBytes, ContextMenuColumn); }">
+                    <i class="bi @(BinaryDataHelper.IsImage(selectedBytes, out _, out _) ? "bi-image text-info" : (BinaryDataHelper.IsPdf(selectedBytes) ? "bi-file-earmark-pdf text-danger" : "bi-file-earmark-binary text-warning")) text-muted"></i>
+                    <span>@(BinaryDataHelper.IsImage(selectedBytes, out _, out _) ? "View Image" : (BinaryDataHelper.IsPdf(selectedBytes) ? "View PDF Document" : "View Binary / Hex"))</span>
+                </button>
+                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = CopyBinaryHexAsync(selectedBytes); }">
+                    <i class="bi bi-file-earmark-code text-muted"></i>
+                    <span>Copy Hex (0x...)</span>
+                </button>
+                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = DownloadBinaryBytesAsync(selectedBytes, ContextMenuColumn); }">
+                    <i class="bi bi-download text-muted"></i>
+                    <span>Save to File</span>
+                </button>
+                <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
+            }
             <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedAsync">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-copy text-muted"></i>
@@ -437,6 +484,124 @@ else
                 </div>
                 <div class="modal-body p-0 flex-grow-1 position-relative">
                     <BlazorMonaco.Editor.StandaloneCodeEditor @ref="_codeEditor" Id="cellDataEditor" ConstructionOptions="EditorConstructionOptions" CssClass="w-100 h-100" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (IsBinaryViewerOpen && _activeBinaryBytes != null)
+{
+    <style>.glass-card { backdrop-filter: none !important; }</style>
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); z-index: 999999;">
+        <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 90vh;">
+            <div class="modal-content shadow-lg h-100 flex-column d-flex" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <!-- Header -->
+                <div class="modal-header py-2 flex-shrink-0 d-flex align-items-center justify-content-between" style="border-bottom: 1px solid var(--app-border);">
+                    <div class="d-flex align-items-center gap-2">
+                        @if (_activeBinaryIsImage)
+                        {
+                            <i class="bi bi-image text-info fs-5"></i>
+                        }
+                        else if (_activeBinaryIsPdf)
+                        {
+                            <i class="bi bi-file-earmark-pdf text-danger fs-5"></i>
+                        }
+                        else
+                        {
+                            <i class="bi bi-file-earmark-binary text-warning fs-5"></i>
+                        }
+                        <h5 class="modal-title mb-0 d-flex align-items-center gap-2" style="color: var(--app-table-header-text); font-size: 1.05rem;">
+                            <span>@(_activeBinaryIsImage ? "Image Viewer" : (_activeBinaryIsPdf ? "PDF Viewer" : "Binary Viewer"))</span>
+                            <span class="text-muted fw-normal">&mdash;</span>
+                            <span class="fw-bold font-monospace" style="color: var(--app-text);">@_activeBinaryColumnName</span>
+                        </h5>
+                    </div>
+                    
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") m-0 ms-2" aria-label="Close" @onclick="CloseBinaryViewer"></button>
+                </div>
+
+                <!-- Action Toolbar (Replaces tabs) -->
+                <div class="px-3 py-2 flex-shrink-0 d-flex align-items-center justify-content-between gap-2" style="border-bottom: 1px solid var(--app-border); background-color: var(--app-surface-secondary);">
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 shadow-sm" @onclick="() => DownloadBinaryBytesAsync(_activeBinaryBytes, _activeBinaryColumnName)" title="Save to disk">
+                            <i class="bi bi-download"></i>
+                            <span>Save File</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" @onclick="() => CopyBinaryHexAsync(_activeBinaryBytes)" title="Copy full 0x hex string">
+                            <i class="bi @(_isBinaryHexCopied ? "bi-check-lg text-success" : "bi-clipboard")"></i>
+                            <span>@(_isBinaryHexCopied ? "Hex Copied!" : "Copy Hex")</span>
+                        </button>
+                        @if (_activeBinaryIsImage)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" @onclick="CopyBinaryBase64Async" title="Copy base64 data URI">
+                                <i class="bi @(_isBinaryBase64Copied ? "bi-check-lg text-success" : "bi-code-square")"></i>
+                                <span>@(_isBinaryBase64Copied ? "Base64 Copied!" : "Copy Base64")</span>
+                            </button>
+                        }
+                    </div>
+
+                    @if (_activeBinaryIsImage || _activeBinaryIsPdf)
+                    {
+                        <div>
+                            @if (_activeBinaryTab == "preview")
+                            {
+                                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" 
+                                        @onclick='() => _activeBinaryTab = "hex"' 
+                                        title="Inspect underlying byte structure and headers">
+                                    <i class="bi bi-file-earmark-code"></i>
+                                    <span>View Raw Hex</span>
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-info d-inline-flex align-items-center gap-1 shadow-sm" 
+                                        @onclick='() => _activeBinaryTab = "preview"' 
+                                        title="@(_activeBinaryIsPdf ? "Return to document preview" : "Return to image preview")">
+                                    <i class="bi @(_activeBinaryIsPdf ? "bi-file-earmark-pdf" : "bi-image")"></i>
+                                    <span>@(_activeBinaryIsPdf ? "View Document" : "View Image")</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <!-- Body -->
+                <div class="modal-body p-3 flex-grow-1 position-relative overflow-auto d-flex flex-column" style="background-color: var(--app-surface); min-height: 200px;">
+                    @if ((_activeBinaryIsImage || _activeBinaryIsPdf) && _activeBinaryTab == "preview")
+                    {
+                        @if (_activeBinaryIsImage)
+                        {
+                            <div class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-3" 
+                                 style="background-image: repeating-conic-gradient(#80808020 0% 25%, transparent 0% 50%) 50% / 20px 20px; border-radius: 6px; overflow: auto; min-height: 300px;">
+                                <img src="data:@(_activeBinaryMimeType);base64,@(_activeBinaryBase64)" 
+                                     alt="Preview" 
+                                     style="max-width: 100%; max-height: calc(90vh - 180px); object-fit: contain; box-shadow: 0 4px 20px rgba(0,0,0,0.4); border-radius: 4px;" />
+                            </div>
+                        }
+                        else if (_activeBinaryIsPdf)
+                        {
+                            <div class="w-100 h-100 flex-grow-1 position-relative rounded overflow-hidden" style="min-height: calc(90vh - 150px); background-color: #525659;">
+                                @if (!string.IsNullOrEmpty(_activePdfBlobUrl))
+                                {
+                                    <iframe src="@($"{_activePdfBlobUrl}#toolbar=0&navpanes=0")" class="w-100 h-100 border-0" style="min-height: calc(90vh - 150px); display: block;" title="PDF Preview"></iframe>
+                                }
+                                else
+                                {
+                                    <div class="d-flex align-items-center justify-content-center h-100 text-white" style="min-height: 300px;">
+                                        <span class="spinner-border spinner-border-sm me-2"></span> Loading PDF...
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="w-100 h-100 position-relative">
+                            <div class="m-0 p-3 h-100 w-100 rounded overflow-auto" 
+                                 style="font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace; font-size: 0.85rem; line-height: 1.6; background-color: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); word-break: break-all; white-space: pre-wrap; max-height: calc(90vh - 150px); user-select: text;">@_activeBinaryRawHex</div>
+                        </div>
+                    }
                 </div>
             </div>
         </div>
@@ -660,9 +825,30 @@ else
             {
                 return dto.ToString("M/d/yyyy h:mm:ss.fff tt zzz");
             }
+            if (val is byte[] bytes)
+            {
+                return BinaryDataHelper.FormatBinaryForDisplay(bytes);
+            }
             return val?.ToString();
         }
         return null;
+    }
+
+    private string FormatValueForSearch(object v)
+    {
+        if (v is byte[] bytes)
+        {
+            return BinaryDataHelper.FormatBinaryForDisplay(bytes);
+        }
+        if (v is DateTime dt)
+        {
+            return dt.ToString("M/d/yyyy h:mm:ss.fff tt");
+        }
+        if (v is DateTimeOffset dto)
+        {
+            return dto.ToString("M/d/yyyy h:mm:ss.fff tt zzz");
+        }
+        return v.ToString() ?? string.Empty;
     }
 
     private List<IDictionary<string, object>> FilteredRows
@@ -678,7 +864,8 @@ else
                 r.Values.Any(v => 
                 {
                     if (v == null) return false;
-                    var valStr = SearchCaseSensitive ? v.ToString()! : v.ToString()!.ToLowerInvariant();
+                    var rawStr = FormatValueForSearch(v);
+                    var valStr = SearchCaseSensitive ? rawStr : rawStr.ToLowerInvariant();
                     
                     if (SearchExactMatch)
                     {
@@ -726,6 +913,7 @@ else
         if (row.TryGetValue(column, out var val) && val != null)
         {
             if (val is string s) return s;
+            if (val is byte[] b) return Convert.ToHexString(b);
             if (val is IComparable) return val;
             return val.ToString();
         }
@@ -1063,6 +1251,26 @@ else
         ShowContextMenuState = true;
     }
 
+    private byte[]? SelectedSingleCellByteValue
+    {
+        get
+        {
+            if (SelectedCells.Count == 1)
+            {
+                var (r, c) = SelectedCells.First();
+                var paged = PagedRows;
+                if (r >= 0 && r < paged.Count && c >= 0 && c < Columns.Count)
+                {
+                    if (paged[r].TryGetValue(Columns[c], out var val) && val is byte[] bytes)
+                    {
+                        return bytes;
+                    }
+                }
+            }
+            return null;
+        }
+    }
+
     private string BuildClipboardText(bool includeHeaders)
     {
         var paged = PagedRows;
@@ -1074,6 +1282,14 @@ else
             var (r, c) = SelectedCells.First();
             if (r >= 0 && r < paged.Count && c >= 0 && c < Columns.Count)
             {
+                var row = paged[r];
+                var col = Columns[c];
+                if (row.TryGetValue(col, out var raw) && raw is byte[] bytes)
+                {
+                    var hex = BinaryDataHelper.ToHexString(bytes, prefix: true);
+                    if (includeHeaders) return $"{col}\r\n{hex}";
+                    return hex;
+                }
                 var val = GetColumnValue(paged[r], Columns[c]) ?? "NULL";
                 if (includeHeaders)
                 {
@@ -1106,8 +1322,18 @@ else
             {
                 if (SelectedCells.Contains((targetRows[rIdx], c)))
                 {
-                    var val = GetColumnValue(row, Columns[c]);
-                    rowValues.Add(val ?? "NULL");
+                    if (row.TryGetValue(Columns[c], out var raw) && raw is byte[] bytes)
+                    {
+                        var bVal = bytes.Length <= BinaryDataHelper.ShortBinaryThreshold
+                            ? BinaryDataHelper.ToHexString(bytes, prefix: true)
+                            : BinaryDataHelper.FormatBinaryForDisplay(bytes);
+                        rowValues.Add(bVal);
+                    }
+                    else
+                    {
+                        var val = GetColumnValue(row, Columns[c]);
+                        rowValues.Add(val ?? "NULL");
+                    }
                 }
                 else
                 {
@@ -1265,16 +1491,17 @@ else
 
         if (values.Count > 0)
         {
-            // Simple heuristic to check if we need quotes
-            bool useQuotes = !decimal.TryParse(values.First(), out _);
-            
             var formattedValues = values.Select(v => {
-                if (useQuotes)
+                if (v!.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                 {
-                    string escaped = v!.Replace("'", "''");
-                    return string.Format("N'{0}'", escaped);
+                    return v!;
                 }
-                return v!;
+                if (decimal.TryParse(v, out _))
+                {
+                    return v!;
+                }
+                string escaped = v!.Replace("'", "''");
+                return string.Format("N'{0}'", escaped);
             });
             var inClause = $"IN ({string.Join(", ", formattedValues)})";
 
@@ -1300,7 +1527,7 @@ else
             .ToList();
 
         AggCount = values.Count;
-        AggDistinct = values.Select(v => v?.ToString()).Distinct().Count();
+        AggDistinct = values.Select(v => v is byte[] b ? Convert.ToHexString(b) : v?.ToString()).Distinct().Count();
         
         AggSum = null;
         AggAverage = null;
@@ -1395,6 +1622,17 @@ else
                             else if (val is bool bl) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = bl;
                             else if (val is DateTime dt) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = dt;
                             else if (val is TimeSpan ts) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = ts;
+                            else if (val is byte[] bytes)
+                            {
+                                if (bytes.Length <= 16000)
+                                {
+                                    worksheet.Cell(rowIdx + 2, colIdx + 1).Value = BinaryDataHelper.ToHexString(bytes, prefix: true);
+                                }
+                                else
+                                {
+                                    worksheet.Cell(rowIdx + 2, colIdx + 1).Value = BinaryDataHelper.FormatBinaryForDisplay(bytes);
+                                }
+                            }
                             else worksheet.Cell(rowIdx + 2, colIdx + 1).Value = val.ToString();
                         }
                     }
@@ -1514,6 +1752,145 @@ else
         IsCodeViewerOpen = false;
     }
 
+    // Binary / Image Viewer State
+    private bool IsBinaryViewerOpen = false;
+    private byte[]? _activeBinaryBytes;
+    private string _activeBinaryColumnName = "";
+    private bool _activeBinaryIsImage = false;
+    private bool _activeBinaryIsPdf = false;
+    private string _activePdfBlobUrl = "";
+    private string _activeBinaryFormat = "";
+    private string _activeBinaryMimeType = "";
+    private string _activeBinaryBase64 = "";
+    private string _activeBinaryRawHex = "";
+    private string _activeBinaryTab = "preview";
+    private bool _isBinaryHexCopied = false;
+    private bool _isBinaryBase64Copied = false;
+
+    private async Task OpenBinaryViewer(byte[] bytes, string columnName)
+    {
+        _activeBinaryBytes = bytes;
+        _activeBinaryColumnName = columnName;
+        _activeBinaryIsImage = BinaryDataHelper.IsImage(bytes, out var fmt, out var mime);
+        _activeBinaryIsPdf = BinaryDataHelper.IsPdf(bytes);
+        _activeBinaryFormat = fmt;
+        _activeBinaryMimeType = mime;
+        _activeBinaryBase64 = _activeBinaryIsImage ? Convert.ToBase64String(bytes) : "";
+        _activeBinaryRawHex = BinaryDataHelper.GetRawHexForDisplay(bytes);
+        _activeBinaryTab = (_activeBinaryIsImage || _activeBinaryIsPdf) ? "preview" : "hex";
+        _isBinaryHexCopied = false;
+        _isBinaryBase64Copied = false;
+        _activePdfBlobUrl = "";
+        IsBinaryViewerOpen = true;
+        StateHasChanged();
+
+        if (_activeBinaryIsPdf)
+        {
+            try
+            {
+                using var stream = new MemoryStream(bytes);
+                using var streamRef = new DotNetStreamReference(stream);
+                _activePdfBlobUrl = await JS.InvokeAsync<string>("createBlobUrlFromStream", streamRef, "application/pdf");
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating PDF blob URL: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task CloseBinaryViewer()
+    {
+        if (!string.IsNullOrEmpty(_activePdfBlobUrl))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("revokeBlobUrl", _activePdfBlobUrl);
+            }
+            catch { }
+            _activePdfBlobUrl = "";
+        }
+        IsBinaryViewerOpen = false;
+        _activeBinaryBytes = null;
+        _activeBinaryBase64 = "";
+        _activeBinaryRawHex = "";
+        _activeBinaryIsPdf = false;
+        StateHasChanged();
+    }
+
+    private async Task CopyBinaryHexAsync(byte[] bytes)
+    {
+        if (bytes == null || bytes.Length == 0) return;
+        try
+        {
+            var hex = BinaryDataHelper.ToHexString(bytes, prefix: true);
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", hex);
+            _isBinaryHexCopied = true;
+            ShowCopyFeedback("Hex copied");
+            StateHasChanged();
+            _ = Task.Delay(2000).ContinueWith(_ =>
+            {
+                _isBinaryHexCopied = false;
+                InvokeAsync(StateHasChanged);
+            });
+        }
+        catch { }
+    }
+
+    private async Task CopyBinaryBase64Async()
+    {
+        if (_activeBinaryBytes == null || _activeBinaryBytes.Length == 0) return;
+        try
+        {
+            var b64 = $"data:{_activeBinaryMimeType};base64,{_activeBinaryBase64}";
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", b64);
+            _isBinaryBase64Copied = true;
+            ShowCopyFeedback("Base64 copied");
+            StateHasChanged();
+            _ = Task.Delay(2000).ContinueWith(_ =>
+            {
+                _isBinaryBase64Copied = false;
+                InvokeAsync(StateHasChanged);
+            });
+        }
+        catch { }
+    }
+
+    private async Task DownloadBinaryBytesAsync(byte[] bytes, string colName)
+    {
+        if (bytes == null || bytes.Length == 0) return;
+        try
+        {
+            string ext;
+            if (BinaryDataHelper.IsImage(bytes, out var imgFormat, out _))
+            {
+                ext = imgFormat.ToLowerInvariant();
+                if (ext == "jpeg") ext = "jpg";
+            }
+            else if (BinaryDataHelper.IsPdf(bytes))
+            {
+                ext = "pdf";
+            }
+            else
+            {
+                ext = "bin";
+            }
+
+            var cleanCol = string.IsNullOrWhiteSpace(colName) ? "data" : colName.Replace(" ", "_");
+            var fileName = $"{cleanCol}_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+
+            using var stream = new MemoryStream(bytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+            ShowCopyFeedback($"Downloaded {fileName}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error downloading binary data: {ex.Message}");
+        }
+    }
+
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
@@ -1526,6 +1903,10 @@ else
 
     public void Dispose()
     {
+        if (!string.IsNullOrEmpty(_activePdfBlobUrl))
+        {
+            try { _ = JS.InvokeVoidAsync("revokeBlobUrl", _activePdfBlobUrl); } catch { }
+        }
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         _copyFeedbackCts?.Cancel();
         _copyFeedbackCts?.Dispose();

@@ -1023,3 +1023,16 @@ window.configureQueryEditor = function(editorId) {
 
 
 
+
+
+window.createBlobUrlFromStream = async function(contentStreamReference, mimeType) {
+    const arrayBuffer = await contentStreamReference.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: mimeType || 'application/pdf' });
+    return URL.createObjectURL(blob);
+};
+
+window.revokeBlobUrl = function(url) {
+    if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+    }
+};
