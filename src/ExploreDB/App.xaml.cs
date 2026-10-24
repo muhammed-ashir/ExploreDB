@@ -99,6 +99,7 @@ public partial class App : Application
             services.AddSingleton<DataCleanupService>();
             services.AddSingleton<ISchemaComparisonService, SchemaComparisonService>();
             services.AddSingleton<IHtmlReportGenerator, HtmlReportGenerator>();
+            services.AddSingleton<ToolRegistryService>();
 
             // Register Windows
             services.AddTransient<MainWindow>();

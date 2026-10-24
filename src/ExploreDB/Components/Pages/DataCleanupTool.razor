@@ -6,19 +6,49 @@
 @inject QueryStateService QueryStateService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject ToolRegistryService ToolService
 @implements IDisposable
 
 <div class="container-fluid h-100 d-flex flex-column pb-5">
     <!-- Header & Breadcrumb -->
-    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
-        <div>
-            <h3 class="fw-bold mb-0" style="color: var(--app-text);">Data Cleanup</h3>
-            <span class="text-muted small">Target Database: <strong style="color: var(--app-text);">@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)</strong></span>
-        </div>
+    <!-- Title Row: Data Cleanup (Left) + Back / Actions (Right) -->
+    <div class="d-flex align-items-center justify-content-between mb-2">
+        <h3 class="fw-bold mb-0" style="color: var(--app-text);">Data Cleanup</h3>
+        @if (_plan != null)
+        {
+            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                    style="color: var(--app-text); border-color: var(--app-border);"
+                    @onclick="BackToSelection"
+                    title="Return to table selection">
+                <i class="bi bi-arrow-left"></i>
+                <span>Back</span>
+            </button>
+        }
+        else
+        {
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        style="color: var(--app-text); border-color: var(--app-border);"
+                        @onclick="RefreshTablesAsync"
+                        title="Reload tables from database">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>Refresh</span>
+                </button>
+                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Back to Tools</span>
+                </a>
+            </div>
+        }
+    </div>
 
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            @if (_plan != null)
-            {
+    <!-- Subtitle / Action Row: Target Database (Left) + Action Buttons (Right) -->
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+        <span class="text-muted small">Target Database: <strong style="color: var(--app-text);">@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)</strong></span>
+
+        @if (_plan != null)
+        {
+            <div class="d-flex align-items-center gap-2 flex-wrap">
                 <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
                         @onclick="CopySqlScriptAsync"
                         title="Copy full transactional script to clipboard">
@@ -61,30 +91,8 @@
                     <i class="bi bi-play-circle"></i>
                     <span>Open in Query Runner</span>
                 </button>
-
-                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                        style="color: var(--app-text); border-color: var(--app-border);"
-                        @onclick="BackToSelection"
-                        title="Return to table selection">
-                    <i class="bi bi-arrow-left"></i>
-                    <span>Back</span>
-                </button>
-            }
-            else
-            {
-                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                        style="color: var(--app-text); border-color: var(--app-border);"
-                        @onclick="RefreshTablesAsync"
-                        title="Reload tables from database">
-                    <i class="bi bi-arrow-clockwise"></i>
-                    <span>Refresh</span>
-                </button>
-                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
-                    <i class="bi bi-arrow-left"></i>
-                    <span>Back to Tools</span>
-                </a>
-            }
-        </div>
+            </div>
+        }
     </div>
 
     @if (!SchemaService.IsDatabaseConnected)
@@ -536,6 +544,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (!ToolService.IsToolAvailable("data-cleanup"))
+        {
+            Nav.NavigateTo("tools");
+            return;
+        }
+
         SchemaService.OnTablesLoaded += OnTablesLoadedHandler;
 
         var currentDb = SchemaService.ActiveDatabase;

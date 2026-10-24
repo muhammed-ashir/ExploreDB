@@ -107,6 +107,7 @@
 <li>Generates clean, alias-based SQL with proper formatting.</li></ul>
 <h3>🏃 <strong>Query Runner</strong></h3><ul><li>Write and execute custom SQL queries instantly.</li><li>Beautiful results grid with dynamic column generation.</li><li>Handles multiple result sets seamlessly.</li></ul>
 <h3>🔍 <strong>Table, View, & SP Explorers</strong></h3><ul><li>Browse all database tables, views, and stored procedures in a searchable grid.</li><li>View table schemas, column data types, and row counts.</li><li>Visualize parent (upstream) and child (downstream) relationships.</li><li>Understand foreign key dependencies at a glance.</li></ul>
+<h3>🛠️ <strong>Tools Hub</strong></h3><ul><li>Dedicated hub for specialized database utilities with configurable visibility and lifecycle states.</li><li><strong>Data Cleanup</strong>: Interactive, safe data deletion generator with relationship inspection and preview safeguards.</li><li><strong>SQL Compare</strong>: Deep database schema comparison with side-by-side diffing for Tables, Views, Stored Procedures, Functions, and Triggers.</li></ul>
 <h3>🎨 <strong>Modern UI</strong></h3><ul><li>Dark-themed glassmorphic design.</li><li>Smooth animations and transitions.</li><li>Clean, emoji-based iconography.</li></ul>
 <hr>
 
@@ -367,12 +368,30 @@
 <div class="code-container"><div class="code-header"><span class="lang">json</span><button class="copy-btn">Copy</button></div><pre><code>{
   "QueryHistoryLimit": 500,
   "MaxOpenTabs": 20,
-  "DisableAutoUpdates": false
+  "DisableAutoUpdates": false,
+  "Tools": [
+    { "Id": "data-cleanup", "Status": "Live", "IsVisible": true },
+    { "Id": "sql-compare", "Status": "Live", "IsVisible": true },
+    { "Id": "sql-profiler", "Status": "Coming Soon", "IsVisible": true }
+  ]
 }</code></pre></div>
 <ul>
   <li><strong><code>QueryHistoryLimit</code></strong>: Sets the maximum number of executed queries saved in your local history tab (default: <code>500</code>). Older queries are automatically purged when this limit is reached.</li>
   <li><strong><code>MaxOpenTabs</code></strong>: Restricts the maximum number of tabs you can have open at the same time in the Query Runner (default: <code>20</code>). This protects system memory and ensures top performance.</li>
   <li><strong><code>DisableAutoUpdates</code></strong>: When set to <code>true</code>, the application will completely stop checking for Microsoft Store and GitHub updates in the background, and will never show an update banner (default: <code>false</code>). Useful for enterprise environments requiring strict version control.</li>
+  <li><strong><code>Tools</code></strong>: Configures the visibility and lifecycle status of tools displayed in the Tools Hub. Each entry contains:
+    <ul>
+      <li><strong><code>Id</code></strong>: Unique identifier of the tool (e.g. <code>"data-cleanup"</code>, <code>"sql-compare"</code>, <code>"sql-profiler"</code>).</li>
+      <li><strong><code>IsVisible</code></strong>: When set to <code>false</code>, completely omits the tool card from the Tools Hub grid.</li>
+      <li><strong><code>Status</code> (Status Badges &amp; Clickability)</strong>:
+        <ul>
+          <li><strong><code>"Live"</code></strong>: No badge is displayed; card is clickable and navigates to the tool route.</li>
+          <li><strong><code>"Beta"</code></strong>: Displays a sleek purple Beta badge; card is clickable for early testing.</li>
+          <li><strong><code>"Coming Soon"</code></strong>: Displays a muted Coming Soon badge; card is disabled/non-clickable (<code>cursor: default</code>).</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
 </ul>
 <hr>
 <h2>📝 Application Logs</h2>

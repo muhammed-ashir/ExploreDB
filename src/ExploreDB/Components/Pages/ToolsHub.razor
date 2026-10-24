@@ -1,6 +1,7 @@
 @page "/tools"
 @using ExploreDB.Services
 @inject NavigationManager Nav
+@inject ToolRegistryService ToolService
 
 <div class="container-fluid h-100 d-flex flex-column pb-5">
     <div class="row mb-4 align-items-center">
@@ -53,13 +54,20 @@
                     <div class="card h-100 p-4 rounded-3 shadow-sm transition-transform hover-scale"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: @(tool.IsAvailable ? "pointer" : "default");"
                          @onclick="() => LaunchTool(tool)"
-                         title="@(tool.IsAvailable ? "Click to open " + tool.Title : "Coming soon")">
+                         title="@(tool.IsAvailable ? (tool.IsBeta ? $"Click to open {tool.Title} (Beta)" : $"Click to open {tool.Title}") : "Coming soon")">
                         <div class="d-flex align-items-start justify-content-between mb-3">
                             <div class="rounded-3 d-flex align-items-center justify-content-center shadow-sm"
                                  style="width: 48px; height: 48px; background-color: @tool.IconBg; color: @tool.IconColor; font-size: 1.4rem;">
                                 <i class="bi @tool.Icon"></i>
                             </div>
-                            @if (!tool.IsAvailable)
+                            @if (tool.IsBeta)
+                            {
+                                <span class="badge rounded-pill border"
+                                      style="font-size: 0.72rem; padding: 4px 9px; font-weight: 600; background-color: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3) !important;">
+                                    Beta
+                                </span>
+                            }
+                            else if (!tool.IsAvailable || tool.IsComingSoon)
                             {
                                 <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"
                                       style="font-size: 0.72rem; padding: 4px 8px; font-weight: 600;">
@@ -90,52 +98,7 @@
 @code {
     private string SearchTerm = "";
 
-    private record ToolItem(
-        string Id,
-        string Title,
-        string Description,
-        string Icon,
-        string IconBg,
-        string IconColor,
-        string Route,
-        bool IsAvailable
-    );
-
-    private readonly List<ToolItem> Tools = new()
-    {
-        new ToolItem(
-            "data-cleanup",
-            "Data Cleanup",
-            "Calculate safe deletion hierarchy and generate dependency-ordered cleanup scripts without foreign key violation errors.",
-            "bi-eraser",
-            "rgba(239, 68, 68, 0.12)",
-            "#ef4444",
-            "/tools/data-cleanup",
-            true
-        ),
-        new ToolItem(
-            "sql-compare",
-            "SQL Compare",
-            "Compare schemas, table structures, and data differences between databases with synchronization scripts.",
-            "bi-arrow-left-right",
-            "rgba(168, 85, 247, 0.12)",
-            "#a855f7",
-            "/tools/sql-compare",
-            true
-        ),
-        new ToolItem(
-            "sql-profiler",
-            "SQL Profiler",
-            "Real-time query execution monitoring, trace events, deadlocks, and live SQL server activity tracking.",
-            "bi-activity",
-            "rgba(14, 165, 233, 0.12)",
-            "#0ea5e9",
-            "",
-            false
-        )
-    };
-
-    private IEnumerable<ToolItem> FilteredTools => Tools.Where(t =>
+    private IEnumerable<ToolItem> FilteredTools => ToolService.GetVisibleTools().Where(t =>
     {
         if (!string.IsNullOrWhiteSpace(SearchTerm))
         {

@@ -14,28 +14,46 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject ThemeService ThemeService
+@inject ToolRegistryService ToolService
 @implements IDisposable
 
 <div class="container-fluid h-100 d-flex flex-column pb-4">
     <!-- Header (Hidden during comparison loading screen) -->
     @if (!_isComparing)
     {
-        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-            <div>
-                <h3 class="fw-bold mb-0" style="color: var(--app-text);">SQL Compare</h3>
-                @if (_result != null)
-                {
-                    <span class="text-muted small">
-                        Source: <strong style="color: var(--app-text);">@_result.SourceEndpoint.ToString()</strong> 
-                        <i class="bi bi-arrow-right mx-1 text-primary"></i> 
-                        Target: <strong style="color: var(--app-text);">@_result.TargetEndpoint.ToString()</strong>
-                    </span>
-                }
-            </div>
+        <!-- Title Row: SQL Compare (Left) + New Comparison / Back to Tools (Right) -->
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <h3 class="fw-bold mb-0" style="color: var(--app-text);">SQL Compare</h3>
+            @if (_result != null)
+            {
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        style="color: var(--app-text); border-color: var(--app-border);"
+                        @onclick="ResetComparison"
+                        title="Configure a new comparison">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>New Comparison</span>
+                </button>
+            }
+            else
+            {
+                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Back to Tools</span>
+                </a>
+            }
+        </div>
 
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                @if (_result != null)
-                {
+        @if (_result != null)
+        {
+            <!-- Subtitle / Action Row: Source & Target Endpoints (Left) + Action Buttons (Right) -->
+            <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                <span class="text-muted small">
+                    Source: <strong style="color: var(--app-text);">@_result.SourceEndpoint.ToString()</strong> 
+                    <i class="bi bi-arrow-right mx-1 text-primary"></i> 
+                    Target: <strong style="color: var(--app-text);">@_result.TargetEndpoint.ToString()</strong>
+                </span>
+
+                <div class="d-flex align-items-center gap-2 flex-wrap">
                     <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
                             @onclick="CopySyncScriptAsync"
                             title="Copy generated synchronization script">
@@ -56,24 +74,9 @@
                         <i class="bi bi-play-circle"></i>
                         <span>Open in Query Runner</span>
                     </button>
-
-                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                            style="color: var(--app-text); border-color: var(--app-border);"
-                            @onclick="ResetComparison"
-                            title="Configure a new comparison">
-                        <i class="bi bi-arrow-left"></i>
-                        <span>New Comparison</span>
-                    </button>
-                }
-                else
-                {
-                    <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
-                        <i class="bi bi-arrow-left"></i>
-                        <span>Back to Tools</span>
-                    </a>
-                }
+                </div>
             </div>
-        </div>
+        }
     }
 
     @if (_isComparing)
@@ -647,7 +650,7 @@
                     <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Identical" ? "border-secondary" : "")"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
                          @onclick='() => _selectedChangeFilter = "Identical"'>
-                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">= IDENTICAL</span>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">IDENTICAL</span>
                         <span class="fs-4 fw-bold text-muted">@_result.Summary.IdenticalCount</span>
                     </div>
                 </div>
@@ -671,34 +674,40 @@
                      style="background-color: var(--app-surface); border: 1px solid var(--app-border); @(_isGridCollapsed ? "height: 48px;" : $"height: {_topPanelHeight}px; min-height: 120px;") transition: height 0.15s ease;">
                     
                     <!-- Filter & Action Bar (100% width) -->
-                    <div class="p-2 px-3 border-bottom d-flex flex-column gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
-                        <!-- Row 1: Search Box (50% size) + Right Controls -->
+                    <div class="p-2 px-3 @(!_isGridCollapsed ? "border-bottom" : "") d-flex flex-column gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
+                        <!-- Row 1: Search Box (if expanded) or Object List Title (if collapsed) + Right Controls -->
                         <div class="d-flex align-items-center justify-content-between gap-3">
-                            <!-- Left: Search Box (50% size) -->
-                            <div class="input-group input-group-sm" style="width: 50%; max-width: 50%;">
-                                <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
-                                    <i class="bi bi-search"></i>
-                                </span>
-                                <input type="text" class="form-control form-control-sm border-start-0 ps-0"
-                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
-                                       placeholder="Filter objects..."
-                                       @bind="_filterQuery"
-                                       @bind:event="oninput" />
-                                @if (!string.IsNullOrEmpty(_filterQuery))
-                                {
-                                    <button class="btn btn-outline-secondary border-start-0"
-                                            style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
-                                            @onclick="() => _filterQuery = string.Empty">
-                                        <i class="bi bi-x"></i>
-                                    </button>
-                                }
-                            </div>
+                            @if (!_isGridCollapsed)
+                            {
+                                <!-- Left: Search Box (50% size) -->
+                                <div class="input-group input-group-sm" style="width: 50%; max-width: 50%;">
+                                    <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text" class="form-control form-control-sm border-start-0 ps-0"
+                                           style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                           placeholder="Filter objects..."
+                                           @bind="_filterQuery"
+                                           @bind:event="oninput" />
+                                    @if (!string.IsNullOrEmpty(_filterQuery))
+                                    {
+                                        <button class="btn btn-outline-secondary border-start-0"
+                                                style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
+                                                @onclick="() => _filterQuery = string.Empty">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="fw-semibold small" style="color: var(--app-text);">Object List</span>
+                                </div>
+                            }
 
-                            <!-- Right: Count & Collapse/Expand & Full Screen Toggles -->
-                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                                <span class="text-muted small" style="font-size: 0.75rem;">
-                                    Showing <strong>@FilteredDifferences.Count()</strong> of @_result.Differences.Count
-                                </span>
+                            <!-- Right: Collapse/Expand & Full Screen Toggles -->
+                            <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-auto">
                                 <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
                                         style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
                                         title="@(_isGridCollapsed ? "Expand object list" : "Collapse object list for larger diff view")"
@@ -715,18 +724,23 @@
                             </div>
                         </div>
 
-                    <!-- Row 2: Category Filter Pills (Below Search Box) -->
+                    <!-- Row 2: Category Filter Pills (Left) + Showing Count (Right) -->
                     @if (!_isGridCollapsed)
                     {
-                        <div class="d-flex align-items-center gap-1 overflow-auto" style="font-size: 0.75rem; white-space: nowrap;">
-                            @foreach (var cat in _availableCategories)
-                            {
-                                <button class="badge rounded-pill border-0 @(_selectedCategoryFilter == cat ? "bg-primary text-white" : "bg-secondary-subtle text-muted")"
-                                        style="cursor: pointer; padding: 5px 10px; font-weight: 500;"
-                                        @onclick="() => _selectedCategoryFilter = cat">
-                                    @cat
-                                </button>
-                            }
+                        <div class="d-flex align-items-center justify-content-between gap-2" style="font-size: 0.75rem; white-space: nowrap;">
+                            <div class="d-flex align-items-center gap-1 overflow-auto">
+                                @foreach (var cat in _availableCategories)
+                                {
+                                    <button class="badge rounded-pill border-0 @(_selectedCategoryFilter == cat ? "bg-primary text-white" : "bg-secondary-subtle text-muted")"
+                                            style="cursor: pointer; padding: 5px 10px; font-weight: 500;"
+                                            @onclick="() => _selectedCategoryFilter = cat">
+                                        @cat
+                                    </button>
+                                }
+                            </div>
+                            <span class="text-muted small flex-shrink-0 ms-auto" style="font-size: 0.75rem;">
+                                Showing <strong>@FilteredDifferences.Count()</strong> of @_result.Differences.Count
+                            </span>
                         </div>
                     }
                 </div>
@@ -1054,6 +1068,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (!ToolService.IsToolAvailable("sql-compare"))
+        {
+            Nav.NavigateTo("tools");
+            return;
+        }
+
         ThemeService.OnThemeChanged += HandleThemeChanged;
         InitializeEndpointsFromActiveConnection();
         await LoadSourceDatabasesAsync();
