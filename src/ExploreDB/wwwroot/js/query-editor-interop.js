@@ -1192,3 +1192,58 @@ window.initSqlCompareSplitter = function (dotNetRef) {
 
     return true;
 };
+
+window.initQueryEditorSplitter = function (dotNetRef, splitterId, wrapperId) {
+    splitterId = splitterId || 'query-editor-resizer';
+    wrapperId = wrapperId || 'query-editor-wrapper';
+    var splitter = document.getElementById(splitterId);
+    var wrapper = document.getElementById(wrapperId);
+    if (!splitter || !wrapper) return false;
+
+    if (splitter._hasSplitterHandler) return true;
+    splitter._hasSplitterHandler = true;
+
+    splitter.addEventListener('pointerdown', function (e) {
+        e.preventDefault();
+        try { splitter.setPointerCapture(e.pointerId); } catch (err) {}
+
+        var startY = e.clientY;
+        var startHeight = wrapper.offsetHeight;
+        var minHeight = 150;
+        var lastHeight = startHeight;
+
+        splitter.classList.add('dragging');
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+
+        function onPointerMove(moveEvent) {
+            var deltaY = moveEvent.clientY - startY;
+            var newHeight = Math.round(Math.max(minHeight, startHeight + deltaY));
+            lastHeight = newHeight;
+            wrapper.style.height = newHeight + 'px';
+            wrapper.style.flexGrow = '0';
+            window.dispatchEvent(new Event('resize'));
+        }
+
+        function onPointerUp(upEvent) {
+            try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+            splitter.removeEventListener('pointermove', onPointerMove);
+            splitter.removeEventListener('pointerup', onPointerUp);
+            splitter.removeEventListener('pointercancel', onPointerUp);
+            splitter.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            window.dispatchEvent(new Event('resize'));
+
+            if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                dotNetRef.invokeMethodAsync('SetQueryEditorHeight', lastHeight);
+            }
+        }
+
+        splitter.addEventListener('pointermove', onPointerMove);
+        splitter.addEventListener('pointerup', onPointerUp);
+        splitter.addEventListener('pointercancel', onPointerUp);
+    });
+
+    return true;
+};

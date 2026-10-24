@@ -73,8 +73,8 @@
         <div class="col-12 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column" : "")">
             <div class="card shadow-sm @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1 d-flex flex-column" : "")" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 
-                <div class="card-body p-0 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column flex-grow-1" : "")">
-                    <div class="@(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")" style="@(ActiveTab.HasExecuted && !IsMinimized ? "height: 350px;" : "") width: 100%; display: block; resize: vertical; overflow: hidden; min-height: 150px; padding-bottom: 2px;">
+                <div class="card-body p-0 @(!ActiveTab.HasExecuted || IsMinimized ? (_customEditorHeight == null ? "d-flex flex-column flex-grow-1" : "") : "")">
+                    <div id="popout-editor-wrapper" class="@(!ActiveTab.HasExecuted || IsMinimized ? (_customEditorHeight == null ? "flex-grow-1" : "") : "")" style="@(_customEditorHeight.HasValue ? $"height: {_customEditorHeight.Value}px;" : (ActiveTab.HasExecuted && !IsMinimized ? "height: 350px;" : "")) width: 100%; display: block; overflow: hidden; min-height: 150px;">
                         @if (_isReady)
                         {
                             <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
@@ -87,6 +87,12 @@
                             </div>
                         }
                     </div>
+                </div>
+                <!-- Resizer Bar (Drag to Resize Query Editor) -->
+                <div id="popout-editor-resizer"
+                     class="sql-compare-splitter"
+                     title="Drag up or down to resize query editor">
+                    <div class="sql-compare-splitter-handle"></div>
                 </div>
             </div>
         </div>
@@ -213,6 +219,13 @@
     private string ResultTab = "Results";
     private StandaloneCodeEditor _editor = default!;
     private DotNetObjectReference<PopoutRunner>? _objRef;
+    private int? _customEditorHeight = null;
+
+    [JSInvokable]
+    public void SetQueryEditorHeight(int height)
+    {
+        _customEditorHeight = height;
+    }
     private System.Timers.Timer? _execTimer;
     private System.Timers.Timer? _saveDebounceTimer;
 
@@ -255,6 +268,7 @@
                 try
                 {
                     await JS.InvokeVoidAsync("window.globalShortcuts.registerQueryRunner", _objRef);
+                    await JS.InvokeVoidAsync("initQueryEditorSplitter", _objRef, "popout-editor-resizer", "popout-editor-wrapper");
                 }
                 catch { }
             }
@@ -350,6 +364,7 @@
         try
         {
             await JS.InvokeVoidAsync("configureQueryEditor", "query-editor");
+            await JS.InvokeVoidAsync("initQueryEditorSplitter", _objRef, "popout-editor-resizer", "popout-editor-wrapper");
         }
         catch { }
         await RegisterAutocompleteItemsAsync();
