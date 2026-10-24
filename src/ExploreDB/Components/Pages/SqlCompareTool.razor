@@ -662,11 +662,13 @@
             </div>
 
             <!-- Redgate Top/Bottom Layout: Differences Table (Top) + Visual Diff Viewer (Bottom) -->
-            <div class="@(_isFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3 d-flex flex-column gap-2" : "d-flex flex-column flex-grow-1 gap-2 overflow-hidden")"
+            <div id="sql-compare-results-container"
+                 class="@(_isFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3 d-flex flex-column gap-2" : "d-flex flex-column flex-grow-1 gap-2 overflow-hidden")"
                  style="@(_isFullScreen ? "background-color: var(--app-bg); z-index: 9999;" : "min-height: 0;")">
                 <!-- Top Panel: Differences Grid (Full Width) -->
-                <div class="card rounded-3 shadow-sm d-flex flex-column overflow-hidden flex-shrink-0"
-                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); @(_isGridCollapsed ? "height: 48px;" : "height: 40%; min-height: 210px; max-height: 42vh;") transition: height 0.2s ease;">
+                <div id="sql-compare-top-panel"
+                     class="card rounded-3 shadow-sm d-flex flex-column overflow-hidden flex-shrink-0"
+                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); @(_isGridCollapsed ? "height: 48px;" : $"height: {_topPanelHeight}px; min-height: 120px; max-height: calc(100% - 180px);") transition: height 0.15s ease;">
                     
                     <!-- Filter & Action Bar (100% width) -->
                     <div class="p-2 px-3 border-bottom d-flex flex-column gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
@@ -746,7 +748,6 @@
                                         <th>Object Name</th>
                                         <th style="width: 145px;" class="text-center">
                                             <span>Status</span>
-                                            <i class="bi bi-info-circle ms-1 text-muted" style="font-size: 0.7rem; cursor: help;" title="Shows how the object in Source differs from Target"></i>
                                         </th>
                                     </tr>
                                 </thead>
@@ -781,8 +782,8 @@
                                                     <span class="fw-semibold">@diff.Name</span>
                                                 </td>
                                                 <td class="text-center">
-                                                    <span class="badge @GetChangeBadgeClass(diff.ChangeType) d-inline-flex align-items-center gap-1"
-                                                          style="font-size: 0.68rem; min-width: 95px; cursor: help;"
+                                                    <span class="badge @GetChangeBadgeClass(diff.ChangeType) d-inline-flex align-items-center justify-content-center gap-1"
+                                                          style="font-size: 0.68rem; padding: 4px 8px; cursor: help;"
                                                           title="@GetChangeTooltip(diff.ChangeType)">
                                                         <span>@GetChangeBadgeText(diff.ChangeType)</span>
                                                         <i class="bi bi-info-circle opacity-75" style="font-size: 0.62rem;"></i>
@@ -797,9 +798,20 @@
                     }
                 </div>
 
+                @if (!_isGridCollapsed)
+                {
+                    <!-- Splitter Bar (Drag to Resize Top vs Bottom) -->
+                    <div id="sql-compare-splitter"
+                         class="sql-compare-splitter"
+                         title="Drag up or down to resize panels">
+                        <div class="sql-compare-splitter-handle"></div>
+                    </div>
+                }
+
                 <!-- Bottom Panel: Monaco Visual Diff Viewer (Full Width) -->
-                <div class="card rounded-3 shadow-sm d-flex flex-column flex-grow-1 overflow-hidden"
-                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); min-height: 320px;">
+                <div id="sql-compare-diff-panel"
+                     class="card rounded-3 shadow-sm d-flex flex-column flex-grow-1 overflow-hidden"
+                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); min-height: 180px;">
                     <!-- Diff Viewer Top Toolbar -->
                     <div class="p-2 px-3 border-bottom d-flex align-items-center justify-content-between gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
                         <div class="d-flex align-items-center gap-2 overflow-hidden">
@@ -959,6 +971,14 @@
     private bool _isSourceCopied = false;
     private bool _isGridCollapsed = false;
     private bool _isFullScreen = false;
+    private int _topPanelHeight = 260;
+    private DotNetObjectReference<SqlCompareTool>? _dotNetRef;
+
+    [JSInvokable]
+    public void SetTopPanelHeight(int height)
+    {
+        _topPanelHeight = height;
+    }
 
     private string _sourceProfileId = "active";
     private string _targetProfileId = "active";
@@ -1024,6 +1044,15 @@
         InitializeEndpointsFromActiveConnection();
         await LoadSourceDatabasesAsync();
         await LoadTargetDatabasesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_result != null && !_isComparing && !_isGridCollapsed)
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("initSqlCompareSplitter", "sql-compare-splitter", "sql-compare-top-panel", "sql-compare-results-container", _dotNetRef);
+        }
     }
 
     private async void HandleThemeChanged()
@@ -1698,6 +1727,7 @@
         _toastCts?.Dispose();
         _cts?.Cancel();
         _cts?.Dispose();
+        _dotNetRef?.Dispose();
         _originalModel = null;
         _modifiedModel = null;
     }

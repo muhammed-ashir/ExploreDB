@@ -1149,4 +1149,39 @@ a.card.glow-highlight:hover,
     color: #f8f9fa !important;
 }
 
+/* SQL Compare Vertical Splitter */
+.sql-compare-splitter {
+    height: 10px;
+    cursor: row-resize;
+    user-select: none;
+    margin: -3px 0;
+    z-index: 25;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.15s ease;
+}
+
+.sql-compare-splitter:hover,
+.sql-compare-splitter.dragging {
+    background-color: rgba(13, 110, 253, 0.12);
+}
+
+.sql-compare-splitter-handle {
+    width: 48px;
+    height: 4px;
+    border-radius: 2px;
+    background-color: var(--app-border);
+    transition: background-color 0.15s ease, width 0.15s ease;
+}
+
+.sql-compare-splitter:hover .sql-compare-splitter-handle,
+.sql-compare-splitter.dragging .sql-compare-splitter-handle {
+    background-color: var(--primary-color) !important;
+    width: 68px !important;
+}
+
+
 

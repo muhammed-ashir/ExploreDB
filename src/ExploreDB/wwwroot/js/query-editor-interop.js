@@ -1091,3 +1091,61 @@ window.sqlDiffSetSideBySide = function (editorId, sideBySide) {
     }
     return false;
 };
+
+window.initSqlCompareSplitter = function (splitterId, topPanelId, containerId, dotNetRef) {
+    var splitter = document.getElementById(splitterId);
+    var topPanel = document.getElementById(topPanelId);
+    var container = document.getElementById(containerId);
+    if (!splitter || !topPanel || !container) return false;
+
+    if (splitter._hasSplitterHandler) return true;
+    splitter._hasSplitterHandler = true;
+
+    splitter.addEventListener('pointerdown', function (e) {
+        e.preventDefault();
+        try {
+            splitter.setPointerCapture(e.pointerId);
+        } catch (err) {}
+
+        var startY = e.clientY;
+        var startHeight = topPanel.offsetHeight;
+        var minHeight = 120;
+        var lastHeight = startHeight;
+
+        splitter.classList.add('dragging');
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+
+        function onPointerMove(moveEvent) {
+            var containerRect = container.getBoundingClientRect();
+            var maxHeight = Math.max(minHeight, containerRect.height - 180);
+            var deltaY = moveEvent.clientY - startY;
+            var newHeight = Math.round(Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY)));
+            lastHeight = newHeight;
+            topPanel.style.height = newHeight + 'px';
+            topPanel.style.maxHeight = 'none';
+        }
+
+        function onPointerUp(upEvent) {
+            try {
+                splitter.releasePointerCapture(upEvent.pointerId);
+            } catch (err) {}
+            splitter.removeEventListener('pointermove', onPointerMove);
+            splitter.removeEventListener('pointerup', onPointerUp);
+            splitter.removeEventListener('pointercancel', onPointerUp);
+            splitter.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+
+            if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                dotNetRef.invokeMethodAsync('SetTopPanelHeight', lastHeight);
+            }
+        }
+
+        splitter.addEventListener('pointermove', onPointerMove);
+        splitter.addEventListener('pointerup', onPointerUp);
+        splitter.addEventListener('pointercancel', onPointerUp);
+    });
+
+    return true;
+};
