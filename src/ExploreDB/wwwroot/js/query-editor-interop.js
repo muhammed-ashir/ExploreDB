@@ -1437,7 +1437,7 @@ window.initGridColumnResizers = function (containerId, dotNetRef) {
         if (colIdx < 1) return;
 
         var headerSpan = th.querySelector('.text-truncate');
-        var maxContentWidth = headerSpan ? (headerSpan.scrollWidth + 42) : (th.scrollWidth + 24);
+        var maxContentWidth = headerSpan ? (headerSpan.scrollWidth + 52) : (th.scrollWidth + 28);
 
         var rows = table.querySelectorAll('tbody tr');
         var sampleCount = Math.min(rows.length, 120);

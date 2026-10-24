@@ -156,14 +156,14 @@
                             data-col-index="@localCol"
                             data-col-name="@col"
                             style="@GetColumnWidthStyle(col)">
-                            <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2" 
+                            <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2 gap-2" 
                                  style="cursor: pointer; user-select: none;" 
                                  title="Click to select column (Ctrl+Click to toggle, Shift+Click for range)"
                                  @onclick="e => HandleColumnHeaderClick(e, localCol)" 
                                  @oncontextmenu="e => ShowColumnHeaderContextMenu(e, localCol, col)" 
                                  @oncontextmenu:preventDefault="true">
                                 <span class="text-truncate flex-grow-1">@col</span>
-                                <button class="btn btn-link p-0 px-1 ms-1 d-inline-flex align-items-center justify-content-center sort-btn text-decoration-none border-0 shadow-none" 
+                                <button class="btn btn-link p-0 px-1 ms-2 me-1 d-inline-flex align-items-center justify-content-center sort-btn text-decoration-none border-0 shadow-none flex-shrink-0" 
                                         type="button"
                                         title="Sort by @col"
                                         @onclick="() => SortBy(col)" 
@@ -826,7 +826,7 @@ else
         {
             return $"width: {w}px; min-width: {w}px; max-width: {Math.Max(w, 1200)}px; overflow: hidden;";
         }
-        return "min-width: 70px; max-width: 800px; overflow: hidden;";
+        return "min-width: 80px; max-width: 800px; overflow: hidden;";
     }
 
     [JSInvokable]
