@@ -31,3 +31,20 @@ This folder contains database setup and test scripts for ExploreDB, organized by
      - Optional **5,000,000 rows** in `dbo.MassiveDataTest`.
 - **Target Database**: `ExploreDB`
 - **Disk Footprint**: ~450 MB data (within SQL Server Express 10 GB limit).
+
+---
+
+## 3. SQL Compare Test Pair (Realistic Schema Difference Testing)
+- **Scripts & Packages**:
+  1. [`Compare_Source_DB.sql`](Compare_Source_DB.sql) & [`CompareDB_Source.dacpac`](CompareDB_Source.dacpac) - Target DB: `CompareDB_Source` (Development / Reference schema with new features).
+  2. [`Compare_Target_DB.sql`](Compare_Target_DB.sql) & [`CompareDB_Target.dacpac`](CompareDB_Target.dacpac) - Target DB: `CompareDB_Target` (Production / Destination schema with older structures and deprecated objects).
+- **Execution Time**: **~1 to 2 seconds each**
+- **Test Matrix Covered**:
+  - **Added Objects** (Source only): `sales.Discounts`, `audit.SecurityLog`, `dbo.Seq_InvoiceNumber`, `reporting.vw_MonthlyRevenueBreakdown`, `sales.fn_CalculateDiscountedPrice`, `sales.sp_ApplyBulkDiscount`, `sales.trg_UpdateStockOnOrder`.
+  - **Modified Objects**:
+    - `dbo.Customers` (Email type length, LoyaltyTier & IsVerified added).
+    - `sales.Orders` (ShippingMethod & TrackingNumber added, new index, check constraint).
+    - `inventory.Products` (Decimal precision change, DiscontinuedDate column added).
+    - `sales.vw_CustomerOrders`, `sales.sp_CreateOrder`, `sales.fn_GetCustomerTotalSpend` (Definition updates).
+  - **Deleted / Deprecated Objects** (Target only): `dbo.LegacyImportQueue`, `sales.OldOrderArchive`, `reporting.vw_DeprecatedSalesStats`, `dbo.sp_LegacySync`.
+  - **Identical Objects** (100% Match): `dbo.Categories`, `inventory.Warehouses`, `sales.PaymentMethods`, `dbo.vw_ActiveCategories`, `dbo.sp_GetCategories`, `dbo.fn_CalculateMargin`.

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Windows;
 using ExploreDB.Services;
+using ExploreDB.Services.SqlCompare;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -96,6 +97,8 @@ public partial class App : Application
             services.AddSingleton<SnippetService>();
             services.AddSingleton<WindowManagerService>();
             services.AddSingleton<DataCleanupService>();
+            services.AddSingleton<ISchemaComparisonService, SchemaComparisonService>();
+            services.AddSingleton<IHtmlReportGenerator, HtmlReportGenerator>();
 
             // Register Windows
             services.AddTransient<MainWindow>();

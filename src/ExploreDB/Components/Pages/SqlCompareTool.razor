@@ -1,0 +1,1159 @@
+@page "/tools/sql-compare"
+@using ExploreDB.Services
+@using ExploreDB.Services.SqlCompare
+@using ExploreDB.Services.SqlCompare.Models
+@using BlazorMonaco.Editor
+@using BlazorMonaco
+@using System.IO
+@using System.Threading
+@inject ISchemaComparisonService ComparisonService
+@inject IHtmlReportGenerator HtmlGenerator
+@inject SchemaService SchemaService
+@inject ConnectionService ConnectionService
+@inject QueryStateService QueryStateService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="container-fluid h-100 d-flex flex-column pb-4">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div>
+            <h3 class="fw-bold mb-0" style="color: var(--app-text);">SQL Compare</h3>
+            @if (_result != null)
+            {
+                <span class="text-muted small">
+                    Source: <strong style="color: var(--app-text);">@_result.SourceEndpoint.ToString()</strong> 
+                    <i class="bi bi-arrow-right mx-1 text-primary"></i> 
+                    Target: <strong style="color: var(--app-text);">@_result.TargetEndpoint.ToString()</strong>
+                </span>
+            }
+        </div>
+
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if (_result != null)
+            {
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="CopySyncScriptAsync"
+                        title="Copy generated synchronization script">
+                    <i class="bi @(_isScriptCopied ? "bi-check-lg text-success" : "bi-clipboard")"></i>
+                    <span>@(_isScriptCopied ? "Script Copied!" : "Copy Script")</span>
+                </button>
+
+                <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="ExportHtmlReportAsync"
+                        title="Export standalone offline HTML diff report">
+                    <i class="bi bi-filetype-html"></i>
+                    <span>Export HTML</span>
+                </button>
+
+                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
+                        @onclick="OpenInQueryRunnerAsync"
+                        title="Open synchronization script in Query Runner">
+                    <i class="bi bi-play-circle"></i>
+                    <span>Open in Query Runner</span>
+                </button>
+
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        style="color: var(--app-text); border-color: var(--app-border);"
+                        @onclick="ResetComparison"
+                        title="Configure a new comparison">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>New Comparison</span>
+                </button>
+            }
+            else
+            {
+                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Back to Tools</span>
+                </a>
+            }
+        </div>
+    </div>
+
+    @if (_isComparing)
+    {
+        <!-- Comparison Progress Screen -->
+        <div class="flex-grow-1 d-flex flex-column align-items-center justify-content-center p-5">
+            <div class="card p-4 rounded-3 shadow text-center" style="background-color: var(--app-surface); border: 1px solid var(--app-border); max-width: 520px; width: 100%;">
+                <div class="spinner-border text-primary mb-3 mx-auto" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Comparing...</span>
+                </div>
+                <h5 class="fw-bold mb-2" style="color: var(--app-text);">Comparing Database Schemas</h5>
+                <p class="text-muted small mb-3">@_progressMessage</p>
+                <div class="progress mb-3" style="height: 8px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: @($"{_progressPercent}%")"></div>
+                </div>
+                <button class="btn btn-sm btn-outline-danger align-self-center mt-2" @onclick="CancelComparison">
+                    <i class="bi bi-x-circle me-1"></i> Cancel
+                </button>
+            </div>
+        </div>
+    }
+    else if (_result == null)
+    {
+        <!-- Setup & Connection Screen -->
+        <div class="row g-4 flex-grow-1 align-items-start">
+            <!-- Left: Source Endpoint -->
+            <div class="col-12 col-lg-6">
+                <div class="card p-4 rounded-3 shadow-sm h-100" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                    <div class="mb-3 border-bottom pb-2" style="border-color: var(--app-border) !important;">
+                        <h6 class="fw-bold mb-0 text-primary">Source</h6>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="btn-group btn-group-sm shadow-sm">
+                            <button type="button" class="btn @(_source.Type == EndpointType.LiveDatabase ? "btn-primary" : "btn-outline-secondary") btn-sm"
+                                    @onclick="() => _source.Type = EndpointType.LiveDatabase">
+                                Live Database
+                            </button>
+                            <button type="button" class="btn @(_source.Type == EndpointType.DacpacFile ? "btn-primary" : "btn-outline-secondary") btn-sm"
+                                    @onclick="() => _source.Type = EndpointType.DacpacFile">
+                                .dacpac File
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (_source.Type == EndpointType.LiveDatabase)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" style="color: var(--app-text);">Connection Profile</label>
+                            <select class="form-select form-select-sm"
+                                    style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                    value="@_sourceProfileId"
+                                    @onchange="OnSourceProfileChanged">
+                                <option value="active" disabled="@(!SchemaService.IsDatabaseConnected)">Active Session (@GetActiveServerDisplayName())</option>
+                                @if (ConnectionService.SavedConnections.Any())
+                                {
+                                    <optgroup label="Saved Connections">
+                                        @foreach (var c in ConnectionService.SavedConnections)
+                                        {
+                                            <option value="@c.Id">@(string.IsNullOrWhiteSpace(c.Name) ? c.Server : $"{c.Name} ({c.Server})")</option>
+                                        }
+                                    </optgroup>
+                                }
+                                <option value="custom">+ Custom / New Connection...</option>
+                            </select>
+                        </div>
+
+                        @if (_sourceProfileId == "custom")
+                        {
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--app-text);">Server</label>
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_source.Server" placeholder="localhost or server\instance" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--app-text);">Authentication</label>
+                                <select class="form-select form-select-sm"
+                                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                        @bind="_source.AuthType">
+                                    <option value="Windows">Windows Authentication</option>
+                                    <option value="SqlServer">SQL Server Authentication</option>
+                                    <option value="EntraMfa">Microsoft Entra MFA</option>
+                                </select>
+                            </div>
+
+                            @if (_source.AuthType != "Windows")
+                            {
+                                <div class="row g-2 mb-3">
+                                    <div class="@(_source.AuthType == "SqlServer" ? "col-6" : "col-12")">
+                                        <label class="form-label small fw-bold" style="color: var(--app-text);">@(_source.AuthType == "EntraMfa" ? "Username / Email" : "Username")</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                               placeholder="@(_source.AuthType == "EntraMfa" ? "user@domain.com" : "sa")"
+                                               @bind="_source.Username" />
+                                    </div>
+                                    @if (_source.AuthType == "SqlServer")
+                                    {
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold" style="color: var(--app-text);">Password</label>
+                                            <input type="password" class="form-control form-control-sm"
+                                                   style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                                   @bind="_source.Password" />
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="mb-3 p-2 px-3 rounded-2" style="background-color: var(--app-input-bg); border: 1px solid var(--app-border);">
+                                <div class="d-flex align-items-center justify-content-between gap-3 mb-1">
+                                    <div class="d-flex align-items-center gap-2 overflow-hidden text-truncate me-3" style="min-width: 0;">
+                                        <i class="bi bi-hdd-network text-primary flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                        <span class="fw-semibold text-truncate" style="font-size: 0.85rem; color: var(--app-text);" title="@_source.Server">@_source.Server</span>
+                                    </div>
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none flex-shrink-0 text-nowrap d-inline-flex align-items-center gap-1" style="font-size: 0.75rem;" @onclick='() => _sourceProfileId = "custom"'>
+                                        <i class="bi bi-pencil"></i><span>Edit</span>
+                                    </button>
+                                </div>
+                                <div class="text-muted small" style="font-size: 0.75rem; line-height: 1.4;">
+                                    <div class="d-flex align-items-center gap-2 text-truncate me-3" style="min-width: 0;">
+                                        <i class="bi bi-shield-check opacity-75 flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                        <span class="text-truncate">@GetAuthDisplayName(_source.AuthType)</span>
+                                    </div>
+                                    @if (_source.AuthType != "Windows" && !string.IsNullOrWhiteSpace(_source.Username))
+                                    {
+                                        <div class="d-flex align-items-center gap-2 mt-1 text-truncate me-3" style="min-width: 0;">
+                                            <i class="bi bi-person opacity-75 flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                            <span class="text-truncate" title="@_source.Username">@_source.Username</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label small fw-bold mb-0" style="color: var(--app-text);">Database</label>
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.75rem;" @onclick="LoadSourceDatabasesAsync">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh DBs
+                                </button>
+                            </div>
+                            @if (_sourceDatabases.Count > 0)
+                            {
+                                <select class="form-select form-select-sm"
+                                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                        @bind="_source.Database">
+                                    @foreach (var db in _sourceDatabases)
+                                    {
+                                        <option value="@db">@db</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_source.Database" placeholder="e.g. AdventureWorks" />
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Dacpac File Picker -->
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" style="color: var(--app-text);">Data-Tier Application Package (.dacpac)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_source.DacpacPath" placeholder="Path to source .dacpac..." />
+                                <button class="btn btn-outline-secondary" type="button" @onclick="BrowseSourceDacpac">
+                                    <i class="bi bi-folder2-open"></i> Browse...
+                                </button>
+                            </div>
+                            <small class="text-muted" style="font-size: 0.75rem;">Select a compiled database project or export (.dacpac)</small>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Right: Target Endpoint -->
+            <div class="col-12 col-lg-6">
+                <div class="card p-4 rounded-3 shadow-sm h-100" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                    <div class="mb-3 border-bottom pb-2" style="border-color: var(--app-border) !important;">
+                        <h6 class="fw-bold mb-0 text-success">Target</h6>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="btn-group btn-group-sm shadow-sm">
+                            <button type="button" class="btn @(_target.Type == EndpointType.LiveDatabase ? "btn-success" : "btn-outline-secondary") btn-sm"
+                                    @onclick="() => _target.Type = EndpointType.LiveDatabase">
+                                Live Database
+                            </button>
+                            <button type="button" class="btn @(_target.Type == EndpointType.DacpacFile ? "btn-success" : "btn-outline-secondary") btn-sm"
+                                    @onclick="() => _target.Type = EndpointType.DacpacFile">
+                                .dacpac File
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (_target.Type == EndpointType.LiveDatabase)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" style="color: var(--app-text);">Connection Profile</label>
+                            <select class="form-select form-select-sm"
+                                    style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                    value="@_targetProfileId"
+                                    @onchange="OnTargetProfileChanged">
+                                <option value="active" disabled="@(!SchemaService.IsDatabaseConnected)">Active Session (@GetActiveServerDisplayName())</option>
+                                @if (ConnectionService.SavedConnections.Any())
+                                {
+                                    <optgroup label="Saved Connections">
+                                        @foreach (var c in ConnectionService.SavedConnections)
+                                        {
+                                            <option value="@c.Id">@(string.IsNullOrWhiteSpace(c.Name) ? c.Server : $"{c.Name} ({c.Server})")</option>
+                                        }
+                                    </optgroup>
+                                }
+                                <option value="custom">+ Custom / New Connection...</option>
+                            </select>
+                        </div>
+
+                        @if (_targetProfileId == "custom")
+                        {
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--app-text);">Server</label>
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_target.Server" placeholder="localhost or server\instance" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--app-text);">Authentication</label>
+                                <select class="form-select form-select-sm"
+                                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                        @bind="_target.AuthType">
+                                    <option value="Windows">Windows Authentication</option>
+                                    <option value="SqlServer">SQL Server Authentication</option>
+                                    <option value="EntraMfa">Microsoft Entra MFA</option>
+                                </select>
+                            </div>
+
+                            @if (_target.AuthType != "Windows")
+                            {
+                                <div class="row g-2 mb-3">
+                                    <div class="@(_target.AuthType == "SqlServer" ? "col-6" : "col-12")">
+                                        <label class="form-label small fw-bold" style="color: var(--app-text);">@(_target.AuthType == "EntraMfa" ? "Username / Email" : "Username")</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                               placeholder="@(_target.AuthType == "EntraMfa" ? "user@domain.com" : "sa")"
+                                               @bind="_target.Username" />
+                                    </div>
+                                    @if (_target.AuthType == "SqlServer")
+                                    {
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold" style="color: var(--app-text);">Password</label>
+                                            <input type="password" class="form-control form-control-sm"
+                                                   style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                                   @bind="_target.Password" />
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="mb-3 p-2 px-3 rounded-2" style="background-color: var(--app-input-bg); border: 1px solid var(--app-border);">
+                                <div class="d-flex align-items-center justify-content-between gap-3 mb-1">
+                                    <div class="d-flex align-items-center gap-2 overflow-hidden text-truncate me-3" style="min-width: 0;">
+                                        <i class="bi bi-hdd-network text-success flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                        <span class="fw-semibold text-truncate" style="font-size: 0.85rem; color: var(--app-text);" title="@_target.Server">@_target.Server</span>
+                                    </div>
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none flex-shrink-0 text-nowrap d-inline-flex align-items-center gap-1" style="font-size: 0.75rem;" @onclick='() => _targetProfileId = "custom"'>
+                                        <i class="bi bi-pencil"></i><span>Edit</span>
+                                    </button>
+                                </div>
+                                <div class="text-muted small" style="font-size: 0.75rem; line-height: 1.4;">
+                                    <div class="d-flex align-items-center gap-2 text-truncate me-3" style="min-width: 0;">
+                                        <i class="bi bi-shield-check opacity-75 flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                        <span class="text-truncate">@GetAuthDisplayName(_target.AuthType)</span>
+                                    </div>
+                                    @if (_target.AuthType != "Windows" && !string.IsNullOrWhiteSpace(_target.Username))
+                                    {
+                                        <div class="d-flex align-items-center gap-2 mt-1 text-truncate me-3" style="min-width: 0;">
+                                            <i class="bi bi-person opacity-75 flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                            <span class="text-truncate" title="@_target.Username">@_target.Username</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label small fw-bold mb-0" style="color: var(--app-text);">Database</label>
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.75rem;" @onclick="LoadTargetDatabasesAsync">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh DBs
+                                </button>
+                            </div>
+                            @if (_targetDatabases.Count > 0)
+                            {
+                                <select class="form-select form-select-sm"
+                                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                        @bind="_target.Database">
+                                    @foreach (var db in _targetDatabases)
+                                    {
+                                        <option value="@db">@db</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_target.Database" placeholder="e.g. AdventureWorks_Prod" />
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Dacpac File Picker -->
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" style="color: var(--app-text);">Data-Tier Application Package (.dacpac)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_target.DacpacPath" placeholder="Path to target .dacpac..." />
+                                <button class="btn btn-outline-secondary" type="button" @onclick="BrowseTargetDacpac">
+                                    <i class="bi bi-folder2-open"></i> Browse...
+                                </button>
+                            </div>
+                            <small class="text-muted" style="font-size: 0.75rem;">Select a compiled database project or export (.dacpac)</small>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Comparison Options Panel (Collapsible) -->
+            <div class="col-12">
+                <div class="card p-3 rounded-3 shadow-sm" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                    <div class="d-flex align-items-center justify-content-between cursor-pointer" @onclick="() => _optionsExpanded = !_optionsExpanded" style="cursor: pointer;">
+                        <h6 class="fw-bold mb-0" style="color: var(--app-text); font-size: 0.95rem;">
+                            <i class="bi bi-sliders text-primary me-2"></i>Comparison Options
+                        </h6>
+                        <i class="bi @(_optionsExpanded ? "bi-chevron-up" : "bi-chevron-down") text-muted"></i>
+                    </div>
+
+                    @if (_optionsExpanded)
+                    {
+                        <div class="row g-3 pt-3 mt-1 border-top" style="border-color: var(--app-border) !important;">
+                            <div class="col-12 col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="optWhitespace" @bind="_options.IgnoreWhitespace" />
+                                    <label class="form-check-label small" for="optWhitespace" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Whitespace
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="optConstraintNames" @bind="_options.IgnoreSystemConstraintNames" />
+                                    <label class="form-check-label small" for="optConstraintNames" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore System Constraint Names
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="optComments" @bind="_options.IgnoreComments" />
+                                    <label class="form-check-label small" for="optComments" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Comments
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="optCollation" @bind="_options.IgnoreCollation" />
+                                    <label class="form-check-label small" for="optCollation" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Collation Differences
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="optIdentity" @bind="_options.IgnoreIdentitySeed" />
+                                    <label class="form-check-label small" for="optIdentity" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Identity Seed &amp; Increment
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="optPermissions" @bind="_options.IgnorePermissions" />
+                                    <label class="form-check-label small" for="optPermissions" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Permissions &amp; Roles
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Start Comparison Button -->
+            <div class="col-12 text-center pt-2">
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="alert alert-danger py-2 mb-3 d-inline-block text-start" style="font-size: 0.85rem;">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>@_errorMessage
+                    </div>
+                    <br />
+                }
+                <button class="btn btn-primary btn-lg px-5 shadow-sm fw-bold" @onclick="StartComparisonAsync">
+                    <i class="bi bi-arrow-left-right me-2"></i> Compare Schemas
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Comparison Results View (Redgate Style) -->
+        <div class="d-flex flex-column flex-grow-1 gap-3" style="min-height: 0;">
+            <!-- Summary KPI Cards -->
+            <div class="row g-2">
+                <div class="col-6 col-md-2">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Different" ? "border-primary" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "Different"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">DIFFERENCES</span>
+                        <span class="fs-4 fw-bold text-primary">@_result.Summary.TotalDifferences</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Added" ? "border-success" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "Added"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">+ ADDED (SOURCE)</span>
+                        <span class="fs-4 fw-bold text-success">@_result.Summary.AddedCount</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Modified" ? "border-warning" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "Modified"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">~ MODIFIED</span>
+                        <span class="fs-4 fw-bold text-warning">@_result.Summary.ModifiedCount</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Deleted" ? "border-danger" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "Deleted"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">- DELETED (TARGET)</span>
+                        <span class="fs-4 fw-bold text-danger">@_result.Summary.DeletedCount</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Identical" ? "border-secondary" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "Identical"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">= IDENTICAL</span>
+                        <span class="fs-4 fw-bold text-muted">@_result.Summary.IdenticalCount</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "All" ? "border-info" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "All"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">ALL OBJECTS</span>
+                        <span class="fs-4 fw-bold" style="color: var(--app-text);">@_result.Summary.TotalObjectsCompared</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Split Main View: Differences Table (Left/Top) + Visual Diff Viewer (Right/Bottom) -->
+            <div class="row g-3 flex-grow-1" style="min-height: 480px;">
+                <!-- Left Pane: Differences Grid -->
+                <div class="col-12 col-lg-5 d-flex flex-column h-100">
+                    <div class="card rounded-3 shadow-sm d-flex flex-column h-100 overflow-hidden" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                        <!-- Filter & Search Bar -->
+                        <div class="p-2 border-bottom" style="border-color: var(--app-border) !important;">
+                            <div class="input-group input-group-sm mb-2">
+                                <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control form-control-sm border-start-0 ps-0"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       placeholder="Filter objects..."
+                                       @bind="_filterQuery"
+                                       @bind:event="oninput" />
+                                @if (!string.IsNullOrEmpty(_filterQuery))
+                                {
+                                    <button class="btn btn-outline-secondary border-start-0"
+                                            style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
+                                            @onclick="() => _filterQuery = string.Empty">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                }
+                            </div>
+
+                            <!-- Category Filter Pills -->
+                            <div class="d-flex align-items-center gap-1 flex-wrap" style="font-size: 0.75rem;">
+                                @foreach (var cat in _availableCategories)
+                                {
+                                    <button class="badge rounded-pill border-0 @(_selectedCategoryFilter == cat ? "bg-primary text-white" : "bg-secondary-subtle text-muted")"
+                                            style="cursor: pointer; padding: 4px 8px;"
+                                            @onclick="() => _selectedCategoryFilter = cat">
+                                        @cat
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Object List -->
+                        <div class="flex-grow-1 overflow-auto" style="max-height: calc(100vh - 340px);">
+                            <table class="table table-hover table-sm mb-0 align-middle" style="color: var(--app-text); font-size: 0.8rem;">
+                                <thead style="background-color: var(--app-surface-secondary); position: sticky; top: 0; z-index: 10;">
+                                    <tr>
+                                        <th style="width: 32px;" class="text-center">
+                                            <input type="checkbox" class="form-check-input"
+                                                   checked="@IsAllSelected"
+                                                   @onchange="ToggleSelectAll"
+                                                   title="Include/Exclude all filtered objects" />
+                                        </th>
+                                        <th>Object Name</th>
+                                        <th style="width: 80px;" class="text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!FilteredDifferences.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="3" class="text-center py-4 text-muted">
+                                                No objects match the current filter.
+                                            </td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var diff in FilteredDifferences)
+                                        {
+                                            <tr class="cursor-pointer @(_selectedItem?.Id == diff.Id ? "table-active" : "")"
+                                                style="cursor: pointer;"
+                                                @onclick="() => SelectDiffItem(diff)">
+                                                <td class="text-center" @onclick:stopPropagation="true">
+                                                    <input type="checkbox" class="form-check-input"
+                                                           checked="@diff.IsSelected"
+                                                           @onchange="(e) => diff.IsSelected = (bool)(e.Value ?? false)" />
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <i class="bi @diff.BootstrapIcon text-primary" style="font-size: 0.9rem;"></i>
+                                                        <div class="overflow-hidden text-truncate">
+                                                            <span class="fw-semibold">@diff.Name</span>
+                                                            <small class="text-muted d-block" style="font-size: 0.68rem;">@diff.CategoryDisplayName</small>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td class="text-center">
+                                                    <span class="badge @GetChangeBadgeClass(diff.ChangeType)" style="font-size: 0.65rem;">
+                                                        @diff.ChangeType
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Pane: Side-by-Side Visual Diff Viewer -->
+                <div class="col-12 col-lg-7 d-flex flex-column h-100">
+                    <div class="card rounded-3 shadow-sm d-flex flex-column h-100 overflow-hidden" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                        <!-- Diff Viewer Header -->
+                        <div class="p-2 px-3 border-bottom d-flex align-items-center justify-content-between" style="border-color: var(--app-border) !important;">
+                            <div class="d-flex align-items-center gap-2 overflow-hidden">
+                                @if (_selectedItem != null)
+                                {
+                                    <i class="bi @_selectedItem.BootstrapIcon text-primary fs-6"></i>
+                                    <span class="fw-bold text-truncate" style="color: var(--app-text); font-size: 0.9rem;">@_selectedItem.Name</span>
+                                    <span class="badge @GetChangeBadgeClass(_selectedItem.ChangeType)" style="font-size: 0.65rem;">@_selectedItem.ChangeType</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Select an object to inspect differences</span>
+                                }
+                            </div>
+
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-secondary-subtle text-muted border border-secondary-subtle" style="font-size: 0.7rem;">
+                                    Left: Target DDL | Right: Source DDL
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Diff Code Container -->
+                        <div class="flex-grow-1 position-relative" style="min-height: 400px; background-color: #1e1e1e;">
+                            @if (_selectedItem == null)
+                            {
+                                <div class="d-flex align-items-center justify-content-center h-100 text-muted small">
+                                    <i class="bi bi-arrow-left me-2"></i> Select an object from the list to view its side-by-side DDL diff
+                                </div>
+                            }
+                            else
+                            {
+                                <!-- Side-by-side DDL View -->
+                                <div class="row g-0 h-100">
+                                    <div class="col-6 border-end h-100 d-flex flex-column" style="border-color: #333 !important;">
+                                        <div class="px-3 py-1 bg-dark text-muted small border-bottom border-secondary d-flex justify-content-between" style="font-size: 0.72rem;">
+                                            <span>TARGET: @_result.TargetEndpoint.ToString()</span>
+                                            <span class="badge bg-danger-subtle text-danger">Original</span>
+                                        </div>
+                                        <pre class="flex-grow-1 p-3 m-0 text-light overflow-auto" style="font-family: 'Cascadia Code', Consolas, monospace; font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; background-color: #181818;">@(string.IsNullOrWhiteSpace(_selectedItem.TargetScript) ? "-- Object does not exist in target database." : _selectedItem.TargetScript)</pre>
+                                    </div>
+                                    <div class="col-6 h-100 d-flex flex-column">
+                                        <div class="px-3 py-1 bg-dark text-muted small border-bottom border-secondary d-flex justify-content-between" style="font-size: 0.72rem;">
+                                            <span>SOURCE: @_result.SourceEndpoint.ToString()</span>
+                                            <span class="badge bg-success-subtle text-success">Modified</span>
+                                        </div>
+                                        <pre class="flex-grow-1 p-3 m-0 text-light overflow-auto" style="font-family: 'Cascadia Code', Consolas, monospace; font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; background-color: #181818;">@(string.IsNullOrWhiteSpace(_selectedItem.SourceScript) ? "-- Object does not exist in source database." : _selectedItem.SourceScript)</pre>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private DatabaseEndpoint _source = new();
+    private DatabaseEndpoint _target = new();
+    private ComparisonOptions _options = new();
+    private bool _optionsExpanded = false;
+    private bool _isComparing = false;
+    private string _progressMessage = "Preparing comparison...";
+    private double _progressPercent = 0;
+    private string _errorMessage = "";
+    private CancellationTokenSource? _cts;
+
+    private SchemaComparisonResultModel? _result;
+    private SchemaDifferenceItem? _selectedItem;
+
+    private string _sourceProfileId = "active";
+    private string _targetProfileId = "active";
+
+    private string _filterQuery = "";
+    private string _selectedCategoryFilter = "All";
+    private string _selectedChangeFilter = "Different";
+    private bool _isScriptCopied = false;
+
+    private List<string> _sourceDatabases = new();
+    private List<string> _targetDatabases = new();
+    private List<string> _availableCategories = new() { "All" };
+
+    private bool IsAllSelected => FilteredDifferences.Any() && FilteredDifferences.All(d => d.IsSelected);
+
+    private IEnumerable<SchemaDifferenceItem> FilteredDifferences
+    {
+        get
+        {
+            if (_result == null) return Enumerable.Empty<SchemaDifferenceItem>();
+
+            return _result.Differences.Where(d =>
+            {
+                // Filter by change type
+                bool matchesChange = _selectedChangeFilter switch
+                {
+                    "Different" => d.HasDifference,
+                    "Added" => d.ChangeType == ChangeType.Added,
+                    "Modified" => d.ChangeType == ChangeType.Modified,
+                    "Deleted" => d.ChangeType == ChangeType.Deleted,
+                    "Identical" => d.ChangeType == ChangeType.Identical,
+                    _ => true
+                };
+                if (!matchesChange) return false;
+
+                // Filter by category
+                if (_selectedCategoryFilter != "All" && !string.Equals(d.CategoryDisplayName, _selectedCategoryFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                // Filter by search text
+                if (!string.IsNullOrWhiteSpace(_filterQuery))
+                {
+                    var q = _filterQuery.Trim();
+                    return d.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                           d.Schema.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                           d.ObjectName.Contains(q, StringComparison.OrdinalIgnoreCase);
+                }
+
+                return true;
+            });
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        InitializeEndpointsFromActiveConnection();
+        await LoadSourceDatabasesAsync();
+        await LoadTargetDatabasesAsync();
+    }
+
+    private string GetActiveServerDisplayName()
+    {
+        if (!SchemaService.IsDatabaseConnected || string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        {
+            return "Not Connected";
+        }
+
+        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
+        if (active != null && !string.IsNullOrWhiteSpace(active.Name))
+            return $"{active.Name} ({active.Server})";
+        if (!string.IsNullOrEmpty(_source.Server))
+            return _source.Server;
+        return "Connected Server";
+    }
+
+    private string GetAuthDisplayName(string authType)
+    {
+        return authType switch
+        {
+            "Windows" => "Windows Authentication",
+            "SqlServer" => "SQL Server Authentication",
+            "EntraMfa" => "Microsoft Entra MFA",
+            _ => string.IsNullOrWhiteSpace(authType) ? "Windows Authentication" : authType
+        };
+    }
+
+    private async Task OnSourceProfileChanged(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "active";
+        _sourceProfileId = val;
+        if (val == "active")
+        {
+            InitializeEndpointFromActiveConnection(_source);
+        }
+        else if (val != "custom")
+        {
+            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == val);
+            if (saved != null)
+            {
+                ApplySavedConnectionToEndpoint(_source, saved);
+            }
+        }
+        await LoadSourceDatabasesAsync();
+    }
+
+    private async Task OnTargetProfileChanged(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "active";
+        _targetProfileId = val;
+        if (val == "active")
+        {
+            InitializeEndpointFromActiveConnection(_target);
+        }
+        else if (val != "custom")
+        {
+            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == val);
+            if (saved != null)
+            {
+                ApplySavedConnectionToEndpoint(_target, saved);
+            }
+        }
+        await LoadTargetDatabasesAsync();
+    }
+
+    private void ApplySavedConnectionToEndpoint(DatabaseEndpoint endpoint, ConnectionService.SavedConnection saved)
+    {
+        endpoint.Server = saved.Server;
+        endpoint.AuthType = saved.AuthType;
+        endpoint.Username = saved.Username;
+        endpoint.Password = saved.Password;
+        if (!string.IsNullOrEmpty(saved.Database))
+        {
+            endpoint.Database = saved.Database;
+        }
+    }
+
+    private void InitializeEndpointFromActiveConnection(DatabaseEndpoint endpoint)
+    {
+        if (SchemaService.IsDatabaseConnected && !string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        {
+            try
+            {
+                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                endpoint.Server = builder.DataSource;
+                endpoint.AuthType = builder.IntegratedSecurity ? "Windows" : (builder.Authentication == Microsoft.Data.SqlClient.SqlAuthenticationMethod.ActiveDirectoryInteractive ? "EntraMfa" : "SqlServer");
+                endpoint.Username = builder.UserID ?? "";
+                endpoint.Password = builder.Password ?? "";
+                if (endpoint == _source && !string.IsNullOrEmpty(SchemaService.ActiveDatabase))
+                {
+                    endpoint.Database = SchemaService.ActiveDatabase;
+                }
+            }
+            catch { }
+        }
+    }
+
+    private void InitializeEndpointsFromActiveConnection()
+    {
+        if (SchemaService.IsDatabaseConnected && !string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        {
+            _sourceProfileId = "active";
+            _targetProfileId = "active";
+            InitializeEndpointFromActiveConnection(_source);
+            InitializeEndpointFromActiveConnection(_target);
+        }
+        else if (ConnectionService.SavedConnections.Any())
+        {
+            var firstSaved = ConnectionService.SavedConnections.First();
+            _sourceProfileId = firstSaved.Id;
+            _targetProfileId = firstSaved.Id;
+            ApplySavedConnectionToEndpoint(_source, firstSaved);
+            ApplySavedConnectionToEndpoint(_target, firstSaved);
+        }
+        else
+        {
+            _sourceProfileId = "custom";
+            _targetProfileId = "custom";
+        }
+    }
+
+    private async Task LoadSourceDatabasesAsync()
+    {
+        if (_source.Type != EndpointType.LiveDatabase || string.IsNullOrWhiteSpace(_source.Server)) return;
+
+        try
+        {
+            _sourceDatabases = await FetchDatabasesForEndpointAsync(_source);
+            if (string.IsNullOrEmpty(_source.Database) && _sourceDatabases.Count > 0)
+            {
+                _source.Database = _sourceDatabases.Contains(SchemaService.ActiveDatabase) ? SchemaService.ActiveDatabase : _sourceDatabases[0];
+            }
+        }
+        catch { }
+    }
+
+    private async Task LoadTargetDatabasesAsync()
+    {
+        if (_target.Type != EndpointType.LiveDatabase || string.IsNullOrWhiteSpace(_target.Server)) return;
+
+        try
+        {
+            _targetDatabases = await FetchDatabasesForEndpointAsync(_target);
+            if (string.IsNullOrEmpty(_target.Database) && _targetDatabases.Count > 0)
+            {
+                _target.Database = _targetDatabases[0];
+            }
+        }
+        catch { }
+    }
+
+    private async Task<List<string>> FetchDatabasesForEndpointAsync(DatabaseEndpoint endpoint)
+    {
+        var dbs = new List<string>();
+        try
+        {
+            var masterConnString = endpoint.BuildConnectionString();
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(masterConnString) { InitialCatalog = "master" };
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(builder.ConnectionString);
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                dbs.Add(reader.GetString(0));
+            }
+        }
+        catch { }
+        return dbs;
+    }
+
+    private void BrowseSourceDacpac()
+    {
+        try
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Data-tier Application Package (*.dacpac)|*.dacpac|All Files (*.*)|*.*",
+                Title = "Select Source .dacpac File"
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                _source.DacpacPath = dlg.FileName;
+            }
+        }
+        catch { }
+    }
+
+    private void BrowseTargetDacpac()
+    {
+        try
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Data-tier Application Package (*.dacpac)|*.dacpac|All Files (*.*)|*.*",
+                Title = "Select Target .dacpac File"
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                _target.DacpacPath = dlg.FileName;
+            }
+        }
+        catch { }
+    }
+
+    private async Task StartComparisonAsync()
+    {
+        _errorMessage = "";
+
+        // Validate endpoints
+        if (_source.Type == EndpointType.LiveDatabase && string.IsNullOrWhiteSpace(_source.Database))
+        {
+            _errorMessage = "Please specify a Source database name.";
+            return;
+        }
+        if (_source.Type == EndpointType.DacpacFile && (string.IsNullOrWhiteSpace(_source.DacpacPath) || !File.Exists(_source.DacpacPath)))
+        {
+            _errorMessage = "The Source .dacpac file was not found.";
+            return;
+        }
+        if (_target.Type == EndpointType.LiveDatabase && string.IsNullOrWhiteSpace(_target.Database))
+        {
+            _errorMessage = "Please specify a Target database name.";
+            return;
+        }
+        if (_target.Type == EndpointType.DacpacFile && (string.IsNullOrWhiteSpace(_target.DacpacPath) || !File.Exists(_target.DacpacPath)))
+        {
+            _errorMessage = "The Target .dacpac file was not found.";
+            return;
+        }
+
+        _isComparing = true;
+        _progressMessage = "Connecting to endpoints...";
+        _progressPercent = 10;
+        StateHasChanged();
+
+        _cts = new CancellationTokenSource();
+        var progress = new Progress<ComparisonProgress>(p =>
+        {
+            _progressMessage = p.Message;
+            _progressPercent = p.ProgressPercentage;
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            _result = await ComparisonService.CompareAsync(_source, _target, _options, progress, _cts.Token);
+
+            // Populate category filter list
+            _availableCategories = new List<string> { "All" };
+            var cats = _result.Differences.Select(d => d.CategoryDisplayName).Distinct().OrderBy(c => c);
+            _availableCategories.AddRange(cats);
+
+            // Pre-select first difference item if any
+            _selectedItem = _result.Differences.FirstOrDefault(d => d.HasDifference) ?? _result.Differences.FirstOrDefault();
+        }
+        catch (OperationCanceledException)
+        {
+            _errorMessage = "Comparison was cancelled.";
+            _result = null;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Comparison failed: {ex.Message}";
+            _result = null;
+        }
+        finally
+        {
+            _isComparing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CancelComparison()
+    {
+        _cts?.Cancel();
+    }
+
+    private void ResetComparison()
+    {
+        _result = null;
+        _selectedItem = null;
+        _errorMessage = "";
+    }
+
+    private void SelectDiffItem(SchemaDifferenceItem item)
+    {
+        _selectedItem = item;
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        bool select = (bool)(e.Value ?? false);
+        foreach (var item in FilteredDifferences)
+        {
+            item.IsSelected = select;
+        }
+    }
+
+    private async Task OpenInQueryRunnerAsync()
+    {
+        if (_result == null) return;
+
+        var script = await ComparisonService.GenerateSynchronizationScriptAsync(_result);
+        var targetDb = !string.IsNullOrWhiteSpace(_result.TargetEndpoint.Database) ? _result.TargetEndpoint.Database : "TargetDB";
+        var tabName = $"Sync_{targetDb}_{DateTime.Now:yyyyMMdd_HHmm}.sql";
+
+        var newTab = new QueryTab
+        {
+            Name = tabName,
+            Content = script,
+            OriginalContent = script,
+            ConnectionString = _result.TargetEndpoint.Type == EndpointType.LiveDatabase ? _result.TargetEndpoint.BuildConnectionString() : ConnectionService.ConnectionString
+        };
+
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+        await QueryStateService.SaveTabsAsync();
+
+        Nav.NavigateTo("/runner");
+    }
+
+    private async Task CopySyncScriptAsync()
+    {
+        if (_result == null) return;
+
+        try
+        {
+            var script = await ComparisonService.GenerateSynchronizationScriptAsync(_result);
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", script);
+            _isScriptCopied = true;
+            StateHasChanged();
+
+            _ = Task.Delay(2000).ContinueWith(_ =>
+            {
+                _isScriptCopied = false;
+                InvokeAsync(StateHasChanged);
+            });
+        }
+        catch { }
+    }
+
+    private async Task ExportHtmlReportAsync()
+    {
+        if (_result == null) return;
+
+        try
+        {
+            var html = HtmlGenerator.GenerateReportHtml(_result);
+            var htmlBytes = System.Text.Encoding.UTF8.GetBytes(html);
+            var targetName = string.IsNullOrWhiteSpace(_result.TargetEndpoint.Database) ? "Target" : _result.TargetEndpoint.Database.Replace(" ", "_");
+            var fileName = $"SchemaCompare_{targetName}_{DateTime.Now:yyyyMMdd_HHmmss}.html";
+
+            using var stream = new MemoryStream(htmlBytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting HTML report: {ex.Message}");
+        }
+    }
+
+    private string GetChangeBadgeClass(ChangeType type) => type switch
+    {
+        ChangeType.Added => "bg-success-subtle text-success border border-success-subtle",
+        ChangeType.Modified => "bg-warning-subtle text-warning border border-warning-subtle",
+        ChangeType.Deleted => "bg-danger-subtle text-danger border border-danger-subtle",
+        _ => "bg-secondary-subtle text-muted border border-secondary-subtle"
+    };
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}
