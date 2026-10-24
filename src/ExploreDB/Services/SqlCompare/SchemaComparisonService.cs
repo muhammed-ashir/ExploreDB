@@ -39,82 +39,137 @@ public class SchemaComparisonService : ISchemaComparisonService
 
         return await Task.Run(() =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var sourceEndpoint = source.ToDacCompareEndpoint();
-            var targetEndpoint = target.ToDacCompareEndpoint();
-
-            var comparison = new SchemaComparison(sourceEndpoint, targetEndpoint);
-            options.ApplyTo(comparison.Options);
-
-            progress?.Report(new ComparisonProgress("Comparing database schemas and analyzing dependencies...", 30));
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var dacResult = comparison.Compare();
-
-            progress?.Report(new ComparisonProgress("Processing differences and extracting object definitions...", 70));
-
-            var diffItems = new List<SchemaDifferenceItem>();
-
-            int identicalCount = 0;
-            int addedCount = 0;
-            int deletedCount = 0;
-            int modifiedCount = 0;
-
-            if (dacResult?.Differences != null)
+            if (cancellationToken.IsCancellationRequested)
             {
-                foreach (var diff in dacResult.Differences)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    var item = MapDacDifference(diff);
-                    diffItems.Add(item);
-
-                    switch (item.ChangeType)
-                    {
-                        case ChangeType.Added:
-                            addedCount++;
-                            break;
-                        case ChangeType.Deleted:
-                            deletedCount++;
-                            break;
-                        case ChangeType.Modified:
-                            modifiedCount++;
-                            break;
-                        default:
-                            identicalCount++;
-                            break;
-                    }
-                }
+                return new SchemaComparisonResultModel { IsCancelled = true, SourceEndpoint = source, TargetEndpoint = target };
             }
 
-            stopwatch.Stop();
-            progress?.Report(new ComparisonProgress("Comparison complete.", 100));
-
-            var summary = new ComparisonSummary
+            try
             {
-                SourceDescription = source.ToString(),
-                TargetDescription = target.ToString(),
-                ComparisonTimestamp = DateTime.UtcNow,
-                ElapsedTime = stopwatch.Elapsed,
-                TotalObjectsCompared = diffItems.Count,
-                IdenticalCount = identicalCount,
-                AddedCount = addedCount,
-                DeletedCount = deletedCount,
-                ModifiedCount = modifiedCount
-            };
+                var sourceEndpoint = source.ToDacCompareEndpoint();
+                var targetEndpoint = target.ToDacCompareEndpoint();
 
-            return new SchemaComparisonResultModel
+                var comparison = new SchemaComparison(sourceEndpoint, targetEndpoint);
+                options.ApplyTo(comparison.Options);
+
+                progress?.Report(new ComparisonProgress("Comparing database schemas and analyzing dependencies...", 30));
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return new SchemaComparisonResultModel { IsCancelled = true, SourceEndpoint = source, TargetEndpoint = target };
+                }
+
+                var dacResult = comparison.Compare(cancellationToken);
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return new SchemaComparisonResultModel { IsCancelled = true, SourceEndpoint = source, TargetEndpoint = target };
+                }
+
+                if (dacResult == null || !dacResult.IsValid)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        return new SchemaComparisonResultModel { IsCancelled = true, SourceEndpoint = source, TargetEndpoint = target };
+                    }
+
+                    var errors = new List<string>();
+                    try
+                    {
+                        if (dacResult != null)
+                        {
+                            var errList = dacResult.GetErrors();
+                            if (errList != null)
+                            {
+                                foreach (var err in errList)
+                                {
+                                    if (err != null)
+                                    {
+                                        errors.Add(err.ToString() ?? "Unknown schema comparison error");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    string errorDetails = errors.Any()
+                        ? string.Join("; ", errors)
+                        : "The schema comparison operation could not populate the database model. Ensure the database is accessible, resources are available, and query execution has not timed out.";
+
+                    throw new InvalidOperationException(errorDetails);
+                }
+
+                progress?.Report(new ComparisonProgress("Processing differences and extracting object definitions...", 70));
+
+                var diffItems = new List<SchemaDifferenceItem>();
+
+                int identicalCount = 0;
+                int addedCount = 0;
+                int deletedCount = 0;
+                int modifiedCount = 0;
+
+                if (dacResult?.Differences != null)
+                {
+                    foreach (var diff in dacResult.Differences)
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            return new SchemaComparisonResultModel { IsCancelled = true, SourceEndpoint = source, TargetEndpoint = target };
+                        }
+
+                        var item = MapDacDifference(diff);
+                        diffItems.Add(item);
+
+                        switch (item.ChangeType)
+                        {
+                            case ChangeType.Added:
+                                addedCount++;
+                                break;
+                            case ChangeType.Deleted:
+                                deletedCount++;
+                                break;
+                            case ChangeType.Modified:
+                                modifiedCount++;
+                                break;
+                            default:
+                                identicalCount++;
+                                break;
+                        }
+                    }
+                }
+
+                stopwatch.Stop();
+                progress?.Report(new ComparisonProgress("Comparison complete.", 100));
+
+                var summary = new ComparisonSummary
+                {
+                    SourceDescription = source.ToString(),
+                    TargetDescription = target.ToString(),
+                    ComparisonTimestamp = DateTime.UtcNow,
+                    ElapsedTime = stopwatch.Elapsed,
+                    TotalObjectsCompared = diffItems.Count,
+                    IdenticalCount = identicalCount,
+                    AddedCount = addedCount,
+                    DeletedCount = deletedCount,
+                    ModifiedCount = modifiedCount
+                };
+
+                return new SchemaComparisonResultModel
+                {
+                    Differences = diffItems,
+                    Summary = summary,
+                    Options = options,
+                    SourceEndpoint = source,
+                    TargetEndpoint = target,
+                    RawDacResult = dacResult
+                };
+            }
+            catch (OperationCanceledException)
             {
-                Differences = diffItems,
-                Summary = summary,
-                Options = options,
-                SourceEndpoint = source,
-                TargetEndpoint = target,
-                RawDacResult = dacResult
-            };
-        }, cancellationToken);
+                return new SchemaComparisonResultModel { IsCancelled = true, SourceEndpoint = source, TargetEndpoint = target };
+            }
+        });
     }
 
     public Task<string> GenerateSynchronizationScriptAsync(

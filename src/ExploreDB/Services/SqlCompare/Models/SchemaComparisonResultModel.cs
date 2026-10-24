@@ -15,6 +15,11 @@ public class SchemaComparisonResultModel
     public DatabaseEndpoint TargetEndpoint { get; set; } = new();
 
     /// <summary>
+    /// Indicates whether the comparison was cancelled by user request.
+    /// </summary>
+    public bool IsCancelled { get; set; } = false;
+
+    /// <summary>
     /// Underlying DacFx result object, if available, used for incremental script generation.
     /// </summary>
     public SchemaComparisonResult? RawDacResult { get; set; }

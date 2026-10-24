@@ -13,6 +13,7 @@
 @inject QueryStateService QueryStateService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject ThemeService ThemeService
 @implements IDisposable
 
 <div class="container-fluid h-100 d-flex flex-column pb-4">
@@ -77,16 +78,15 @@
         <!-- Comparison Progress Screen -->
         <div class="flex-grow-1 d-flex flex-column align-items-center justify-content-center p-5">
             <div class="card p-4 rounded-3 shadow text-center" style="background-color: var(--app-surface); border: 1px solid var(--app-border); max-width: 520px; width: 100%;">
-                <div class="spinner-border text-primary mb-3 mx-auto" role="status" style="width: 3rem; height: 3rem;">
+                <div class="spinner-border text-primary mb-3 mx-auto" role="status" style="width: 2.75rem; height: 2.75rem; border-width: 0.25em;">
                     <span class="visually-hidden">Comparing...</span>
                 </div>
                 <h5 class="fw-bold mb-2" style="color: var(--app-text);">Comparing Database Schemas</h5>
-                <p class="text-muted small mb-3">@_progressMessage</p>
-                <div class="progress mb-3" style="height: 8px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: @($"{_progressPercent}%")"></div>
+                <div class="text-muted small mb-3" style="font-size: 0.85rem;">
+                    <i class="bi bi-stopwatch me-1"></i>Elapsed: @_elapsedTimeFormatted
                 </div>
-                <button class="btn btn-sm btn-outline-danger align-self-center mt-2" @onclick="CancelComparison">
-                    <i class="bi bi-x-circle me-1"></i> Cancel
+                <button class="btn btn-sm btn-outline-danger align-self-center px-3" @onclick="CancelComparison">
+                    Cancel
                 </button>
             </div>
         </div>
@@ -106,7 +106,7 @@
                         <div class="btn-group btn-group-sm shadow-sm">
                             <button type="button" class="btn @(_source.Type == EndpointType.LiveDatabase ? "btn-primary" : "btn-outline-secondary") btn-sm"
                                     @onclick="() => _source.Type = EndpointType.LiveDatabase">
-                                Live Database
+                                Database
                             </button>
                             <button type="button" class="btn @(_source.Type == EndpointType.DacpacFile ? "btn-primary" : "btn-outline-secondary") btn-sm"
                                     @onclick="() => _source.Type = EndpointType.DacpacFile">
@@ -117,24 +117,81 @@
 
                     @if (_source.Type == EndpointType.LiveDatabase)
                     {
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold" style="color: var(--app-text);">Connection Profile</label>
-                            <select class="form-select form-select-sm"
-                                    style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
-                                    value="@_sourceProfileId"
-                                    @onchange="OnSourceProfileChanged">
-                                <option value="active" disabled="@(!SchemaService.IsDatabaseConnected)">Active Session (@GetActiveServerDisplayName())</option>
-                                @if (ConnectionService.SavedConnections.Any())
-                                {
-                                    <optgroup label="Saved Connections">
-                                        @foreach (var c in ConnectionService.SavedConnections)
+                        <div class="position-relative mb-3">
+                            <label class="form-label small fw-bold mb-1" style="color: var(--app-text);">Connection Profile</label>
+                            <div class="form-control form-control-sm d-flex align-items-center justify-content-between cursor-pointer shadow-sm"
+                                 style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); cursor: pointer;"
+                                 @onclick="ToggleSourceDropdown">
+                                <span class="text-truncate me-2">@GetSelectedProfileDisplayName(_sourceProfileId, _source)</span>
+                                <i class="bi @(_isSourceProfileDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") flex-shrink-0 text-muted" style="font-size: 0.75rem;"></i>
+                            </div>
+
+                            @if (_isSourceProfileDropdownOpen)
+                            {
+                                <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseSourceDropdown"></div>
+                                <div class="dropdown-menu show shadow-lg p-2 mt-1 rounded-3"
+                                     style="position: absolute; top: 100%; left: 0; z-index: 1050; width: 100%; min-width: 320px; background-color: var(--app-dropdown-bg); color: var(--app-text); border: 1px solid var(--app-border);">
+                                    <div class="mb-2">
+                                        <input type="text"
+                                               class="form-control form-control-sm"
+                                               style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                               placeholder="Search connections..."
+                                               @bind="_sourceSearchTerm"
+                                               @bind:event="oninput"
+                                               @onclick:stopPropagation />
+                                    </div>
+                                    <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 250px; overflow-y: auto;">
+                                        @if (string.IsNullOrEmpty(_sourceSearchTerm) || "active session".Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase) || GetActiveServerDisplayName().Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase))
                                         {
-                                            <option value="@c.Id">@(string.IsNullOrWhiteSpace(c.Name) ? c.Server : $"{c.Name} ({c.Server})")</option>
+                                            var isActiveSelected = _sourceProfileId == "active";
+                                            <div class="dropdown-item p-2 mb-1 rounded-2 @(isActiveSelected ? "bg-primary text-white" : "") @(!SchemaService.IsDatabaseConnected ? "opacity-50" : "")"
+                                                 style="cursor: @(!SchemaService.IsDatabaseConnected ? "not-allowed" : "pointer");"
+                                                 @onclick='async () => { if (SchemaService.IsDatabaseConnected) await SelectSourceProfile("active"); }'>
+                                                <div class="d-flex flex-column text-truncate" style="min-width: 0;">
+                                                    <span class="fw-semibold text-truncate" style="font-size: 0.85rem;">Active Session</span>
+                                                    <span class="small @(isActiveSelected ? "text-white-50" : "text-muted") text-truncate" style="font-size: 0.72rem;">@GetActiveServerDisplayName()</span>
+                                                </div>
+                                            </div>
                                         }
-                                    </optgroup>
-                                }
-                                <option value="custom">+ Custom / New Connection...</option>
-                            </select>
+
+                                        @{
+                                            var filteredSourceSaved = ConnectionService.SavedConnections
+                                                .Where(c => string.IsNullOrEmpty(_sourceSearchTerm) ||
+                                                            (!string.IsNullOrEmpty(c.Name) && c.Name.Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                                                            (!string.IsNullOrEmpty(c.Server) && c.Server.Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                                                            (!string.IsNullOrEmpty(c.Database) && c.Database.Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase)))
+                                                .ToList();
+                                        }
+
+                                        @if (filteredSourceSaved.Any())
+                                        {
+                                            <div class="px-2 py-1 small fw-bold text-muted text-uppercase mt-1" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                                                Saved Connections
+                                            </div>
+
+                                            @foreach (var c in filteredSourceSaved)
+                                            {
+                                                var isSelected = _sourceProfileId == c.Id;
+                                                var capturedId = c.Id;
+                                                <div class="dropdown-item p-2 mb-1 rounded-2 @(isSelected ? "bg-primary text-white" : "")"
+                                                     style="cursor: pointer;"
+                                                     @onclick="async () => await SelectSourceProfile(capturedId)">
+                                                    <div class="d-flex flex-column text-truncate" style="min-width: 0;">
+                                                        <span class="fw-semibold text-truncate" style="font-size: 0.85rem;">@(string.IsNullOrWhiteSpace(c.Name) ? c.Server : c.Name)</span>
+                                                        <span class="small @(isSelected ? "text-white-50" : "text-muted") text-truncate" style="font-size: 0.72rem;">@c.Server</span>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                    <hr class="dropdown-divider border-secondary my-2">
+                                    <button type="button" class="dropdown-item text-info text-center py-2 rounded-2 fw-medium"
+                                            style="border: 1px dashed var(--bs-info); width: calc(100% - 8px); margin: 0 4px;"
+                                            @onclick='async () => await SelectSourceProfile("custom")'>
+                                        <i class="bi bi-plus-lg me-1"></i> New Connection
+                                    </button>
+                                </div>
+                            }
                         </div>
 
                         @if (_sourceProfileId == "custom")
@@ -246,7 +303,6 @@
                                     <i class="bi bi-folder2-open"></i> Browse...
                                 </button>
                             </div>
-                            <small class="text-muted" style="font-size: 0.75rem;">Select a compiled database project or export (.dacpac)</small>
                         </div>
                     }
                 </div>
@@ -263,7 +319,7 @@
                         <div class="btn-group btn-group-sm shadow-sm">
                             <button type="button" class="btn @(_target.Type == EndpointType.LiveDatabase ? "btn-success" : "btn-outline-secondary") btn-sm"
                                     @onclick="() => _target.Type = EndpointType.LiveDatabase">
-                                Live Database
+                                Database
                             </button>
                             <button type="button" class="btn @(_target.Type == EndpointType.DacpacFile ? "btn-success" : "btn-outline-secondary") btn-sm"
                                     @onclick="() => _target.Type = EndpointType.DacpacFile">
@@ -274,24 +330,81 @@
 
                     @if (_target.Type == EndpointType.LiveDatabase)
                     {
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold" style="color: var(--app-text);">Connection Profile</label>
-                            <select class="form-select form-select-sm"
-                                    style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
-                                    value="@_targetProfileId"
-                                    @onchange="OnTargetProfileChanged">
-                                <option value="active" disabled="@(!SchemaService.IsDatabaseConnected)">Active Session (@GetActiveServerDisplayName())</option>
-                                @if (ConnectionService.SavedConnections.Any())
-                                {
-                                    <optgroup label="Saved Connections">
-                                        @foreach (var c in ConnectionService.SavedConnections)
+                        <div class="position-relative mb-3">
+                            <label class="form-label small fw-bold mb-1" style="color: var(--app-text);">Connection Profile</label>
+                            <div class="form-control form-control-sm d-flex align-items-center justify-content-between cursor-pointer shadow-sm"
+                                 style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); cursor: pointer;"
+                                 @onclick="ToggleTargetDropdown">
+                                <span class="text-truncate me-2">@GetSelectedProfileDisplayName(_targetProfileId, _target)</span>
+                                <i class="bi @(_isTargetProfileDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") flex-shrink-0 text-muted" style="font-size: 0.75rem;"></i>
+                            </div>
+
+                            @if (_isTargetProfileDropdownOpen)
+                            {
+                                <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseTargetDropdown"></div>
+                                <div class="dropdown-menu show shadow-lg p-2 mt-1 rounded-3"
+                                     style="position: absolute; top: 100%; left: 0; z-index: 1050; width: 100%; min-width: 320px; background-color: var(--app-dropdown-bg); color: var(--app-text); border: 1px solid var(--app-border);">
+                                    <div class="mb-2">
+                                        <input type="text"
+                                               class="form-control form-control-sm"
+                                               style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                               placeholder="Search connections..."
+                                               @bind="_targetSearchTerm"
+                                               @bind:event="oninput"
+                                               @onclick:stopPropagation />
+                                    </div>
+                                    <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 250px; overflow-y: auto;">
+                                        @if (string.IsNullOrEmpty(_targetSearchTerm) || "active session".Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase) || GetActiveServerDisplayName().Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase))
                                         {
-                                            <option value="@c.Id">@(string.IsNullOrWhiteSpace(c.Name) ? c.Server : $"{c.Name} ({c.Server})")</option>
+                                            var isActiveSelected = _targetProfileId == "active";
+                                            <div class="dropdown-item p-2 mb-1 rounded-2 @(isActiveSelected ? "bg-primary text-white" : "") @(!SchemaService.IsDatabaseConnected ? "opacity-50" : "")"
+                                                 style="cursor: @(!SchemaService.IsDatabaseConnected ? "not-allowed" : "pointer");"
+                                                 @onclick='async () => { if (SchemaService.IsDatabaseConnected) await SelectTargetProfile("active"); }'>
+                                                <div class="d-flex flex-column text-truncate" style="min-width: 0;">
+                                                    <span class="fw-semibold text-truncate" style="font-size: 0.85rem;">Active Session</span>
+                                                    <span class="small @(isActiveSelected ? "text-white-50" : "text-muted") text-truncate" style="font-size: 0.72rem;">@GetActiveServerDisplayName()</span>
+                                                </div>
+                                            </div>
                                         }
-                                    </optgroup>
-                                }
-                                <option value="custom">+ Custom / New Connection...</option>
-                            </select>
+
+                                        @{
+                                            var filteredTargetSaved = ConnectionService.SavedConnections
+                                                .Where(c => string.IsNullOrEmpty(_targetSearchTerm) ||
+                                                            (!string.IsNullOrEmpty(c.Name) && c.Name.Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                                                            (!string.IsNullOrEmpty(c.Server) && c.Server.Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                                                            (!string.IsNullOrEmpty(c.Database) && c.Database.Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase)))
+                                                .ToList();
+                                        }
+
+                                        @if (filteredTargetSaved.Any())
+                                        {
+                                            <div class="px-2 py-1 small fw-bold text-muted text-uppercase mt-1" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                                                Saved Connections
+                                            </div>
+
+                                            @foreach (var c in filteredTargetSaved)
+                                            {
+                                                var isSelected = _targetProfileId == c.Id;
+                                                var capturedId = c.Id;
+                                                <div class="dropdown-item p-2 mb-1 rounded-2 @(isSelected ? "bg-primary text-white" : "")"
+                                                     style="cursor: pointer;"
+                                                     @onclick="async () => await SelectTargetProfile(capturedId)">
+                                                    <div class="d-flex flex-column text-truncate" style="min-width: 0;">
+                                                        <span class="fw-semibold text-truncate" style="font-size: 0.85rem;">@(string.IsNullOrWhiteSpace(c.Name) ? c.Server : c.Name)</span>
+                                                        <span class="small @(isSelected ? "text-white-50" : "text-muted") text-truncate" style="font-size: 0.72rem;">@c.Server</span>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                    <hr class="dropdown-divider border-secondary my-2">
+                                    <button type="button" class="dropdown-item text-info text-center py-2 rounded-2 fw-medium"
+                                            style="border: 1px dashed var(--bs-info); width: calc(100% - 8px); margin: 0 4px;"
+                                            @onclick='async () => await SelectTargetProfile("custom")'>
+                                        <i class="bi bi-plus-lg me-1"></i> New Connection
+                                    </button>
+                                </div>
+                            }
                         </div>
 
                         @if (_targetProfileId == "custom")
@@ -403,7 +516,6 @@
                                     <i class="bi bi-folder2-open"></i> Browse...
                                 </button>
                             </div>
-                            <small class="text-muted" style="font-size: 0.75rem;">Select a compiled database project or export (.dacpac)</small>
                         </div>
                     }
                 </div>
@@ -703,6 +815,23 @@
             </div>
         </div>
     }
+
+    <!-- Toast Notification -->
+    @if (!string.IsNullOrEmpty(_toastMessage))
+    {
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
+            <div class="toast show align-items-center border-0 shadow-lg" role="alert" 
+                 style="animation: slideInUp 0.3s ease; background-color: var(--app-surface-secondary); color: var(--app-text); border-left: 4px solid var(--bs-@_toastThemeClass) !important;">
+                <div class="d-flex">
+                    <div class="toast-body d-flex align-items-center flex-grow-1 overflow-hidden" title="@_toastMessage">
+                        <i class="bi @_toastIconClass me-3 fs-5 text-@_toastThemeClass flex-shrink-0"></i>
+                        <span class="text-truncate">@_toastMessage</span>
+                    </div>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") me-3 m-auto flex-shrink-0" @onclick="() => _toastMessage = null"></button>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -711,16 +840,23 @@
     private ComparisonOptions _options = new();
     private bool _optionsExpanded = false;
     private bool _isComparing = false;
-    private string _progressMessage = "Preparing comparison...";
-    private double _progressPercent = 0;
+    private string _elapsedTimeFormatted = "00:00";
     private string _errorMessage = "";
     private CancellationTokenSource? _cts;
+    private string? _toastMessage = null;
+    private string _toastThemeClass = "info";
+    private string _toastIconClass = "bi-info-circle-fill";
+    private CancellationTokenSource? _toastCts;
 
     private SchemaComparisonResultModel? _result;
     private SchemaDifferenceItem? _selectedItem;
 
     private string _sourceProfileId = "active";
     private string _targetProfileId = "active";
+    private bool _isSourceProfileDropdownOpen = false;
+    private bool _isTargetProfileDropdownOpen = false;
+    private string _sourceSearchTerm = "";
+    private string _targetSearchTerm = "";
 
     private string _filterQuery = "";
     private string _selectedCategoryFilter = "All";
@@ -806,17 +942,69 @@
         };
     }
 
-    private async Task OnSourceProfileChanged(ChangeEventArgs e)
+    private void ToggleSourceDropdown()
     {
-        var val = e.Value?.ToString() ?? "active";
-        _sourceProfileId = val;
-        if (val == "active")
+        _isSourceProfileDropdownOpen = !_isSourceProfileDropdownOpen;
+        if (_isSourceProfileDropdownOpen)
+        {
+            _isTargetProfileDropdownOpen = false;
+            _sourceSearchTerm = "";
+        }
+    }
+
+    private void CloseSourceDropdown()
+    {
+        _isSourceProfileDropdownOpen = false;
+        _sourceSearchTerm = "";
+    }
+
+    private void ToggleTargetDropdown()
+    {
+        _isTargetProfileDropdownOpen = !_isTargetProfileDropdownOpen;
+        if (_isTargetProfileDropdownOpen)
+        {
+            _isSourceProfileDropdownOpen = false;
+            _targetSearchTerm = "";
+        }
+    }
+
+    private void CloseTargetDropdown()
+    {
+        _isTargetProfileDropdownOpen = false;
+        _targetSearchTerm = "";
+    }
+
+    private string GetSelectedProfileDisplayName(string profileId, DatabaseEndpoint endpoint)
+    {
+        if (profileId == "active")
+        {
+            return $"Active Session ({GetActiveServerDisplayName()})";
+        }
+        if (profileId == "custom")
+        {
+            return string.IsNullOrWhiteSpace(endpoint.Server) ? "New Connection" : $"New Connection ({endpoint.Server})";
+        }
+        var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == profileId);
+        if (saved != null)
+        {
+            return string.IsNullOrWhiteSpace(saved.Name) ? saved.Server : $"{saved.Name} ({saved.Server})";
+        }
+        return "Select Connection...";
+    }
+
+    private async Task SelectSourceProfile(string profileId)
+    {
+        _sourceProfileId = profileId;
+        _isSourceProfileDropdownOpen = false;
+        _sourceSearchTerm = "";
+
+        if (profileId == "active")
         {
             InitializeEndpointFromActiveConnection(_source);
         }
-        else if (val != "custom")
+        else if (profileId != "custom")
         {
-            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == val);
+            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == profileId);
             if (saved != null)
             {
                 ApplySavedConnectionToEndpoint(_source, saved);
@@ -825,17 +1013,19 @@
         await LoadSourceDatabasesAsync();
     }
 
-    private async Task OnTargetProfileChanged(ChangeEventArgs e)
+    private async Task SelectTargetProfile(string profileId)
     {
-        var val = e.Value?.ToString() ?? "active";
-        _targetProfileId = val;
-        if (val == "active")
+        _targetProfileId = profileId;
+        _isTargetProfileDropdownOpen = false;
+        _targetSearchTerm = "";
+
+        if (profileId == "active")
         {
             InitializeEndpointFromActiveConnection(_target);
         }
-        else if (val != "custom")
+        else if (profileId != "custom")
         {
-            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == val);
+            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == profileId);
             if (saved != null)
             {
                 ApplySavedConnectionToEndpoint(_target, saved);
@@ -1012,21 +1202,44 @@
         }
 
         _isComparing = true;
-        _progressMessage = "Connecting to endpoints...";
-        _progressPercent = 10;
+        _elapsedTimeFormatted = "00:00";
         StateHasChanged();
 
         _cts = new CancellationTokenSource();
-        var progress = new Progress<ComparisonProgress>(p =>
+        using var timerCts = new CancellationTokenSource();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        _ = Task.Run(async () =>
         {
-            _progressMessage = p.Message;
-            _progressPercent = p.ProgressPercentage;
-            InvokeAsync(StateHasChanged);
-        });
+            while (!timerCts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(500, timerCts.Token);
+                    var ts = stopwatch.Elapsed;
+                    _elapsedTimeFormatted = $"{(int)ts.TotalMinutes:D2}:{ts.Seconds:D2}";
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch { break; }
+            }
+        }, timerCts.Token);
 
         try
         {
-            _result = await ComparisonService.CompareAsync(_source, _target, _options, progress, _cts.Token);
+            var result = await ComparisonService.CompareAsync(_source, _target, _options, null, _cts.Token);
+
+            if (_cts?.IsCancellationRequested == true || result == null || result.IsCancelled)
+            {
+                _errorMessage = "";
+                _result = null;
+                if (_cts?.IsCancellationRequested == true || result?.IsCancelled == true)
+                {
+                    ShowToast("Comparison was cancelled.", "info", "bi-info-circle-fill");
+                }
+                return;
+            }
+
+            _result = result;
 
             // Populate category filter list
             _availableCategories = new List<string> { "All" };
@@ -1038,24 +1251,45 @@
         }
         catch (OperationCanceledException)
         {
-            _errorMessage = "Comparison was cancelled.";
+            _errorMessage = "";
             _result = null;
+            ShowToast("Comparison was cancelled.", "info", "bi-info-circle-fill");
         }
         catch (Exception ex)
         {
-            _errorMessage = $"Comparison failed: {ex.Message}";
-            _result = null;
+            if (_cts?.IsCancellationRequested == true)
+            {
+                _errorMessage = "";
+                _result = null;
+                ShowToast("Comparison was cancelled.", "info", "bi-info-circle-fill");
+            }
+            else
+            {
+                _errorMessage = $"Comparison failed: {ex.Message}";
+                _result = null;
+            }
         }
         finally
         {
+            timerCts.Cancel();
+            stopwatch.Stop();
             _isComparing = false;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
     }
 
     private void CancelComparison()
     {
-        _cts?.Cancel();
+        try
+        {
+            _cts?.Cancel();
+        }
+        catch { }
+
+        _isComparing = false;
+        _errorMessage = "";
+        ShowToast("Comparison was cancelled.", "info", "bi-info-circle-fill");
+        StateHasChanged();
     }
 
     private void ResetComparison()
@@ -1151,8 +1385,32 @@
         _ => "bg-secondary-subtle text-muted border border-secondary-subtle"
     };
 
+    private void ShowToast(string message, string themeClass = "info", string iconClass = "bi-info-circle-fill", int delayMs = 3000)
+    {
+        _toastCts?.Cancel();
+        _toastCts = new CancellationTokenSource();
+        var token = _toastCts.Token;
+        _toastMessage = message;
+        _toastThemeClass = themeClass;
+        _toastIconClass = iconClass;
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delayMs, token);
+                _toastMessage = null;
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (TaskCanceledException) { }
+        }, token);
+    }
+
     public void Dispose()
     {
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
         _cts?.Cancel();
         _cts?.Dispose();
     }

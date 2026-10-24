@@ -44,10 +44,18 @@ public class ComparisonOptions
     public bool IgnoreIdentitySeed { get; set; } = false;
 
     /// <summary>
+    /// Command execution timeout in seconds. 0 indicates no timeout (infinite),
+    /// ensuring large enterprise databases with thousands of objects do not prematurely fail.
+    /// </summary>
+    public int CommandTimeout { get; set; } = 0;
+
+    /// <summary>
     /// Applies these options to the underlying DacFx DacDeployOptions object.
     /// </summary>
     public void ApplyTo(DacDeployOptions dacOptions)
     {
+        dacOptions.CommandTimeout = CommandTimeout;
+        dacOptions.LongRunningCommandTimeout = CommandTimeout;
         dacOptions.IgnoreWhitespace = IgnoreWhitespace;
         dacOptions.IgnoreComments = IgnoreComments;
         dacOptions.IgnoreIdentitySeed = IgnoreIdentitySeed;
