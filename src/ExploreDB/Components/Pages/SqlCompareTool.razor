@@ -821,7 +821,7 @@
                             }
                         </div>
 
-                        <!-- Diff Controls (Prev/Next/Toggle Side-by-Side/Full Screen) -->
+                        <!-- Diff Controls (Prev/Next/Toggle Side-by-Side) -->
                         <div class="d-flex align-items-center gap-2 flex-shrink-0">
                             <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm"
                                     style="font-size: 0.75rem; border-color: var(--app-border);"
@@ -846,42 +846,16 @@
                                 <i class="bi @(_isSideBySide ? "bi-layout-split" : "bi-distribute-vertical")"></i>
                                 <span>@(_isSideBySide ? "Side-by-Side" : "Inline")</span>
                             </button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm"
-                                    style="font-size: 0.75rem; border-color: var(--app-border);"
-                                    title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")"
-                                    @onclick="ToggleFullScreen">
-                                <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
-                            </button>
                         </div>
                     </div>
 
                     <!-- Diff Endpoints Sub-Header (50/50 Full Width Split) -->
                     <div class="row g-0 border-bottom text-muted" style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary, rgba(0,0,0,0.03)); font-size: 0.75rem;">
-                        <!-- Target Header (Left / Original) -->
+                        <!-- Source Header (Left) -->
                         <div class="col-6 px-3 py-1 border-end d-flex align-items-center justify-content-between overflow-hidden" style="border-color: var(--app-border) !important;">
                             <div class="d-flex align-items-center gap-2 overflow-hidden">
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
-                                    TARGET (Original)
-                                </span>
-                                <span class="text-truncate fw-semibold" style="color: var(--app-text);" title="@_result?.TargetEndpoint.ToString()">
-                                    @_result?.TargetEndpoint.ToString()
-                                </span>
-                            </div>
-                            <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-2 flex-shrink-0"
-                                    style="font-size: 0.75rem; text-decoration: none;"
-                                    title="Copy Target DDL script"
-                                    @onclick="CopyTargetDdlAsync"
-                                    disabled="@(string.IsNullOrWhiteSpace(_selectedItem?.TargetScript))">
-                                <i class="bi @(_isTargetCopied ? "bi-check-lg text-success" : "bi-clipboard") me-1"></i>
-                                <span class="small">@(_isTargetCopied ? "Copied" : "Copy")</span>
-                            </button>
-                        </div>
-
-                        <!-- Source Header (Right / Modified) -->
-                        <div class="col-6 px-3 py-1 d-flex align-items-center justify-content-between overflow-hidden">
-                            <div class="d-flex align-items-center gap-2 overflow-hidden">
-                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
-                                    SOURCE (Modified)
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
+                                    SOURCE
                                 </span>
                                 <span class="text-truncate fw-semibold" style="color: var(--app-text);" title="@_result?.SourceEndpoint.ToString()">
                                     @_result?.SourceEndpoint.ToString()
@@ -894,6 +868,26 @@
                                     disabled="@(string.IsNullOrWhiteSpace(_selectedItem?.SourceScript))">
                                 <i class="bi @(_isSourceCopied ? "bi-check-lg text-success" : "bi-clipboard") me-1"></i>
                                 <span class="small">@(_isSourceCopied ? "Copied" : "Copy")</span>
+                            </button>
+                        </div>
+
+                        <!-- Target Header (Right) -->
+                        <div class="col-6 px-3 py-1 d-flex align-items-center justify-content-between overflow-hidden">
+                            <div class="d-flex align-items-center gap-2 overflow-hidden">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
+                                    TARGET
+                                </span>
+                                <span class="text-truncate fw-semibold" style="color: var(--app-text);" title="@_result?.TargetEndpoint.ToString()">
+                                    @_result?.TargetEndpoint.ToString()
+                                </span>
+                            </div>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-2 flex-shrink-0"
+                                    style="font-size: 0.75rem; text-decoration: none;"
+                                    title="Copy Target DDL script"
+                                    @onclick="CopyTargetDdlAsync"
+                                    disabled="@(string.IsNullOrWhiteSpace(_selectedItem?.TargetScript))">
+                                <i class="bi @(_isTargetCopied ? "bi-check-lg text-success" : "bi-clipboard") me-1"></i>
+                                <span class="small">@(_isTargetCopied ? "Copied" : "Copy")</span>
                             </button>
                         </div>
                     </div>
@@ -1594,20 +1588,20 @@
     {
         if (!_isDiffEditorReady || _diffEditor == null) return;
 
-        var targetScript = _selectedItem != null && !string.IsNullOrWhiteSpace(_selectedItem.TargetScript)
-            ? _selectedItem.TargetScript
-            : (_selectedItem != null ? "-- Object does not exist in target database." : "");
-
         var sourceScript = _selectedItem != null && !string.IsNullOrWhiteSpace(_selectedItem.SourceScript)
             ? _selectedItem.SourceScript
             : (_selectedItem != null ? "-- Object does not exist in source database." : "");
+
+        var targetScript = _selectedItem != null && !string.IsNullOrWhiteSpace(_selectedItem.TargetScript)
+            ? _selectedItem.TargetScript
+            : (_selectedItem != null ? "-- Object does not exist in target database." : "");
 
         try
         {
             if (_originalModel == null || _modifiedModel == null)
             {
-                _originalModel = await Global.CreateModel(JS, targetScript, "sql");
-                _modifiedModel = await Global.CreateModel(JS, sourceScript, "sql");
+                _originalModel = await Global.CreateModel(JS, sourceScript, "sql");
+                _modifiedModel = await Global.CreateModel(JS, targetScript, "sql");
                 await _diffEditor.SetModel(new DiffEditorModel
                 {
                     Original = _originalModel,
@@ -1616,8 +1610,8 @@
             }
             else
             {
-                await _originalModel.SetValue(targetScript);
-                await _modifiedModel.SetValue(sourceScript);
+                await _originalModel.SetValue(sourceScript);
+                await _modifiedModel.SetValue(targetScript);
             }
 
             await JS.InvokeVoidAsync("initSqlDiffNavigator", "sql-diff-editor");
