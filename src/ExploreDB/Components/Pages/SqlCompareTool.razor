@@ -17,61 +17,64 @@
 @implements IDisposable
 
 <div class="container-fluid h-100 d-flex flex-column pb-4">
-    <!-- Header -->
-    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-        <div>
-            <h3 class="fw-bold mb-0" style="color: var(--app-text);">SQL Compare</h3>
-            @if (_result != null)
-            {
-                <span class="text-muted small">
-                    Source: <strong style="color: var(--app-text);">@_result.SourceEndpoint.ToString()</strong> 
-                    <i class="bi bi-arrow-right mx-1 text-primary"></i> 
-                    Target: <strong style="color: var(--app-text);">@_result.TargetEndpoint.ToString()</strong>
-                </span>
-            }
+    <!-- Header (Hidden during comparison loading screen) -->
+    @if (!_isComparing)
+    {
+        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+            <div>
+                <h3 class="fw-bold mb-0" style="color: var(--app-text);">SQL Compare</h3>
+                @if (_result != null)
+                {
+                    <span class="text-muted small">
+                        Source: <strong style="color: var(--app-text);">@_result.SourceEndpoint.ToString()</strong> 
+                        <i class="bi bi-arrow-right mx-1 text-primary"></i> 
+                        Target: <strong style="color: var(--app-text);">@_result.TargetEndpoint.ToString()</strong>
+                    </span>
+                }
+            </div>
+
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                @if (_result != null)
+                {
+                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="CopySyncScriptAsync"
+                            title="Copy generated synchronization script">
+                        <i class="bi @(_isScriptCopied ? "bi-check-lg text-success" : "bi-clipboard")"></i>
+                        <span>@(_isScriptCopied ? "Script Copied!" : "Copy Script")</span>
+                    </button>
+
+                    <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="ExportHtmlReportAsync"
+                            title="Export standalone offline HTML diff report">
+                        <i class="bi bi-filetype-html"></i>
+                        <span>Export HTML</span>
+                    </button>
+
+                    <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
+                            @onclick="OpenInQueryRunnerAsync"
+                            title="Open synchronization script in Query Runner">
+                        <i class="bi bi-play-circle"></i>
+                        <span>Open in Query Runner</span>
+                    </button>
+
+                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                            style="color: var(--app-text); border-color: var(--app-border);"
+                            @onclick="ResetComparison"
+                            title="Configure a new comparison">
+                        <i class="bi bi-arrow-left"></i>
+                        <span>New Comparison</span>
+                    </button>
+                }
+                else
+                {
+                    <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
+                        <i class="bi bi-arrow-left"></i>
+                        <span>Back to Tools</span>
+                    </a>
+                }
+            </div>
         </div>
-
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            @if (_result != null)
-            {
-                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                        @onclick="CopySyncScriptAsync"
-                        title="Copy generated synchronization script">
-                    <i class="bi @(_isScriptCopied ? "bi-check-lg text-success" : "bi-clipboard")"></i>
-                    <span>@(_isScriptCopied ? "Script Copied!" : "Copy Script")</span>
-                </button>
-
-                <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 shadow-sm"
-                        @onclick="ExportHtmlReportAsync"
-                        title="Export standalone offline HTML diff report">
-                    <i class="bi bi-filetype-html"></i>
-                    <span>Export HTML</span>
-                </button>
-
-                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
-                        @onclick="OpenInQueryRunnerAsync"
-                        title="Open synchronization script in Query Runner">
-                    <i class="bi bi-play-circle"></i>
-                    <span>Open in Query Runner</span>
-                </button>
-
-                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                        style="color: var(--app-text); border-color: var(--app-border);"
-                        @onclick="ResetComparison"
-                        title="Configure a new comparison">
-                    <i class="bi bi-arrow-left"></i>
-                    <span>New Comparison</span>
-                </button>
-            }
-            else
-            {
-                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
-                    <i class="bi bi-arrow-left"></i>
-                    <span>Back to Tools</span>
-                </a>
-            }
-        </div>
-    </div>
+    }
 
     @if (_isComparing)
     {
@@ -620,7 +623,7 @@
                     <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Added" ? "border-success" : "")"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
                          @onclick='() => _selectedChangeFilter = "Added"'>
-                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">+ ADDED (SOURCE)</span>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">ONLY IN SOURCE</span>
                         <span class="fs-4 fw-bold text-success">@_result.Summary.AddedCount</span>
                     </div>
                 </div>
@@ -628,7 +631,7 @@
                     <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Modified" ? "border-warning" : "")"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
                          @onclick='() => _selectedChangeFilter = "Modified"'>
-                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">~ MODIFIED</span>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">DIFFERENT</span>
                         <span class="fs-4 fw-bold text-warning">@_result.Summary.ModifiedCount</span>
                     </div>
                 </div>
@@ -636,7 +639,7 @@
                     <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Deleted" ? "border-danger" : "")"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
                          @onclick='() => _selectedChangeFilter = "Deleted"'>
-                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">- DELETED (TARGET)</span>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">ONLY IN TARGET</span>
                         <span class="fs-4 fw-bold text-danger">@_result.Summary.DeletedCount</span>
                     </div>
                 </div>
@@ -658,14 +661,19 @@
                 </div>
             </div>
 
-            <!-- Split Main View: Differences Table (Left/Top) + Visual Diff Viewer (Right/Bottom) -->
-            <div class="row g-3 flex-grow-1" style="min-height: 480px;">
-                <!-- Left Pane: Differences Grid -->
-                <div class="col-12 col-lg-5 d-flex flex-column h-100">
-                    <div class="card rounded-3 shadow-sm d-flex flex-column h-100 overflow-hidden" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
-                        <!-- Filter & Search Bar -->
-                        <div class="p-2 border-bottom" style="border-color: var(--app-border) !important;">
-                            <div class="input-group input-group-sm mb-2">
+            <!-- Redgate Top/Bottom Layout: Differences Table (Top) + Visual Diff Viewer (Bottom) -->
+            <div class="@(_isFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3 d-flex flex-column gap-2" : "d-flex flex-column flex-grow-1 gap-2 overflow-hidden")"
+                 style="@(_isFullScreen ? "background-color: var(--app-bg); z-index: 9999;" : "min-height: 0;")">
+                <!-- Top Panel: Differences Grid (Full Width) -->
+                <div class="card rounded-3 shadow-sm d-flex flex-column overflow-hidden flex-shrink-0"
+                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); @(_isGridCollapsed ? "height: 48px;" : "height: 40%; min-height: 210px; max-height: 42vh;") transition: height 0.2s ease;">
+                    
+                    <!-- Filter & Action Bar (100% width) -->
+                    <div class="p-2 px-3 border-bottom d-flex flex-column gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
+                        <!-- Row 1: Search Box (50% size) + Right Controls -->
+                        <div class="d-flex align-items-center justify-content-between gap-3">
+                            <!-- Left: Search Box (50% size) -->
+                            <div class="input-group input-group-sm" style="width: 50%; max-width: 50%;">
                                 <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
                                     <i class="bi bi-search"></i>
                                 </span>
@@ -684,39 +692,69 @@
                                 }
                             </div>
 
-                            <!-- Category Filter Pills -->
-                            <div class="d-flex align-items-center gap-1 flex-wrap" style="font-size: 0.75rem;">
-                                @foreach (var cat in _availableCategories)
-                                {
-                                    <button class="badge rounded-pill border-0 @(_selectedCategoryFilter == cat ? "bg-primary text-white" : "bg-secondary-subtle text-muted")"
-                                            style="cursor: pointer; padding: 4px 8px;"
-                                            @onclick="() => _selectedCategoryFilter = cat">
-                                        @cat
-                                    </button>
-                                }
+                            <!-- Right: Count & Collapse/Expand & Full Screen Toggles -->
+                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                <span class="text-muted small" style="font-size: 0.75rem;">
+                                    Showing <strong>@FilteredDifferences.Count()</strong> of @_result.Differences.Count
+                                </span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                                        title="@(_isGridCollapsed ? "Expand object list" : "Collapse object list for larger diff view")"
+                                        @onclick="() => _isGridCollapsed = !_isGridCollapsed">
+                                    <i class="bi @(_isGridCollapsed ? "bi-chevron-down" : "bi-chevron-up")"></i>
+                                    <span>@(_isGridCollapsed ? "Expand" : "Collapse")</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                                        title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")"
+                                        @onclick="ToggleFullScreen">
+                                    <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                                </button>
                             </div>
                         </div>
 
-                        <!-- Object List -->
-                        <div class="flex-grow-1 overflow-auto" style="max-height: calc(100vh - 340px);">
+                    <!-- Row 2: Category Filter Pills (Below Search Box) -->
+                    @if (!_isGridCollapsed)
+                    {
+                        <div class="d-flex align-items-center gap-1 overflow-auto" style="font-size: 0.75rem; white-space: nowrap;">
+                            @foreach (var cat in _availableCategories)
+                            {
+                                <button class="badge rounded-pill border-0 @(_selectedCategoryFilter == cat ? "bg-primary text-white" : "bg-secondary-subtle text-muted")"
+                                        style="cursor: pointer; padding: 5px 10px; font-weight: 500;"
+                                        @onclick="() => _selectedCategoryFilter = cat">
+                                    @cat
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+
+                    <!-- Object List Table (Full Width) -->
+                    @if (!_isGridCollapsed)
+                    {
+                        <div class="flex-grow-1 overflow-auto">
                             <table class="table table-hover table-sm mb-0 align-middle" style="color: var(--app-text); font-size: 0.8rem;">
                                 <thead style="background-color: var(--app-surface-secondary); position: sticky; top: 0; z-index: 10;">
                                     <tr>
-                                        <th style="width: 32px;" class="text-center">
+                                        <th style="width: 38px;" class="text-center">
                                             <input type="checkbox" class="form-check-input"
                                                    checked="@IsAllSelected"
                                                    @onchange="ToggleSelectAll"
                                                    title="Include/Exclude all filtered objects" />
                                         </th>
+                                        <th style="width: 160px;">Category</th>
                                         <th>Object Name</th>
-                                        <th style="width: 80px;" class="text-center">Status</th>
+                                        <th style="width: 145px;" class="text-center">
+                                            <span>Status</span>
+                                            <i class="bi bi-info-circle ms-1 text-muted" style="font-size: 0.7rem; cursor: help;" title="Shows how the object in Source differs from Target"></i>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @if (!FilteredDifferences.Any())
                                     {
                                         <tr>
-                                            <td colspan="3" class="text-center py-4 text-muted">
+                                            <td colspan="4" class="text-center py-4 text-muted">
                                                 No objects match the current filter.
                                             </td>
                                         </tr>
@@ -735,16 +773,19 @@
                                                 </td>
                                                 <td>
                                                     <div class="d-flex align-items-center gap-2">
-                                                        <i class="bi @diff.BootstrapIcon text-primary" style="font-size: 0.9rem;"></i>
-                                                        <div class="overflow-hidden text-truncate">
-                                                            <span class="fw-semibold">@diff.Name</span>
-                                                            <small class="text-muted d-block" style="font-size: 0.68rem;">@diff.CategoryDisplayName</small>
-                                                        </div>
+                                                        <i class="bi @diff.BootstrapIcon text-primary"></i>
+                                                        <span class="text-muted" style="font-size: 0.75rem;">@diff.CategoryDisplayName</span>
                                                     </div>
                                                 </td>
+                                                <td>
+                                                    <span class="fw-semibold">@diff.Name</span>
+                                                </td>
                                                 <td class="text-center">
-                                                    <span class="badge @GetChangeBadgeClass(diff.ChangeType)" style="font-size: 0.65rem;">
-                                                        @diff.ChangeType
+                                                    <span class="badge @GetChangeBadgeClass(diff.ChangeType) d-inline-flex align-items-center gap-1"
+                                                          style="font-size: 0.68rem; min-width: 95px; cursor: help;"
+                                                          title="@GetChangeTooltip(diff.ChangeType)">
+                                                        <span>@GetChangeBadgeText(diff.ChangeType)</span>
+                                                        <i class="bi bi-info-circle opacity-75" style="font-size: 0.62rem;"></i>
                                                     </span>
                                                 </td>
                                             </tr>
@@ -753,63 +794,126 @@
                                 </tbody>
                             </table>
                         </div>
-                    </div>
+                    }
                 </div>
 
-                <!-- Right Pane: Side-by-Side Visual Diff Viewer -->
-                <div class="col-12 col-lg-7 d-flex flex-column h-100">
-                    <div class="card rounded-3 shadow-sm d-flex flex-column h-100 overflow-hidden" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
-                        <!-- Diff Viewer Header -->
-                        <div class="p-2 px-3 border-bottom d-flex align-items-center justify-content-between" style="border-color: var(--app-border) !important;">
-                            <div class="d-flex align-items-center gap-2 overflow-hidden">
-                                @if (_selectedItem != null)
-                                {
-                                    <i class="bi @_selectedItem.BootstrapIcon text-primary fs-6"></i>
-                                    <span class="fw-bold text-truncate" style="color: var(--app-text); font-size: 0.9rem;">@_selectedItem.Name</span>
-                                    <span class="badge @GetChangeBadgeClass(_selectedItem.ChangeType)" style="font-size: 0.65rem;">@_selectedItem.ChangeType</span>
-                                }
-                                else
-                                {
-                                    <span class="text-muted small">Select an object to inspect differences</span>
-                                }
-                            </div>
-
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="badge bg-secondary-subtle text-muted border border-secondary-subtle" style="font-size: 0.7rem;">
-                                    Left: Target DDL | Right: Source DDL
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Diff Code Container -->
-                        <div class="flex-grow-1 position-relative" style="min-height: 400px; background-color: #1e1e1e;">
-                            @if (_selectedItem == null)
+                <!-- Bottom Panel: Monaco Visual Diff Viewer (Full Width) -->
+                <div class="card rounded-3 shadow-sm d-flex flex-column flex-grow-1 overflow-hidden"
+                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); min-height: 320px;">
+                    <!-- Diff Viewer Top Toolbar -->
+                    <div class="p-2 px-3 border-bottom d-flex align-items-center justify-content-between gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
+                        <div class="d-flex align-items-center gap-2 overflow-hidden">
+                            @if (_selectedItem != null)
                             {
-                                <div class="d-flex align-items-center justify-content-center h-100 text-muted small">
-                                    <i class="bi bi-arrow-left me-2"></i> Select an object from the list to view its side-by-side DDL diff
-                                </div>
+                                <i class="bi @_selectedItem.BootstrapIcon text-primary fs-6"></i>
+                                <span class="fw-bold text-truncate" style="color: var(--app-text); font-size: 0.95rem;">@_selectedItem.Name</span>
+                                <span class="badge @GetChangeBadgeClass(_selectedItem.ChangeType) d-inline-flex align-items-center gap-1"
+                                      style="font-size: 0.68rem; cursor: help;"
+                                      title="@GetChangeTooltip(_selectedItem.ChangeType)">
+                                    <span>@GetChangeBadgeText(_selectedItem.ChangeType)</span>
+                                    <i class="bi bi-info-circle opacity-75" style="font-size: 0.62rem;"></i>
+                                </span>
+                                <span class="text-muted small">(@_selectedItem.CategoryDisplayName)</span>
                             }
                             else
                             {
-                                <!-- Side-by-side DDL View -->
-                                <div class="row g-0 h-100">
-                                    <div class="col-6 border-end h-100 d-flex flex-column" style="border-color: #333 !important;">
-                                        <div class="px-3 py-1 bg-dark text-muted small border-bottom border-secondary d-flex justify-content-between" style="font-size: 0.72rem;">
-                                            <span>TARGET: @_result.TargetEndpoint.ToString()</span>
-                                            <span class="badge bg-danger-subtle text-danger">Original</span>
-                                        </div>
-                                        <pre class="flex-grow-1 p-3 m-0 text-light overflow-auto" style="font-family: 'Cascadia Code', Consolas, monospace; font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; background-color: #181818;">@(string.IsNullOrWhiteSpace(_selectedItem.TargetScript) ? "-- Object does not exist in target database." : _selectedItem.TargetScript)</pre>
-                                    </div>
-                                    <div class="col-6 h-100 d-flex flex-column">
-                                        <div class="px-3 py-1 bg-dark text-muted small border-bottom border-secondary d-flex justify-content-between" style="font-size: 0.72rem;">
-                                            <span>SOURCE: @_result.SourceEndpoint.ToString()</span>
-                                            <span class="badge bg-success-subtle text-success">Modified</span>
-                                        </div>
-                                        <pre class="flex-grow-1 p-3 m-0 text-light overflow-auto" style="font-family: 'Cascadia Code', Consolas, monospace; font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; background-color: #181818;">@(string.IsNullOrWhiteSpace(_selectedItem.SourceScript) ? "-- Object does not exist in source database." : _selectedItem.SourceScript)</pre>
-                                    </div>
-                                </div>
+                                <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Select an object from the list above to inspect differences</span>
                             }
                         </div>
+
+                        <!-- Diff Controls (Prev/Next/Toggle Side-by-Side/Full Screen) -->
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm"
+                                    style="font-size: 0.75rem; border-color: var(--app-border);"
+                                    title="Jump to previous difference block"
+                                    @onclick="GoToPrevDiffAsync"
+                                    disabled="@(_selectedItem == null)">
+                                <i class="bi bi-arrow-up"></i>
+                                <span>Prev Diff</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm"
+                                    style="font-size: 0.75rem; border-color: var(--app-border);"
+                                    title="Jump to next difference block"
+                                    @onclick="GoToNextDiffAsync"
+                                    disabled="@(_selectedItem == null)">
+                                <i class="bi bi-arrow-down"></i>
+                                <span>Next Diff</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm"
+                                    style="font-size: 0.75rem; border-color: var(--app-border);"
+                                    title="@(_isSideBySide ? "Switch to unified inline diff view" : "Switch to side-by-side split diff view")"
+                                    @onclick="ToggleSideBySideAsync">
+                                <i class="bi @(_isSideBySide ? "bi-layout-split" : "bi-distribute-vertical")"></i>
+                                <span>@(_isSideBySide ? "Side-by-Side" : "Inline")</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm"
+                                    style="font-size: 0.75rem; border-color: var(--app-border);"
+                                    title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")"
+                                    @onclick="ToggleFullScreen">
+                                <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Diff Endpoints Sub-Header (50/50 Full Width Split) -->
+                    <div class="row g-0 border-bottom text-muted" style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary, rgba(0,0,0,0.03)); font-size: 0.75rem;">
+                        <!-- Target Header (Left / Original) -->
+                        <div class="col-6 px-3 py-1 border-end d-flex align-items-center justify-content-between overflow-hidden" style="border-color: var(--app-border) !important;">
+                            <div class="d-flex align-items-center gap-2 overflow-hidden">
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
+                                    TARGET (Original)
+                                </span>
+                                <span class="text-truncate fw-semibold" style="color: var(--app-text);" title="@_result?.TargetEndpoint.ToString()">
+                                    @_result?.TargetEndpoint.ToString()
+                                </span>
+                            </div>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-2 flex-shrink-0"
+                                    style="font-size: 0.75rem; text-decoration: none;"
+                                    title="Copy Target DDL script"
+                                    @onclick="CopyTargetDdlAsync"
+                                    disabled="@(string.IsNullOrWhiteSpace(_selectedItem?.TargetScript))">
+                                <i class="bi @(_isTargetCopied ? "bi-check-lg text-success" : "bi-clipboard") me-1"></i>
+                                <span class="small">@(_isTargetCopied ? "Copied" : "Copy")</span>
+                            </button>
+                        </div>
+
+                        <!-- Source Header (Right / Modified) -->
+                        <div class="col-6 px-3 py-1 d-flex align-items-center justify-content-between overflow-hidden">
+                            <div class="d-flex align-items-center gap-2 overflow-hidden">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
+                                    SOURCE (Modified)
+                                </span>
+                                <span class="text-truncate fw-semibold" style="color: var(--app-text);" title="@_result?.SourceEndpoint.ToString()">
+                                    @_result?.SourceEndpoint.ToString()
+                                </span>
+                            </div>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-2 flex-shrink-0"
+                                    style="font-size: 0.75rem; text-decoration: none;"
+                                    title="Copy Source DDL script"
+                                    @onclick="CopySourceDdlAsync"
+                                    disabled="@(string.IsNullOrWhiteSpace(_selectedItem?.SourceScript))">
+                                <i class="bi @(_isSourceCopied ? "bi-check-lg text-success" : "bi-clipboard") me-1"></i>
+                                <span class="small">@(_isSourceCopied ? "Copied" : "Copy")</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Diff Monaco Editor Container -->
+                    <div class="flex-grow-1 position-relative" style="min-height: 250px; height: 100%;">
+                        @if (_selectedItem == null)
+                        {
+                            <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center"
+                                 style="background-color: var(--app-surface-secondary); z-index: 10;">
+                                <i class="bi bi-file-earmark-diff fs-1 mb-2 opacity-50 text-secondary"></i>
+                                <div class="fw-semibold text-secondary">No Object Selected</div>
+                                <div class="small opacity-75 text-secondary">Select an object from the list above to view its side-by-side DDL diff</div>
+                            </div>
+                        }
+                        <StandaloneDiffEditor @ref="_diffEditor"
+                                              Id="sql-diff-editor"
+                                              ConstructionOptions="DiffEditorConstructionOptions"
+                                              OnDidInit="DiffEditorOnDidInit"
+                                              CssClass="w-100 h-100" />
                     </div>
                 </div>
             </div>
@@ -850,6 +954,17 @@
 
     private SchemaComparisonResultModel? _result;
     private SchemaDifferenceItem? _selectedItem;
+
+    // Monaco Diff Editor State
+    private StandaloneDiffEditor? _diffEditor;
+    private TextModel? _originalModel;
+    private TextModel? _modifiedModel;
+    private bool _isSideBySide = true;
+    private bool _isDiffEditorReady = false;
+    private bool _isTargetCopied = false;
+    private bool _isSourceCopied = false;
+    private bool _isGridCollapsed = false;
+    private bool _isFullScreen = false;
 
     private string _sourceProfileId = "active";
     private string _targetProfileId = "active";
@@ -911,9 +1026,19 @@
 
     protected override async Task OnInitializedAsync()
     {
+        ThemeService.OnThemeChanged += HandleThemeChanged;
         InitializeEndpointsFromActiveConnection();
         await LoadSourceDatabasesAsync();
         await LoadTargetDatabasesAsync();
+    }
+
+    private async void HandleThemeChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            await BlazorMonaco.Editor.Global.SetTheme(JS, ThemeService.IsDark ? "vs-dark" : "vs");
+            StateHasChanged();
+        });
     }
 
     private string GetActiveServerDisplayName()
@@ -1248,6 +1373,7 @@
 
             // Pre-select first difference item if any
             _selectedItem = _result.Differences.FirstOrDefault(d => d.HasDifference) ?? _result.Differences.FirstOrDefault();
+            await UpdateDiffContentAsync();
         }
         catch (OperationCanceledException)
         {
@@ -1297,11 +1423,19 @@
         _result = null;
         _selectedItem = null;
         _errorMessage = "";
+        _isFullScreen = false;
+        _ = UpdateDiffContentAsync();
     }
 
-    private void SelectDiffItem(SchemaDifferenceItem item)
+    private void ToggleFullScreen()
+    {
+        _isFullScreen = !_isFullScreen;
+    }
+
+    private async Task SelectDiffItem(SchemaDifferenceItem item)
     {
         _selectedItem = item;
+        await UpdateDiffContentAsync();
     }
 
     private void ToggleSelectAll(ChangeEventArgs e)
@@ -1385,6 +1519,29 @@
         _ => "bg-secondary-subtle text-muted border border-secondary-subtle"
     };
 
+    private string GetChangeBadgeText(ChangeType type) => type switch
+    {
+        ChangeType.Added => "Only in Source",
+        ChangeType.Deleted => "Only in Target",
+        ChangeType.Modified => "Different",
+        _ => "Identical"
+    };
+
+    private string GetChangeTooltip(ChangeType type)
+    {
+        var sourceDb = !string.IsNullOrWhiteSpace(_result?.SourceEndpoint.Database) ? _result.SourceEndpoint.Database : "Source";
+        var targetDb = !string.IsNullOrWhiteSpace(_result?.TargetEndpoint.Database) ? _result.TargetEndpoint.Database : "Target";
+
+        return type switch
+        {
+            ChangeType.Added => $"Only in Source: Exists in Source ({sourceDb}), but missing in Target ({targetDb}). Synchronization will CREATE it in Target.",
+            ChangeType.Deleted => $"Only in Target: Exists in Target ({targetDb}), but missing in Source ({sourceDb}). Synchronization will DROP it from Target.",
+            ChangeType.Modified => $"Different: Exists in both databases, but schemas differ. Synchronization will ALTER Target to match Source.",
+            ChangeType.Identical => $"Identical: Schema matches exactly in both databases ({sourceDb} and {targetDb}). No action needed.",
+            _ => "Schema difference status relative to Target"
+        };
+    }
+
     private void ShowToast(string message, string themeClass = "info", string iconClass = "bi-info-circle-fill", int delayMs = 3000)
     {
         _toastCts?.Cancel();
@@ -1407,11 +1564,147 @@
         }, token);
     }
 
+    #region Monaco Diff Editor Methods
+
+    private StandaloneDiffEditorConstructionOptions DiffEditorConstructionOptions(StandaloneDiffEditor editor)
+    {
+        return new StandaloneDiffEditorConstructionOptions
+        {
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
+            ReadOnly = true,
+            OriginalEditable = false,
+            AutomaticLayout = true,
+            RenderSideBySide = _isSideBySide,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            LineNumbers = "on",
+            ScrollBeyondLastLine = false,
+            FontSize = 13,
+            RenderOverviewRuler = false,
+            IgnoreTrimWhitespace = false
+        };
+    }
+
+    private async Task DiffEditorOnDidInit()
+    {
+        _isDiffEditorReady = true;
+        await UpdateDiffContentAsync();
+    }
+
+    private async Task UpdateDiffContentAsync()
+    {
+        if (!_isDiffEditorReady || _diffEditor == null) return;
+
+        var targetScript = _selectedItem != null && !string.IsNullOrWhiteSpace(_selectedItem.TargetScript)
+            ? _selectedItem.TargetScript
+            : (_selectedItem != null ? "-- Object does not exist in target database." : "");
+
+        var sourceScript = _selectedItem != null && !string.IsNullOrWhiteSpace(_selectedItem.SourceScript)
+            ? _selectedItem.SourceScript
+            : (_selectedItem != null ? "-- Object does not exist in source database." : "");
+
+        try
+        {
+            if (_originalModel == null || _modifiedModel == null)
+            {
+                _originalModel = await Global.CreateModel(JS, targetScript, "sql");
+                _modifiedModel = await Global.CreateModel(JS, sourceScript, "sql");
+                await _diffEditor.SetModel(new DiffEditorModel
+                {
+                    Original = _originalModel,
+                    Modified = _modifiedModel
+                });
+            }
+            else
+            {
+                await _originalModel.SetValue(targetScript);
+                await _modifiedModel.SetValue(sourceScript);
+            }
+
+            await JS.InvokeVoidAsync("initSqlDiffNavigator", "sql-diff-editor");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] Error updating diff editor: {ex.Message}");
+        }
+    }
+
+    private async Task GoToPrevDiffAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("sqlDiffPrev", "sql-diff-editor");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] PrevDiff error: {ex.Message}");
+        }
+    }
+
+    private async Task GoToNextDiffAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("sqlDiffNext", "sql-diff-editor");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] NextDiff error: {ex.Message}");
+        }
+    }
+
+    private async Task ToggleSideBySideAsync()
+    {
+        _isSideBySide = !_isSideBySide;
+        try
+        {
+            if (_diffEditor != null)
+            {
+                await _diffEditor.UpdateOptions(new DiffEditorOptions { RenderSideBySide = _isSideBySide });
+            }
+            await JS.InvokeVoidAsync("sqlDiffSetSideBySide", "sql-diff-editor", _isSideBySide);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] ToggleSideBySide error: {ex.Message}");
+        }
+    }
+
+    private async Task CopyTargetDdlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedItem?.TargetScript)) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selectedItem.TargetScript);
+            _isTargetCopied = true;
+            StateHasChanged();
+            _ = Task.Delay(2000).ContinueWith(_ => InvokeAsync(() => { _isTargetCopied = false; StateHasChanged(); }));
+        }
+        catch { }
+    }
+
+    private async Task CopySourceDdlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedItem?.SourceScript)) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selectedItem.SourceScript);
+            _isSourceCopied = true;
+            StateHasChanged();
+            _ = Task.Delay(2000).ContinueWith(_ => InvokeAsync(() => { _isSourceCopied = false; StateHasChanged(); }));
+        }
+        catch { }
+    }
+
+    #endregion
+
     public void Dispose()
     {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
         _toastCts?.Cancel();
         _toastCts?.Dispose();
         _cts?.Cancel();
         _cts?.Dispose();
+        _originalModel = null;
+        _modifiedModel = null;
     }
 }

@@ -1036,3 +1036,58 @@ window.revokeBlobUrl = function(url) {
         URL.revokeObjectURL(url);
     }
 };
+
+window.sqlDiffNavigator = null;
+window.initSqlDiffNavigator = function (editorId) {
+    if (typeof monaco === 'undefined' || !monaco.editor) return false;
+    var diffEditors = monaco.editor.getDiffEditors();
+    for (var i = 0; i < diffEditors.length; i++) {
+        var e = diffEditors[i];
+        var container = e.getContainerDomNode();
+        if (container && (container.id === editorId || (container.closest && container.closest('#' + editorId)))) {
+            if (window.sqlDiffNavigator && typeof window.sqlDiffNavigator.dispose === 'function') {
+                try { window.sqlDiffNavigator.dispose(); } catch (err) {}
+            }
+            window.sqlDiffNavigator = monaco.editor.createDiffNavigator(e, {
+                followsCaret: true,
+                ignoreCharChanges: false
+            });
+            return true;
+        }
+    }
+    return false;
+};
+
+window.sqlDiffNext = function (editorId) {
+    editorId = editorId || "sql-diff-editor";
+    if (!window.sqlDiffNavigator) {
+        window.initSqlDiffNavigator(editorId);
+    }
+    if (window.sqlDiffNavigator) {
+        window.sqlDiffNavigator.next();
+    }
+};
+
+window.sqlDiffPrev = function (editorId) {
+    editorId = editorId || "sql-diff-editor";
+    if (!window.sqlDiffNavigator) {
+        window.initSqlDiffNavigator(editorId);
+    }
+    if (window.sqlDiffNavigator) {
+        window.sqlDiffNavigator.previous();
+    }
+};
+
+window.sqlDiffSetSideBySide = function (editorId, sideBySide) {
+    if (typeof monaco === 'undefined' || !monaco.editor) return false;
+    var diffEditors = monaco.editor.getDiffEditors();
+    for (var i = 0; i < diffEditors.length; i++) {
+        var e = diffEditors[i];
+        var container = e.getContainerDomNode();
+        if (container && (container.id === editorId || (container.closest && container.closest('#' + editorId)))) {
+            e.updateOptions({ renderSideBySide: sideBySide });
+            return true;
+        }
+    }
+    return false;
+};
