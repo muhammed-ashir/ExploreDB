@@ -1092,60 +1092,103 @@ window.sqlDiffSetSideBySide = function (editorId, sideBySide) {
     return false;
 };
 
-window.initSqlCompareSplitter = function (splitterId, topPanelId, containerId, dotNetRef) {
-    var splitter = document.getElementById(splitterId);
-    var topPanel = document.getElementById(topPanelId);
-    var container = document.getElementById(containerId);
-    if (!splitter || !topPanel || !container) return false;
+window.initSqlCompareSplitter = function (dotNetRef) {
+    // 1. Top Panel Resizer (between Object List and Diff Viewer)
+    var topSplitter = document.getElementById('sql-compare-splitter');
+    var topPanel = document.getElementById('sql-compare-top-panel');
+    
+    if (topSplitter && topPanel && !topSplitter._hasSplitterHandler) {
+        topSplitter._hasSplitterHandler = true;
+        topSplitter.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            try { topSplitter.setPointerCapture(e.pointerId); } catch (err) {}
 
-    if (splitter._hasSplitterHandler) return true;
-    splitter._hasSplitterHandler = true;
+            var startY = e.clientY;
+            var startHeight = topPanel.offsetHeight;
+            var minHeight = 120;
+            var lastHeight = startHeight;
 
-    splitter.addEventListener('pointerdown', function (e) {
-        e.preventDefault();
-        try {
-            splitter.setPointerCapture(e.pointerId);
-        } catch (err) {}
+            topSplitter.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
 
-        var startY = e.clientY;
-        var startHeight = topPanel.offsetHeight;
-        var minHeight = 120;
-        var lastHeight = startHeight;
-
-        splitter.classList.add('dragging');
-        document.body.style.cursor = 'row-resize';
-        document.body.style.userSelect = 'none';
-
-        function onPointerMove(moveEvent) {
-            var containerRect = container.getBoundingClientRect();
-            var maxHeight = Math.max(minHeight, containerRect.height - 180);
-            var deltaY = moveEvent.clientY - startY;
-            var newHeight = Math.round(Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY)));
-            lastHeight = newHeight;
-            topPanel.style.height = newHeight + 'px';
-            topPanel.style.maxHeight = 'none';
-        }
-
-        function onPointerUp(upEvent) {
-            try {
-                splitter.releasePointerCapture(upEvent.pointerId);
-            } catch (err) {}
-            splitter.removeEventListener('pointermove', onPointerMove);
-            splitter.removeEventListener('pointerup', onPointerUp);
-            splitter.removeEventListener('pointercancel', onPointerUp);
-            splitter.classList.remove('dragging');
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-
-            if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
-                dotNetRef.invokeMethodAsync('SetTopPanelHeight', lastHeight);
+            function onPointerMove(moveEvent) {
+                var deltaY = moveEvent.clientY - startY;
+                var newHeight = Math.round(Math.max(minHeight, startHeight + deltaY));
+                lastHeight = newHeight;
+                topPanel.style.height = newHeight + 'px';
+                topPanel.style.maxHeight = 'none';
+                window.dispatchEvent(new Event('resize'));
             }
-        }
 
-        splitter.addEventListener('pointermove', onPointerMove);
-        splitter.addEventListener('pointerup', onPointerUp);
-        splitter.addEventListener('pointercancel', onPointerUp);
-    });
+            function onPointerUp(upEvent) {
+                try { topSplitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+                topSplitter.removeEventListener('pointermove', onPointerMove);
+                topSplitter.removeEventListener('pointerup', onPointerUp);
+                topSplitter.removeEventListener('pointercancel', onPointerUp);
+                topSplitter.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                window.dispatchEvent(new Event('resize'));
+
+                if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                    dotNetRef.invokeMethodAsync('SetTopPanelHeight', lastHeight);
+                }
+            }
+
+            topSplitter.addEventListener('pointermove', onPointerMove);
+            topSplitter.addEventListener('pointerup', onPointerUp);
+            topSplitter.addEventListener('pointercancel', onPointerUp);
+        });
+    }
+
+    // 2. Diff Panel Resizer (at bottom of Diff Viewer)
+    var diffSplitter = document.getElementById('sql-compare-diff-resizer');
+    var diffPanel = document.getElementById('sql-compare-diff-panel');
+
+    if (diffSplitter && diffPanel && !diffSplitter._hasSplitterHandler) {
+        diffSplitter._hasSplitterHandler = true;
+        diffSplitter.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            try { diffSplitter.setPointerCapture(e.pointerId); } catch (err) {}
+
+            var startY = e.clientY;
+            var startHeight = diffPanel.offsetHeight;
+            var minHeight = 220;
+            var lastHeight = startHeight;
+
+            diffSplitter.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+
+            function onPointerMove(moveEvent) {
+                var deltaY = moveEvent.clientY - startY;
+                var newHeight = Math.round(Math.max(minHeight, startHeight + deltaY));
+                lastHeight = newHeight;
+                diffPanel.style.height = newHeight + 'px';
+                window.dispatchEvent(new Event('resize'));
+            }
+
+            function onPointerUp(upEvent) {
+                try { diffSplitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+                diffSplitter.removeEventListener('pointermove', onPointerMove);
+                diffSplitter.removeEventListener('pointerup', onPointerUp);
+                diffSplitter.removeEventListener('pointercancel', onPointerUp);
+                diffSplitter.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                window.dispatchEvent(new Event('resize'));
+
+                if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                    dotNetRef.invokeMethodAsync('SetDiffPanelHeight', lastHeight);
+                }
+            }
+
+            diffSplitter.addEventListener('pointermove', onPointerMove);
+            diffSplitter.addEventListener('pointerup', onPointerUp);
+            diffSplitter.addEventListener('pointercancel', onPointerUp);
+        });
+    }
 
     return true;
 };

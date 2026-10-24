@@ -663,12 +663,12 @@
 
             <!-- Redgate Top/Bottom Layout: Differences Table (Top) + Visual Diff Viewer (Bottom) -->
             <div id="sql-compare-results-container"
-                 class="@(_isFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3 d-flex flex-column gap-2" : "d-flex flex-column flex-grow-1 gap-2 overflow-hidden")"
-                 style="@(_isFullScreen ? "background-color: var(--app-bg); z-index: 9999;" : "min-height: 0;")">
+                 class="@(_isFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3 d-flex flex-column gap-2 overflow-auto" : "d-flex flex-column gap-2")"
+                 style="@(_isFullScreen ? "background-color: var(--app-bg); z-index: 9999; overflow-y: auto;" : "min-height: 0;")">
                 <!-- Top Panel: Differences Grid (Full Width) -->
                 <div id="sql-compare-top-panel"
                      class="card rounded-3 shadow-sm d-flex flex-column overflow-hidden flex-shrink-0"
-                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); @(_isGridCollapsed ? "height: 48px;" : $"height: {_topPanelHeight}px; min-height: 120px; max-height: calc(100% - 180px);") transition: height 0.15s ease;">
+                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); @(_isGridCollapsed ? "height: 48px;" : $"height: {_topPanelHeight}px; min-height: 120px;") transition: height 0.15s ease;">
                     
                     <!-- Filter & Action Bar (100% width) -->
                     <div class="p-2 px-3 border-bottom d-flex flex-column gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
@@ -810,8 +810,8 @@
 
                 <!-- Bottom Panel: Monaco Visual Diff Viewer (Full Width) -->
                 <div id="sql-compare-diff-panel"
-                     class="card rounded-3 shadow-sm d-flex flex-column flex-grow-1 overflow-hidden"
-                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); min-height: 180px;">
+                     class="card rounded-3 shadow-sm d-flex flex-column flex-shrink-0 overflow-hidden"
+                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); height: @(_isGridCollapsed && _isFullScreen ? "calc(100vh - 120px)" : $"{_diffPanelHeight}px"); min-height: 220px;">
                     <!-- Diff Viewer Top Toolbar -->
                     <div class="p-2 px-3 border-bottom d-flex align-items-center justify-content-between gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
                         <div class="d-flex align-items-center gap-2 overflow-hidden">
@@ -922,6 +922,13 @@
                                               CssClass="w-100 h-100" />
                     </div>
                 </div>
+
+                <!-- Splitter Bar: Bottom of Diff Viewer (Drag to Resize Diff Viewer) -->
+                <div id="sql-compare-diff-resizer"
+                     class="sql-compare-splitter"
+                     title="Drag up or down to resize diff viewer">
+                    <div class="sql-compare-splitter-handle"></div>
+                </div>
             </div>
         </div>
     }
@@ -972,12 +979,19 @@
     private bool _isGridCollapsed = false;
     private bool _isFullScreen = false;
     private int _topPanelHeight = 260;
+    private int _diffPanelHeight = 440;
     private DotNetObjectReference<SqlCompareTool>? _dotNetRef;
 
     [JSInvokable]
     public void SetTopPanelHeight(int height)
     {
         _topPanelHeight = height;
+    }
+
+    [JSInvokable]
+    public void SetDiffPanelHeight(int height)
+    {
+        _diffPanelHeight = height;
     }
 
     private string _sourceProfileId = "active";
@@ -1048,10 +1062,10 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_result != null && !_isComparing && !_isGridCollapsed)
+        if (_result != null && !_isComparing)
         {
             _dotNetRef ??= DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("initSqlCompareSplitter", "sql-compare-splitter", "sql-compare-top-panel", "sql-compare-results-container", _dotNetRef);
+            await JS.InvokeVoidAsync("initSqlCompareSplitter", _dotNetRef);
         }
     }
 
