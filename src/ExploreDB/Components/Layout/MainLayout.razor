@@ -206,6 +206,7 @@
                     bool isQueryRunner = string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("runner", StringComparison.OrdinalIgnoreCase);
                     bool isHistory = relativePath.StartsWith("history", StringComparison.OrdinalIgnoreCase);
                     bool isSnippets = relativePath.StartsWith("snippets", StringComparison.OrdinalIgnoreCase);
+                    bool isTools = relativePath.StartsWith("tools", StringComparison.OrdinalIgnoreCase);
 
                     if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
                     {
@@ -217,7 +218,7 @@
                         catch { }
                     }
                 }
-                @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner && !isHistory && !isSnippets)
+                @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner && !isHistory && !isSnippets && !isTools)
                 {
                     <div class="w-100 h-100 d-flex justify-content-center align-items-center" style="min-height: 80vh;">
                         <ExploreDB.Components.Shared.NoDatabaseBanner Height="100%" />

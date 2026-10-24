@@ -146,6 +146,11 @@
                 <span>Type Explorer</span>
             </a>
 
+            <a href="tools"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsToolsActive ? "active" : "")">
+                <span>Tools</span>
+            </a>
+
             <a href="learning"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsLearningActive ? "active" : "")">
                 <span>Learning Hub</span>
@@ -172,6 +177,7 @@
     private bool IsRunnerActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
     private bool IsPathfinderActive => CurrentUrl.Contains("/builder");
     private bool IsLearningActive => CurrentUrl.Contains("/learning");
+    private bool IsToolsActive => CurrentUrl.Contains("/tools");
     private bool IsExplorerActive => CurrentUrl.Contains("/explorer");
     private bool IsViewExplorerActive => CurrentUrl.Contains("/views") && !CurrentUrl.Contains("/view/");
     private bool IsSpExplorerActive => CurrentUrl.Contains("/procs") || CurrentUrl.Contains("/proc/");

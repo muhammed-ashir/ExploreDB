@@ -1,0 +1,162 @@
+@page "/tools"
+@using ExploreDB.Services
+@inject NavigationManager Nav
+
+<div class="container-fluid h-100 d-flex flex-column pb-5">
+    <div class="row mb-4 align-items-center">
+        <div class="col">
+            <h2 class="fw-bold mb-0" style="color: var(--app-text);">Tools &amp; Utilities</h2>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="row mb-4">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="input-group shadow-sm">
+                <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="text"
+                       class="form-control shadow-none border-start-0 ps-0"
+                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                       placeholder="Search tools..."
+                       @bind="SearchTerm"
+                       @bind:event="oninput" />
+                @if (!string.IsNullOrEmpty(SearchTerm))
+                {
+                    <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" @onclick="() => SearchTerm = string.Empty">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Tools Grid -->
+    <div class="row g-4 flex-grow-1 align-content-start">
+        @if (!FilteredTools.Any())
+        {
+            <div class="col-12">
+                <div class="d-flex flex-column align-items-center justify-content-center p-5 rounded" style="border: 1px dashed var(--app-border); background-color: var(--app-surface-secondary);">
+                    <i class="bi bi-tools text-muted fs-1 mb-2"></i>
+                    <h5 class="fw-bold text-muted mb-1">No tools match your search</h5>
+                    <p class="text-muted small mb-3">Try clearing your search term.</p>
+                    <button class="btn btn-sm btn-outline-primary" @onclick="ResetFilters">Clear Search</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            @foreach (var tool in FilteredTools)
+            {
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card h-100 p-4 rounded-3 shadow-sm transition-transform hover-scale"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: @(tool.IsAvailable ? "pointer" : "default");"
+                         @onclick="() => LaunchTool(tool)"
+                         title="@(tool.IsAvailable ? "Click to open " + tool.Title : "Coming soon")">
+                        <div class="d-flex align-items-start justify-content-between mb-3">
+                            <div class="rounded-3 d-flex align-items-center justify-content-center shadow-sm"
+                                 style="width: 48px; height: 48px; background-color: @tool.IconBg; color: @tool.IconColor; font-size: 1.4rem;">
+                                <i class="bi @tool.Icon"></i>
+                            </div>
+                            @if (!tool.IsAvailable)
+                            {
+                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"
+                                      style="font-size: 0.72rem; padding: 4px 8px; font-weight: 600;">
+                                    Coming Soon
+                                </span>
+                            }
+                        </div>
+
+                        <h5 class="fw-bold mb-2" style="color: var(--app-text); font-size: 1.1rem;">@tool.Title</h5>
+                        <p class="text-muted small mb-0" style="line-height: 1.5;">@tool.Description</p>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<style>
+    .hover-scale {
+        transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease;
+    }
+    .hover-scale:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+    }
+</style>
+
+@code {
+    private string SearchTerm = "";
+
+    private record ToolItem(
+        string Id,
+        string Title,
+        string Description,
+        string Icon,
+        string IconBg,
+        string IconColor,
+        string Route,
+        bool IsAvailable
+    );
+
+    private readonly List<ToolItem> Tools = new()
+    {
+        new ToolItem(
+            "data-cleanup",
+            "Data Cleanup",
+            "Calculate safe deletion hierarchy and generate dependency-ordered cleanup scripts without foreign key violation errors.",
+            "bi-eraser",
+            "rgba(239, 68, 68, 0.12)",
+            "#ef4444",
+            "/tools/data-cleanup",
+            true
+        ),
+        new ToolItem(
+            "sql-compare",
+            "SQL Compare",
+            "Compare schemas, table structures, and data differences between databases with synchronization scripts.",
+            "bi-arrow-left-right",
+            "rgba(168, 85, 247, 0.12)",
+            "#a855f7",
+            "",
+            false
+        ),
+        new ToolItem(
+            "sql-profiler",
+            "SQL Profiler",
+            "Real-time query execution monitoring, trace events, deadlocks, and live SQL server activity tracking.",
+            "bi-activity",
+            "rgba(14, 165, 233, 0.12)",
+            "#0ea5e9",
+            "",
+            false
+        )
+    };
+
+    private IEnumerable<ToolItem> FilteredTools => Tools.Where(t =>
+    {
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            var term = SearchTerm.Trim();
+            return t.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || t.Description.Contains(term, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return true;
+    });
+
+    private void LaunchTool(ToolItem tool)
+    {
+        if (tool.IsAvailable && !string.IsNullOrEmpty(tool.Route))
+        {
+            Nav.NavigateTo(tool.Route);
+        }
+    }
+
+    private void ResetFilters()
+    {
+        SearchTerm = "";
+    }
+}

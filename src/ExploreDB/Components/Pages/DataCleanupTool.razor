@@ -1,0 +1,846 @@
+@page "/tools/data-cleanup"
+@using ExploreDB.Services
+@using System.IO
+@inject DataCleanupService CleanupService
+@inject SchemaService SchemaService
+@inject QueryStateService QueryStateService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="container-fluid h-100 d-flex flex-column pb-5">
+    <!-- Header & Breadcrumb -->
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+        <div>
+            <h3 class="fw-bold mb-0" style="color: var(--app-text);">Data Cleanup</h3>
+            <span class="text-muted small">Target Database: <strong style="color: var(--app-text);">@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)</strong></span>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if (_plan != null)
+            {
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="CopySqlScriptAsync"
+                        title="Copy full transactional script to clipboard">
+                    <i class="bi @(_isScriptCopied ? "bi-check-lg text-success" : "bi-clipboard")"></i>
+                    <span>@(_isScriptCopied ? "Script Copied!" : "Copy SQL Script")</span>
+                </button>
+
+                <!-- Export Order Dropdown -->
+                <div class="position-relative">
+                    <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="() => _isExportDropdownOpen = !_isExportDropdownOpen">
+                        <i class="bi bi-download"></i>
+                        <span>Export Order</span>
+                        <i class="bi bi-chevron-down ms-1" style="font-size: 0.75rem;"></i>
+                    </button>
+                    @if (_isExportDropdownOpen)
+                    {
+                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => _isExportDropdownOpen = false"></div>
+                        <div class="dropdown-menu dropdown-menu-end show shadow-lg p-1 mt-1"
+                             style="position: absolute; top: 100%; right: 0; z-index: 1050; min-width: 190px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border);">
+                            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 export-btn"
+                                    type="button"
+                                    @onclick="ExportCsvAsync">
+                                <i class="bi bi-file-earmark-spreadsheet text-success fs-6"></i>
+                                <span>CSV Spreadsheet (.csv)</span>
+                            </button>
+                            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 export-btn"
+                                    type="button"
+                                    @onclick="ExportHtmlReportAsync">
+                                <i class="bi bi-filetype-html text-primary fs-6"></i>
+                                <span>HTML Report (.html)</span>
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
+                        @onclick="OpenInQueryEditorAsync"
+                        title="Open generated script in Query Runner">
+                    <i class="bi bi-play-circle"></i>
+                    <span>Open in Query Runner</span>
+                </button>
+
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        style="color: var(--app-text); border-color: var(--app-border);"
+                        @onclick="BackToSelection"
+                        title="Return to table selection">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Back</span>
+                </button>
+            }
+            else
+            {
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        style="color: var(--app-text); border-color: var(--app-border);"
+                        @onclick="RefreshTablesAsync"
+                        title="Reload tables from database">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>Refresh</span>
+                </button>
+                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Back to Tools</span>
+                </a>
+            }
+        </div>
+    </div>
+
+    @if (!SchemaService.IsDatabaseConnected)
+    {
+        <NoDatabaseBanner Height="calc(100vh - 160px)" />
+    }
+    else if (_isLoading)
+    {
+        <LoadingSpinner Height="calc(100vh - 160px)" Message="Analyzing tables, row counts, and foreign keys..." />
+    }
+    else
+    {
+        <div class="row g-4 flex-grow-1 align-items-start">
+            @if (_plan == null)
+            {
+                <!-- Full Width Initial Setup View -->
+                <div class="col-12">
+                    <div class="card p-4 rounded-3 shadow-sm" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                        <div class="row g-4">
+                            <!-- Left: Table Selection Checklist -->
+                            <div class="col-12 col-lg-7 col-xl-8 d-flex flex-column">
+                                <div class="d-flex align-items-center justify-content-between mb-3">
+                                    <h6 class="fw-bold mb-0" style="color: var(--app-text); font-size: 1rem;">
+                                        <i class="bi bi-table text-primary me-2"></i>Select Tables to Clean
+                                    </h6>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.75rem;">
+                                        @SelectedCount of @_tables.Count Selected
+                                    </span>
+                                </div>
+
+                                <!-- Search & Bulk Selection Actions -->
+                                <div class="mb-3">
+                                    <div class="input-group input-group-sm mb-2 shadow-sm">
+                                        <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                                            <i class="bi bi-search"></i>
+                                        </span>
+                                        <input type="text"
+                                               class="form-control shadow-none border-start-0 ps-0"
+                                               style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                               placeholder="Filter tables..."
+                                               @bind="_tableFilter"
+                                               @bind:event="oninput" />
+                                        @if (!string.IsNullOrEmpty(_tableFilter))
+                                        {
+                                            <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" @onclick="() => _tableFilter = string.Empty">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        }
+                                    </div>
+
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-secondary btn-sm" @onclick="SelectAll">Select All</button>
+                                            <button class="btn btn-outline-secondary btn-sm" @onclick="DeselectAll">Deselect All</button>
+                                        </div>
+                                        <div class="form-check m-0 d-flex align-items-center gap-2">
+                                            <input class="form-check-input mt-0"
+                                                   type="checkbox"
+                                                   id="autoIncludeChildren"
+                                                   checked="@_autoIncludeChildTables"
+                                                   @onchange="(e) => OnAutoIncludeChanged((bool)(e.Value ?? false))" />
+                                            <label class="form-check-label small user-select-none"
+                                                   for="autoIncludeChildren"
+                                                   style="color: var(--app-text); cursor: pointer;"
+                                                   title="Auto-select all child tables referencing currently selected tables to avoid foreign key orphan errors">
+                                                Auto-include Child Tables
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Scrollable Table Checklist -->
+                                <div class="flex-grow-1 rounded border overflow-auto custom-scrollbar-light"
+                                     style="max-height: 480px; min-height: 280px; background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                    @if (!FilteredTables.Any())
+                                    {
+                                        <div class="p-4 text-center text-muted small">No tables found matching your filter.</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="list-group list-group-flush">
+                                            @foreach (var table in FilteredTables)
+                                            {
+                                                <label class="list-group-item d-flex align-items-center justify-content-between py-2 px-3 border-bottom"
+                                                       style="background: transparent; color: var(--app-text); border-color: var(--app-border) !important; cursor: pointer;">
+                                                    <div class="d-flex align-items-start gap-2 overflow-hidden me-2">
+                                                        <input class="form-check-input flex-shrink-0"
+                                                               style="margin-top: 3px;"
+                                                               type="checkbox"
+                                                               checked="@table.IsSelected"
+                                                               @onchange="(e) => ToggleTableSelection(table, (bool)(e.Value ?? false))" />
+                                                        <div class="d-flex flex-column overflow-hidden">
+                                                            <span class="font-monospace text-truncate" style="font-size: 0.88rem;" title="@table.FullName">
+                                                                <span class="text-muted">@table.Schema.</span><strong>@table.TableName</strong>
+                                                            </span>
+                                                            @if ((table.IsSelected && table.IsAutoSelected) || table.DependentChildren.Count > 0)
+                                                            {
+                                                                <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                                                                    @if (table.IsSelected && table.IsAutoSelected)
+                                                                    {
+                                                                        <span class="badge bg-info-subtle text-info border border-info-subtle"
+                                                                              style="font-size: 0.65rem; padding: 2px 6px; font-weight: 600;"
+                                                                              title="@table.AutoSelectedReason">
+                                                                            Auto-included
+                                                                        </span>
+                                                                    }
+                                                                    @if (table.DependentChildren.Count > 0)
+                                                                    {
+                                                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle"
+                                                                              style="font-size: 0.65rem; padding: 2px 6px; font-weight: 600;"
+                                                                              title="Referenced by @table.DependentChildren.Count child table(s): @string.Join(", ", table.DependentChildren.Select(c => c.Replace("[", "").Replace("]", ""))). Child tables must be deleted before this table!">
+                                                                            @(table.DependentChildren.Count == 1 ? "1 Child" : $"{table.DependentChildren.Count} Children")
+                                                                        </span>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                    <div class="d-flex align-items-center flex-shrink-0">
+                                                        <span class="badge bg-dark-subtle text-muted" style="font-size: 0.72rem; font-variant-numeric: tabular-nums;">
+                                                            @table.EstimatedRows.ToString("N0") rows
+                                                        </span>
+                                                    </div>
+                                                </label>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Right: Options & Action Button -->
+                            <div class="col-12 col-lg-5 col-xl-4">
+                                <h6 class="fw-bold mb-3" style="color: var(--app-text); font-size: 1rem;">
+                                    <i class="bi bi-sliders text-primary me-2"></i>Cleanup Options
+                                </h6>
+
+                                <!-- Options Card -->
+                                <div class="p-3 rounded mb-3" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border);">
+                                    <label class="fw-bold small mb-2 d-block" style="color: var(--app-text);">Execution Strategy</label>
+                                    
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="radio" name="strategyRadio" id="stratConstraint" 
+                                               checked="@(_strategy == CleanupStrategy.ConstraintDisabling)"
+                                               @onchange="() => _strategy = CleanupStrategy.ConstraintDisabling" />
+                                        <label class="form-check-label small" for="stratConstraint" style="color: var(--app-text);">
+                                            <strong>Constraint Disabling</strong>
+                                            <span class="d-block text-muted" style="font-size: 0.75rem;">Disables FK constraints, deletes data, and re-enables with verification. 100% immune to circular references and self-references.</span>
+                                        </label>
+                                    </div>
+
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="radio" name="strategyRadio" id="stratTopo" 
+                                               checked="@(_strategy == CleanupStrategy.Topological)"
+                                               @onchange="() => _strategy = CleanupStrategy.Topological" />
+                                        <label class="form-check-label small" for="stratTopo" style="color: var(--app-text);">
+                                            <strong>Topological Sort</strong>
+                                            <span class="d-block text-muted" style="font-size: 0.75rem;">Orders statements from deepest child table to root parents without altering constraint states.</span>
+                                        </label>
+                                    </div>
+
+                                    <hr class="my-3" style="border-color: var(--app-border);" />
+
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="reseedCheckbox" @bind="_reseedIdentities" />
+                                        <label class="form-check-label small" for="reseedCheckbox" style="color: var(--app-text);">
+                                            <strong>Reseed Identity Columns</strong>
+                                            <span class="d-block text-muted" style="font-size: 0.75rem;">Resets auto-increment identities back to initial seed (<code style="font-size: 0.72rem;">DBCC CHECKIDENT(..., RESEED, 0)</code>).</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Analyze Button -->
+                                <button class="btn btn-primary w-100 py-3 d-flex align-items-center justify-content-center shadow-sm fw-bold fs-6"
+                                        disabled="@(SelectedCount == 0)"
+                                        @onclick="CalculateOrder">
+                                    <span>Analyze Deletion Order</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Left: Table Selection & Configuration (Side-by-side with Plan) -->
+                <div class="col-12 col-xl-5">
+                    <div class="card p-4 rounded-3 shadow-sm h-100 d-flex flex-column" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                        <div class="mb-3">
+                            <h6 class="fw-bold mb-1" style="color: var(--app-text); font-size: 1rem;">
+                                <i class="bi bi-table text-primary me-2"></i>Select Tables to Clean
+                            </h6>
+                            <div>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.75rem;">
+                                    @SelectedCount of @_tables.Count Selected
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Search & Bulk Selection Actions -->
+                        <div class="mb-3">
+                            <div class="input-group input-group-sm mb-2 shadow-sm">
+                                <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text"
+                                       class="form-control shadow-none border-start-0 ps-0"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       placeholder="Filter tables..."
+                                       @bind="_tableFilter"
+                                       @bind:event="oninput" />
+                                @if (!string.IsNullOrEmpty(_tableFilter))
+                                {
+                                    <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" @onclick="() => _tableFilter = string.Empty">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                }
+                            </div>
+
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="SelectAll">Select All</button>
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="DeselectAll">Deselect All</button>
+                                </div>
+                                <div class="form-check m-0 d-flex align-items-center gap-2">
+                                    <input class="form-check-input mt-0"
+                                           type="checkbox"
+                                           id="autoIncludeChildrenCompact"
+                                           checked="@_autoIncludeChildTables"
+                                           @onchange="(e) => OnAutoIncludeChanged((bool)(e.Value ?? false))" />
+                                    <label class="form-check-label small user-select-none"
+                                           for="autoIncludeChildrenCompact"
+                                           style="color: var(--app-text); cursor: pointer;"
+                                           title="Auto-select all child tables referencing currently selected tables to avoid foreign key orphan errors">
+                                        Auto-include Child Tables
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Scrollable Table Checklist -->
+                        <div class="flex-grow-1 rounded border overflow-auto mb-3 custom-scrollbar-light"
+                             style="max-height: 280px; min-height: 180px; background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                            @if (!FilteredTables.Any())
+                            {
+                                <div class="p-4 text-center text-muted small">No tables found matching your filter.</div>
+                            }
+                            else
+                            {
+                                <div class="list-group list-group-flush">
+                                    @foreach (var table in FilteredTables)
+                                    {
+                                        <label class="list-group-item d-flex align-items-start py-2 px-3 border-bottom"
+                                               style="background: transparent; color: var(--app-text); border-color: var(--app-border) !important; cursor: pointer;">
+                                            <div class="d-flex align-items-start gap-2 overflow-hidden w-100">
+                                                <input class="form-check-input flex-shrink-0"
+                                                       style="margin-top: 3px;"
+                                                       type="checkbox"
+                                                       checked="@table.IsSelected"
+                                                       @onchange="(e) => ToggleTableSelection(table, (bool)(e.Value ?? false))" />
+                                                <div class="d-flex flex-column overflow-hidden flex-grow-1">
+                                                    <span class="font-monospace text-truncate" style="font-size: 0.88rem;" title="@table.FullName">
+                                                        <span class="text-muted">@table.Schema.</span><strong>@table.TableName</strong>
+                                                    </span>
+                                                    <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                                                        @if (table.IsSelected && table.IsAutoSelected)
+                                                        {
+                                                            <span class="badge bg-info-subtle text-info border border-info-subtle"
+                                                                  style="font-size: 0.65rem; padding: 2px 6px; font-weight: 600;"
+                                                                  title="@table.AutoSelectedReason">
+                                                                Auto-included
+                                                            </span>
+                                                        }
+                                                        @if (table.DependentChildren.Count > 0)
+                                                        {
+                                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle"
+                                                                  style="font-size: 0.65rem; padding: 2px 6px; font-weight: 600;"
+                                                                  title="Referenced by @table.DependentChildren.Count child table(s): @string.Join(", ", table.DependentChildren.Select(c => c.Replace("[", "").Replace("]", ""))). Child tables must be deleted before this table!">
+                                                                @(table.DependentChildren.Count == 1 ? "1 Child" : $"{table.DependentChildren.Count} Children")
+                                                            </span>
+                                                        }
+                                                        <span class="badge bg-dark-subtle text-muted" style="font-size: 0.68rem; padding: 2px 6px; font-variant-numeric: tabular-nums;">
+                                                            @table.EstimatedRows.ToString("N0") rows
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Options Card -->
+                        <div class="p-3 rounded mb-3" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border);">
+                            <label class="fw-bold small mb-2 d-block" style="color: var(--app-text);">Cleanup Execution Strategy</label>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="strategyRadioCompact" id="stratConstraintCompact" 
+                                       checked="@(_strategy == CleanupStrategy.ConstraintDisabling)"
+                                       @onchange="() => _strategy = CleanupStrategy.ConstraintDisabling" />
+                                <label class="form-check-label small" for="stratConstraintCompact" style="color: var(--app-text);">
+                                    <strong>Constraint Disabling</strong>
+                                </label>
+                            </div>
+
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="strategyRadioCompact" id="stratTopoCompact" 
+                                       checked="@(_strategy == CleanupStrategy.Topological)"
+                                       @onchange="() => _strategy = CleanupStrategy.Topological" />
+                                <label class="form-check-label small" for="stratTopoCompact" style="color: var(--app-text);">
+                                    <strong>Topological Sort</strong>
+                                </label>
+                            </div>
+
+                            <div class="form-check mt-2 pt-2 border-top" style="border-color: var(--app-border) !important;">
+                                <input class="form-check-input" type="checkbox" id="reseedCheckboxCompact" @bind="_reseedIdentities" />
+                                <label class="form-check-label small" for="reseedCheckboxCompact" style="color: var(--app-text);">
+                                    <strong>Reseed Identity Columns</strong>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Analyze Button -->
+                        <button class="btn btn-primary w-100 py-2 d-flex align-items-center justify-content-center shadow-sm fw-bold"
+                                disabled="@(SelectedCount == 0)"
+                                @onclick="CalculateOrder">
+                            <span>Re-analyze Order</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right: Analyzed Execution Sequence -->
+                <div class="col-12 col-xl-7">
+                    <div class="card p-4 rounded-3 shadow-sm" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                        <!-- Metrics Row -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12 col-sm-4">
+                                <div class="p-3 rounded border text-center" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                    <span class="text-muted small d-block mb-1 fw-bold text-uppercase" style="font-size: 0.68rem; letter-spacing: 0.5px;">Tables</span>
+                                    <h4 class="fw-bold mb-0 text-primary">@_plan.TotalTables</h4>
+                                </div>
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <div class="p-3 rounded border text-center" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                    <span class="text-muted small d-block mb-1 fw-bold text-uppercase" style="font-size: 0.68rem; letter-spacing: 0.5px;">Est. Rows</span>
+                                    <h4 class="fw-bold mb-0 text-danger">@_plan.TotalEstimatedRows.ToString("N0")</h4>
+                                </div>
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <div class="p-3 rounded border text-center" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                    <span class="text-muted small d-block mb-1 fw-bold text-uppercase" style="font-size: 0.68rem; letter-spacing: 0.5px;">Cycles</span>
+                                    <span class="badge @(_plan.HasCycles ? "bg-warning-subtle text-warning" : "bg-success-subtle text-success") fw-bold" style="font-size: 0.72rem;">
+                                        @(_plan.HasCycles ? "Detected" : "Clean")
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (_plan.HasCycles)
+                        {
+                            <div class="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill fs-5 text-warning flex-shrink-0"></i>
+                                <div>
+                                    <strong>Circular Foreign Key Loop Detected:</strong> One or more tables reference each other circularly (@string.Join(", ", _plan.CycleTables)). The script will automatically disable constraints to guarantee successful execution.
+                                </div>
+                            </div>
+                        }
+
+                        <div class="mb-2">
+                            <h6 class="fw-bold mb-0" style="color: var(--app-text);">Calculated Deletion Order</h6>
+                        </div>
+
+                        <!-- Sequence Table -->
+                        <div class="table-responsive rounded border" style="border-color: var(--app-border) !important; max-height: 480px; overflow-y: auto;">
+                            <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem; background-color: var(--app-surface); color: var(--app-text);">
+                                <thead style="background-color: var(--app-surface-secondary); color: var(--app-table-header-text); position: sticky; top: 0; z-index: 10;">
+                                    <tr>
+                                        <th style="width: 50px;" class="text-center">#</th>
+                                        <th>Table Name</th>
+                                        <th>Dependency Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var step in _plan.Steps)
+                                    {
+                                        <tr>
+                                            <td class="text-center fw-bold text-muted" style="font-size: 0.82rem;">@step.StepNumber</td>
+                                            <td>
+                                                <span class="font-monospace fw-bold" style="color: var(--app-text);">
+                                                    <span class="text-muted fw-normal">@step.Schema.</span>@step.TableName
+                                                </span>
+                                            </td>
+                                            <td class="text-muted small" style="line-height: 1.4;">
+                                                @step.Explanation
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .export-btn {
+        color: var(--app-text) !important;
+        background: transparent;
+        border: none;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        transition: background-color 0.12s ease;
+    }
+    .export-btn:hover {
+        background-color: var(--primary-color) !important;
+        color: #ffffff !important;
+    }
+    .export-btn:hover i,
+    .export-btn:hover span {
+        color: #ffffff !important;
+    }
+</style>
+
+@code {
+    private List<CleanupTableItem> _tables = new();
+    private string _tableFilter = "";
+    private CleanupStrategy _strategy = CleanupStrategy.ConstraintDisabling;
+    private bool _reseedIdentities = true;
+    private bool _autoIncludeChildTables = true;
+    private bool _isLoading = false;
+    private bool _isExportDropdownOpen = false;
+    private bool _isScriptCopied = false;
+    private CleanupPlanResult? _plan;
+
+    private int SelectedCount => _tables.Count(t => t.IsSelected);
+
+    private IEnumerable<CleanupTableItem> FilteredTables => _tables.Where(t =>
+    {
+        if (string.IsNullOrWhiteSpace(_tableFilter)) return true;
+        var term = _tableFilter.Trim();
+        return t.FullName.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || t.TableName.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || t.Schema.Contains(term, StringComparison.OrdinalIgnoreCase);
+    });
+
+    protected override async Task OnInitializedAsync()
+    {
+        SchemaService.OnTablesLoaded += OnTablesLoadedHandler;
+
+        var currentDb = SchemaService.ActiveDatabase;
+        var session = CleanupService.SessionState;
+
+        if (session != null &&
+            !string.IsNullOrEmpty(currentDb) &&
+            string.Equals(session.DatabaseName, currentDb, StringComparison.OrdinalIgnoreCase) &&
+            session.Tables.Count > 0)
+        {
+            _tables = session.Tables;
+            _tableFilter = session.TableFilter;
+            _strategy = session.Strategy;
+            _reseedIdentities = session.ReseedIdentities;
+            _autoIncludeChildTables = session.AutoIncludeChildTables;
+            _plan = session.Plan;
+        }
+        else
+        {
+            await LoadTablesAsync();
+        }
+    }
+
+    private void OnTablesLoadedHandler()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            CleanupService.ClearSessionState();
+            await LoadTablesAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task RefreshTablesAsync()
+    {
+        CleanupService.ClearSessionState();
+        await LoadTablesAsync();
+    }
+
+    private void BackToSelection()
+    {
+        _plan = null;
+        SaveSession();
+    }
+
+    private async Task LoadTablesAsync()
+    {
+        if (!SchemaService.IsDatabaseConnected) return;
+
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _tables = await CleanupService.GetTablesWithEstimatesAsync();
+            _plan = null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading cleanup tables: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleTableSelection(CleanupTableItem table, bool isSelected)
+    {
+        table.IsSelected = isSelected;
+        table.IsAutoSelected = false;
+        table.AutoSelectedReason = string.Empty;
+        UpdateAutoSelections();
+    }
+
+    private void OnAutoIncludeChanged(bool value)
+    {
+        _autoIncludeChildTables = value;
+        UpdateAutoSelections();
+    }
+
+    private void SelectAll()
+    {
+        foreach (var t in FilteredTables)
+        {
+            t.IsSelected = true;
+            t.IsAutoSelected = false;
+            t.AutoSelectedReason = string.Empty;
+        }
+        UpdateAutoSelections();
+    }
+
+    private void DeselectAll()
+    {
+        foreach (var t in FilteredTables)
+        {
+            t.IsSelected = false;
+            t.IsAutoSelected = false;
+            t.AutoSelectedReason = string.Empty;
+        }
+        UpdateAutoSelections();
+    }
+
+    private void UpdateAutoSelections()
+    {
+        if (!_autoIncludeChildTables)
+        {
+            // Clear auto-selection state if feature is disabled
+            foreach (var t in _tables.Where(t => t.IsAutoSelected))
+            {
+                t.IsSelected = false;
+                t.IsAutoSelected = false;
+                t.AutoSelectedReason = string.Empty;
+            }
+            StateHasChanged();
+            return;
+        }
+
+        // Find all explicitly selected tables (selected by the user, not auto-included)
+        var explicitlySelected = _tables.Where(t => t.IsSelected && !t.IsAutoSelected).ToList();
+        var requiredBy = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        // BFS traversal from explicitly selected tables down to all referencing child tables
+        var queue = new Queue<CleanupTableItem>(explicitlySelected);
+        var visited = new HashSet<string>(explicitlySelected.Select(t => t.FullName), StringComparer.OrdinalIgnoreCase);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            foreach (var other in _tables)
+            {
+                // 'other' has 'current' in its ReferencedParents (other is a child of current)
+                if (other.ReferencedParents.Contains(current.FullName, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (!requiredBy.ContainsKey(other.FullName))
+                    {
+                        requiredBy[other.FullName] = new List<string>();
+                    }
+                    if (!requiredBy[other.FullName].Contains(current.TableName, StringComparer.OrdinalIgnoreCase))
+                    {
+                        requiredBy[other.FullName].Add(current.TableName);
+                    }
+
+                    if (visited.Add(other.FullName))
+                    {
+                        queue.Enqueue(other);
+                    }
+                }
+            }
+        }
+
+        foreach (var t in _tables)
+        {
+            if (t.IsSelected && !t.IsAutoSelected)
+            {
+                // User explicitly selected this table: keep untouched
+                continue;
+            }
+
+            if (requiredBy.TryGetValue(t.FullName, out var parentNames))
+            {
+                t.IsSelected = true;
+                t.IsAutoSelected = true;
+                t.AutoSelectedReason = $"Auto-included: child of {string.Join(", ", parentNames)}";
+            }
+            else if (t.IsAutoSelected)
+            {
+                // Was auto-selected previously, but its parent was deselected
+                t.IsSelected = false;
+                t.IsAutoSelected = false;
+                t.AutoSelectedReason = string.Empty;
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private void CalculateOrder()
+    {
+        if (_autoIncludeChildTables)
+        {
+            UpdateAutoSelections();
+        }
+
+        var selected = _tables.Where(t => t.IsSelected).ToList();
+        if (selected.Count == 0) return;
+
+        _plan = CleanupService.CalculateDeletionOrder(
+            selected,
+            _strategy,
+            _reseedIdentities,
+            SchemaService.ActiveDatabase
+        );
+
+        SaveSession();
+        StateHasChanged();
+    }
+
+    private async Task OpenInQueryEditorAsync()
+    {
+        if (_plan == null) return;
+
+        SaveSession();
+
+        var sql = CleanupService.GenerateSqlScript(_plan);
+        var dbName = string.IsNullOrWhiteSpace(_plan.DatabaseName) ? "DB" : _plan.DatabaseName.Replace(" ", "_");
+        var tabName = $"Cleanup_{dbName}_{DateTime.Now:yyyyMMdd_HHmm}.sql";
+
+        var newTab = new QueryTab
+        {
+            Name = tabName,
+            Content = sql,
+            OriginalContent = sql
+        };
+
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+        await QueryStateService.SaveTabsAsync();
+
+        Nav.NavigateTo("/runner");
+    }
+
+    private async Task CopySqlScriptAsync()
+    {
+        if (_plan == null) return;
+
+        try
+        {
+            var sql = CleanupService.GenerateSqlScript(_plan);
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", sql);
+            _isScriptCopied = true;
+            StateHasChanged();
+
+            _ = Task.Delay(2000).ContinueWith(_ =>
+            {
+                _isScriptCopied = false;
+                InvokeAsync(StateHasChanged);
+            });
+        }
+        catch { }
+    }
+
+    private async Task ExportCsvAsync()
+    {
+        if (_plan == null) return;
+        _isExportDropdownOpen = false;
+
+        try
+        {
+            var csvBytes = CleanupService.GenerateCsvBytes(_plan);
+            var dbName = string.IsNullOrWhiteSpace(_plan.DatabaseName) ? "Database" : _plan.DatabaseName.Replace(" ", "_");
+            var fileName = $"CleanupOrder_{dbName}_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+
+            using var stream = new MemoryStream(csvBytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting CSV: {ex.Message}");
+        }
+    }
+
+    private async Task ExportHtmlReportAsync()
+    {
+        if (_plan == null) return;
+        _isExportDropdownOpen = false;
+
+        try
+        {
+            var html = CleanupService.GenerateHtmlReport(_plan);
+            var htmlBytes = System.Text.Encoding.UTF8.GetBytes(html);
+            var dbName = string.IsNullOrWhiteSpace(_plan.DatabaseName) ? "Database" : _plan.DatabaseName.Replace(" ", "_");
+            var fileName = $"CleanupReport_{dbName}_{DateTime.Now:yyyyMMdd_HHmmss}.html";
+
+            using var stream = new MemoryStream(htmlBytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting HTML: {ex.Message}");
+        }
+    }
+
+    private void SaveSession()
+    {
+        if (string.IsNullOrEmpty(SchemaService.ActiveDatabase) || _tables.Count == 0) return;
+
+        CleanupService.SaveSessionState(new CleanupSessionState
+        {
+            DatabaseName = SchemaService.ActiveDatabase,
+            Tables = _tables,
+            TableFilter = _tableFilter,
+            Strategy = _strategy,
+            ReseedIdentities = _reseedIdentities,
+            AutoIncludeChildTables = _autoIncludeChildTables,
+            Plan = _plan
+        });
+    }
+
+    public void Dispose()
+    {
+        SchemaService.OnTablesLoaded -= OnTablesLoadedHandler;
+        SaveSession();
+    }
+}

@@ -95,6 +95,7 @@ public partial class App : Application
             services.AddSingleton<ThemeService>();
             services.AddSingleton<SnippetService>();
             services.AddSingleton<WindowManagerService>();
+            services.AddSingleton<DataCleanupService>();
 
             // Register Windows
             services.AddTransient<MainWindow>();
