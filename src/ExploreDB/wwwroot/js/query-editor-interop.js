@@ -1247,3 +1247,250 @@ window.initQueryEditorSplitter = function (dotNetRef, splitterId, wrapperId) {
 
     return true;
 };
+
+window.initGridColumnResizers = function (containerId, dotNetRef) {
+    var container = document.getElementById(containerId);
+    if (!container) return false;
+
+    if (container._hasGridResizer) {
+        container._dotNetRef = dotNetRef;
+        return true;
+    }
+    container._hasGridResizer = true;
+    container._dotNetRef = dotNetRef;
+
+    var table = container.querySelector('.result-set-table');
+    var guide = container.querySelector('.grid-col-guide');
+    if (!table) return false;
+
+    var isDragging = false;
+    var hasMoved = false;
+    var startX = 0;
+    var startWidth = 0;
+    var currentTh = null;
+    var currentColName = null;
+    var currentPointerId = null;
+
+    function getColumnFromEvent(e) {
+        // 1. Direct handle in <th>
+        if (e.target && e.target.classList && e.target.classList.contains('grid-col-resizer')) {
+            var th = e.target.closest('th');
+            if (!th) return null;
+            return {
+                th: th,
+                colIndex: parseInt(th.getAttribute('data-col-index'), 10),
+                colName: th.getAttribute('data-col-name'),
+                fromHandle: true
+            };
+        }
+
+        // 2. Cell edge detection (works on any <th> or <td> across both header and data rows)
+        var cell = e.target ? e.target.closest('th, td') : null;
+        if (!cell) return null;
+
+        var rect = cell.getBoundingClientRect();
+        var edgeThreshold = 6;
+        var isRightEdge = (e.clientX >= rect.right - edgeThreshold && e.clientX <= rect.right + 3);
+        var isLeftEdge = (e.clientX >= rect.left - 3 && e.clientX <= rect.left + edgeThreshold);
+
+        if (!isRightEdge && !isLeftEdge) return null;
+
+        var targetCell = isRightEdge ? cell : cell.previousElementSibling;
+        if (!targetCell) return null;
+        if (targetCell.classList.contains('col-index')) return null;
+
+        var cellIdx = targetCell.cellIndex;
+        if (cellIdx < 1) return null;
+
+        var thead = table.querySelector('thead');
+        if (!thead) return null;
+        var allThs = thead.querySelectorAll('th');
+        var th = allThs[cellIdx];
+        if (!th || th.classList.contains('col-index')) return null;
+
+        return {
+            th: th,
+            colIndex: parseInt(th.getAttribute('data-col-index'), 10),
+            colName: th.getAttribute('data-col-name'),
+            fromHandle: false,
+            cell: targetCell
+        };
+    }
+
+    function onPointerMove(e) {
+        if (!isDragging) {
+            var colInfo = getColumnFromEvent(e);
+            if (colInfo) {
+                container.classList.add('grid-col-hover');
+            } else {
+                container.classList.remove('grid-col-hover');
+            }
+            return;
+        }
+
+        // Live dragging
+        if (Math.abs(e.clientX - startX) > 2) {
+            hasMoved = true;
+        }
+
+        var deltaX = e.clientX - startX;
+        var minWidth = 50;
+        var newWidth = Math.max(minWidth, Math.round(startWidth + deltaX));
+
+        currentTh.style.width = newWidth + 'px';
+        currentTh.style.minWidth = newWidth + 'px';
+
+        // Auto-scroll near container edges if table has horizontal overflow
+        var cRect = container.getBoundingClientRect();
+        if (e.clientX > cRect.right - 35) {
+            container.scrollLeft += 8;
+        } else if (e.clientX < cRect.left + 35) {
+            container.scrollLeft -= 8;
+        }
+
+        // Keep vertical guide line aligned with the column boundary
+        if (guide) {
+            var thRect = currentTh.getBoundingClientRect();
+            var guideX = thRect.right - cRect.left + container.scrollLeft;
+            guide.style.left = Math.round(guideX) + 'px';
+        }
+    }
+
+    function onPointerDown(e) {
+        if (e.button !== 0) return; // Left mouse button only
+
+        var colInfo = getColumnFromEvent(e);
+        if (!colInfo || !colInfo.th) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        isDragging = true;
+        hasMoved = false;
+        startX = e.clientX;
+        currentTh = colInfo.th;
+        currentColName = colInfo.colName;
+        startWidth = currentTh.getBoundingClientRect().width;
+        currentPointerId = e.pointerId;
+
+        try { container.setPointerCapture(e.pointerId); } catch (err) {}
+
+        document.body.classList.add('grid-col-resizing');
+
+        if (guide) {
+            var cRect = container.getBoundingClientRect();
+            var thRect = currentTh.getBoundingClientRect();
+            var guideX = thRect.right - cRect.left + container.scrollLeft;
+            guide.style.left = Math.round(guideX) + 'px';
+            guide.style.top = '0px';
+            guide.style.height = table.offsetHeight + 'px';
+            guide.style.display = 'block';
+        }
+    }
+
+    function onPointerUp(e) {
+        if (!isDragging) return;
+
+        try { container.releasePointerCapture(e.pointerId); } catch (err) {}
+
+        if (guide) {
+            guide.style.display = 'none';
+        }
+
+        document.body.classList.remove('grid-col-resizing');
+        container.classList.remove('grid-col-hover');
+        isDragging = false;
+
+        if (hasMoved) {
+            // Block any click that might be fired by the browser on the cell/header
+            var blockClick = function (evt) {
+                evt.stopPropagation();
+                evt.preventDefault();
+                window.removeEventListener('click', blockClick, true);
+            };
+            window.addEventListener('click', blockClick, true);
+            setTimeout(function () {
+                window.removeEventListener('click', blockClick, true);
+            }, 120);
+
+            var finalWidth = Math.round(currentTh.getBoundingClientRect().width);
+            var ref = container._dotNetRef;
+            if (ref && typeof ref.invokeMethodAsync === 'function' && currentColName) {
+                ref.invokeMethodAsync('SetColumnWidth', currentColName, finalWidth);
+            }
+        }
+    }
+
+    function onDblClick(e) {
+        var colInfo = getColumnFromEvent(e);
+        if (!colInfo || !colInfo.th) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        autoFitColumn(colInfo);
+    }
+
+    function autoFitColumn(colInfo) {
+        var th = colInfo.th;
+        var colIdx = th.cellIndex;
+        if (colIdx < 1) return;
+
+        var headerSpan = th.querySelector('.text-truncate');
+        var maxContentWidth = headerSpan ? (headerSpan.scrollWidth + 42) : (th.scrollWidth + 24);
+
+        var rows = table.querySelectorAll('tbody tr');
+        var sampleCount = Math.min(rows.length, 120);
+        for (var i = 0; i < sampleCount; i++) {
+            var cell = rows[i].cells[colIdx];
+            if (cell) {
+                var cellWidth = cell.scrollWidth + 24;
+                if (cellWidth > maxContentWidth) {
+                    maxContentWidth = cellWidth;
+                }
+            }
+        }
+
+        var finalWidth = Math.max(60, Math.min(850, Math.round(maxContentWidth)));
+        th.style.width = finalWidth + 'px';
+        th.style.minWidth = finalWidth + 'px';
+
+        var ref = container._dotNetRef;
+        if (ref && typeof ref.invokeMethodAsync === 'function' && colInfo.colName) {
+            ref.invokeMethodAsync('SetColumnWidth', colInfo.colName, finalWidth);
+        }
+    }
+
+    function onPointerLeave() {
+        if (!isDragging) {
+            container.classList.remove('grid-col-hover');
+        }
+    }
+
+    container.addEventListener('pointermove', onPointerMove);
+    container.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('pointerup', onPointerUp);
+    container.addEventListener('pointercancel', onPointerUp);
+    container.addEventListener('pointerleave', onPointerLeave);
+    container.addEventListener('dblclick', onDblClick);
+
+    container._cleanupResizers = function () {
+        container.removeEventListener('pointermove', onPointerMove);
+        container.removeEventListener('pointerdown', onPointerDown);
+        container.removeEventListener('pointerup', onPointerUp);
+        container.removeEventListener('pointercancel', onPointerUp);
+        container.removeEventListener('pointerleave', onPointerLeave);
+        container.removeEventListener('dblclick', onDblClick);
+        container._hasGridResizer = false;
+        container._dotNetRef = null;
+    };
+
+    return true;
+};
+
+window.destroyGridColumnResizers = function (containerId) {
+    var container = document.getElementById(containerId);
+    if (container && typeof container._cleanupResizers === 'function') {
+        container._cleanupResizers();
+    }
+};

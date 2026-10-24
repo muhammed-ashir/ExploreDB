@@ -713,6 +713,60 @@ body {
     background-color: var(--app-table-hover) !important;
 }
 
+/* Result Set Grid Column Resizing */
+.result-set-table th.col-resizable {
+    position: relative;
+    user-select: none;
+}
+
+.result-set-table .grid-col-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 5;
+}
+
+.result-set-table .grid-col-resizer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 2px;
+    height: 100%;
+    background-color: transparent;
+    transition: background-color 0.12s ease;
+}
+
+.result-set-table .grid-col-resizer:hover::after,
+.result-set-table .grid-col-resizer.is-resizing::after {
+    background-color: var(--primary-color);
+}
+
+.grid-col-guide {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    background-color: var(--primary-color);
+    box-shadow: 0 0 6px rgba(13, 110, 253, 0.7);
+    z-index: 100;
+    pointer-events: none;
+}
+
+.table-responsive.grid-col-hover,
+.table-responsive.grid-col-hover * {
+    cursor: col-resize !important;
+}
+
+body.grid-col-resizing,
+body.grid-col-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
 /* Light Mode Scrollbars */
 [data-bs-theme="light"] *::-webkit-scrollbar-track,
 [data-bs-theme="light"] .custom-scrollbar-light::-webkit-scrollbar-track {

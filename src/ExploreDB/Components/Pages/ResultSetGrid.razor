@@ -129,7 +129,7 @@
         </div>
     </div>
 
-    <div class="table-responsive rounded position-relative" tabindex="0" style="border: 1px solid var(--app-border); outline: none;" @onkeydown="HandleKeyDown">
+    <div id="@_tableContainerId" class="table-responsive rounded position-relative" tabindex="0" style="border: 1px solid var(--app-border); outline: none;" @onkeydown="HandleKeyDown">
         <table class="result-set-table" style="min-width: 100%; width: max-content;">
             <thead>
                 <tr>
@@ -152,8 +152,10 @@
                         var col = Columns[cIdx];
                         int localCol = cIdx;
                         bool isColSelected = IsColumnFullySelected(localCol);
-                        <th class="p-0 align-middle @(isColSelected ? "selected-col-header" : "")" 
-                            style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px;">
+                        <th class="p-0 align-middle @(isColSelected ? "selected-col-header" : "") col-resizable position-relative" 
+                            data-col-index="@localCol"
+                            data-col-name="@col"
+                            style="@GetColumnWidthStyle(col)">
                             <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2" 
                                  style="cursor: pointer; user-select: none;" 
                                  title="Click to select column (Ctrl+Click to toggle, Shift+Click for range)"
@@ -175,6 +177,11 @@
                                         <i class="bi bi-arrow-down-up text-muted" style="opacity: 0.45; font-size: 0.85rem;"></i>
                                     }
                                 </button>
+                            </div>
+                            <div class="grid-col-resizer" 
+                                 data-col-index="@localCol" 
+                                 data-col-name="@col"
+                                 title="Drag to resize column (Double-click to auto-fit)">
                             </div>
                         </th>
                     }
@@ -217,7 +224,7 @@
                             var val = GetColumnValue(row, col);
                             bool isCellSelected = SelectedCells.Contains((localIndex, localCol));
                             <td class="@(isCellSelected ? "selected-cell" : "")"
-                                style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis; cursor: default;" 
+                                style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis;" 
                                 title="@val"
                                 @onclick="e => HandleCellClick(e, localIndex, localCol)"
                                 @oncontextmenu="e => ShowCellContextMenu(e, localIndex, localCol)"
@@ -269,6 +276,7 @@
                 }
             </tbody>
         </table>
+        <div class="grid-col-guide" style="display: none;"></div>
     </div>
 
     @if (!string.IsNullOrEmpty(ActiveAggregateColumn))
@@ -808,17 +816,49 @@ else
 
     private int CurrentPage = 1;
 
+    private string _tableContainerId = "gridTable_" + Guid.NewGuid().ToString("N");
+    private Dictionary<string, double> _columnWidths = new();
+    private DotNetObjectReference<ResultSetGrid>? _dotNetRef;
+
+    private string GetColumnWidthStyle(string col)
+    {
+        if (_columnWidths.TryGetValue(col, out var w))
+        {
+            return $"width: {w}px; min-width: {w}px; max-width: {Math.Max(w, 1200)}px; overflow: hidden;";
+        }
+        return "min-width: 70px; max-width: 800px; overflow: hidden;";
+    }
+
+    [JSInvokable]
+    public void SetColumnWidth(string columnName, double width)
+    {
+        if (!string.IsNullOrEmpty(columnName))
+        {
+            _columnWidths[columnName] = width;
+        }
+    }
+
     protected override void OnParametersSet()
     {
         ClearCellSelection();
         Rows = Data.Select(d => (IDictionary<string, object>)d).ToList();
         if (Rows.Any())
         {
-            Columns = Rows.First().Keys.ToList();
+            var newColumns = Rows.First().Keys.ToList();
+            if (!newColumns.SequenceEqual(Columns))
+            {
+                Columns = newColumns;
+                var keysToRemove = _columnWidths.Keys.Where(k => !Columns.Contains(k)).ToList();
+                foreach (var k in keysToRemove)
+                {
+                    _columnWidths.Remove(k);
+                }
+            }
         }
         else
         {
             Columns.Clear();
+            _columnWidths.Clear();
         }
     }
 
@@ -834,6 +874,15 @@ else
                 {
                     await _definitionEditor.SetValue(currentText);
                 }
+            }
+            catch { }
+        }
+        else if (!IsTextDefinition && Columns.Count > 0)
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("initGridColumnResizers", _tableContainerId, _dotNetRef);
             }
             catch { }
         }
@@ -2061,6 +2110,9 @@ else
         {
             try { _ = JS.InvokeVoidAsync("revokeBlobUrl", _activePdfBlobUrl); } catch { }
         }
+        try { _ = JS.InvokeVoidAsync("destroyGridColumnResizers", _tableContainerId); } catch { }
+        _dotNetRef?.Dispose();
+        _dotNetRef = null;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         _copyFeedbackCts?.Cancel();
         _copyFeedbackCts?.Dispose();
