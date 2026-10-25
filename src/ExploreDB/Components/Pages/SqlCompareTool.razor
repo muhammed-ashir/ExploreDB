@@ -684,7 +684,7 @@
                                     <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
                                         <i class="bi bi-search"></i>
                                     </span>
-                                    <input type="text" class="form-control form-control-sm border-start-0 ps-0"
+                                    <input type="text" class="form-control form-control-sm border-start-0 ps-0 @(!string.IsNullOrEmpty(_filterQuery) ? "border-end-0" : "")"
                                            style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
                                            placeholder="Filter objects..."
                                            @bind="_filterQuery"
@@ -695,7 +695,7 @@
                                                 style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
                                                 title="Clear filter"
                                                 @onclick="() => _filterQuery = string.Empty">
-                                            <i class="bi bi-x"></i>
+                                            <i class="bi bi-x-lg"></i>
                                         </button>
                                     }
                                     <button type="button" class="btn @(_filterCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-2"

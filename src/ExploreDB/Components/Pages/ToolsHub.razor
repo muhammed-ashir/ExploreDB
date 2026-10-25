@@ -18,17 +18,35 @@
                     <i class="bi bi-search"></i>
                 </span>
                 <input type="text"
-                       class="form-control shadow-none border-start-0 ps-0"
+                       class="form-control shadow-none border-start-0 ps-0 @(!string.IsNullOrEmpty(SearchTerm) ? "border-end-0" : "")"
                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
                        placeholder="Search tools..."
                        @bind="SearchTerm"
                        @bind:event="oninput" />
                 @if (!string.IsNullOrEmpty(SearchTerm))
                 {
-                    <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" @onclick="() => SearchTerm = string.Empty">
+                    <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" title="Clear filter" @onclick="() => SearchTerm = string.Empty">
                         <i class="bi bi-x-lg"></i>
                     </button>
                 }
+                <button type="button" class="btn @(CaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-3"
+                        style="z-index: 0; border-color: var(--app-input-border); @(CaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                        title="Match Case"
+                        @onclick="() => CaseSensitive = !CaseSensitive">
+                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                </button>
+                <button type="button" class="btn @(MatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-3"
+                        style="z-index: 0; border-color: var(--app-input-border); @(MatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                        title="Match Whole Word"
+                        @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
+                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                </button>
+                <button type="button" class="btn @(ExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-3"
+                        style="z-index: 0; border-color: var(--app-input-border); @(ExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                        title="Exact Match"
+                        @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
+                    <i class="bi bi-bullseye fs-6"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -97,17 +115,48 @@
 
 @code {
     private string SearchTerm = "";
+    private bool CaseSensitive = false;
+    private bool MatchWholeWord = false;
+    private bool ExactMatch = false;
 
     private IEnumerable<ToolItem> FilteredTools => ToolService.GetVisibleTools().Where(t =>
     {
-        if (!string.IsNullOrWhiteSpace(SearchTerm))
-        {
-            var term = SearchTerm.Trim();
-            return t.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
-                || t.Description.Contains(term, StringComparison.OrdinalIgnoreCase);
-        }
+        if (string.IsNullOrWhiteSpace(SearchTerm)) return true;
 
-        return true;
+        var term = CaseSensitive ? SearchTerm.Trim() : SearchTerm.Trim().ToLowerInvariant();
+        var title = CaseSensitive ? (t.Title ?? "") : (t.Title ?? "").ToLowerInvariant();
+        var desc = CaseSensitive ? (t.Description ?? "") : (t.Description ?? "").ToLowerInvariant();
+        var id = CaseSensitive ? (t.Id ?? "") : (t.Id ?? "").ToLowerInvariant();
+
+        if (ExactMatch)
+        {
+            return title == term || desc == term || id == term;
+        }
+        else if (MatchWholeWord)
+        {
+            if (title.Split(' ', '.', '_', '-', '/', '\\').Contains(term) ||
+                desc.Split(' ', '.', '_', '-', '/', '\\').Contains(term) ||
+                id.Split(' ', '.', '_', '-').Contains(term))
+            {
+                return true;
+            }
+
+            try
+            {
+                string pattern = $@"(^|[\s._\-\/\\]){System.Text.RegularExpressions.Regex.Escape(term)}($|[\s._\-\/\\])";
+                var regexOpt = CaseSensitive ? System.Text.RegularExpressions.RegexOptions.None : System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+                return System.Text.RegularExpressions.Regex.IsMatch(title, pattern, regexOpt) ||
+                       System.Text.RegularExpressions.Regex.IsMatch(desc, pattern, regexOpt);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return title.Contains(term) || desc.Contains(term) || id.Contains(term);
+        }
     });
 
     private void LaunchTool(ToolItem tool)
@@ -121,5 +170,8 @@
     private void ResetFilters()
     {
         SearchTerm = "";
+        CaseSensitive = false;
+        MatchWholeWord = false;
+        ExactMatch = false;
     }
 }

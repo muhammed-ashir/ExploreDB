@@ -130,7 +130,7 @@
                                             <i class="bi bi-search"></i>
                                         </span>
                                         <input type="text"
-                                               class="form-control shadow-none border-start-0 ps-0"
+                                               class="form-control shadow-none border-start-0 ps-0 @(!string.IsNullOrEmpty(_tableFilter) ? "border-end-0" : "")"
                                                style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
                                                placeholder="Filter tables..."
                                                @bind="_tableFilter"
@@ -316,7 +316,7 @@
                                     <i class="bi bi-search"></i>
                                 </span>
                                 <input type="text"
-                                       class="form-control shadow-none border-start-0 ps-0"
+                                       class="form-control shadow-none border-start-0 ps-0 @(!string.IsNullOrEmpty(_tableFilter) ? "border-end-0" : "")"
                                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
                                        placeholder="Filter tables..."
                                        @bind="_tableFilter"

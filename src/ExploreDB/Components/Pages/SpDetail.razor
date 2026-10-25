@@ -108,10 +108,16 @@
                             <div class="mb-4">
                             <div class="input-group shadow-sm w-100 flex-nowrap">
                                 <input type="text"
-                                       class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
+                                       class="form-control bg-dark text-white border-secondary shadow-none @(!string.IsNullOrEmpty(ParamSearchTerm) ? "border-end-0" : "")" style="min-width: 200px;"
                                        placeholder="Search parameters..."
                                        @bind="ParamSearchTerm"
                                        @bind:event="oninput" />
+                                @if (!string.IsNullOrEmpty(ParamSearchTerm))
+                                {
+                                    <button class="btn btn-outline-secondary bg-dark text-muted border-secondary border-start-0" title="Clear filter" @onclick="() => ParamSearchTerm = string.Empty">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                }
                                 <button class="btn @(ParamCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ParamCaseSensitive = !ParamCaseSensitive">
                                     <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                 </button>
@@ -188,10 +194,16 @@
                         <div class="flex-grow-1" style="min-width: 300px; max-width: 500px;">
                             <div class="input-group shadow-sm flex-nowrap">
                             <input type="text"
-                                   class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
+                                   class="form-control bg-dark text-white border-secondary shadow-none @(!string.IsNullOrEmpty(DependencySearchTerm) ? "border-end-0" : "")" style="min-width: 200px;"
                                    placeholder="Search dependencies..."
                                    @bind="DependencySearchTerm"
                                    @bind:event="oninput" />
+                            @if (!string.IsNullOrEmpty(DependencySearchTerm))
+                            {
+                                <button class="btn btn-outline-secondary bg-dark text-muted border-secondary border-start-0" title="Clear filter" @onclick="() => DependencySearchTerm = string.Empty">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            }
                             <button class="btn @(DependencySearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => DependencySearchCaseSensitive = !DependencySearchCaseSensitive">
                                 <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                             </button>

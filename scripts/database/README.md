@@ -18,10 +18,22 @@ This folder contains database setup and test scripts for ExploreDB, organized by
   - **Multi-Schema Hierarchy**: `dbo`, `sales`, `hr`, `inventory`, `reporting`, `audit`, `security`.
   - **Object Explorer Coverage**: Tables, Views, Indexed Views, Stored Procedures (including multi-result sets and `OUTPUT` parameters), Table-Valued Functions (ITVF & MSTVF), Scalar Functions, Triggers, Sequences, Synonyms, and User-Defined Types (UDT).
   - **Paging & Filtering**: 500 realistic relational orders for testing pagination, filtering, and sorting in the grid.
+  - **Circular Foreign Key Loops**: Built-in 2-table cycle (`dbo.Circular_Department` <-> `dbo.Circular_Employee`) and 3-table cyclic loop (`dbo.Exam_Body` -> `dbo.Exam_Product` -> `dbo.Exam_Session` -> `dbo.Exam_Body`) for testing the **Data Cleanup Tool** cycle detection and automatic constraint-disabling cleanup script generation.
 
 ---
 
-## 2. Enterprise High-Volume Benchmark Database (Stress Testing & Massive Data)
+## 2. Circular Foreign Key Test Tables (Data Cleanup Tool Validation)
+- **Script**: [`Test_Circular_Foreign_Keys.sql`](Test_Circular_Foreign_Keys.sql)
+- **Execution Time**: **~0.1 seconds**
+- **Target Database**: Current database context (auto-selects `ExploreDB_Lite` or `ExploreDB`)
+- **Purpose**:
+  - Creates 2-table and 3-table circular foreign key dependency loops populated with sample data.
+  - Allows reproduction and verification of ExploreDB's **Data Cleanup Tool** yellow warning callout (*"Circular Foreign Key Loop Detected: One or more tables reference each other circularly..."*).
+  - Verifies the automatic Kahn topological sorting and the generated cleanup script containing `ALTER TABLE ... NOCHECK CONSTRAINT ALL;` before deletion and `WITH CHECK CHECK CONSTRAINT ALL;` after deletion.
+
+---
+
+## 3. Enterprise High-Volume Benchmark Database (Stress Testing & Massive Data)
 - **Scripts**:
   1. [`01_Schema_ExploreDB.sql`](01_Schema_ExploreDB.sql) - Full enterprise schema, partitioning, indexing, procedures, and types.
   2. [`02_Data_ExploreDB.sql`](02_Data_ExploreDB.sql) - High-volume generator featuring:
@@ -34,7 +46,7 @@ This folder contains database setup and test scripts for ExploreDB, organized by
 
 ---
 
-## 3. SQL Compare Test Pair (Realistic Schema Difference Testing)
+## 4. SQL Compare Test Pair (Realistic Schema Difference Testing)
 - **Scripts & Packages**:
   1. [`Compare_Source_DB.sql`](Compare_Source_DB.sql) & [`CompareDB_Source.dacpac`](CompareDB_Source.dacpac) - Target DB: `CompareDB_Source` (Development / Reference schema with new features).
   2. [`Compare_Target_DB.sql`](Compare_Target_DB.sql) & [`CompareDB_Target.dacpac`](CompareDB_Target.dacpac) - Target DB: `CompareDB_Target` (Production / Destination schema with older structures and deprecated objects).

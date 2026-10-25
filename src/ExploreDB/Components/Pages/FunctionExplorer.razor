@@ -52,10 +52,16 @@ else
         <div class="col-md-6">
             <div class="input-group shadow-sm flex-nowrap">
                 <input type="text" 
-                       class="form-control shadow-none" style="min-width: 200px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" 
+                       class="form-control shadow-none @(!string.IsNullOrEmpty(SearchTerm) ? "border-end-0" : "")" style="min-width: 200px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" 
                        placeholder="Search functions..." 
                        @bind="SearchTerm" 
                        @bind:event="oninput" />
+                @if (!string.IsNullOrEmpty(SearchTerm))
+                {
+                    <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" title="Clear filter" @onclick="() => SearchTerm = string.Empty">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                }
                 <button class="btn @(CaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(CaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
                     <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                 </button>

@@ -114,10 +114,16 @@
                         <div class="mb-4">
                             <div class="input-group shadow-sm w-100 flex-nowrap">
                                 <input type="text"
-                                       class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
+                                       class="form-control bg-dark text-white border-secondary shadow-none @(!string.IsNullOrEmpty(TableColumnSearchTerm) ? "border-end-0" : "")" style="min-width: 200px;"
                                        placeholder="Search columns..."
                                        @bind="TableColumnSearchTerm"
                                        @bind:event="oninput" />
+                                @if (!string.IsNullOrEmpty(TableColumnSearchTerm))
+                                {
+                                    <button class="btn btn-outline-secondary bg-dark text-muted border-secondary border-start-0" title="Clear filter" @onclick="() => TableColumnSearchTerm = string.Empty">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                }
                                 <button class="btn @(ColumnSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ColumnSearchCaseSensitive = !ColumnSearchCaseSensitive">
                                     <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                 </button>
@@ -206,24 +212,32 @@
                 }
                 else
                 {
-                    <div class="mb-4 d-flex justify-content-start">
-                    <div class="input-group shadow-sm w-50 flex-nowrap">
-                        <input type="text"
-                               class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
-                               placeholder="Search relationships..."
-                               @bind="RelationshipSearchTerm"
-                               @bind:event="oninput" />
-                        <button class="btn @(RelationshipSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => RelationshipSearchCaseSensitive = !RelationshipSearchCaseSensitive">
-                            <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
-                        </button>
-                        <button class="btn @(RelationshipSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { RelationshipSearchMatchWholeWord = !RelationshipSearchMatchWholeWord; if (RelationshipSearchMatchWholeWord) RelationshipSearchExactMatch = false; }">
-                            <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
-                        </button>
-                        <button class="btn @(RelationshipSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { RelationshipSearchExactMatch = !RelationshipSearchExactMatch; if (RelationshipSearchExactMatch) RelationshipSearchMatchWholeWord = false; }">
-                            <i class="bi bi-bullseye fs-6"></i>
-                        </button>
+                    <div class="mb-4 d-flex flex-wrap align-items-center gap-3">
+                        <div class="flex-grow-1" style="min-width: 300px; max-width: 500px;">
+                            <div class="input-group shadow-sm flex-nowrap">
+                                <input type="text"
+                                       class="form-control bg-dark text-white border-secondary shadow-none @(!string.IsNullOrEmpty(RelationshipSearchTerm) ? "border-end-0" : "")" style="min-width: 200px;"
+                                       placeholder="Search relationships..."
+                                       @bind="RelationshipSearchTerm"
+                                       @bind:event="oninput" />
+                                @if (!string.IsNullOrEmpty(RelationshipSearchTerm))
+                                {
+                                    <button class="btn btn-outline-secondary bg-dark text-muted border-secondary border-start-0" title="Clear filter" @onclick="() => RelationshipSearchTerm = string.Empty">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                }
+                                <button class="btn @(RelationshipSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => RelationshipSearchCaseSensitive = !RelationshipSearchCaseSensitive">
+                                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                </button>
+                                <button class="btn @(RelationshipSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { RelationshipSearchMatchWholeWord = !RelationshipSearchMatchWholeWord; if (RelationshipSearchMatchWholeWord) RelationshipSearchExactMatch = false; }">
+                                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                </button>
+                                <button class="btn @(RelationshipSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { RelationshipSearchExactMatch = !RelationshipSearchExactMatch; if (RelationshipSearchExactMatch) RelationshipSearchMatchWholeWord = false; }">
+                                    <i class="bi bi-bullseye fs-6"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                </div>
                 <div class="accordion schema-accordion" id="relationshipsAccordion">
                     <div class="accordion-item glass-card mb-3 border-secondary">
                         <h2 class="accordion-header" id="headingParents">
@@ -426,10 +440,16 @@
                             <div class="flex-grow-1" style="min-width: 300px; max-width: 500px;">
                                 <div class="input-group shadow-sm flex-nowrap">
                                 <input type="text"
-                                       class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
-                                       placeholder="Search dependent views, procedures, & functions..."
+                                       class="form-control bg-dark text-white border-secondary shadow-none @(!string.IsNullOrEmpty(UsedBySearchTerm) ? "border-end-0" : "")" style="min-width: 200px;"
+                                       placeholder="Search dependent objects..."
                                        @bind="UsedBySearchTerm"
                                        @bind:event="oninput" />
+                                @if (!string.IsNullOrEmpty(UsedBySearchTerm))
+                                {
+                                    <button class="btn btn-outline-secondary bg-dark text-muted border-secondary border-start-0" title="Clear filter" @onclick="() => UsedBySearchTerm = string.Empty">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                }
                                 <button class="btn @(UsedBySearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => UsedBySearchCaseSensitive = !UsedBySearchCaseSensitive">
                                     <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                 </button>
@@ -587,10 +607,16 @@
                                     <div class="d-flex gap-2 mb-3">
                                         <div class="input-group input-group-sm flex-grow-1" style="min-width: 0;">
                                             <input type="text"
-                                                   class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
+                                                   class="form-control bg-dark text-white border-secondary shadow-none @(!string.IsNullOrEmpty(UpdateColumnSearchTerm) ? "border-end-0" : "")" style="min-width: 200px;"
                                                    placeholder="Search update columns..."
                                                    @bind="UpdateColumnSearchTerm"
                                                    @bind:event="oninput" />
+                                            @if (!string.IsNullOrEmpty(UpdateColumnSearchTerm))
+                                            {
+                                                <button class="btn btn-outline-secondary bg-dark text-muted border-secondary border-start-0" title="Clear filter" @onclick="() => UpdateColumnSearchTerm = string.Empty">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            }
                                             <button class="btn @(UpdateColumnSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => UpdateColumnSearchCaseSensitive = !UpdateColumnSearchCaseSensitive">
                                                 <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                             </button>

@@ -245,7 +245,13 @@
                         <div class="d-flex flex-column" style="height: 450px;">
                             <div class="p-3 border-bottom border-secondary d-flex gap-2">
                                 <div class="input-group input-group-sm flex-grow-1 shadow-sm">
-                                    <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
+                                    <input type="text" class="form-control border-secondary @(!string.IsNullOrEmpty(SearchConn) ? "border-end-0" : "")" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
+                                    @if (!string.IsNullOrEmpty(SearchConn))
+                                    {
+                                        <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" title="Clear filter" @onclick="() => SearchConn = string.Empty">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    }
                                     <button class="btn @(FilterCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(FilterCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Case" @onclick="() => FilterCaseSensitive = !FilterCaseSensitive">
                                         <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                     </button>

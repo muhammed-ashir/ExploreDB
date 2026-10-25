@@ -16,6 +16,7 @@
 -- 4. Complete Schema Hierarchy (Tables, Views, Indexed Views, Stored Procedures,
 --    Multi-result set procedures, Scalar/Table-Valued Functions, Triggers, Sequences, Synonyms, UDTs)
 -- 5. Data Editor, Paging & Filtering (500 realistic orders for testing grid pagination and search)
+-- 6. Circular Foreign Key Loops (2-table & 3-table cyclic loops to test Data Cleanup Tool cycle detection)
 -- =======================================================================================
 
 USE master;
@@ -288,6 +289,68 @@ CREATE TABLE audit.ProductPriceChanges (
     ChangedBy NVARCHAR(100) DEFAULT SUSER_SNAME(),
     ChangedAt DATETIME2 DEFAULT GETDATE()
 );
+GO
+
+-- =======================================================================================
+-- 9. CIRCULAR FOREIGN KEY TEST TABLES (For Testing Data Cleanup Tool Cycle Detection)
+-- =======================================================================================
+-- Cycle A: 2-Table Mutual Reference Cycle
+CREATE TABLE dbo.Circular_Department (
+    DepartmentID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    DepartmentName NVARCHAR(100) NOT NULL,
+    ManagerEmployeeID INT NULL
+);
+
+CREATE TABLE dbo.Circular_Employee (
+    EmployeeID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    EmployeeName NVARCHAR(100) NOT NULL,
+    DepartmentID INT NULL
+);
+GO
+
+ALTER TABLE dbo.Circular_Department
+    ADD CONSTRAINT FK_CircularDept_Manager 
+    FOREIGN KEY (ManagerEmployeeID) REFERENCES dbo.Circular_Employee(EmployeeID);
+
+ALTER TABLE dbo.Circular_Employee
+    ADD CONSTRAINT FK_CircularEmp_Dept 
+    FOREIGN KEY (DepartmentID) REFERENCES dbo.Circular_Department(DepartmentID);
+GO
+
+-- Cycle B: 3-Table Multi-hop Cyclic Loop (Exam System matching real-world schema)
+CREATE TABLE dbo.Exam_Body (
+    BodyID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    BodyCode NVARCHAR(20) NOT NULL UNIQUE,
+    BodyName NVARCHAR(150) NOT NULL,
+    CurrentProductID INT NULL
+);
+
+CREATE TABLE dbo.Exam_Product (
+    ProductID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    ProductCode NVARCHAR(20) NOT NULL UNIQUE,
+    ProductName NVARCHAR(150) NOT NULL,
+    ActiveSessionID INT NULL
+);
+
+CREATE TABLE dbo.Exam_Session (
+    SessionID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    SessionCode NVARCHAR(20) NOT NULL UNIQUE,
+    SessionName NVARCHAR(150) NOT NULL,
+    ManagingBodyID INT NULL
+);
+GO
+
+ALTER TABLE dbo.Exam_Body
+    ADD CONSTRAINT FK_ExamBody_Product 
+    FOREIGN KEY (CurrentProductID) REFERENCES dbo.Exam_Product(ProductID);
+
+ALTER TABLE dbo.Exam_Product
+    ADD CONSTRAINT FK_ExamProduct_Session 
+    FOREIGN KEY (ActiveSessionID) REFERENCES dbo.Exam_Session(SessionID);
+
+ALTER TABLE dbo.Exam_Session
+    ADD CONSTRAINT FK_ExamSession_Body 
+    FOREIGN KEY (ManagingBodyID) REFERENCES dbo.Exam_Body(BodyID);
 GO
 
 -- =======================================================================================
@@ -777,9 +840,64 @@ BEGIN
     SET @log = @log + 1;
 END;
 
+-- 15.10 Circular Foreign Key Loop Test Data
+-- Temporarily disable constraints for initial circular insertion
+ALTER TABLE dbo.Circular_Department NOCHECK CONSTRAINT ALL;
+ALTER TABLE dbo.Circular_Employee NOCHECK CONSTRAINT ALL;
+ALTER TABLE dbo.Exam_Body NOCHECK CONSTRAINT ALL;
+ALTER TABLE dbo.Exam_Product NOCHECK CONSTRAINT ALL;
+ALTER TABLE dbo.Exam_Session NOCHECK CONSTRAINT ALL;
+
+-- Insert 2-table cycle data
+SET IDENTITY_INSERT dbo.Circular_Department ON;
+INSERT INTO dbo.Circular_Department (DepartmentID, DepartmentName, ManagerEmployeeID) VALUES
+(1, 'Engineering & Core Platform', 1),
+(2, 'Finance & Accounting', 2),
+(3, 'Human Resources', 3),
+(4, 'Product & Design', 4);
+SET IDENTITY_INSERT dbo.Circular_Department OFF;
+
+SET IDENTITY_INSERT dbo.Circular_Employee ON;
+INSERT INTO dbo.Circular_Employee (EmployeeID, EmployeeName, DepartmentID) VALUES
+(1, 'Alice Director', 1),
+(2, 'Bob CFO', 2),
+(3, 'Charlie HR Lead', 3),
+(4, 'Diana VP Product', 4);
+SET IDENTITY_INSERT dbo.Circular_Employee OFF;
+
+-- Insert 3-table cyclic loop data
+SET IDENTITY_INSERT dbo.Exam_Body ON;
+INSERT INTO dbo.Exam_Body (BodyID, BodyCode, BodyName, CurrentProductID) VALUES
+(1, 'CAMBRIDGE', 'Cambridge Assessment Board', 1),
+(2, 'OXFORD', 'Oxford International Examination', 2),
+(3, 'EDEXCEL', 'Pearson Edexcel Qualifications', 3);
+SET IDENTITY_INSERT dbo.Exam_Body OFF;
+
+SET IDENTITY_INSERT dbo.Exam_Product ON;
+INSERT INTO dbo.Exam_Product (ProductID, ProductCode, ProductName, ActiveSessionID) VALUES
+(1, 'IGCSE-MATH', 'IGCSE Mathematics Higher', 1),
+(2, 'A-LEVEL-PHY', 'A-Level Physics Advanced', 2),
+(3, 'BTEC-IT', 'BTEC National Information Tech', 3);
+SET IDENTITY_INSERT dbo.Exam_Product OFF;
+
+SET IDENTITY_INSERT dbo.Exam_Session ON;
+INSERT INTO dbo.Exam_Session (SessionID, SessionCode, SessionName, ManagingBodyID) VALUES
+(1, 'SESS-2026-JUN', 'June 2026 Examination Series', 1),
+(2, 'SESS-2026-NOV', 'November 2026 Examination Series', 2),
+(3, 'SESS-2027-JAN', 'January 2027 Winter Session', 3);
+SET IDENTITY_INSERT dbo.Exam_Session OFF;
+
+-- Re-enable and validate circular constraints
+ALTER TABLE dbo.Circular_Department WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE dbo.Circular_Employee WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE dbo.Exam_Body WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE dbo.Exam_Product WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE dbo.Exam_Session WITH CHECK CHECK CONSTRAINT ALL;
+
 PRINT '=======================================================================================';
 PRINT 'ExploreDB_Lite Feature-Centric Database Created & Populated Successfully!';
 PRINT 'Verified: All SQL Data Types, Images (PNG/JPEG), PDFs, Binary (128KB), RowVersion,';
-PRINT 'Multi-Schema, Views, Stored Procedures, Functions, Triggers, Sequences & 500 Orders.';
+PRINT 'Multi-Schema, Views, Stored Procedures, Functions, Triggers, Sequences, 500 Orders,';
+PRINT 'and Circular Foreign Key Loops (dbo.Circular_*, dbo.Exam_* for Data Cleanup testing).';
 PRINT '=======================================================================================';
 GO
