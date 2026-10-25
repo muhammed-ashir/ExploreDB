@@ -303,23 +303,72 @@
                             </div>
                         }
 
-                        <div class="mb-3">
+                        <div class="mb-3 position-relative">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <label class="form-label small fw-bold mb-0" style="color: var(--app-text);">Database</label>
-                                <button class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.75rem;" @onclick="LoadSourceDatabasesAsync">
-                                    <i class="bi bi-arrow-clockwise"></i> Refresh DBs
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.75rem;" @onclick="LoadSourceDatabasesAsync" disabled="@_isSourceDbLoading">
+                                    <i class="bi @(_isSourceDbLoading ? "bi-arrow-clockwise spinner-border spinner-border-sm border-0" : "bi-arrow-clockwise")"></i> Refresh DBs
                                 </button>
                             </div>
                             @if (_sourceDatabases.Count > 0)
                             {
-                                <select class="form-select form-select-sm"
-                                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
-                                        @bind="_source.Database">
-                                    @foreach (var db in _sourceDatabases)
+                                <div class="position-relative">
+                                    <input class="form-control form-control-sm pe-4 text-truncate"
+                                           @bind="_sourceDbSearch"
+                                           @bind:event="oninput"
+                                           placeholder="@(!string.IsNullOrWhiteSpace(_source.Database) ? _source.Database : "Search database...")"
+                                           @onfocus="OpenSourceDbDropdown"
+                                           @onclick="OpenSourceDbDropdown"
+                                           @onkeydown="OnSourceDbSearchKeyDown"
+                                           style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                                    @if (_isSourceDbDropdownOpen)
                                     {
-                                        <option value="@db">@db</option>
+                                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseSourceDbDropdown"></div>
+                                        <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track"
+                                             style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                            @if (_isSourceDbLoading)
+                                            {
+                                                <div class="p-3 text-center text-info">
+                                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                                    <small>Loading databases...</small>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                var filtered = _sourceDatabases.Where(d => string.IsNullOrWhiteSpace(_sourceDbSearch) || d.Contains(_sourceDbSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+                                                if (filtered.Any())
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var db in filtered)
+                                                        {
+                                                            var isSelected = string.Equals(_source.Database, db, StringComparison.OrdinalIgnoreCase);
+                                                            <button type="button"
+                                                                    class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate d-flex align-items-center justify-content-between @(isSelected ? "bg-primary-subtle text-primary fw-semibold" : "")"
+                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; @(isSelected ? "" : "background-color: transparent; color: var(--app-text);")"
+                                                                    title="@db"
+                                                                    @onclick="() => SelectSourceDatabase(db)">
+                                                                <span class="text-truncate">@db</span>
+                                                                @if (isSelected)
+                                                                {
+                                                                    <i class="bi bi-check2 text-primary flex-shrink-0 ms-2"></i>
+                                                                }
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">No matches found.</div>
+                                                }
+                                            }
+                                        </div>
                                     }
-                                </select>
+
+                                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 10px; top: 0; pointer-events: none;">
+                                        <i class="bi @(_isSourceDbDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") text-muted" style="font-size: 0.8rem;"></i>
+                                    </div>
+                                </div>
                             }
                             else
                             {
@@ -516,23 +565,72 @@
                             </div>
                         }
 
-                        <div class="mb-3">
+                        <div class="mb-3 position-relative">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <label class="form-label small fw-bold mb-0" style="color: var(--app-text);">Database</label>
-                                <button class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.75rem;" @onclick="LoadTargetDatabasesAsync">
-                                    <i class="bi bi-arrow-clockwise"></i> Refresh DBs
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.75rem;" @onclick="LoadTargetDatabasesAsync" disabled="@_isTargetDbLoading">
+                                    <i class="bi @(_isTargetDbLoading ? "bi-arrow-clockwise spinner-border spinner-border-sm border-0" : "bi-arrow-clockwise")"></i> Refresh DBs
                                 </button>
                             </div>
                             @if (_targetDatabases.Count > 0)
                             {
-                                <select class="form-select form-select-sm"
-                                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
-                                        @bind="_target.Database">
-                                    @foreach (var db in _targetDatabases)
+                                <div class="position-relative">
+                                    <input class="form-control form-control-sm pe-4 text-truncate"
+                                           @bind="_targetDbSearch"
+                                           @bind:event="oninput"
+                                           placeholder="@(!string.IsNullOrWhiteSpace(_target.Database) ? _target.Database : "Search database...")"
+                                           @onfocus="OpenTargetDbDropdown"
+                                           @onclick="OpenTargetDbDropdown"
+                                           @onkeydown="OnTargetDbSearchKeyDown"
+                                           style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                                    @if (_isTargetDbDropdownOpen)
                                     {
-                                        <option value="@db">@db</option>
+                                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseTargetDbDropdown"></div>
+                                        <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track"
+                                             style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                            @if (_isTargetDbLoading)
+                                            {
+                                                <div class="p-3 text-center text-info">
+                                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                                    <small>Loading databases...</small>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                var filtered = _targetDatabases.Where(d => string.IsNullOrWhiteSpace(_targetDbSearch) || d.Contains(_targetDbSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+                                                if (filtered.Any())
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var db in filtered)
+                                                        {
+                                                            var isSelected = string.Equals(_target.Database, db, StringComparison.OrdinalIgnoreCase);
+                                                            <button type="button"
+                                                                    class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate d-flex align-items-center justify-content-between @(isSelected ? "bg-primary-subtle text-primary fw-semibold" : "")"
+                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; @(isSelected ? "" : "background-color: transparent; color: var(--app-text);")"
+                                                                    title="@db"
+                                                                    @onclick="() => SelectTargetDatabase(db)">
+                                                                <span class="text-truncate">@db</span>
+                                                                @if (isSelected)
+                                                                {
+                                                                    <i class="bi bi-check2 text-primary flex-shrink-0 ms-2"></i>
+                                                                }
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">No matches found.</div>
+                                                }
+                                            }
+                                        </div>
                                     }
-                                </select>
+
+                                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 10px; top: 0; pointer-events: none;">
+                                        <i class="bi @(_isTargetDbDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") text-muted" style="font-size: 0.8rem;"></i>
+                                    </div>
+                                </div>
                             }
                             else
                             {
@@ -742,8 +840,24 @@
                                 </div>
                             }
 
-                            <!-- Right: Collapse/Expand & Full Screen Toggles -->
+                            <!-- Right: Diff Navigation, Collapse/Expand & Full Screen Toggles -->
                             <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-auto">
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                                        title="Jump to previous difference in object list"
+                                        @onclick="GoToPrevDiffAsync"
+                                        disabled="@(_selectedItem == null || !FilteredDifferences.Any())">
+                                    <i class="bi bi-arrow-up"></i>
+                                    <span>Prev Diff</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                                        title="Jump to next difference in object list"
+                                        @onclick="GoToNextDiffAsync"
+                                        disabled="@(_selectedItem == null || !FilteredDifferences.Any())">
+                                    <i class="bi bi-arrow-down"></i>
+                                    <span>Next Diff</span>
+                                </button>
                                 <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
                                         style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
                                         title="@(_isGridCollapsed ? "Expand object list" : "Collapse object list for larger diff view")"
@@ -878,26 +992,24 @@
                             }
                         </div>
 
-                        <!-- Diff Controls (Prev/Next/Toggle Side-by-Side) -->
-                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm"
-                                    style="font-size: 0.75rem; border-color: var(--app-border);"
-                                    title="Jump to previous difference block"
-                                    @onclick="GoToPrevDiffAsync"
-                                    disabled="@(_selectedItem == null)">
-                                <i class="bi bi-arrow-up"></i>
-                                <span>Prev Diff</span>
+                        <!-- Diff Controls (Navigate Diff Blocks inside file + Toggle Side-by-Side) -->
+                        <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center justify-content-center shadow-sm"
+                                    style="font-size: 0.75rem; border-color: var(--app-border); min-width: 28px; height: 28px;"
+                                    title="Previous difference block inside file"
+                                    @onclick="GoToPrevBlockAsync"
+                                    disabled="@(_selectedItem == null || !_selectedItem.HasDifference)">
+                                <i class="bi bi-chevron-up"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm"
-                                    style="font-size: 0.75rem; border-color: var(--app-border);"
-                                    title="Jump to next difference block"
-                                    @onclick="GoToNextDiffAsync"
-                                    disabled="@(_selectedItem == null)">
-                                <i class="bi bi-arrow-down"></i>
-                                <span>Next Diff</span>
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center justify-content-center shadow-sm"
+                                    style="font-size: 0.75rem; border-color: var(--app-border); min-width: 28px; height: 28px;"
+                                    title="Next difference block inside file"
+                                    @onclick="GoToNextBlockAsync"
+                                    disabled="@(_selectedItem == null || !_selectedItem.HasDifference)">
+                                <i class="bi bi-chevron-down"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm"
-                                    style="font-size: 0.75rem; border-color: var(--app-border);"
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm ms-1"
+                                    style="font-size: 0.75rem; border-color: var(--app-border); height: 28px;"
                                     title="@(_isSideBySide ? "Switch to unified inline diff view" : "Switch to side-by-side split diff view")"
                                     @onclick="ToggleSideBySideAsync">
                                 <i class="bi @(_isSideBySide ? "bi-layout-split" : "bi-distribute-vertical")"></i>
@@ -1077,6 +1189,12 @@
 
     private List<string> _sourceDatabases = new();
     private List<string> _targetDatabases = new();
+    private string _sourceDbSearch = "";
+    private string _targetDbSearch = "";
+    private bool _isSourceDbDropdownOpen = false;
+    private bool _isTargetDbDropdownOpen = false;
+    private bool _isSourceDbLoading = false;
+    private bool _isTargetDbLoading = false;
     private List<string> _availableCategories = new() { "All" };
 
     private bool IsAllSelected => FilteredDifferences.Any() && FilteredDifferences.All(d => d.IsSelected);
@@ -1410,13 +1528,63 @@
 
         try
         {
+            _isSourceDbLoading = true;
+            StateHasChanged();
             _sourceDatabases = await FetchDatabasesForEndpointAsync(_source);
             if (string.IsNullOrEmpty(_source.Database) && _sourceDatabases.Count > 0)
             {
                 _source.Database = _sourceDatabases.Contains(SchemaService.ActiveDatabase) ? SchemaService.ActiveDatabase : _sourceDatabases[0];
             }
+            _sourceDbSearch = _source.Database;
         }
         catch { }
+        finally
+        {
+            _isSourceDbLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenSourceDbDropdown()
+    {
+        if (!_isSourceDbDropdownOpen)
+        {
+            _isSourceDbDropdownOpen = true;
+            _sourceDbSearch = "";
+        }
+    }
+
+    private void CloseSourceDbDropdown()
+    {
+        _isSourceDbDropdownOpen = false;
+        _sourceDbSearch = _source.Database;
+    }
+
+    private void SelectSourceDatabase(string db)
+    {
+        _source.Database = db;
+        _sourceDbSearch = db;
+        _isSourceDbDropdownOpen = false;
+    }
+
+    private void OnSourceDbSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var filtered = _sourceDatabases.Where(d => string.IsNullOrWhiteSpace(_sourceDbSearch) || d.Contains(_sourceDbSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (filtered.Any())
+            {
+                SelectSourceDatabase(filtered.First());
+            }
+            else if (!string.IsNullOrWhiteSpace(_sourceDbSearch))
+            {
+                SelectSourceDatabase(_sourceDbSearch);
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            CloseSourceDbDropdown();
+        }
     }
 
     private async Task LoadTargetDatabasesAsync()
@@ -1425,13 +1593,63 @@
 
         try
         {
+            _isTargetDbLoading = true;
+            StateHasChanged();
             _targetDatabases = await FetchDatabasesForEndpointAsync(_target);
             if (string.IsNullOrEmpty(_target.Database) && _targetDatabases.Count > 0)
             {
                 _target.Database = _targetDatabases[0];
             }
+            _targetDbSearch = _target.Database;
         }
         catch { }
+        finally
+        {
+            _isTargetDbLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenTargetDbDropdown()
+    {
+        if (!_isTargetDbDropdownOpen)
+        {
+            _isTargetDbDropdownOpen = true;
+            _targetDbSearch = "";
+        }
+    }
+
+    private void CloseTargetDbDropdown()
+    {
+        _isTargetDbDropdownOpen = false;
+        _targetDbSearch = _target.Database;
+    }
+
+    private void SelectTargetDatabase(string db)
+    {
+        _target.Database = db;
+        _targetDbSearch = db;
+        _isTargetDbDropdownOpen = false;
+    }
+
+    private void OnTargetDbSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var filtered = _targetDatabases.Where(d => string.IsNullOrWhiteSpace(_targetDbSearch) || d.Contains(_targetDbSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (filtered.Any())
+            {
+                SelectTargetDatabase(filtered.First());
+            }
+            else if (!string.IsNullOrWhiteSpace(_targetDbSearch))
+            {
+                SelectTargetDatabase(_targetDbSearch);
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            CloseTargetDbDropdown();
+        }
     }
 
     private async Task<List<string>> FetchDatabasesForEndpointAsync(DatabaseEndpoint endpoint)
@@ -1859,25 +2077,69 @@
 
     private async Task GoToPrevDiffAsync()
     {
-        try
-        {
-            await JS.InvokeVoidAsync("sqlDiffPrev", "sql-diff-editor");
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[SqlCompare] PrevDiff error: {ex.Message}");
-        }
+        await NavigateToObjectDeltaAsync(-1);
     }
 
     private async Task GoToNextDiffAsync()
     {
+        await NavigateToObjectDeltaAsync(1);
+    }
+
+    private async Task GoToPrevBlockAsync()
+    {
         try
         {
-            await JS.InvokeVoidAsync("sqlDiffNext", "sql-diff-editor");
+            await JS.InvokeVoidAsync("sqlDiffNavigateBlock", "sql-diff-editor", "prev");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[SqlCompare] NextDiff error: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] PrevBlock error: {ex.Message}");
+        }
+    }
+
+    private async Task GoToNextBlockAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("sqlDiffNavigateBlock", "sql-diff-editor", "next");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] NextBlock error: {ex.Message}");
+        }
+    }
+
+    private async Task NavigateToObjectDeltaAsync(int delta)
+    {
+        var list = FilteredDifferences.ToList();
+        if (list.Count == 0) return;
+
+        int currentIndex = _selectedItem != null ? list.FindIndex(d => d.Id == _selectedItem.Id) : -1;
+        var hasDiffs = list.Any(d => d.HasDifference);
+        int targetIndex = currentIndex;
+
+        for (int step = 1; step <= list.Count; step++)
+        {
+            int candidate = (currentIndex + (delta * step)) % list.Count;
+            if (candidate < 0) candidate += list.Count;
+
+            if (!hasDiffs || list[candidate].HasDifference)
+            {
+                targetIndex = candidate;
+                break;
+            }
+        }
+
+        if (targetIndex >= 0 && targetIndex < list.Count && targetIndex != currentIndex)
+        {
+            await SelectDiffItem(list[targetIndex]);
+            await InvokeAsync(StateHasChanged);
+        }
+        else if (currentIndex < 0 && list.Count > 0)
+        {
+            var first = list.FirstOrDefault(d => d.HasDifference) ?? list[0];
+            await SelectDiffItem(first);
+            await InvokeAsync(StateHasChanged);
         }
     }
 

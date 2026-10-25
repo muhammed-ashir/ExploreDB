@@ -1038,58 +1038,138 @@ window.revokeBlobUrl = function(url) {
 };
 
 window.sqlDiffNavigator = null;
-window.initSqlDiffNavigator = function (editorId) {
-    if (typeof monaco === 'undefined' || !monaco.editor) return false;
-    var diffEditors = monaco.editor.getDiffEditors();
-    for (var i = 0; i < diffEditors.length; i++) {
-        var e = diffEditors[i];
-        var container = e.getContainerDomNode();
-        if (container && (container.id === editorId || (container.closest && container.closest('#' + editorId)))) {
-            if (window.sqlDiffNavigator && typeof window.sqlDiffNavigator.dispose === 'function') {
-                try { window.sqlDiffNavigator.dispose(); } catch (err) {}
-            }
-            window.sqlDiffNavigator = monaco.editor.createDiffNavigator(e, {
-                followsCaret: true,
-                ignoreCharChanges: false
-            });
-            return true;
+
+function getDiffEditorInstance(editorId) {
+    editorId = editorId || "sql-diff-editor";
+
+    // 1. Check window.blazorMonaco registry
+    if (window.blazorMonaco && typeof window.blazorMonaco.getEditor === 'function') {
+        var ed = window.blazorMonaco.getEditor(editorId, true);
+        if (ed && typeof ed.getLineChanges === 'function') {
+            return ed;
         }
+        var edNormal = window.blazorMonaco.getEditor(editorId);
+        if (edNormal && typeof edNormal.getLineChanges === 'function') {
+            return edNormal;
+        }
+    }
+
+    // 2. Check window.blazorMonaco.editors array directly
+    if (window.blazorMonaco && Array.isArray(window.blazorMonaco.editors)) {
+        var holder = window.blazorMonaco.editors.find(function (h) {
+            return h.id === editorId;
+        });
+        if (holder && holder.editor && typeof holder.editor.getLineChanges === 'function') {
+            return holder.editor;
+        }
+    }
+
+    return null;
+}
+
+window.initSqlDiffNavigator = function (editorId) {
+    return true;
+};
+
+window.sqlDiffNavigateBlock = function (editorId, direction) {
+    editorId = editorId || "sql-diff-editor";
+    var diffEditor = getDiffEditorInstance(editorId);
+    if (!diffEditor) return false;
+
+    var changes = diffEditor.getLineChanges();
+    if (!changes || changes.length === 0) return false;
+
+    var origEditor = diffEditor.getOriginalEditor();
+    var modEditor = diffEditor.getModifiedEditor();
+    var isOrigFocused = origEditor && typeof origEditor.hasTextFocus === 'function' && origEditor.hasTextFocus();
+    var activeEditor = isOrigFocused ? origEditor : modEditor;
+    if (!activeEditor) return false;
+
+    var currentPos = (typeof activeEditor.getPosition === 'function' && activeEditor.getPosition()) || { lineNumber: 1, column: 1 };
+    var currentLine = currentPos.lineNumber;
+
+    // Helper to get line bounds for a change on the relevant side (DiffMate pattern)
+    function getChangeRange(c) {
+        if (isOrigFocused) {
+            var start = c.originalStartLineNumber > 0 ? c.originalStartLineNumber : (c.originalEndLineNumber > 0 ? c.originalEndLineNumber : 1);
+            var end = c.originalEndLineNumber > 0 ? c.originalEndLineNumber : start;
+            return { start: start, end: end };
+        } else {
+            var start = c.modifiedStartLineNumber > 0 ? c.modifiedStartLineNumber : (c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : 1);
+            var end = c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : start;
+            return { start: start, end: end };
+        }
+    }
+
+    // Check if cursor is currently within any diff chunk
+    var currentDiffIdx = -1;
+    for (var i = 0; i < changes.length; i++) {
+        var range = getChangeRange(changes[i]);
+        if (currentLine >= range.start && currentLine <= range.end) {
+            currentDiffIdx = i;
+            break;
+        }
+    }
+
+    var targetChange = null;
+
+    if (direction === 'next' || direction === 1) {
+        if (currentDiffIdx !== -1) {
+            targetChange = changes[(currentDiffIdx + 1) % changes.length];
+        } else {
+            for (var i = 0; i < changes.length; i++) {
+                var range = getChangeRange(changes[i]);
+                if (range.start > currentLine) {
+                    targetChange = changes[i];
+                    break;
+                }
+            }
+            if (!targetChange) targetChange = changes[0]; // Wrap around
+        }
+    } else {
+        if (currentDiffIdx !== -1) {
+            targetChange = changes[(currentDiffIdx - 1 + changes.length) % changes.length];
+        } else {
+            for (var i = changes.length - 1; i >= 0; i--) {
+                var range = getChangeRange(changes[i]);
+                if (range.end < currentLine) {
+                    targetChange = changes[i];
+                    break;
+                }
+            }
+            if (!targetChange) targetChange = changes[changes.length - 1]; // Wrap around
+        }
+    }
+
+    if (!targetChange) return false;
+
+    // Prefer jumping to modified side's line. If pure deletion on modified, jump to original side.
+    var targetEditor = targetChange.modifiedStartLineNumber > 0 ? modEditor : origEditor;
+    var targetLine = targetChange.modifiedStartLineNumber > 0 ? targetChange.modifiedStartLineNumber : targetChange.originalStartLineNumber;
+
+    if (targetEditor) {
+        var line = targetLine > 0 ? targetLine : 1;
+        targetEditor.revealLineInCenter(line);
+        targetEditor.setPosition({ lineNumber: line, column: 1 });
+        targetEditor.focus();
+        return true;
     }
     return false;
 };
 
 window.sqlDiffNext = function (editorId) {
-    editorId = editorId || "sql-diff-editor";
-    if (!window.sqlDiffNavigator) {
-        window.initSqlDiffNavigator(editorId);
-    }
-    if (window.sqlDiffNavigator) {
-        window.sqlDiffNavigator.next();
-    }
+    return window.sqlDiffNavigateBlock(editorId, 'next');
 };
 
 window.sqlDiffPrev = function (editorId) {
-    editorId = editorId || "sql-diff-editor";
-    if (!window.sqlDiffNavigator) {
-        window.initSqlDiffNavigator(editorId);
-    }
-    if (window.sqlDiffNavigator) {
-        window.sqlDiffNavigator.previous();
-    }
+    return window.sqlDiffNavigateBlock(editorId, 'prev');
 };
 
 window.sqlDiffSetSideBySide = function (editorId, sideBySide) {
-    if (typeof monaco === 'undefined' || !monaco.editor) return false;
-    var diffEditors = monaco.editor.getDiffEditors();
-    for (var i = 0; i < diffEditors.length; i++) {
-        var e = diffEditors[i];
-        var container = e.getContainerDomNode();
-        if (container && (container.id === editorId || (container.closest && container.closest('#' + editorId)))) {
-            e.updateOptions({ renderSideBySide: sideBySide });
-            return true;
-        }
-    }
-    return false;
+    var diffEditor = getDiffEditorInstance(editorId);
+    if (!diffEditor) return false;
+    diffEditor.updateOptions({ renderSideBySide: sideBySide });
+    return true;
 };
 
 window.initSqlCompareSplitter = function (dotNetRef) {
