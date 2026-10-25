@@ -15,6 +15,7 @@
 @inject IJSRuntime JS
 @inject ThemeService ThemeService
 @inject ToolRegistryService ToolService
+@inject WindowManagerService WindowManager
 @implements IDisposable
 
 <div class="container-fluid h-100 d-flex flex-column pb-4">
@@ -985,6 +986,9 @@
 </div>
 
 @code {
+    [CascadingParameter(Name = "IsPopout")]
+    public bool IsPopout { get; set; }
+
     private DatabaseEndpoint _source = new();
     private DatabaseEndpoint _target = new();
     private ComparisonOptions _options = new();
@@ -1595,7 +1599,14 @@
         QueryStateService.ActiveTabId = newTab.Id;
         await QueryStateService.SaveTabsAsync();
 
-        Nav.NavigateTo("/runner");
+        if (IsPopout)
+        {
+            WindowManager.NavigateMainWindow("/runner");
+        }
+        else
+        {
+            Nav.NavigateTo("/runner");
+        }
     }
 
     private async Task CopySyncScriptAsync()

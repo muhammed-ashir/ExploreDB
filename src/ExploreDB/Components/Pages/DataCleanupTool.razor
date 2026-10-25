@@ -7,6 +7,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject ToolRegistryService ToolService
+@inject WindowManagerService WindowManager
 @implements IDisposable
 
 <div class="container-fluid h-100 d-flex flex-column pb-5">
@@ -557,6 +558,9 @@
 </style>
 
 @code {
+    [CascadingParameter(Name = "IsPopout")]
+    public bool IsPopout { get; set; }
+
     private List<CleanupTableItem> _tables = new();
     private string _tableFilter = "";
     private bool _filterCaseSensitive = false;
@@ -849,7 +853,14 @@
         QueryStateService.ActiveTabId = newTab.Id;
         await QueryStateService.SaveTabsAsync();
 
-        Nav.NavigateTo("/runner");
+        if (IsPopout)
+        {
+            WindowManager.NavigateMainWindow("/runner");
+        }
+        else
+        {
+            Nav.NavigateTo("/runner");
+        }
     }
 
     private async Task CopySqlScriptAsync()

@@ -15,6 +15,9 @@ public class WindowManagerService
     private readonly IConfiguration _configuration;
     private readonly Dictionary<Guid, Window> _openQueryPopouts = new();
     private readonly List<Window> _openSchemaPopouts = new();
+    private readonly Dictionary<string, Window> _openToolPopouts = new(StringComparer.OrdinalIgnoreCase);
+
+    public event Action<string>? OnNavigateMainWindowRequested;
 
     public WindowManagerService(IServiceProvider serviceProvider, QueryStateService queryStateService, IConfiguration configuration)
     {
@@ -115,6 +118,56 @@ public class WindowManagerService
             popoutWindow.Closed += (s, e) =>
             {
                 _openSchemaPopouts.Remove(popoutWindow);
+            };
+
+            popoutWindow.Show();
+            return true;
+        });
+    }
+
+    public void NavigateMainWindow(string route)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (Application.Current.MainWindow != null)
+            {
+                if (Application.Current.MainWindow.WindowState == WindowState.Minimized)
+                {
+                    Application.Current.MainWindow.WindowState = WindowState.Normal;
+                }
+                Application.Current.MainWindow.Activate();
+            }
+            OnNavigateMainWindowRequested?.Invoke(route);
+        });
+    }
+
+    public bool OpenToolPopout(string toolId, string startPath, string title, bool closeOnConnectionChange = false)
+    {
+        return Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (_openToolPopouts.TryGetValue(toolId, out var existingWindow))
+            {
+                if (existingWindow.IsLoaded)
+                {
+                    if (existingWindow.WindowState == WindowState.Minimized)
+                    {
+                        existingWindow.WindowState = WindowState.Maximized;
+                    }
+                    existingWindow.Activate();
+                    return true;
+                }
+                else
+                {
+                    _openToolPopouts.Remove(toolId);
+                }
+            }
+
+            var popoutWindow = new ToolPopoutWindow(toolId, startPath, title, _serviceProvider, closeOnConnectionChange);
+            _openToolPopouts[toolId] = popoutWindow;
+
+            popoutWindow.Closed += (s, e) =>
+            {
+                _openToolPopouts.Remove(toolId);
             };
 
             popoutWindow.Show();

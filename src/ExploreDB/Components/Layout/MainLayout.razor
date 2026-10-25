@@ -8,6 +8,7 @@
 @inject ExploreDB.Services.GitHubUpdateService UpdateService
 @inject ExploreDB.Services.StoreUpdateService StoreUpdateService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject WindowManagerService WindowManager
 
 <div class="container-fluid p-0">
     @if (IsSwitchingDatabaseGlobal)
@@ -600,6 +601,7 @@
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
         SchemaService.OnError += HandleSchemaError;
         ThemeService.OnThemeChanged += HandleThemeChanged;
+        WindowManager.OnNavigateMainWindowRequested += HandleNavigateMainWindowRequested;
 
         if (!Config.GetValue<bool>("DisableAutoUpdates", false))
         {
@@ -667,6 +669,7 @@
 
     public void Dispose()
     {
+        WindowManager.OnNavigateMainWindowRequested -= HandleNavigateMainWindowRequested;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         App.RequestAppExit -= HandleRequestAppExit;
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
@@ -675,6 +678,15 @@
         SchemaService.OnError -= HandleSchemaError;
         Nav.LocationChanged -= OnLocationChanged;
         _updateTimer?.Dispose();
+    }
+
+    private void HandleNavigateMainWindowRequested(string route)
+    {
+        _ = InvokeAsync(() =>
+        {
+            Nav.NavigateTo(route);
+            StateHasChanged();
+        });
     }
 
     private async Task PollForUpdatesAsync()

@@ -17,6 +17,8 @@ public class ToolItem
     public string Route { get; set; } = string.Empty;
     public string Status { get; set; } = "Live"; // "Live", "Beta", "Coming Soon"
     public bool IsVisible { get; set; } = true;
+    public bool? OpenInPopout { get; set; }
+    public bool? CloseOnConnectionChange { get; set; }
 
     public bool IsLive => Status.Equals("Live", StringComparison.OrdinalIgnoreCase);
     public bool IsBeta => Status.Equals("Beta", StringComparison.OrdinalIgnoreCase);
@@ -31,6 +33,8 @@ public class ToolConfigItem
     public string Id { get; set; } = string.Empty;
     public string? Status { get; set; }
     public bool? IsVisible { get; set; }
+    public bool? OpenInPopout { get; set; }
+    public bool? CloseOnConnectionChange { get; set; }
 }
 
 public class ToolRegistryService
@@ -68,6 +72,14 @@ public class ToolRegistryService
                         {
                             tool.IsVisible = cfg.IsVisible.Value;
                         }
+                        if (cfg.OpenInPopout.HasValue)
+                        {
+                            tool.OpenInPopout = cfg.OpenInPopout.Value;
+                        }
+                        if (cfg.CloseOnConnectionChange.HasValue)
+                        {
+                            tool.CloseOnConnectionChange = cfg.CloseOnConnectionChange.Value;
+                        }
                         result.Add(tool);
                     }
                 }
@@ -103,6 +115,33 @@ public class ToolRegistryService
         return tool == null || (tool.IsVisible && tool.IsAvailable);
     }
 
+    public bool ShouldOpenInPopout(string toolId)
+    {
+        var tool = GetAllTools().FirstOrDefault(t => t.Id.Equals(toolId, StringComparison.OrdinalIgnoreCase));
+        if (tool?.OpenInPopout.HasValue == true)
+        {
+            return tool.OpenInPopout.Value;
+        }
+
+        return _configuration.GetValue<bool>("OpenToolsInPopout", false);
+    }
+
+    public bool ShouldCloseOnConnectionChange(string toolId)
+    {
+        var tool = GetAllTools().FirstOrDefault(t => t.Id.Equals(toolId, StringComparison.OrdinalIgnoreCase));
+        if (tool?.CloseOnConnectionChange.HasValue == true)
+        {
+            return tool.CloseOnConnectionChange.Value;
+        }
+
+        if (toolId.Equals("data-cleanup", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     public static List<ToolItem> GetDefaultTools()
     {
         return new List<ToolItem>
@@ -117,7 +156,8 @@ public class ToolRegistryService
                 IconColor = "#ef4444",
                 Route = "/tools/data-cleanup",
                 Status = "Live",
-                IsVisible = true
+                IsVisible = true,
+                CloseOnConnectionChange = true
             },
             new ToolItem
             {
@@ -129,7 +169,8 @@ public class ToolRegistryService
                 IconColor = "#a855f7",
                 Route = "/tools/sql-compare",
                 Status = "Live",
-                IsVisible = true
+                IsVisible = true,
+                CloseOnConnectionChange = false
             },
             new ToolItem
             {

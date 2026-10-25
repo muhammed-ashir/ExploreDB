@@ -2,6 +2,7 @@
 @using ExploreDB.Services
 @inject NavigationManager Nav
 @inject ToolRegistryService ToolService
+@inject WindowManagerService WindowManager
 
 <div class="container-fluid h-100 d-flex flex-column pb-5">
     <div class="row mb-4 align-items-center">
@@ -72,26 +73,34 @@
                     <div class="card h-100 p-4 rounded-3 shadow-sm transition-transform hover-scale"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: @(tool.IsAvailable ? "pointer" : "default");"
                          @onclick="() => LaunchTool(tool)"
-                         title="@(tool.IsAvailable ? (tool.IsBeta ? $"Click to open {tool.Title} (Beta)" : $"Click to open {tool.Title}") : "Coming soon")">
+                         title="@(tool.IsAvailable ? (ToolService.ShouldOpenInPopout(tool.Id) ? $"Click to open {tool.Title} in a separate window" : (tool.IsBeta ? $"Click to open {tool.Title} (Beta)" : $"Click to open {tool.Title}")) : "Coming soon")">
                         <div class="d-flex align-items-start justify-content-between mb-3">
                             <div class="rounded-3 d-flex align-items-center justify-content-center shadow-sm"
                                  style="width: 48px; height: 48px; background-color: @tool.IconBg; color: @tool.IconColor; font-size: 1.4rem;">
                                 <i class="bi @tool.Icon"></i>
                             </div>
-                            @if (tool.IsBeta)
-                            {
-                                <span class="badge rounded-pill border"
-                                      style="font-size: 0.72rem; padding: 4px 9px; font-weight: 600; background-color: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3) !important;">
-                                    Beta
-                                </span>
-                            }
-                            else if (!tool.IsAvailable || tool.IsComingSoon)
-                            {
-                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"
-                                      style="font-size: 0.72rem; padding: 4px 8px; font-weight: 600;">
-                                    Coming Soon
-                                </span>
-                            }
+                            <div class="d-flex align-items-center gap-2">
+                                @if (tool.IsAvailable && !string.IsNullOrEmpty(tool.Route) && ToolService.ShouldOpenInPopout(tool.Id))
+                                {
+                                    <span class="text-muted p-1" title="Opens in a separate window">
+                                        <i class="bi bi-box-arrow-up-right"></i>
+                                    </span>
+                                }
+                                @if (tool.IsBeta)
+                                {
+                                    <span class="badge rounded-pill border"
+                                          style="font-size: 0.72rem; padding: 4px 9px; font-weight: 600; background-color: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3) !important;">
+                                        Beta
+                                    </span>
+                                }
+                                else if (!tool.IsAvailable || tool.IsComingSoon)
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"
+                                          style="font-size: 0.72rem; padding: 4px 8px; font-weight: 600;">
+                                        Coming Soon
+                                    </span>
+                                }
+                            </div>
                         </div>
 
                         <h5 class="fw-bold mb-2" style="color: var(--app-text); font-size: 1.1rem;">@tool.Title</h5>
@@ -163,7 +172,15 @@
     {
         if (tool.IsAvailable && !string.IsNullOrEmpty(tool.Route))
         {
-            Nav.NavigateTo(tool.Route);
+            if (ToolService.ShouldOpenInPopout(tool.Id))
+            {
+                bool closeOnConn = ToolService.ShouldCloseOnConnectionChange(tool.Id);
+                WindowManager.OpenToolPopout(tool.Id, tool.Route, $"{tool.Title} - ExploreDB", closeOnConn);
+            }
+            else
+            {
+                Nav.NavigateTo(tool.Route);
+            }
         }
     }
 

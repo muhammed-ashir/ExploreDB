@@ -113,7 +113,7 @@
 
 <h2>📦 Installation Guide</h2>
 <h3><strong>Method 1: Microsoft Store (Recommended)</strong></h3>
-<p>ExploreDB is officially available on the Microsoft Store for seamless installation and completely silent background updates!<ol><li>Open the <strong>Microsoft Store</strong> app on Windows.</li><li>Search for <strong>ExploreDB</strong> and click <strong>Install</strong>.</li></ol></p>
+<p>ExploreDB is officially available on the Microsoft Store for seamless installation and completely silent background updates!<ol><li>Open the <strong>Microsoft Store</strong> app on Windows.</li><li>Search for <strong>ExploreDB</strong> and click <strong>Install</strong>.</li></ol></p>
 <p><em>(Updates will be handled automatically by Windows!)</em></p>
 <hr>
 <h3><strong>Method 2: Manual Installation (GitHub Beta / Internal)</strong></h3>
@@ -363,35 +363,90 @@
   <li><strong>Crucial Step</strong>: Because the old link is broken, automatic updates will fail. You must tell all your teammates to manually download and run the new <code>.appinstaller</code> file one time. This will permanently repoint their computers to your new repository!</li>
 </ol>
 <hr>
-<h2>⚙️ Application Settings</h2>
-<p>ExploreDB provides several configurable settings that can be customized in the <code>appsettings.json</code> file located in the application installation directory.</p>
-<div class="code-container"><div class="code-header"><span class="lang">json</span><button class="copy-btn">Copy</button></div><pre><code>{
+<h2>⚙️ Application Settings (<code>appsettings.json</code>)</h2>
+<p>ExploreDB provides comprehensive configuration options that allow you to customize query behavior, window management, caching, logging, and tool visibility. These options can be configured in the <code>appsettings.json</code> file located in the application installation directory.</p>
+
+<div class="code-container">
+  <div class="code-header"><span class="lang">json</span><button class="copy-btn">Copy</button></div>
+  <pre><code>{
+  "AllowNonSelectQueries": true,
+  "Logging": {
+    "LogRetentionDays": 10,
+    "LogLevel": "Information"
+  },
+  "DisableAutoUpdates": false,
   "QueryHistoryLimit": 500,
   "MaxOpenTabs": 20,
-  "DisableAutoUpdates": false,
+  "MaxSchemaCacheCount": 10,
+  "SchemaCacheExpirationHours": 12,
+  "MaxPopoutTabs": 5,
+  "MaxSchemaPopouts": 5,
+  "OpenToolsInPopout": false,
   "Tools": [
-    { "Id": "data-cleanup", "Status": "Live", "IsVisible": true },
-    { "Id": "sql-compare", "Status": "Live", "IsVisible": true },
-    { "Id": "sql-profiler", "Status": "Coming Soon", "IsVisible": true }
+    {
+      "Id": "data-cleanup",
+      "Status": "Live",
+      "IsVisible": true,
+      "OpenInPopout": true,
+      "CloseOnConnectionChange": true
+    },
+    {
+      "Id": "sql-compare",
+      "Status": "Live",
+      "IsVisible": true,
+      "OpenInPopout": true,
+      "CloseOnConnectionChange": false
+    },
+    {
+      "Id": "sql-profiler",
+      "Status": "Coming Soon",
+      "IsVisible": true
+    }
   ]
-}</code></pre></div>
+}</code></pre>
+</div>
+
+<h3>1. 🔒 Query &amp; Execution Safety</h3>
 <ul>
-  <li><strong><code>QueryHistoryLimit</code></strong>: Sets the maximum number of executed queries saved in your local history tab (default: <code>500</code>). Older queries are automatically purged when this limit is reached.</li>
-  <li><strong><code>MaxOpenTabs</code></strong>: Restricts the maximum number of tabs you can have open at the same time in the Query Runner (default: <code>20</code>). This protects system memory and ensures top performance.</li>
-  <li><strong><code>DisableAutoUpdates</code></strong>: When set to <code>true</code>, the application will completely stop checking for Microsoft Store and GitHub updates in the background, and will never show an update banner (default: <code>false</code>). Useful for enterprise environments requiring strict version control.</li>
-  <li><strong><code>Tools</code></strong>: Configures the visibility and lifecycle status of tools displayed in the Tools Hub. Each entry contains:
+  <li><strong><code>AllowNonSelectQueries</code></strong> <em>(boolean, default: <code>true</code>)</em>: When set to <code>false</code>, ExploreDB enforces read-only mode across all query runners and execution tools. Any non-SELECT statements (such as <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>DROP</code>, <code>ALTER</code>) will be blocked to prevent accidental database modifications in production environments.</li>
+  <li><strong><code>QueryHistoryLimit</code></strong> <em>(integer, default: <code>500</code>)</em>: Maximum number of executed queries preserved in your local history tab. Older records are automatically pruned when this threshold is exceeded.</li>
+  <li><strong><code>MaxOpenTabs</code></strong> <em>(integer, default: <code>20</code>)</em>: Maximum number of concurrent query tabs allowed open in the Query Runner. Protects system memory and maintains smooth Monaco editor performance.</li>
+</ul>
+
+<h3>2. ⚡ Schema Caching &amp; Performance</h3>
+<ul>
+  <li><strong><code>MaxSchemaCacheCount</code></strong> <em>(integer, default: <code>10</code>)</em>: Maximum number of complete database schemas kept in memory simultaneously. Enables instantaneous switching between frequently accessed databases without redundant roundtrips to the SQL server.</li>
+  <li><strong><code>SchemaCacheExpirationHours</code></strong> <em>(integer, default: <code>12</code>)</em>: Time-to-live (in hours) before an in-memory schema cache is considered stale and automatically refreshed from the database.</li>
+</ul>
+
+<h3>3. 🪟 Windows &amp; Popout Management</h3>
+<ul>
+  <li><strong><code>MaxPopoutTabs</code></strong> <em>(integer, default: <code>5</code>)</em>: Maximum number of query editor tabs that can be popped out into standalone desktop windows at the same time.</li>
+  <li><strong><code>MaxSchemaPopouts</code></strong> <em>(integer, default: <code>5</code>)</em>: Maximum number of schema detail views (Tables/Views) that can be opened simultaneously in standalone windows.</li>
+  <li><strong><code>OpenToolsInPopout</code></strong> <em>(boolean, default: <code>false</code>)</em>: Global default setting for the Tools Hub. When set to <code>true</code>, clicking any tool card launches that tool directly in its own dedicated, resizable standalone window. When set to <code>false</code>, tools open in the main application window.</li>
+</ul>
+
+<h3>4. 🛠️ Tools Hub Lifecycle &amp; Popout Overrides</h3>
+<p>The <strong><code>Tools</code></strong> array allows granular, per-tool configuration overriding the global defaults:</p>
+<ul>
+  <li><strong><code>Id</code></strong> <em>(string, required)</em>: The unique identifier of the tool (e.g. <code>"data-cleanup"</code>, <code>"sql-compare"</code>, <code>"sql-profiler"</code>).</li>
+  <li><strong><code>IsVisible</code></strong> <em>(boolean, default: <code>true</code>)</em>: Whether the tool card is displayed in the Tools Hub grid. Set to <code>false</code> to completely hide a tool.</li>
+  <li><strong><code>OpenInPopout</code></strong> <em>(boolean, optional)</em>: Per-tool override for popout window behavior. When set to <code>true</code>, the tool card displays a subtle popout indicator (<code>↗</code>) and launches in its own standalone window. If omitted, it falls back to the global <code>OpenToolsInPopout</code> setting.</li>
+  <li><strong><code>CloseOnConnectionChange</code></strong> <em>(boolean, optional)</em>: Controls whether the tool popout window automatically closes when the active database connection changes in the main window sidebar. Defaults to <code>true</code> for <em>Data Cleanup</em> (which operates on the active database), and <code>false</code> for <em>SQL Compare</em> (which manages its own source and target endpoints).</li>
+  <li><strong><code>Status</code></strong> <em>(string, default: <code>"Live"</code>)</em>: Controls the tool's availability badge and interactivity:
     <ul>
-      <li><strong><code>Id</code></strong>: Unique identifier of the tool (e.g. <code>"data-cleanup"</code>, <code>"sql-compare"</code>, <code>"sql-profiler"</code>).</li>
-      <li><strong><code>IsVisible</code></strong>: When set to <code>false</code>, completely omits the tool card from the Tools Hub grid.</li>
-      <li><strong><code>Status</code> (Status Badges &amp; Clickability)</strong>:
-        <ul>
-          <li><strong><code>"Live"</code></strong>: No badge is displayed; card is clickable and navigates to the tool route.</li>
-          <li><strong><code>"Beta"</code></strong>: Displays a sleek purple Beta badge; card is clickable for early testing.</li>
-          <li><strong><code>"Coming Soon"</code></strong>: Displays a muted Coming Soon badge; card is disabled/non-clickable (<code>cursor: default</code>).</li>
-        </ul>
-      </li>
+      <li><strong><code>"Live"</code></strong>: Normal production state. No badge is shown; card is clickable and navigates to the tool.</li>
+      <li><strong><code>"Beta"</code></strong>: Displays a sleek purple <em>Beta</em> badge; card is clickable for early feature access.</li>
+      <li><strong><code>"Coming Soon"</code></strong>: Displays a muted <em>Coming Soon</em> badge; card is disabled and non-clickable (<code>cursor: default</code>).</li>
     </ul>
   </li>
+</ul>
+
+<h3>5. 🔄 Updates &amp; Diagnostics</h3>
+<ul>
+  <li><strong><code>DisableAutoUpdates</code></strong> <em>(boolean, default: <code>false</code>)</em>: When set to <code>true</code>, completely disables background update checks for Microsoft Store and GitHub releases, silencing all update notifications. Ideal for enterprise deployments with strict package version locks.</li>
+  <li><strong><code>Logging:LogRetentionDays</code></strong> <em>(integer, default: <code>10</code>)</em>: Number of days daily log files are retained in <code>%LocalAppData%\ExploreDB\logs</code> before being automatically purged to save disk space.</li>
+  <li><strong><code>Logging:LogLevel</code></strong> <em>(string, default: <code>"Information"</code>)</em>: Logging verbosity level. Supported values: <code>"Verbose"</code>, <code>"Debug"</code>, <code>"Information"</code>, <code>"Warning"</code>, <code>"Error"</code>, or <code>"Fatal"</code>.</li>
 </ul>
 <hr>
 <h2>📝 Application Logs</h2>
