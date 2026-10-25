@@ -489,8 +489,8 @@
 
                         @if (_plan.HasCycles)
                         {
-                            <div class="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm" role="alert">
-                                <i class="bi bi-exclamation-triangle-fill fs-5 text-warning flex-shrink-0"></i>
+                            <div class="alert alert-warning py-2 px-3 small d-flex align-items-start gap-2 mb-3 shadow-sm" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill fs-5 text-warning flex-shrink-0" style="margin-top: 2px;"></i>
                                 <div>
                                     <strong>Circular Foreign Key Loop Detected:</strong> One or more tables reference each other circularly (@string.Join(", ", _plan.CycleTables)). The script will automatically disable constraints to guarantee successful execution.
                                 </div>
