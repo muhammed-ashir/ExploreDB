@@ -63,6 +63,9 @@ public class CleanupSessionState
     public string DatabaseName { get; set; } = string.Empty;
     public List<CleanupTableItem> Tables { get; set; } = new();
     public string TableFilter { get; set; } = string.Empty;
+    public bool FilterCaseSensitive { get; set; } = false;
+    public bool FilterMatchWholeWord { get; set; } = false;
+    public bool FilterExactMatch { get; set; } = false;
     public CleanupStrategy Strategy { get; set; } = CleanupStrategy.ConstraintDisabling;
     public bool ReseedIdentities { get; set; } = true;
     public bool AutoIncludeChildTables { get; set; } = true;

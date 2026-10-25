@@ -137,10 +137,28 @@
                                                @bind:event="oninput" />
                                         @if (!string.IsNullOrEmpty(_tableFilter))
                                         {
-                                            <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" @onclick="() => _tableFilter = string.Empty">
+                                            <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" title="Clear filter" @onclick="() => _tableFilter = string.Empty">
                                                 <i class="bi bi-x-lg"></i>
                                             </button>
                                         }
+                                        <button type="button" class="btn @(_filterCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                                style="z-index: 0; border-color: var(--app-input-border); @(_filterCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                                title="Match Case"
+                                                @onclick="() => { _filterCaseSensitive = !_filterCaseSensitive; SaveSession(); }">
+                                            <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.85em; letter-spacing: 0.5px;">Aa</span>
+                                        </button>
+                                        <button type="button" class="btn @(_filterMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                                style="z-index: 0; border-color: var(--app-input-border); @(_filterMatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                                title="Match Whole Word"
+                                                @onclick="() => { _filterMatchWholeWord = !_filterMatchWholeWord; if (_filterMatchWholeWord) _filterExactMatch = false; SaveSession(); }">
+                                            <span style="font-family: monospace; font-weight: bold; font-size: 0.85em;">[ab]</span>
+                                        </button>
+                                        <button type="button" class="btn @(_filterExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                                style="z-index: 0; border-color: var(--app-input-border); @(_filterExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                                title="Exact Match"
+                                                @onclick="() => { _filterExactMatch = !_filterExactMatch; if (_filterExactMatch) _filterMatchWholeWord = false; SaveSession(); }">
+                                            <i class="bi bi-bullseye" style="font-size: 0.85rem;"></i>
+                                        </button>
                                     </div>
 
                                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -305,10 +323,28 @@
                                        @bind:event="oninput" />
                                 @if (!string.IsNullOrEmpty(_tableFilter))
                                 {
-                                    <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" @onclick="() => _tableFilter = string.Empty">
+                                    <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" title="Clear filter" @onclick="() => _tableFilter = string.Empty">
                                         <i class="bi bi-x-lg"></i>
                                     </button>
                                 }
+                                <button type="button" class="btn @(_filterCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                        style="z-index: 0; border-color: var(--app-input-border); @(_filterCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                        title="Match Case"
+                                        @onclick="() => { _filterCaseSensitive = !_filterCaseSensitive; SaveSession(); }">
+                                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.85em; letter-spacing: 0.5px;">Aa</span>
+                                </button>
+                                <button type="button" class="btn @(_filterMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                        style="z-index: 0; border-color: var(--app-input-border); @(_filterMatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                        title="Match Whole Word"
+                                        @onclick="() => { _filterMatchWholeWord = !_filterMatchWholeWord; if (_filterMatchWholeWord) _filterExactMatch = false; SaveSession(); }">
+                                    <span style="font-family: monospace; font-weight: bold; font-size: 0.85em;">[ab]</span>
+                                </button>
+                                <button type="button" class="btn @(_filterExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                        style="z-index: 0; border-color: var(--app-input-border); @(_filterExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                        title="Exact Match"
+                                        @onclick="() => { _filterExactMatch = !_filterExactMatch; if (_filterExactMatch) _filterMatchWholeWord = false; SaveSession(); }">
+                                    <i class="bi bi-bullseye" style="font-size: 0.85rem;"></i>
+                                </button>
                             </div>
 
                             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -523,6 +559,9 @@
 @code {
     private List<CleanupTableItem> _tables = new();
     private string _tableFilter = "";
+    private bool _filterCaseSensitive = false;
+    private bool _filterMatchWholeWord = false;
+    private bool _filterExactMatch = false;
     private CleanupStrategy _strategy = CleanupStrategy.ConstraintDisabling;
     private bool _reseedIdentities = true;
     private bool _autoIncludeChildTables = true;
@@ -536,10 +575,47 @@
     private IEnumerable<CleanupTableItem> FilteredTables => _tables.Where(t =>
     {
         if (string.IsNullOrWhiteSpace(_tableFilter)) return true;
-        var term = _tableFilter.Trim();
-        return t.FullName.Contains(term, StringComparison.OrdinalIgnoreCase)
-            || t.TableName.Contains(term, StringComparison.OrdinalIgnoreCase)
-            || t.Schema.Contains(term, StringComparison.OrdinalIgnoreCase);
+        var searchTerm = _filterCaseSensitive ? _tableFilter.Trim() : _tableFilter.Trim().ToLowerInvariant();
+        var tableName = _filterCaseSensitive ? (t.TableName ?? "") : (t.TableName ?? "").ToLowerInvariant();
+        var schemaName = _filterCaseSensitive ? (t.Schema ?? "") : (t.Schema ?? "").ToLowerInvariant();
+        var fullName = _filterCaseSensitive ? (t.FullName ?? "") : (t.FullName ?? "").ToLowerInvariant();
+        var plainFullName = _filterCaseSensitive ? $"{t.Schema}.{t.TableName}" : $"{t.Schema}.{t.TableName}".ToLowerInvariant();
+
+        if (_filterExactMatch)
+        {
+            return tableName == searchTerm ||
+                   schemaName == searchTerm ||
+                   fullName == searchTerm ||
+                   plainFullName == searchTerm ||
+                   $"[{tableName}]" == searchTerm;
+        }
+        else if (_filterMatchWholeWord)
+        {
+            if (tableName.Split(' ', '.', '_', '[', ']').Contains(searchTerm) ||
+                schemaName.Split(' ', '.', '_', '[', ']').Contains(searchTerm) ||
+                fullName.Split(' ', '.', '_', '[', ']').Contains(searchTerm))
+            {
+                return true;
+            }
+
+            try
+            {
+                string pattern = $@"(^|[\s._\[\]]){System.Text.RegularExpressions.Regex.Escape(searchTerm)}($|[\s._\[\]])";
+                var regexOpt = _filterCaseSensitive ? System.Text.RegularExpressions.RegexOptions.None : System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+                return System.Text.RegularExpressions.Regex.IsMatch(plainFullName, pattern, regexOpt) ||
+                       System.Text.RegularExpressions.Regex.IsMatch(fullName, pattern, regexOpt);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return tableName.Contains(searchTerm) ||
+                   schemaName.Contains(searchTerm) ||
+                   fullName.Contains(searchTerm);
+        }
     });
 
     protected override async Task OnInitializedAsync()
@@ -562,6 +638,9 @@
         {
             _tables = session.Tables;
             _tableFilter = session.TableFilter;
+            _filterCaseSensitive = session.FilterCaseSensitive;
+            _filterMatchWholeWord = session.FilterMatchWholeWord;
+            _filterExactMatch = session.FilterExactMatch;
             _strategy = session.Strategy;
             _reseedIdentities = session.ReseedIdentities;
             _autoIncludeChildTables = session.AutoIncludeChildTables;
@@ -845,6 +924,9 @@
             DatabaseName = SchemaService.ActiveDatabase,
             Tables = _tables,
             TableFilter = _tableFilter,
+            FilterCaseSensitive = _filterCaseSensitive,
+            FilterMatchWholeWord = _filterMatchWholeWord,
+            FilterExactMatch = _filterExactMatch,
             Strategy = _strategy,
             ReseedIdentities = _reseedIdentities,
             AutoIncludeChildTables = _autoIncludeChildTables,

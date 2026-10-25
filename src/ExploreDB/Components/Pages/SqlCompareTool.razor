@@ -679,8 +679,8 @@
                         <div class="d-flex align-items-center justify-content-between gap-3">
                             @if (!_isGridCollapsed)
                             {
-                                <!-- Left: Search Box (50% size) -->
-                                <div class="input-group input-group-sm" style="width: 50%; max-width: 50%;">
+                                <!-- Left: Search Box (with Match Case, Whole Word & Exact Match) -->
+                                <div class="input-group input-group-sm" style="width: 50%; max-width: 520px; min-width: 280px;">
                                     <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
                                         <i class="bi bi-search"></i>
                                     </span>
@@ -693,10 +693,29 @@
                                     {
                                         <button class="btn btn-outline-secondary border-start-0"
                                                 style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
+                                                title="Clear filter"
                                                 @onclick="() => _filterQuery = string.Empty">
                                             <i class="bi bi-x"></i>
                                         </button>
                                     }
+                                    <button type="button" class="btn @(_filterCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                            style="z-index: 0; border-color: var(--app-input-border); @(_filterCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                            title="Match Case"
+                                            @onclick="() => _filterCaseSensitive = !_filterCaseSensitive">
+                                        <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.85em; letter-spacing: 0.5px;">Aa</span>
+                                    </button>
+                                    <button type="button" class="btn @(_filterMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                            style="z-index: 0; border-color: var(--app-input-border); @(_filterMatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                            title="Match Whole Word"
+                                            @onclick="() => { _filterMatchWholeWord = !_filterMatchWholeWord; if (_filterMatchWholeWord) _filterExactMatch = false; }">
+                                        <span style="font-family: monospace; font-weight: bold; font-size: 0.85em;">[ab]</span>
+                                    </button>
+                                    <button type="button" class="btn @(_filterExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                            style="z-index: 0; border-color: var(--app-input-border); @(_filterExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                            title="Exact Match"
+                                            @onclick="() => { _filterExactMatch = !_filterExactMatch; if (_filterExactMatch) _filterMatchWholeWord = false; }">
+                                        <i class="bi bi-bullseye" style="font-size: 0.85rem;"></i>
+                                    </button>
                                 </div>
                             }
                             else
@@ -1016,6 +1035,9 @@
     private string _targetSearchTerm = "";
 
     private string _filterQuery = "";
+    private bool _filterCaseSensitive = false;
+    private bool _filterMatchWholeWord = false;
+    private bool _filterExactMatch = false;
     private string _selectedCategoryFilter = "All";
     private string _selectedChangeFilter = "Different";
     private bool _isScriptCopied = false;
@@ -1055,10 +1077,55 @@
                 // Filter by search text
                 if (!string.IsNullOrWhiteSpace(_filterQuery))
                 {
-                    var q = _filterQuery.Trim();
-                    return d.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                           d.Schema.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                           d.ObjectName.Contains(q, StringComparison.OrdinalIgnoreCase);
+                    var searchTerm = _filterCaseSensitive ? _filterQuery.Trim() : _filterQuery.Trim().ToLowerInvariant();
+                    var objName = _filterCaseSensitive ? (d.ObjectName ?? "") : (d.ObjectName ?? "").ToLowerInvariant();
+                    var schemaName = _filterCaseSensitive ? (d.Schema ?? "") : (d.Schema ?? "").ToLowerInvariant();
+                    var fullName = _filterCaseSensitive ? (d.Name ?? "") : (d.Name ?? "").ToLowerInvariant();
+                    var plainFullName = _filterCaseSensitive ? $"{d.Schema}.{d.ObjectName}" : $"{d.Schema}.{d.ObjectName}".ToLowerInvariant();
+
+                    if (_filterExactMatch)
+                    {
+                        if (!(objName == searchTerm ||
+                              schemaName == searchTerm ||
+                              fullName == searchTerm ||
+                              plainFullName == searchTerm ||
+                              $"[{objName}]" == searchTerm))
+                        {
+                            return false;
+                        }
+                    }
+                    else if (_filterMatchWholeWord)
+                    {
+                        bool matched = objName.Split(' ', '.', '_', '[', ']').Contains(searchTerm) ||
+                                       schemaName.Split(' ', '.', '_', '[', ']').Contains(searchTerm) ||
+                                       fullName.Split(' ', '.', '_', '[', ']').Contains(searchTerm);
+
+                        if (!matched)
+                        {
+                            try
+                            {
+                                string pattern = $@"(^|[\s._\[\]]){System.Text.RegularExpressions.Regex.Escape(searchTerm)}($|[\s._\[\]])";
+                                var regexOpt = _filterCaseSensitive ? System.Text.RegularExpressions.RegexOptions.None : System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+                                matched = System.Text.RegularExpressions.Regex.IsMatch(plainFullName, pattern, regexOpt) ||
+                                          System.Text.RegularExpressions.Regex.IsMatch(fullName, pattern, regexOpt);
+                            }
+                            catch
+                            {
+                                matched = false;
+                            }
+                        }
+
+                        if (!matched) return false;
+                    }
+                    else
+                    {
+                        if (!(objName.Contains(searchTerm) ||
+                              schemaName.Contains(searchTerm) ||
+                              fullName.Contains(searchTerm)))
+                        {
+                            return false;
+                        }
+                    }
                 }
 
                 return true;
@@ -1481,6 +1548,10 @@
         _selectedItem = null;
         _errorMessage = "";
         _isFullScreen = false;
+        _filterQuery = "";
+        _filterCaseSensitive = false;
+        _filterMatchWholeWord = false;
+        _filterExactMatch = false;
         _ = UpdateDiffContentAsync();
     }
 
