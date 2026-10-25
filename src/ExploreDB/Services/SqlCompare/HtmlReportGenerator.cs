@@ -39,6 +39,8 @@ public class HtmlReportGenerator : IHtmlReportGenerator
             target = model.TargetEndpoint.ToString(),
             sourceDisplayName = GetEndpointDisplayName(model.SourceEndpoint),
             targetDisplayName = GetEndpointDisplayName(model.TargetEndpoint),
+            sourceServer = model.SourceEndpoint.Server ?? (model.SourceEndpoint.Type == EndpointType.DacpacFile ? "Dacpac Package" : "localhost"),
+            targetServer = model.TargetEndpoint.Server ?? (model.TargetEndpoint.Type == EndpointType.DacpacFile ? "Dacpac Package" : "localhost"),
             differences = model.Differences.Select(d => new
             {
                 id = d.Id,
@@ -77,7 +79,30 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       --modified-bg: rgba(245, 158, 11, 0.15);
       --identical: #64748b;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+    *::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    *::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    *::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+    *::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.32);
+    }
+    *::-webkit-scrollbar-corner {
+      background: transparent;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: var(--bg);
@@ -96,86 +121,266 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       align-items: center;
       flex-shrink: 0;
     }
-    .header-title { display: flex; align-items: center; gap: 12px; }
-    .logo {
-      background: linear-gradient(135deg, #0ea5e9, #6366f1);
-      color: white;
-      font-weight: 800;
-      padding: 5px 11px;
-      border-radius: 6px;
-      font-size: 14px;
-      letter-spacing: 0.5px;
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13.5px;
+    }
+    .report-title {
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.3px;
+    }
+    .header-divider {
+      color: #475569;
+      font-weight: 300;
+    }
+    .report-date-text {
+      color: var(--text-muted);
+      font-size: 12.5px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .header-credit-text {
+      color: var(--text-muted);
+      cursor: default;
+    }
+    .header-credit-link {
+      color: #38bdf8;
+      font-weight: 600;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .header-credit-link:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .header-credit-link svg {
+      opacity: 0.8;
+      transition: opacity 0.15s ease;
+    }
+    .header-credit-link:hover svg {
+      opacity: 1;
+    }
+
+    /* Filters & Endpoints Summary Row */
+    .filters-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 20px;
+      background: var(--surface-secondary);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .kpi-cards-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 16px;
+      min-width: 125px;
+      text-align: center;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      user-select: none;
+      transition: all 0.15s ease;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    .kpi-card:hover {
+      background: var(--surface-hover);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .kpi-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    .kpi-value {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+    .card-all .kpi-value { color: #38bdf8; }
+    .card-all.active {
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 1px #0d6efd;
+      background: rgba(13, 110, 253, 0.1);
+    }
+    .card-added .kpi-value { color: #22c55e; }
+    .card-added.active {
+      border-color: #22c55e;
+      box-shadow: 0 0 0 1px #22c55e;
+      background: rgba(34, 197, 94, 0.1);
+    }
+    .card-modified .kpi-value { color: #f59e0b; }
+    .card-modified.active {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 1px #f59e0b;
+      background: rgba(245, 158, 11, 0.1);
+    }
+    .card-deleted .kpi-value { color: #ef4444; }
+    .card-deleted.active {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 1px #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+    }
+    .card-identical .kpi-value { color: #94a3b8; }
+    .card-identical.active {
+      border-color: #94a3b8;
+      box-shadow: 0 0 0 1px #94a3b8;
+      background: rgba(148, 163, 184, 0.1);
+    }
+
+    .endpoints-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-left: auto;
+      flex-shrink: 0;
+      justify-content: center;
     }
     .endpoint-badge {
-      font-size: 12px;
-      color: var(--text-muted);
-      background: rgba(255,255,255,0.04);
-      padding: 3px 8px;
+      font-size: 11.5px;
+      color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 3px 10px;
       border-radius: 5px;
       border: 1px solid var(--border);
-      max-width: 260px;
+      max-width: 480px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      line-height: 1.4;
+      cursor: help;
     }
-    .stats-bar {
-      display: flex;
-      gap: 12px;
-      background: var(--surface-secondary);
-      padding: 8px 20px;
-      border-bottom: 1px solid var(--border);
-      align-items: center;
-      flex-shrink: 0;
-      font-size: 12px;
-      flex-wrap: wrap;
+    .source-prefix {
+      color: #38bdf8;
+      font-weight: 700;
+      margin-right: 3px;
     }
-    .stat-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 5px;
-      font-weight: 600;
-      cursor: pointer;
-      user-select: none;
-      transition: all 0.15s;
+    .target-prefix {
+      color: #22c55e;
+      font-weight: 700;
+      margin-right: 3px;
     }
-    .stat-pill.active { outline: 2px solid var(--accent); }
-    .pill-all { background: var(--surface-hover); color: var(--text); }
-    .pill-added { background: var(--added-bg); color: var(--added); }
-    .pill-deleted { background: var(--deleted-bg); color: var(--deleted); }
-    .pill-modified { background: var(--modified-bg); color: var(--modified); }
-    .pill-identical { background: rgba(100, 116, 139, 0.2); color: var(--identical); }
-
-    .search-box {
-      margin-left: auto;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 5px 12px;
-      border-radius: 5px;
-      font-size: 12px;
-      width: 220px;
-      outline: none;
-    }
-    .search-box:focus { border-color: var(--accent); }
 
     .main-layout {
       display: flex;
       flex: 1;
-      height: calc(100vh - 98px);
+      min-height: 0;
       overflow: hidden;
     }
     .sidebar {
       width: 360px;
       min-width: 260px;
       border-right: 1px solid var(--border);
-      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
       background: var(--surface);
+      overflow: hidden;
+    }
+    .sidebar.collapsed {
+      display: none;
+    }
+    .sidebar-search-row {
+      padding: 8px 10px 8px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .search-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex: 1;
+      min-width: 0;
+    }
+    .btn-collapse-sidebar {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 5px;
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+      padding: 0;
+    }
+    .btn-collapse-sidebar:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+      border-color: #475569;
+    }
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .sidebar-search-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 28px 6px 30px;
+      border-radius: 5px;
+      font-size: 12px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    .sidebar-search-input:focus {
+      border-color: var(--accent);
+    }
+    .clear-search-btn {
+      position: absolute;
+      right: 6px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 3px 5px;
+      border-radius: 3px;
+    }
+    .clear-search-btn:hover {
+      color: var(--text);
+    }
+    .sidebar-object-list {
+      flex: 1;
+      overflow-y: auto;
     }
     .object-item {
       padding: 8px 14px;
@@ -246,24 +451,6 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       align-items: center;
       gap: 8px;
       flex-shrink: 0;
-    }
-    .engine-badge {
-      font-size: 10.5px;
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-      user-select: none;
-    }
-    .engine-monaco {
-      background: rgba(13, 110, 253, 0.15);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.3);
-    }
-    .engine-offline {
-      background: rgba(245, 158, 11, 0.15);
-      color: #f59e0b;
-      border: 1px solid rgba(245, 158, 11, 0.3);
     }
     .btn-tool {
       background: transparent;
@@ -452,39 +639,96 @@ public class HtmlReportGenerator : IHtmlReportGenerator
 
   <header>
     <div class="header-title">
-      <a href="https://apps.microsoft.com/store/detail/9NF6M6NT09BM?cid=DevShareMCLPCS" target="_blank" rel="noopener noreferrer" class="logo">ExploreDB</a>
-      <span style="font-size: 13.5px; font-weight: 600;">SQL Compare Report</span>
-      <div class="endpoint-badge" id="sourceDesc">Source: ...</div>
-      <span style="color: var(--text-muted); font-size: 12px;">➔</span>
-      <div class="endpoint-badge" id="targetDesc">Target: ...</div>
+      <span class="report-title">SQL Compare Report</span>
+      <span class="header-divider">|</span>
+      <span class="report-date-text">Generated On: <span id="reportDate">...</span></span>
     </div>
-    <div style="font-size: 12px; color: var(--text-muted);" id="reportDate">Generated: ...</div>
+    <div class="header-right">
+      <span class="header-credit-text">Generated by</span>
+      <a href="https://apps.microsoft.com/store/detail/9NF6M6NT09BM?cid=DevShareMCLPCS" target="_blank" rel="noopener noreferrer" class="header-credit-link" title="Open ExploreDB on Microsoft Store">
+        <span>ExploreDB</span>
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+          <path fill-rule="evenodd" d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/>
+          <path fill-rule="evenodd" d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/>
+        </svg>
+      </a>
+    </div>
   </header>
 
-  <div class="stats-bar">
-    <div class="stat-pill pill-all active" onclick="setFilter('All')">All: <span id="cntAll">0</span></div>
-    <div class="stat-pill pill-added" onclick="setFilter('Added')">+ Added: <span id="cntAdded">0</span></div>
-    <div class="stat-pill pill-deleted" onclick="setFilter('Deleted')">- Deleted: <span id="cntDeleted">0</span></div>
-    <div class="stat-pill pill-modified" onclick="setFilter('Modified')">~ Modified: <span id="cntModified">0</span></div>
-    <div class="stat-pill pill-identical" onclick="setFilter('Identical')">= Identical: <span id="cntIdentical">0</span></div>
-    <input type="text" id="searchInput" class="search-box" placeholder="Filter objects..." oninput="applyFilters()">
+  <div class="filters-row">
+    <div class="kpi-cards-group">
+      <div class="kpi-card card-all active" onclick="setFilter('All')">
+        <span class="kpi-label">ALL DIFFERENCES</span>
+        <span class="kpi-value" id="cntAll">0</span>
+      </div>
+      <div class="kpi-card card-added" onclick="setFilter('Added')">
+        <span class="kpi-label">ONLY IN SOURCE</span>
+        <span class="kpi-value" id="cntAdded">0</span>
+      </div>
+      <div class="kpi-card card-modified" onclick="setFilter('Modified')">
+        <span class="kpi-label">DIFFERENT</span>
+        <span class="kpi-value" id="cntModified">0</span>
+      </div>
+      <div class="kpi-card card-deleted" onclick="setFilter('Deleted')">
+        <span class="kpi-label">ONLY IN TARGET</span>
+        <span class="kpi-value" id="cntDeleted">0</span>
+      </div>
+      <div class="kpi-card card-identical" id="cardIdentical" style="display: none;" onclick="setFilter('Identical')">
+        <span class="kpi-label">IDENTICAL</span>
+        <span class="kpi-value" id="cntIdentical">0</span>
+      </div>
+    </div>
+
+    <div class="endpoints-summary">
+      <div class="endpoint-badge" id="sourceBadge">
+        <span class="source-prefix">Source:</span><span id="sourceDesc">...</span>
+      </div>
+      <div class="endpoint-badge" id="targetBadge">
+        <span class="target-prefix">Target:</span><span id="targetDesc">...</span>
+      </div>
+    </div>
   </div>
 
   <div class="main-layout">
-    <div class="sidebar" id="objectList"></div>
+    <div class="sidebar">
+      <div class="sidebar-search-row">
+        <div class="search-input-wrap">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" class="search-icon">
+            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+          </svg>
+          <input type="text" id="searchInput" class="sidebar-search-input" placeholder="Filter objects..." oninput="applyFilters()">
+          <button type="button" id="clearSearchBtn" class="clear-search-btn" onclick="clearSearch()" title="Clear filter">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+            </svg>
+          </button>
+        </div>
+        <button type="button" class="btn-collapse-sidebar" onclick="toggleSidebar()" title="Collapse sidebar">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="sidebar-object-list" id="objectList"></div>
+    </div>
 
     <div class="diff-container">
       <!-- Toolbar with Object Title, Badge & View Mode Toggle -->
       <div class="diff-toolbar">
         <div class="diff-toolbar-left">
+          <button type="button" class="btn-tool" id="btnExpandSidebar" onclick="toggleSidebar()" title="Expand objects sidebar" style="display: none;">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+              <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+            </svg>
+            <span>Objects</span>
+          </button>
           <span class="diff-object-title" id="selectedObjTitle">Select an object</span>
           <span class="status-tag" id="selectedObjBadge" style="display: none;"></span>
         </div>
         <div class="diff-toolbar-actions">
-          <span class="engine-badge engine-monaco" id="engineBadge">Loading Engine...</span>
-          <button type="button" class="btn-tool" id="btnToggleSideBySide" onclick="toggleSideBySide()" title="Toggle Side-by-Side / Inline Diff">
+          <button type="button" class="btn-tool" id="btnToggleSideBySide" style="display: none;" onclick="toggleSideBySide()" title="Toggle Side-by-Side / Inline Diff">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3zm8.5 11V2H14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H8.5zM7.5 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h5.5V2z"/>
+              <path d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3zm8.5 11V2H14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H8.5zM7.5 2H2a1 1 0 0 0-1 1v10a1 1 0 0 1 1 1h5.5V2z"/>
             </svg>
             <span id="sideBySideText">Side-by-Side</span>
           </button>
@@ -526,7 +770,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
         <div id="monacoDiffContainer"></div>
         <div id="monacoLoader" class="diff-loading">
           <div class="spinner"></div>
-          <span>Connecting to Monaco Diff Engine...</span>
+          <span>Loading Diff Viewer...</span>
         </div>
         <div id="diffFallback" style="display: none;"></div>
       </div>
@@ -545,17 +789,48 @@ public class HtmlReportGenerator : IHtmlReportGenerator
     let monacoReady = false;
     let fallbackActivated = false;
 
-    document.getElementById('sourceDesc').textContent = 'Source: ' + reportData.source;
-    document.getElementById('targetDesc').textContent = 'Target: ' + reportData.target;
-    document.getElementById('sourceDisplayName').textContent = reportData.sourceDisplayName || 'Source';
-    document.getElementById('targetDisplayName').textContent = reportData.targetDisplayName || 'Target';
-    document.getElementById('reportDate').textContent = 'Generated: ' + new Date(reportData.summary.comparisonTimestamp).toLocaleString();
+    const srcName = reportData.sourceDisplayName || 'Source';
+    const tgtName = reportData.targetDisplayName || 'Target';
+    const srcServer = reportData.sourceServer || 'localhost';
+    const tgtServer = reportData.targetServer || 'localhost';
 
-    document.getElementById('cntAll').textContent = reportData.differences.length;
+    const srcTooltip = (reportData.sourceServer && reportData.sourceServer.includes('Dacpac'))
+      ? `Dacpac: ${srcName}\nType: Dacpac Package`
+      : `Database: ${srcName}\nServer: ${srcServer}`;
+    const tgtTooltip = (reportData.targetServer && reportData.targetServer.includes('Dacpac'))
+      ? `Dacpac: ${tgtName}\nType: Dacpac Package`
+      : `Database: ${tgtName}\nServer: ${tgtServer}`;
+
+    const srcBadge = document.getElementById('sourceBadge');
+    const tgtBadge = document.getElementById('targetBadge');
+    if (srcBadge) srcBadge.title = srcTooltip;
+    if (tgtBadge) tgtBadge.title = tgtTooltip;
+
+    const srcDesc = document.getElementById('sourceDesc');
+    const tgtDesc = document.getElementById('targetDesc');
+    if (srcDesc) srcDesc.textContent = srcName;
+    if (tgtDesc) tgtDesc.textContent = tgtName;
+
+    const sDn = document.getElementById('sourceDisplayName');
+    const tDn = document.getElementById('targetDisplayName');
+    if (sDn) { sDn.textContent = srcName; sDn.title = srcTooltip; }
+    if (tDn) { tDn.textContent = tgtName; tDn.title = tgtTooltip; }
+    document.getElementById('reportDate').textContent = new Date(reportData.summary.comparisonTimestamp).toLocaleString();
+
+    const totalDiffs = (reportData.summary && reportData.summary.totalDifferences !== undefined)
+      ? reportData.summary.totalDifferences
+      : (reportData.summary.addedCount + reportData.summary.deletedCount + reportData.summary.modifiedCount);
+
+    document.getElementById('cntAll').textContent = totalDiffs;
     document.getElementById('cntAdded').textContent = reportData.summary.addedCount;
     document.getElementById('cntDeleted').textContent = reportData.summary.deletedCount;
     document.getElementById('cntModified').textContent = reportData.summary.modifiedCount;
     document.getElementById('cntIdentical').textContent = reportData.summary.identicalCount;
+
+    if (reportData.summary && reportData.summary.identicalCount > 0) {
+      const idCard = document.getElementById('cardIdentical');
+      if (idCard) idCard.style.display = 'flex';
+    }
 
     // Multi-CDN Candidate list with automatic fallback
     const cdnCandidates = [
@@ -597,12 +872,8 @@ public class HtmlReportGenerator : IHtmlReportGenerator
               const loaderEl = document.getElementById('monacoLoader');
               if (loaderEl) loaderEl.style.display = 'none';
 
-              const badge = document.getElementById('engineBadge');
-              if (badge) {
-                badge.textContent = 'Monaco Engine';
-                badge.className = 'engine-badge engine-monaco';
-                badge.title = 'Powered by Monaco Diff Engine (' + cdn.name + ')';
-              }
+              const btnToggle = document.getElementById('btnToggleSideBySide');
+              if (btnToggle) btnToggle.style.display = 'inline-flex';
 
               const container = document.getElementById('monacoDiffContainer');
               monacoDiffEditor = monaco.editor.createDiffEditor(container, {
@@ -670,18 +941,14 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       const loaderEl = document.getElementById('monacoLoader');
       if (loaderEl) loaderEl.style.display = 'none';
 
+      const btnToggle = document.getElementById('btnToggleSideBySide');
+      if (btnToggle) btnToggle.style.display = 'none';
+
       const monacoContainer = document.getElementById('monacoDiffContainer');
       if (monacoContainer) monacoContainer.style.display = 'none';
 
       const fallback = document.getElementById('diffFallback');
       if (fallback) fallback.style.display = 'flex';
-
-      const badge = document.getElementById('engineBadge');
-      if (badge) {
-        badge.textContent = 'Offline Engine';
-        badge.className = 'engine-badge engine-offline';
-        badge.title = 'Offline mode: Monaco CDN unreachable or timed out (' + reason + ')';
-      }
 
       if (currentSelectedObj) {
         renderFallbackDiff(currentSelectedObj.sourceScript || '', currentSelectedObj.targetScript || '');
@@ -693,26 +960,66 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       document.getElementById('sideBySideText').textContent = isSideBySide ? 'Side-by-Side' : 'Inline';
       if (monacoReady && monacoDiffEditor) {
         monacoDiffEditor.updateOptions({ renderSideBySide: isSideBySide });
-      } else if (fallbackActivated && currentSelectedObj) {
-        renderFallbackDiff(currentSelectedObj.sourceScript || '', currentSelectedObj.targetScript || '');
       }
+    }
+
+    let isSidebarCollapsed = false;
+
+    function toggleSidebar() {
+      isSidebarCollapsed = !isSidebarCollapsed;
+      const sidebar = document.querySelector('.sidebar');
+      const expandBtn = document.getElementById('btnExpandSidebar');
+      if (sidebar) {
+        if (isSidebarCollapsed) {
+          sidebar.classList.add('collapsed');
+        } else {
+          sidebar.classList.remove('collapsed');
+        }
+      }
+      if (expandBtn) {
+        expandBtn.style.display = isSidebarCollapsed ? 'inline-flex' : 'none';
+      }
+      setTimeout(() => {
+        if (monacoDiffEditor) {
+          monacoDiffEditor.layout();
+        }
+      }, 50);
     }
 
     function setFilter(type) {
       currentFilter = type;
-      document.querySelectorAll('.stat-pill').forEach(el => el.classList.remove('active'));
-      const activePill = document.querySelector('.pill-' + type.toLowerCase());
-      if (activePill) activePill.classList.add('active');
+      document.querySelectorAll('.kpi-card').forEach(el => el.classList.remove('active'));
+      const activeCard = document.querySelector('.card-' + type.toLowerCase());
+      if (activeCard) activeCard.classList.add('active');
       applyFilters();
     }
 
+    function clearSearch() {
+      const input = document.getElementById('searchInput');
+      if (input) {
+        input.value = '';
+        input.focus();
+        document.getElementById('clearSearchBtn').style.display = 'none';
+        applyFilters();
+      }
+    }
+
     function applyFilters() {
-      const q = document.getElementById('searchInput').value.toLowerCase();
+      const qInput = document.getElementById('searchInput');
+      const q = (qInput ? qInput.value : '').toLowerCase().trim();
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
+
       const listEl = document.getElementById('objectList');
       listEl.innerHTML = '';
 
       const filtered = reportData.differences.filter(d => {
-        const matchesFilter = (currentFilter === 'All') || (d.changeType === currentFilter);
+        let matchesFilter = true;
+        if (currentFilter === 'All') {
+          matchesFilter = (d.hasDifference !== false);
+        } else {
+          matchesFilter = (d.changeType === currentFilter);
+        }
         const matchesQuery = !q || d.name.toLowerCase().includes(q) || d.category.toLowerCase().includes(q);
         return matchesFilter && matchesQuery;
       });
