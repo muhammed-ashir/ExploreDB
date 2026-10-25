@@ -48,10 +48,26 @@
         {
             <!-- Subtitle / Action Row: Source & Target Endpoints (Left) + Action Buttons (Right) -->
             <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-                <span class="text-muted small">
-                    Source: <strong style="color: var(--app-text);">@_result.SourceEndpoint.ToString()</strong> 
-                    <i class="bi bi-arrow-right mx-1 text-primary"></i> 
-                    Target: <strong style="color: var(--app-text);">@_result.TargetEndpoint.ToString()</strong>
+                <span class="text-muted small d-inline-flex align-items-center flex-wrap gap-1">
+                    <span>Source:</span>
+                    <strong style="color: var(--app-text); cursor: pointer;"
+                            data-bs-tooltip="true"
+                            data-bs-placement="bottom"
+                            data-bs-html="true"
+                            data-bs-title="@GetEndpointTooltipHtml(_result.SourceEndpoint)">
+                        @GetEndpointDisplayName(_result.SourceEndpoint)
+                    </strong>
+
+                    <i class="bi bi-arrow-right mx-1 text-primary"></i>
+
+                    <span>Target:</span>
+                    <strong style="color: var(--app-text); cursor: pointer;"
+                            data-bs-tooltip="true"
+                            data-bs-placement="bottom"
+                            data-bs-html="true"
+                            data-bs-title="@GetEndpointTooltipHtml(_result.TargetEndpoint)">
+                        @GetEndpointDisplayName(_result.TargetEndpoint)
+                    </strong>
                 </span>
 
                 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -83,16 +99,32 @@
     @if (_isComparing)
     {
         <!-- Comparison Progress Screen -->
-        <div class="flex-grow-1 d-flex flex-column align-items-center justify-content-center p-5">
+        <div class="flex-grow-1 d-flex flex-column align-items-center justify-content-center p-4">
             <div class="card p-4 rounded-3 shadow text-center" style="background-color: var(--app-surface); border: 1px solid var(--app-border); max-width: 520px; width: 100%;">
-                <div class="spinner-border text-primary mb-3 mx-auto" role="status" style="width: 2.75rem; height: 2.75rem; border-width: 0.25em;">
-                    <span class="visually-hidden">Comparing...</span>
+                <h5 class="fw-bold mb-4" style="color: var(--app-text);">Comparing Database Schemas</h5>
+
+                <!-- Animated Progress Bar -->
+                <div class="progress mb-3" style="height: 8px; background-color: var(--app-surface-secondary); border-radius: 4px; overflow: hidden;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         role="progressbar"
+                         style="width: @(_comparisonProgressPercent)%; transition: width 0.3s ease-out;">
+                    </div>
                 </div>
-                <h5 class="fw-bold mb-2" style="color: var(--app-text);">Comparing Database Schemas</h5>
-                <div class="text-muted small mb-3" style="font-size: 0.85rem;">
-                    <i class="bi bi-stopwatch me-1"></i>Elapsed: @_elapsedTimeFormatted
+
+                <!-- Timer & Estimation Row -->
+                <div class="d-flex align-items-center justify-content-between text-muted small mb-4 px-1" style="font-size: 0.82rem;">
+                    <span>
+                        Elapsed: <strong style="color: var(--app-text);">@_elapsedTimeFormatted</strong>
+                    </span>
+                    @if (_estimate != null)
+                    {
+                        <span>
+                            Est: <strong style="color: var(--app-text);">~@_estimate.FormattedEstimate</strong>
+                        </span>
+                    }
                 </div>
-                <button class="btn btn-sm btn-outline-danger align-self-center px-3" @onclick="CancelComparison">
+
+                <button class="btn btn-sm btn-outline-danger align-self-center px-4" @onclick="CancelComparison">
                     Cancel
                 </button>
             </div>
@@ -101,7 +133,7 @@
     else if (_result == null)
     {
         <!-- Setup & Connection Screen -->
-        <div class="row g-4 flex-grow-1 align-items-start">
+        <div class="row g-4 align-content-start">
             <!-- Left: Source Endpoint -->
             <div class="col-12 col-lg-6">
                 <div class="card p-4 rounded-3 shadow-sm h-100" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
@@ -615,15 +647,15 @@
         <div class="d-flex flex-column flex-grow-1 gap-3" style="min-height: 0;">
             <!-- Summary KPI Cards -->
             <div class="row g-2">
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-3">
                     <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Different" ? "border-primary" : "")"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
                          @onclick='() => _selectedChangeFilter = "Different"'>
-                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">DIFFERENCES</span>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">ALL DIFFERENCES</span>
                         <span class="fs-4 fw-bold text-primary">@_result.Summary.TotalDifferences</span>
                     </div>
                 </div>
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-3">
                     <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Added" ? "border-success" : "")"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
                          @onclick='() => _selectedChangeFilter = "Added"'>
@@ -631,7 +663,7 @@
                         <span class="fs-4 fw-bold text-success">@_result.Summary.AddedCount</span>
                     </div>
                 </div>
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-3">
                     <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Modified" ? "border-warning" : "")"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
                          @onclick='() => _selectedChangeFilter = "Modified"'>
@@ -639,28 +671,12 @@
                         <span class="fs-4 fw-bold text-warning">@_result.Summary.ModifiedCount</span>
                     </div>
                 </div>
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-3">
                     <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Deleted" ? "border-danger" : "")"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
                          @onclick='() => _selectedChangeFilter = "Deleted"'>
                         <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">ONLY IN TARGET</span>
                         <span class="fs-4 fw-bold text-danger">@_result.Summary.DeletedCount</span>
-                    </div>
-                </div>
-                <div class="col-6 col-md-2">
-                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Identical" ? "border-secondary" : "")"
-                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
-                         @onclick='() => _selectedChangeFilter = "Identical"'>
-                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">IDENTICAL</span>
-                        <span class="fs-4 fw-bold text-muted">@_result.Summary.IdenticalCount</span>
-                    </div>
-                </div>
-                <div class="col-6 col-md-2">
-                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "All" ? "border-info" : "")"
-                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
-                         @onclick='() => _selectedChangeFilter = "All"'>
-                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">ALL OBJECTS</span>
-                        <span class="fs-4 fw-bold" style="color: var(--app-text);">@_result.Summary.TotalObjectsCompared</span>
                     </div>
                 </div>
             </div>
@@ -807,10 +823,7 @@
                                                            @onchange="(e) => diff.IsSelected = (bool)(e.Value ?? false)" />
                                                 </td>
                                                 <td>
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        <i class="bi @diff.BootstrapIcon text-primary"></i>
-                                                        <span class="text-muted" style="font-size: 0.75rem;">@diff.CategoryDisplayName</span>
-                                                    </div>
+                                                    <span class="text-muted" style="font-size: 0.75rem;">@diff.CategoryDisplayName</span>
                                                 </td>
                                                 <td>
                                                     <span class="fw-semibold">@diff.Name</span>
@@ -851,7 +864,6 @@
                         <div class="d-flex align-items-center gap-2 overflow-hidden">
                             @if (_selectedItem != null)
                             {
-                                <i class="bi @_selectedItem.BootstrapIcon text-primary fs-6"></i>
                                 <span class="fw-bold text-truncate" style="color: var(--app-text); font-size: 0.95rem;">@_selectedItem.Name</span>
                                 <span class="badge @GetChangeBadgeClass(_selectedItem.ChangeType) d-inline-flex align-items-center gap-1"
                                       style="font-size: 0.68rem; cursor: help;"
@@ -859,7 +871,6 @@
                                     <span>@GetChangeBadgeText(_selectedItem.ChangeType)</span>
                                     <i class="bi bi-info-circle opacity-75" style="font-size: 0.62rem;"></i>
                                 </span>
-                                <span class="text-muted small">(@_selectedItem.CategoryDisplayName)</span>
                             }
                             else
                             {
@@ -903,9 +914,17 @@
                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
                                     SOURCE
                                 </span>
-                                <span class="text-truncate fw-semibold" style="color: var(--app-text);" title="@_result?.SourceEndpoint.ToString()">
-                                    @_result?.SourceEndpoint.ToString()
-                                </span>
+                                @if (_result?.SourceEndpoint != null)
+                                {
+                                    <span class="text-truncate fw-semibold"
+                                          style="color: var(--app-text); cursor: pointer;"
+                                          data-bs-tooltip="true"
+                                          data-bs-placement="bottom"
+                                          data-bs-html="true"
+                                          data-bs-title="@GetEndpointTooltipHtml(_result.SourceEndpoint)">
+                                        @GetEndpointDisplayName(_result.SourceEndpoint)
+                                    </span>
+                                }
                             </div>
                             <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-2 flex-shrink-0"
                                     style="font-size: 0.75rem; text-decoration: none;"
@@ -923,9 +942,17 @@
                                 <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
                                     TARGET
                                 </span>
-                                <span class="text-truncate fw-semibold" style="color: var(--app-text);" title="@_result?.TargetEndpoint.ToString()">
-                                    @_result?.TargetEndpoint.ToString()
-                                </span>
+                                @if (_result?.TargetEndpoint != null)
+                                {
+                                    <span class="text-truncate fw-semibold"
+                                          style="color: var(--app-text); cursor: pointer;"
+                                          data-bs-tooltip="true"
+                                          data-bs-placement="bottom"
+                                          data-bs-html="true"
+                                          data-bs-title="@GetEndpointTooltipHtml(_result.TargetEndpoint)">
+                                        @GetEndpointDisplayName(_result.TargetEndpoint)
+                                    </span>
+                                }
                             </div>
                             <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-2 flex-shrink-0"
                                     style="font-size: 0.75rem; text-decoration: none;"
@@ -995,6 +1022,8 @@
     private bool _optionsExpanded = false;
     private bool _isComparing = false;
     private string _elapsedTimeFormatted = "00:00";
+    private ComparisonEstimate? _estimate;
+    private int _comparisonProgressPercent = 0;
     private string _errorMessage = "";
     private CancellationTokenSource? _cts;
     private string? _toastMessage = null;
@@ -1145,6 +1174,9 @@
             return;
         }
 
+        // Pre-warm DacFx engine in the background while the user selects databases
+        _ = ComparisonService.PreWarmEngineAsync();
+
         ThemeService.OnThemeChanged += HandleThemeChanged;
         InitializeEndpointsFromActiveConnection();
         await LoadSourceDatabasesAsync();
@@ -1225,6 +1257,35 @@
     {
         _isTargetProfileDropdownOpen = false;
         _targetSearchTerm = "";
+    }
+
+    private static string GetEndpointDisplayName(DatabaseEndpoint endpoint)
+    {
+        if (endpoint.Type == EndpointType.DacpacFile)
+        {
+            return !string.IsNullOrWhiteSpace(endpoint.DacpacPath)
+                ? Path.GetFileName(endpoint.DacpacPath)
+                : "Dacpac Package";
+        }
+
+        return !string.IsNullOrWhiteSpace(endpoint.Database)
+            ? endpoint.Database
+            : (string.IsNullOrWhiteSpace(endpoint.Server) ? "Database" : endpoint.Server);
+    }
+
+    private static string GetEndpointTooltipHtml(DatabaseEndpoint endpoint)
+    {
+        if (endpoint.Type == EndpointType.DacpacFile)
+        {
+            var fileName = !string.IsNullOrWhiteSpace(endpoint.DacpacPath)
+                ? Path.GetFileName(endpoint.DacpacPath)
+                : "Dacpac Package";
+            return $"<b>DACPAC:</b> {System.Net.WebUtility.HtmlEncode(fileName)}<br/><b>File Path:</b> {System.Net.WebUtility.HtmlEncode(endpoint.DacpacPath)}";
+        }
+
+        var db = !string.IsNullOrWhiteSpace(endpoint.Database) ? endpoint.Database : "Database";
+        var server = !string.IsNullOrWhiteSpace(endpoint.Server) ? endpoint.Server : "localhost";
+        return $"<b>Database:</b> {System.Net.WebUtility.HtmlEncode(db)}<br/><b>Server:</b> {System.Net.WebUtility.HtmlEncode(server)}";
     }
 
     private string GetSelectedProfileDisplayName(string profileId, DatabaseEndpoint endpoint)
@@ -1456,11 +1517,24 @@
 
         _isComparing = true;
         _elapsedTimeFormatted = "00:00";
+        _comparisonProgressPercent = 0;
+        _cts = new CancellationTokenSource();
         StateHasChanged();
 
-        _cts = new CancellationTokenSource();
+        // Calculate pre-flight duration estimate
+        try
+        {
+            _estimate = await ComparisonService.EstimateDurationAsync(_source, _target, _cts.Token);
+        }
+        catch
+        {
+            _estimate = new ComparisonEstimate { EstimatedSeconds = ComparisonService.IsEngineWarm ? 35 : 65 };
+        }
+        StateHasChanged();
+
         using var timerCts = new CancellationTokenSource();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var estimatedSec = Math.Max(10.0, (double)(_estimate?.EstimatedSeconds ?? 35));
 
         _ = Task.Run(async () =>
         {
@@ -1468,9 +1542,21 @@
             {
                 try
                 {
-                    await Task.Delay(500, timerCts.Token);
+                    await Task.Delay(200, timerCts.Token);
                     var ts = stopwatch.Elapsed;
                     _elapsedTimeFormatted = $"{(int)ts.TotalMinutes:D2}:{ts.Seconds:D2}";
+
+                    // Smooth Ease-Out Continuous Curve:
+                    // Progresses continuously from 0% toward ~85% by estimated time,
+                    // smoothly decelerating toward 95% if taking longer.
+                    double ratio = ts.TotalSeconds / estimatedSec;
+                    double curve = 1.0 - Math.Exp(-2.0 * ratio);
+                    int calculatedPercent = Math.Clamp((int)Math.Round(curve * 94.0), 0, 95);
+                    if (calculatedPercent > _comparisonProgressPercent)
+                    {
+                        _comparisonProgressPercent = calculatedPercent;
+                    }
+
                     await InvokeAsync(StateHasChanged);
                 }
                 catch { break; }
@@ -1491,6 +1577,10 @@
                 }
                 return;
             }
+
+            _comparisonProgressPercent = 100;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(250);
 
             _result = result;
 

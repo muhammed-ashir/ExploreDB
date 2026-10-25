@@ -7,11 +7,21 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ExploreDB.Services.SqlCompare.Models;
+using Microsoft.Data.SqlClient;
 using Microsoft.SqlServer.Dac.Compare;
 using Microsoft.SqlServer.Dac.Model;
 
 public interface ISchemaComparisonService
 {
+    Task PreWarmEngineAsync();
+
+    Task<ComparisonEstimate> EstimateDurationAsync(
+        DatabaseEndpoint source,
+        DatabaseEndpoint target,
+        CancellationToken cancellationToken = default);
+
+    bool IsEngineWarm { get; }
+
     Task<SchemaComparisonResultModel> CompareAsync(
         DatabaseEndpoint source,
         DatabaseEndpoint target,
@@ -26,6 +36,130 @@ public interface ISchemaComparisonService
 
 public class SchemaComparisonService : ISchemaComparisonService
 {
+    private static bool _isDacFxInitialized = false;
+    private static readonly SemaphoreSlim _warmUpLock = new(1, 1);
+
+    public bool IsEngineWarm => _isDacFxInitialized;
+
+    public async Task PreWarmEngineAsync()
+    {
+        if (_isDacFxInitialized) return;
+
+        await Task.Run(() =>
+        {
+            if (_isDacFxInitialized) return;
+            if (!_warmUpLock.Wait(0)) return;
+
+            try
+            {
+                // Reference DacFx compare and endpoint types to trigger assembly loading and JIT compilation
+                _ = typeof(SchemaComparison).Assembly;
+                _ = typeof(SchemaCompareDatabaseEndpoint).Assembly;
+
+                // Build a minimal in-memory TSqlModel to exercise DacFx metadata schema rules and T-SQL parser
+                using var model = new TSqlModel(SqlServerVersion.Sql160, new TSqlModelOptions());
+                model.AddObjects("CREATE TABLE #_explore_db_prewarm (id INT);");
+
+                _isDacFxInitialized = true;
+                Debug.WriteLine("[SchemaComparisonService] Background DacFx engine pre-warming completed successfully.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SchemaComparisonService] Background pre-warm notice: {ex.Message}");
+            }
+            finally
+            {
+                _warmUpLock.Release();
+            }
+        });
+    }
+
+    public async Task<ComparisonEstimate> EstimateDurationAsync(
+        DatabaseEndpoint source,
+        DatabaseEndpoint target,
+        CancellationToken cancellationToken = default)
+    {
+        var estimate = new ComparisonEstimate
+        {
+            IsColdStart = !_isDacFxInitialized
+        };
+
+        int totalSeconds = 0;
+
+        // DacFx JIT initialization overhead on first run
+        if (estimate.IsColdStart)
+        {
+            totalSeconds += 30;
+        }
+
+        // Source endpoint
+        if (source.Type == EndpointType.LiveDatabase)
+        {
+            totalSeconds += 25; // Base live reverse engineering time
+            try
+            {
+                var count = await QuickCountObjectsAsync(source.BuildConnectionString(), cancellationToken);
+                estimate.SourceObjectCount = count;
+                if (count > 300)
+                {
+                    totalSeconds += (int)Math.Round((count - 300) / 200.0 * 4);
+                }
+            }
+            catch
+            {
+                // Fallback to baseline
+            }
+        }
+        else
+        {
+            totalSeconds += 5; // Dacpac parsing
+        }
+
+        // Target endpoint
+        if (target.Type == EndpointType.LiveDatabase)
+        {
+            totalSeconds += 25; // Base live reverse engineering time
+            try
+            {
+                var count = await QuickCountObjectsAsync(target.BuildConnectionString(), cancellationToken);
+                estimate.TargetObjectCount = count;
+                if (count > 300)
+                {
+                    totalSeconds += (int)Math.Round((count - 300) / 200.0 * 4);
+                }
+            }
+            catch
+            {
+                // Fallback to baseline
+            }
+        }
+        else
+        {
+            totalSeconds += 5; // Dacpac parsing
+        }
+
+        estimate.EstimatedSeconds = Math.Max(10, totalSeconds);
+        return estimate;
+    }
+
+    private static async Task<int> QuickCountObjectsAsync(string connectionString, CancellationToken cancellationToken)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString)
+        {
+            ConnectTimeout = 3
+        };
+
+        using var conn = new SqlConnection(builder.ConnectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        using var cmd = new SqlCommand("SELECT COUNT(*) FROM sys.objects WHERE is_ms_shipped = 0 AND type NOT IN ('S', 'IT', 'X')", conn)
+        {
+            CommandTimeout = 3
+        };
+
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
+    }
     public async Task<SchemaComparisonResultModel> CompareAsync(
         DatabaseEndpoint source,
         DatabaseEndpoint target,
@@ -140,6 +274,7 @@ public class SchemaComparisonService : ISchemaComparisonService
                 }
 
                 stopwatch.Stop();
+                _isDacFxInitialized = true;
                 progress?.Report(new ComparisonProgress("Comparison complete.", 100));
 
                 var summary = new ComparisonSummary
@@ -154,6 +289,8 @@ public class SchemaComparisonService : ISchemaComparisonService
                     DeletedCount = deletedCount,
                     ModifiedCount = modifiedCount
                 };
+
+                _isDacFxInitialized = true;
 
                 return new SchemaComparisonResultModel
                 {
