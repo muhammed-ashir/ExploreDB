@@ -470,6 +470,16 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       background: var(--surface-hover);
       color: var(--text);
     }
+    .btn-tool.btn-tool-icon {
+      padding: 3px 7px;
+      min-width: 26px;
+      justify-content: center;
+    }
+    .btn-tool:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
 
     /* Row 2: 50/50 Split Endpoints Sub-Header (Image 2 exact match) */
     .diff-endpoints-header {
@@ -559,6 +569,23 @@ public class HtmlReportGenerator : IHtmlReportGenerator
     #monacoDiffContainer {
       width: 100%;
       height: 100%;
+    }
+    /* Match Monaco's internal scrollbars to ExploreDB's muted scrollbar theme */
+    .monaco-editor .scrollbar .slider {
+      background: rgba(255, 255, 255, 0.2) !important;
+      border-radius: 4px !important;
+    }
+    .monaco-editor .scrollbar .slider:hover {
+      background: rgba(255, 255, 255, 0.32) !important;
+    }
+    .monaco-editor .scrollbar.vertical,
+    .monaco-editor .scrollbar.horizontal {
+      background: rgba(255, 255, 255, 0.03) !important;
+    }
+    .monaco-diff-editor .overview-ruler,
+    .monaco-editor .decorationsOverviewRuler {
+      display: none !important;
+      width: 0 !important;
     }
     .diff-loading {
       position: absolute;
@@ -726,6 +753,16 @@ public class HtmlReportGenerator : IHtmlReportGenerator
           <span class="status-tag" id="selectedObjBadge" style="display: none;"></span>
         </div>
         <div class="diff-toolbar-actions">
+          <button type="button" class="btn-tool btn-tool-icon" id="btnPrevDiff" onclick="navigateDiffBlock('prev')" title="Previous difference block">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+              <path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"/>
+            </svg>
+          </button>
+          <button type="button" class="btn-tool btn-tool-icon" id="btnNextDiff" onclick="navigateDiffBlock('next')" title="Next difference block">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+              <path fill-rule="evenodd" d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/>
+            </svg>
+          </button>
           <button type="button" class="btn-tool" id="btnToggleSideBySide" style="display: none;" onclick="toggleSideBySide()" title="Toggle Side-by-Side / Inline Diff">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
               <path d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3zm8.5 11V2H14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H8.5zM7.5 2H2a1 1 0 0 0-1 1v10a1 1 0 0 1 1 1h5.5V2z"/>
@@ -889,9 +926,17 @@ public class HtmlReportGenerator : IHtmlReportGenerator
                 domReadOnly: true,
                 folding: true,
                 minimap: { enabled: false },
+                renderOverviewRuler: false,
+                overviewRulerLanes: 0,
+                overviewRulerBorder: false,
                 scrollbar: {
-                  verticalScrollbarSize: 10,
-                  horizontalScrollbarSize: 10
+                  verticalScrollbarSize: 8,
+                  horizontalScrollbarSize: 8,
+                  verticalSliderSize: 8,
+                  horizontalSliderSize: 8,
+                  vertical: 'auto',
+                  horizontal: 'auto',
+                  useShadows: false
                 }
               });
 
@@ -986,6 +1031,127 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       }, 50);
     }
 
+    let currentFallbackBlockIdx = -1;
+
+    function navigateDiffBlock(direction) {
+      if (monacoReady && monacoDiffEditor) {
+        const changes = monacoDiffEditor.getLineChanges();
+        if (!changes || changes.length === 0) return;
+
+        const origEditor = monacoDiffEditor.getOriginalEditor();
+        const modEditor = monacoDiffEditor.getModifiedEditor();
+        const isOrigFocused = origEditor && typeof origEditor.hasTextFocus === 'function' && origEditor.hasTextFocus();
+        const activeEditor = isOrigFocused ? origEditor : modEditor;
+
+        const currentPos = (activeEditor && typeof activeEditor.getPosition === 'function' && activeEditor.getPosition()) || { lineNumber: 1, column: 1 };
+        const currentLine = currentPos.lineNumber;
+
+        function getChangeRange(c) {
+          if (isOrigFocused) {
+            const start = c.originalStartLineNumber > 0 ? c.originalStartLineNumber : (c.originalEndLineNumber > 0 ? c.originalEndLineNumber : 1);
+            const end = c.originalEndLineNumber > 0 ? c.originalEndLineNumber : start;
+            return { start, end };
+          } else {
+            const start = c.modifiedStartLineNumber > 0 ? c.modifiedStartLineNumber : (c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : 1);
+            const end = c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : start;
+            return { start, end };
+          }
+        }
+
+        let currentDiffIdx = -1;
+        for (let i = 0; i < changes.length; i++) {
+          const range = getChangeRange(changes[i]);
+          if (currentLine >= range.start && currentLine <= range.end) {
+            currentDiffIdx = i;
+            break;
+          }
+        }
+
+        let targetChange = null;
+        if (direction === 'next') {
+          if (currentDiffIdx !== -1) {
+            targetChange = changes[(currentDiffIdx + 1) % changes.length];
+          } else {
+            for (let i = 0; i < changes.length; i++) {
+              const range = getChangeRange(changes[i]);
+              if (range.start > currentLine) {
+                targetChange = changes[i];
+                break;
+              }
+            }
+            if (!targetChange) targetChange = changes[0];
+          }
+        } else {
+          if (currentDiffIdx !== -1) {
+            targetChange = changes[(currentDiffIdx - 1 + changes.length) % changes.length];
+          } else {
+            for (let i = changes.length - 1; i >= 0; i--) {
+              const range = getChangeRange(changes[i]);
+              if (range.end < currentLine) {
+                targetChange = changes[i];
+                break;
+              }
+            }
+            if (!targetChange) targetChange = changes[changes.length - 1];
+          }
+        }
+
+        if (targetChange) {
+          const targetEditor = targetChange.modifiedStartLineNumber > 0 ? modEditor : origEditor;
+          const targetLine = targetChange.modifiedStartLineNumber > 0 ? targetChange.modifiedStartLineNumber : targetChange.originalStartLineNumber;
+          if (targetEditor) {
+            const line = targetLine > 0 ? targetLine : 1;
+            targetEditor.revealLineInCenter(line);
+            targetEditor.setPosition({ lineNumber: line, column: 1 });
+            targetEditor.focus();
+          }
+        }
+      } else if (fallbackActivated) {
+        navigateFallbackDiffBlock(direction);
+      }
+    }
+
+    function navigateFallbackDiffBlock(direction) {
+      const pane = document.getElementById('paneRight') || document.querySelector('.fallback-pane');
+      if (!pane) return;
+
+      const diffLines = Array.from(pane.querySelectorAll('.fallback-add, .fallback-del'));
+      if (diffLines.length === 0) return;
+
+      const blocks = [];
+      let currentBlock = [];
+
+      for (let i = 0; i < diffLines.length; i++) {
+        if (currentBlock.length === 0) {
+          currentBlock.push(diffLines[i]);
+        } else {
+          const prev = currentBlock[currentBlock.length - 1];
+          if (diffLines[i].previousElementSibling === prev) {
+            currentBlock.push(diffLines[i]);
+          } else {
+            blocks.push(currentBlock[0]);
+            currentBlock = [diffLines[i]];
+          }
+        }
+      }
+      if (currentBlock.length > 0) {
+        blocks.push(currentBlock[0]);
+      }
+
+      if (blocks.length === 0) return;
+
+      if (direction === 'next') {
+        currentFallbackBlockIdx = (currentFallbackBlockIdx + 1) % blocks.length;
+      } else {
+        currentFallbackBlockIdx = (currentFallbackBlockIdx - 1 + blocks.length) % blocks.length;
+      }
+
+      const targetEl = blocks[currentFallbackBlockIdx];
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
     function setFilter(type) {
       currentFilter = type;
       document.querySelectorAll('.kpi-card').forEach(el => el.classList.remove('active'));
@@ -1057,6 +1223,13 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       badge.style.display = 'inline-block';
       badge.textContent = obj.changeType;
       badge.className = 'status-tag tag-' + obj.changeType;
+
+      const hasDiff = obj && obj.changeType !== 'Identical' && obj.hasDifference !== false;
+      const btnPrev = document.getElementById('btnPrevDiff');
+      const btnNext = document.getElementById('btnNextDiff');
+      if (btnPrev) btnPrev.disabled = !hasDiff;
+      if (btnNext) btnNext.disabled = !hasDiff;
+      currentFallbackBlockIdx = -1;
 
       if (monacoReady && monacoDiffEditor) {
         updateMonacoDiff(obj);
