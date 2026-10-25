@@ -15,19 +15,9 @@
     <!-- Title Row: Data Cleanup (Left) + Back / Actions (Right) -->
     <div class="d-flex align-items-center justify-content-between mb-2">
         <h3 class="fw-bold mb-0" style="color: var(--app-text);">Data Cleanup</h3>
-        @if (_plan != null)
-        {
-            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                    style="color: var(--app-text); border-color: var(--app-border);"
-                    @onclick="BackToSelection"
-                    title="Return to table selection">
-                <i class="bi bi-arrow-left"></i>
-                <span>Back</span>
-            </button>
-        }
-        else
-        {
-            <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2">
+            @if (_plan == null)
+            {
                 <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
                         style="color: var(--app-text); border-color: var(--app-border);"
                         @onclick="RefreshTablesAsync"
@@ -35,15 +25,15 @@
                     <i class="bi bi-arrow-clockwise"></i>
                     <span>Refresh</span>
                 </button>
-                @if (!IsPopout)
-                {
-                    <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
-                        <i class="bi bi-arrow-left"></i>
-                        <span>Back to Tools</span>
-                    </a>
-                }
-            </div>
-        }
+            }
+            @if (!IsPopout)
+            {
+                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Back to Tools</span>
+                </a>
+            }
+        </div>
     </div>
 
     <!-- Subtitle / Action Row: Target Database (Left) + Action Buttons (Right) -->
@@ -122,7 +112,7 @@
                                     <h6 class="fw-bold mb-0" style="color: var(--app-text); font-size: 1rem;">
                                         <i class="bi bi-table text-primary me-2"></i>Select Tables to Clean
                                     </h6>
-                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.75rem;">
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1" style="font-size: 0.75rem;">
                                         @SelectedCount of @_tables.Count Selected
                                     </span>
                                 </div>
@@ -166,9 +156,18 @@
                                     </div>
 
                                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                        <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-secondary btn-sm" @onclick="SelectAll">Select All</button>
-                                            <button class="btn btn-outline-secondary btn-sm" @onclick="DeselectAll">Deselect All</button>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-secondary btn-sm" @onclick="SelectAll">Select All</button>
+                                                <button class="btn btn-outline-secondary btn-sm" @onclick="DeselectAll">Deselect All</button>
+                                            </div>
+                                            <button type="button"
+                                                    class="btn btn-sm @(_showSelectedOnly ? "btn-primary text-white" : "btn-outline-secondary") d-inline-flex align-items-center gap-1 shadow-sm"
+                                                    @onclick="ToggleShowSelectedOnly"
+                                                    title="@(_showSelectedOnly ? "Show all tables" : "Filter list to show only selected tables")">
+                                                <i class="bi @(_showSelectedOnly ? "bi-check2-circle" : "bi-funnel")"></i>
+                                                <span>Show Selected</span>
+                                            </button>
                                         </div>
                                         <div class="form-check m-0 d-flex align-items-center gap-2">
                                             <input class="form-check-input mt-0"
@@ -191,7 +190,18 @@
                                      style="max-height: 480px; min-height: 280px; background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
                                     @if (!FilteredTables.Any())
                                     {
-                                        <div class="p-4 text-center text-muted small">No tables found matching your filter.</div>
+                                        @if (_showSelectedOnly)
+                                        {
+                                            <div class="p-4 text-center text-muted small">
+                                                <i class="bi bi-funnel text-muted fs-4 d-block mb-1"></i>
+                                                <div>No tables currently selected.</div>
+                                                <button class="btn btn-sm btn-outline-primary mt-2" @onclick="ToggleShowSelectedOnly">View All Tables</button>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="p-4 text-center text-muted small">No tables found matching your filter.</div>
+                                        }
                                     }
                                     else
                                     {
@@ -299,173 +309,8 @@
             }
             else
             {
-                <!-- Left: Table Selection & Configuration (Side-by-side with Plan) -->
-                <div class="col-12 col-xl-5">
-                    <div class="card p-4 rounded-3 shadow-sm h-100 d-flex flex-column" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
-                        <div class="mb-3">
-                            <h6 class="fw-bold mb-1" style="color: var(--app-text); font-size: 1rem;">
-                                <i class="bi bi-table text-primary me-2"></i>Select Tables to Clean
-                            </h6>
-                            <div>
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.75rem;">
-                                    @SelectedCount of @_tables.Count Selected
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Search & Bulk Selection Actions -->
-                        <div class="mb-3">
-                            <div class="input-group input-group-sm mb-2 shadow-sm">
-                                <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
-                                    <i class="bi bi-search"></i>
-                                </span>
-                                <input type="text"
-                                       class="form-control shadow-none border-start-0 ps-0 @(!string.IsNullOrEmpty(_tableFilter) ? "border-end-0" : "")"
-                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
-                                       placeholder="Filter tables..."
-                                       @bind="_tableFilter"
-                                       @bind:event="oninput" />
-                                @if (!string.IsNullOrEmpty(_tableFilter))
-                                {
-                                    <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" title="Clear filter" @onclick="() => _tableFilter = string.Empty">
-                                        <i class="bi bi-x-lg"></i>
-                                    </button>
-                                }
-                                <button type="button" class="btn @(_filterCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-2"
-                                        style="z-index: 0; border-color: var(--app-input-border); @(_filterCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
-                                        title="Match Case"
-                                        @onclick="() => { _filterCaseSensitive = !_filterCaseSensitive; SaveSession(); }">
-                                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.85em; letter-spacing: 0.5px;">Aa</span>
-                                </button>
-                                <button type="button" class="btn @(_filterMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-2"
-                                        style="z-index: 0; border-color: var(--app-input-border); @(_filterMatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
-                                        title="Match Whole Word"
-                                        @onclick="() => { _filterMatchWholeWord = !_filterMatchWholeWord; if (_filterMatchWholeWord) _filterExactMatch = false; SaveSession(); }">
-                                    <span style="font-family: monospace; font-weight: bold; font-size: 0.85em;">[ab]</span>
-                                </button>
-                                <button type="button" class="btn @(_filterExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-2"
-                                        style="z-index: 0; border-color: var(--app-input-border); @(_filterExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
-                                        title="Exact Match"
-                                        @onclick="() => { _filterExactMatch = !_filterExactMatch; if (_filterExactMatch) _filterMatchWholeWord = false; SaveSession(); }">
-                                    <i class="bi bi-bullseye" style="font-size: 0.85rem;"></i>
-                                </button>
-                            </div>
-
-                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-secondary btn-sm" @onclick="SelectAll">Select All</button>
-                                    <button class="btn btn-outline-secondary btn-sm" @onclick="DeselectAll">Deselect All</button>
-                                </div>
-                                <div class="form-check m-0 d-flex align-items-center gap-2">
-                                    <input class="form-check-input mt-0"
-                                           type="checkbox"
-                                           id="autoIncludeChildrenCompact"
-                                           checked="@_autoIncludeChildTables"
-                                           @onchange="(e) => OnAutoIncludeChanged((bool)(e.Value ?? false))" />
-                                    <label class="form-check-label small user-select-none"
-                                           for="autoIncludeChildrenCompact"
-                                           style="color: var(--app-text); cursor: pointer;"
-                                           title="Auto-select all child tables referencing currently selected tables to avoid foreign key orphan errors">
-                                        Auto-include Child Tables
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Scrollable Table Checklist -->
-                        <div class="flex-grow-1 rounded border overflow-auto mb-3 custom-scrollbar-light"
-                             style="max-height: 280px; min-height: 180px; background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
-                            @if (!FilteredTables.Any())
-                            {
-                                <div class="p-4 text-center text-muted small">No tables found matching your filter.</div>
-                            }
-                            else
-                            {
-                                <div class="list-group list-group-flush">
-                                    @foreach (var table in FilteredTables)
-                                    {
-                                        <label class="list-group-item d-flex align-items-start py-2 px-3 border-bottom"
-                                               style="background: transparent; color: var(--app-text); border-color: var(--app-border) !important; cursor: pointer;">
-                                            <div class="d-flex align-items-start gap-2 overflow-hidden w-100">
-                                                <input class="form-check-input flex-shrink-0"
-                                                       style="margin-top: 3px;"
-                                                       type="checkbox"
-                                                       checked="@table.IsSelected"
-                                                       @onchange="(e) => ToggleTableSelection(table, (bool)(e.Value ?? false))" />
-                                                <div class="d-flex flex-column overflow-hidden flex-grow-1">
-                                                    <span class="font-monospace text-truncate" style="font-size: 0.88rem;" title="@table.FullName">
-                                                        <span class="text-muted">@table.Schema.</span><strong>@table.TableName</strong>
-                                                    </span>
-                                                    <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
-                                                        @if (table.IsSelected && table.IsAutoSelected)
-                                                        {
-                                                            <span class="badge bg-info-subtle text-info border border-info-subtle"
-                                                                  style="font-size: 0.65rem; padding: 2px 6px; font-weight: 600;"
-                                                                  title="@table.AutoSelectedReason">
-                                                                Auto-included
-                                                            </span>
-                                                        }
-                                                        @if (table.DependentChildren.Count > 0)
-                                                        {
-                                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle"
-                                                                  style="font-size: 0.65rem; padding: 2px 6px; font-weight: 600;"
-                                                                  title="Referenced by @table.DependentChildren.Count child table(s): @string.Join(", ", table.DependentChildren.Select(c => c.Replace("[", "").Replace("]", ""))). Child tables must be deleted before this table!">
-                                                                @(table.DependentChildren.Count == 1 ? "1 Child" : $"{table.DependentChildren.Count} Children")
-                                                            </span>
-                                                        }
-                                                        <span class="badge bg-dark-subtle text-muted" style="font-size: 0.68rem; padding: 2px 6px; font-variant-numeric: tabular-nums;">
-                                                            @table.EstimatedRows.ToString("N0") rows
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </label>
-                                    }
-                                </div>
-                            }
-                        </div>
-
-                        <!-- Options Card -->
-                        <div class="p-3 rounded mb-3" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border);">
-                            <label class="fw-bold small mb-2 d-block" style="color: var(--app-text);">Cleanup Execution Strategy</label>
-                            
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="strategyRadioCompact" id="stratConstraintCompact" 
-                                       checked="@(_strategy == CleanupStrategy.ConstraintDisabling)"
-                                       @onchange="() => _strategy = CleanupStrategy.ConstraintDisabling" />
-                                <label class="form-check-label small" for="stratConstraintCompact" style="color: var(--app-text);">
-                                    <strong>Constraint Disabling</strong>
-                                </label>
-                            </div>
-
-                            <div class="form-check mb-3">
-                                <input class="form-check-input" type="radio" name="strategyRadioCompact" id="stratTopoCompact" 
-                                       checked="@(_strategy == CleanupStrategy.Topological)"
-                                       @onchange="() => _strategy = CleanupStrategy.Topological" />
-                                <label class="form-check-label small" for="stratTopoCompact" style="color: var(--app-text);">
-                                    <strong>Topological Sort</strong>
-                                </label>
-                            </div>
-
-                            <div class="form-check mt-2 pt-2 border-top" style="border-color: var(--app-border) !important;">
-                                <input class="form-check-input" type="checkbox" id="reseedCheckboxCompact" @bind="_reseedIdentities" />
-                                <label class="form-check-label small" for="reseedCheckboxCompact" style="color: var(--app-text);">
-                                    <strong>Reseed Identity Columns</strong>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Analyze Button -->
-                        <button class="btn btn-primary w-100 py-2 d-flex align-items-center justify-content-center shadow-sm fw-bold"
-                                disabled="@(SelectedCount == 0)"
-                                @onclick="CalculateOrder">
-                            <span>Re-analyze Order</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Right: Analyzed Execution Sequence -->
-                <div class="col-12 col-xl-7">
+                <!-- Full Width: Analyzed Execution Sequence -->
+                <div class="col-12">
                     <div class="card p-4 rounded-3 shadow-sm" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
                         <!-- Metrics Row -->
                         <div class="row g-3 mb-4">
@@ -501,12 +346,18 @@
                             </div>
                         }
 
-                        <div class="mb-2">
-                            <h6 class="fw-bold mb-0" style="color: var(--app-text);">Calculated Deletion Order</h6>
+                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                            <h6 class="fw-bold mb-0" style="color: var(--app-text); font-size: 1rem;">Calculated Deletion Order</h6>
+                            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                                    @onclick="BackToSelection"
+                                    title="Edit table selection or cleanup options">
+                                <i class="bi bi-pencil-square"></i>
+                                <span>Edit Selection</span>
+                            </button>
                         </div>
 
                         <!-- Sequence Table -->
-                        <div class="table-responsive rounded border" style="border-color: var(--app-border) !important; max-height: 480px; overflow-y: auto;">
+                        <div class="table-responsive rounded border" style="border-color: var(--app-border) !important; max-height: 520px; overflow-y: auto;">
                             <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem; background-color: var(--app-surface); color: var(--app-text);">
                                 <thead style="background-color: var(--app-surface-secondary); color: var(--app-table-header-text); position: sticky; top: 0; z-index: 10;">
                                     <tr>
@@ -572,6 +423,7 @@
     private CleanupStrategy _strategy = CleanupStrategy.ConstraintDisabling;
     private bool _reseedIdentities = true;
     private bool _autoIncludeChildTables = true;
+    private bool _showSelectedOnly = false;
     private bool _isLoading = false;
     private bool _isExportDropdownOpen = false;
     private bool _isScriptCopied = false;
@@ -581,6 +433,8 @@
 
     private IEnumerable<CleanupTableItem> FilteredTables => _tables.Where(t =>
     {
+        if (_showSelectedOnly && !t.IsSelected) return false;
+
         if (string.IsNullOrWhiteSpace(_tableFilter)) return true;
         var searchTerm = _filterCaseSensitive ? _tableFilter.Trim() : _tableFilter.Trim().ToLowerInvariant();
         var tableName = _filterCaseSensitive ? (t.TableName ?? "") : (t.TableName ?? "").ToLowerInvariant();
@@ -651,6 +505,7 @@
             _strategy = session.Strategy;
             _reseedIdentities = session.ReseedIdentities;
             _autoIncludeChildTables = session.AutoIncludeChildTables;
+            _showSelectedOnly = session.ShowSelectedOnly;
             _plan = session.Plan;
         }
         else if (SchemaService.IsLoadingTables)
@@ -677,6 +532,12 @@
     {
         CleanupService.ClearSessionState();
         await LoadTablesAsync();
+    }
+
+    private void ToggleShowSelectedOnly()
+    {
+        _showSelectedOnly = !_showSelectedOnly;
+        SaveSession();
     }
 
     private void BackToSelection()
@@ -948,6 +809,7 @@
             Strategy = _strategy,
             ReseedIdentities = _reseedIdentities,
             AutoIncludeChildTables = _autoIncludeChildTables,
+            ShowSelectedOnly = _showSelectedOnly,
             Plan = _plan
         });
     }

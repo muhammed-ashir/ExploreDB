@@ -69,6 +69,7 @@ public class CleanupSessionState
     public CleanupStrategy Strategy { get; set; } = CleanupStrategy.ConstraintDisabling;
     public bool ReseedIdentities { get; set; } = true;
     public bool AutoIncludeChildTables { get; set; } = true;
+    public bool ShowSelectedOnly { get; set; } = false;
     public CleanupPlanResult? Plan { get; set; }
 }
 
