@@ -35,10 +35,13 @@
                     <i class="bi bi-arrow-clockwise"></i>
                     <span>Refresh</span>
                 </button>
-                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
-                    <i class="bi bi-arrow-left"></i>
-                    <span>Back to Tools</span>
-                </a>
+                @if (!IsPopout)
+                {
+                    <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
+                        <i class="bi bi-arrow-left"></i>
+                        <span>Back to Tools</span>
+                    </a>
+                }
             </div>
         }
     </div>
@@ -100,9 +103,9 @@
     {
         <NoDatabaseBanner Height="calc(100vh - 160px)" />
     }
-    else if (_isLoading)
+    else if (_isLoading || SchemaService.IsLoadingTables)
     {
-        <LoadingSpinner Height="calc(100vh - 160px)" Message="Analyzing tables, row counts, and foreign keys..." />
+        <LoadingSpinner Height="calc(100vh - 160px)" Message="@(SchemaService.IsLoadingTables ? "Loading database schema & tables..." : "Analyzing tables, row counts, and foreign keys...")" />
     }
     else
     {
@@ -649,6 +652,10 @@
             _reseedIdentities = session.ReseedIdentities;
             _autoIncludeChildTables = session.AutoIncludeChildTables;
             _plan = session.Plan;
+        }
+        else if (SchemaService.IsLoadingTables)
+        {
+            _isLoading = true;
         }
         else
         {
