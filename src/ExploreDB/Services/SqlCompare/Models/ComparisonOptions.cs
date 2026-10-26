@@ -59,6 +59,7 @@ public class ComparisonOptions
         dacOptions.IgnoreWhitespace = IgnoreWhitespace;
         dacOptions.IgnoreComments = IgnoreComments;
         dacOptions.IgnoreIdentitySeed = IgnoreIdentitySeed;
+        dacOptions.IgnoreIncrement = IgnoreIdentitySeed;
         dacOptions.IgnorePermissions = IgnorePermissions;
         dacOptions.IgnoreRoleMembership = IgnorePermissions;
         dacOptions.IgnoreFilegroupPlacement = IgnoreFilegroups;

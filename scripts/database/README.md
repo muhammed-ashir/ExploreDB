@@ -47,16 +47,32 @@ This folder contains database setup and test scripts for ExploreDB, organized by
 ---
 
 ## 4. SQL Compare Test Pair (Realistic Schema Difference Testing)
+
+### A. High-Volume Enterprise Test Pair (Recommended for Deep Testing & Report Validation)
 - **Scripts & Packages**:
-  1. [`Compare_Source_DB.sql`](Compare_Source_DB.sql) & [`CompareDB_Source.dacpac`](CompareDB_Source.dacpac) - Target DB: `CompareDB_Source` (Development / Reference schema with new features).
-  2. [`Compare_Target_DB.sql`](Compare_Target_DB.sql) & [`CompareDB_Target.dacpac`](CompareDB_Target.dacpac) - Target DB: `CompareDB_Target` (Production / Destination schema with older structures and deprecated objects).
-- **Execution Time**: **~1 to 2 seconds each**
+  1. [`Compare_Source_DB.sql`](Compare_Source_DB.sql) & [`CompareDB_Source.dacpac`](CompareDB_Source.dacpac) - Target DB: `CompareDB_Source` (Development / Reference schema with new enterprise modules).
+  2. [`Compare_Target_DB.sql`](Compare_Target_DB.sql) & [`CompareDB_Target.dacpac`](CompareDB_Target.dacpac) - Target DB: `CompareDB_Target` (Production / Destination schema with older structures and legacy tables).
+- **Execution Time**: **~2 to 3 seconds each**
+- **Scale**: **125+ schema differences** across 8 domains (`dbo`, `sales`, `inventory`, `billing`, `crm`, `hr`, `reporting`, `audit`).
 - **Test Matrix Covered**:
-  - **Added Objects** (Source only): `sales.Discounts`, `audit.SecurityLog`, `dbo.Seq_InvoiceNumber`, `reporting.vw_MonthlyRevenueBreakdown`, `sales.fn_CalculateDiscountedPrice`, `sales.sp_ApplyBulkDiscount`, `sales.trg_UpdateStockOnOrder`.
-  - **Modified Objects**:
-    - `dbo.Customers` (Email type length, LoyaltyTier & IsVerified added).
-    - `sales.Orders` (ShippingMethod & TrackingNumber added, new index, check constraint).
-    - `inventory.Products` (Decimal precision change, DiscontinuedDate column added).
-    - `sales.vw_CustomerOrders`, `sales.sp_CreateOrder`, `sales.fn_GetCustomerTotalSpend` (Definition updates).
-  - **Deleted / Deprecated Objects** (Target only): `dbo.LegacyImportQueue`, `sales.OldOrderArchive`, `reporting.vw_DeprecatedSalesStats`, `dbo.sp_LegacySync`.
-  - **Identical Objects** (100% Match): `dbo.Categories`, `inventory.Warehouses`, `sales.PaymentMethods`, `dbo.vw_ActiveCategories`, `dbo.sp_GetCategories`, `dbo.fn_CalculateMargin`.
+  - **Added Objects (57)**: New tables (`sales.Discounts`, `billing.PaymentTransactions`, `crm.Campaigns`, `hr.Leaves`, `audit.SecurityLog`, etc.), Views (`reporting.vw_DailyExecutiveKPI`, `sales.vw_DailySalesSummary`, `billing.vw_MonthlyRecurringRevenue`, etc.), Stored Procedures, Functions, Sequences, and Triggers.
+  - **Modified Objects (44)**: Deep column additions, data type expansions (`NVARCHAR(100)` -> `NVARCHAR(256)`), precision modifications (`DECIMAL(10,2)` -> `DECIMAL(18,4)`), computed columns, updated views, and enhanced procedure & function logic.
+  - **Deleted / Deprecated Objects (24)**: Legacy tables (`dbo.LegacyImportQueue`, `sales.OldOrderArchive`, `billing.LegacyPaymentLog`, etc.), obsolete views, and retired stored procedures.
+  - **Identical Objects (36+)**: 100% identical lookup tables, catalog views, and utility procedures.
+
+### B. Lightweight Test Pair (Fast Validation & Comparison Options Testing)
+- **Scripts & Packages**:
+  1. [`Compare_Source_DB_Lite.sql`](Compare_Source_DB_Lite.sql) & [`CompareDB_Source_Lite.dacpac`](CompareDB_Source_Lite.dacpac) - Target DB: `CompareDB_Source`
+  2. [`Compare_Target_DB_Lite.sql`](Compare_Target_DB_Lite.sql) & [`CompareDB_Target_Lite.dacpac`](CompareDB_Target_Lite.dacpac) - Target DB: `CompareDB_Target`
+- **Execution Time**: **~0.5 seconds**
+- **Scale**: ~25 schema differences for quick spot checks and rapid UI feedback.
+- **Dedicated Comparison Options Test Matrix**:
+  The Lite suite includes specific paired objects designed to test each checkbox in the **Comparison Options** modal:
+  | Option Checkbox | Test Object | Source Definition | Target Definition | Unchecked Result | Checked Result |
+  |---|---|---|---|---|---|
+  | **Ignore Identity (Seed & Increment)** | `dbo.IdentityTest` | `IDENTITY(1, 1)` | `IDENTITY(1000, 10)` | **Modified** | **Identical** (diff ignored) |
+  | **Ignore Collation Differences** | `dbo.CollationTest` | `Latin1_General_CI_AS` | `SQL_Latin1_General_CP1_CI_AS` | **Modified** | **Identical** (diff ignored) |
+  | **Ignore Comments** | `dbo.sp_CommentsTest` | Block & inline doc comments | Legacy short comment | **Modified** | **Identical** (diff ignored) |
+  | **Ignore Whitespace** | `dbo.vw_WhitespaceTest` | Multi-line indented query | Single-line compact query | **Modified** | **Identical** (diff ignored) |
+  | **Ignore Permissions & Roles** | `AppReadOnlyRole` & `sales.PaymentMethods` | Role created & `GRANT SELECT` assigned | Omitted | **Added** (Role & Grant) | **Ignored** |
+  | **Ignore System Constraint Names** | `dbo.SystemConstraintTest` | Unnamed `DEFAULT (1)` | Unnamed `DEFAULT (1)` | System-generated random names normalized | Constraint names ignored |
