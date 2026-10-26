@@ -1023,14 +1023,14 @@
                                     title="Previous difference block inside file"
                                     @onclick="GoToPrevBlockAsync"
                                     disabled="@(_selectedItem == null || !_selectedItem.HasDifference)">
-                                <i class="bi bi-chevron-up"></i>
+                                <i class="bi bi-arrow-up"></i>
                             </button>
                             <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center justify-content-center shadow-sm"
                                     style="font-size: 0.75rem; border-color: var(--app-border); min-width: 28px; height: 28px;"
                                     title="Next difference block inside file"
                                     @onclick="GoToNextBlockAsync"
                                     disabled="@(_selectedItem == null || !_selectedItem.HasDifference)">
-                                <i class="bi bi-chevron-down"></i>
+                                <i class="bi bi-arrow-down"></i>
                             </button>
                             <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm ms-1"
                                     style="font-size: 0.75rem; border-color: var(--app-border); height: 28px;"
