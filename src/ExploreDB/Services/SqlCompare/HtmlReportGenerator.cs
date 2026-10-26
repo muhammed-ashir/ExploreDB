@@ -78,27 +78,64 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       --modified: #f59e0b;
       --modified-bg: rgba(245, 158, 11, 0.15);
       --identical: #64748b;
+      --diff-bg: #1e1e1e;
+      --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+      --scrollbar-thumb-hover: rgba(255, 255, 255, 0.32);
+      --scrollbar-track: rgba(255, 255, 255, 0.03);
+      --endpoint-badge-bg: rgba(255, 255, 255, 0.04);
+      --endpoint-badge-color: #cbd5e1;
+      --link-color: #38bdf8;
+      --selected-bg: rgba(13, 110, 253, 0.15);
+      --selected-border: #38bdf8;
     }
+
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-secondary: #f1f5f9;
+      --surface-hover: #e2e8f0;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --accent: #0d6efd;
+      --added: #16a34a;
+      --added-bg: rgba(22, 163, 74, 0.12);
+      --deleted: #dc2626;
+      --deleted-bg: rgba(220, 38, 38, 0.12);
+      --modified: #d97706;
+      --modified-bg: rgba(217, 119, 6, 0.12);
+      --identical: #64748b;
+      --diff-bg: #ffffff;
+      --scrollbar-thumb: rgba(0, 0, 0, 0.2);
+      --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+      --scrollbar-track: rgba(0, 0, 0, 0.03);
+      --endpoint-badge-bg: rgba(0, 0, 0, 0.04);
+      --endpoint-badge-color: #334155;
+      --link-color: #0284c7;
+      --selected-bg: #e0f2fe;
+      --selected-border: #0284c7;
+    }
+
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
       scrollbar-width: thin;
-      scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
     }
     *::-webkit-scrollbar {
       width: 8px;
       height: 8px;
     }
     *::-webkit-scrollbar-track {
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--scrollbar-track);
     }
     *::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.2);
+      background: var(--scrollbar-thumb);
       border-radius: 4px;
     }
     *::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.32);
+      background: var(--scrollbar-thumb-hover);
     }
     *::-webkit-scrollbar-corner {
       background: transparent;
@@ -143,16 +180,35 @@ public class HtmlReportGenerator : IHtmlReportGenerator
     .header-right {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 8px;
       font-size: 12px;
       color: var(--text-muted);
+    }
+    .btn-theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 4px;
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      padding: 0;
+    }
+    .btn-theme-toggle:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+      border-color: #64748b;
     }
     .header-credit-text {
       color: var(--text-muted);
       cursor: default;
     }
     .header-credit-link {
-      color: #38bdf8;
+      color: var(--link-color);
       font-weight: 600;
       text-decoration: none;
       display: inline-flex;
@@ -264,8 +320,8 @@ public class HtmlReportGenerator : IHtmlReportGenerator
     }
     .endpoint-badge {
       font-size: 11.5px;
-      color: #cbd5e1;
-      background: rgba(255, 255, 255, 0.04);
+      color: var(--endpoint-badge-color);
+      background: var(--endpoint-badge-bg);
       padding: 3px 10px;
       border-radius: 5px;
       border: 1px solid var(--border);
@@ -285,6 +341,12 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       color: #22c55e;
       font-weight: 700;
       margin-right: 3px;
+    }
+    [data-theme="light"] .source-prefix {
+      color: #0284c7;
+    }
+    [data-theme="light"] .target-prefix {
+      color: #16a34a;
     }
 
     .main-layout {
@@ -419,7 +481,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: #1e1e1e;
+      background: var(--diff-bg);
     }
 
     /* Row 1: Object Toolbar */
@@ -441,7 +503,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
     .diff-object-title {
       font-weight: 700;
       font-size: 13.5px;
-      color: #f8fafc;
+      color: var(--text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -528,9 +590,19 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       letter-spacing: 0.5px;
       flex-shrink: 0;
     }
+    [data-theme="light"] .pill-source {
+      background: rgba(13, 110, 253, 0.12);
+      color: #0284c7;
+      border-color: rgba(2, 132, 199, 0.35);
+    }
+    [data-theme="light"] .pill-target {
+      background: rgba(22, 163, 74, 0.12);
+      color: #16a34a;
+      border-color: rgba(22, 163, 74, 0.35);
+    }
     .endpoint-title {
       font-weight: 600;
-      color: #f8fafc;
+      color: var(--text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -539,7 +611,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
     .copy-btn {
       background: transparent;
       border: none;
-      color: #94a3b8;
+      color: var(--text-muted);
       font-size: 11.5px;
       display: inline-flex;
       align-items: center;
@@ -552,8 +624,8 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       font-family: inherit;
     }
     .copy-btn:hover {
-      color: #f8fafc;
-      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      background: var(--surface-hover);
     }
     .copy-btn.copied {
       color: #22c55e;
@@ -564,7 +636,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       flex: 1;
       position: relative;
       overflow: hidden;
-      background: #1e1e1e;
+      background: var(--diff-bg);
     }
     #monacoDiffContainer {
       width: 100%;
@@ -572,15 +644,15 @@ public class HtmlReportGenerator : IHtmlReportGenerator
     }
     /* Match Monaco's internal scrollbars to ExploreDB's muted scrollbar theme */
     .monaco-editor .scrollbar .slider {
-      background: rgba(255, 255, 255, 0.2) !important;
+      background: var(--scrollbar-thumb) !important;
       border-radius: 4px !important;
     }
     .monaco-editor .scrollbar .slider:hover {
-      background: rgba(255, 255, 255, 0.32) !important;
+      background: var(--scrollbar-thumb-hover) !important;
     }
     .monaco-editor .scrollbar.vertical,
     .monaco-editor .scrollbar.horizontal {
-      background: rgba(255, 255, 255, 0.03) !important;
+      background: var(--scrollbar-track) !important;
     }
     .monaco-diff-editor .overview-ruler,
     .monaco-editor .decorationsOverviewRuler {
@@ -597,7 +669,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #1e1e1e;
+      background: var(--diff-bg);
       color: var(--text-muted);
       font-size: 13px;
       gap: 12px;
@@ -621,7 +693,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       height: 100%;
       display: flex;
       overflow: hidden;
-      background: #1e1e1e;
+      background: var(--diff-bg);
     }
     .fallback-pane {
       flex: 1;
@@ -630,7 +702,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       font-family: "Cascadia Code", Consolas, Menlo, monospace;
       font-size: 12px;
       line-height: 1.6;
-      background: #1e1e1e;
+      background: var(--diff-bg);
     }
     .fallback-line {
       display: flex;
@@ -660,6 +732,19 @@ public class HtmlReportGenerator : IHtmlReportGenerator
     .typ { color: #4ec9b0; }
     .str { color: #ce9178; }
     .com { color: #6a9955; font-style: italic; }
+
+    /* SQL Syntax Colors for Fallback Engine (VS Code Light mode) */
+    [data-theme="light"] .kw { color: #0000ff; }
+    [data-theme="light"] .typ { color: #267f99; }
+    [data-theme="light"] .str { color: #a31515; }
+    [data-theme="light"] .com { color: #008000; }
+    [data-theme="light"] .fallback-num { color: #94a3b8; }
+    [data-theme="light"] .fallback-line { color: #0f172a; }
+    [data-theme="light"] .fallback-add { background: rgba(34, 197, 94, 0.18); color: #15803d; }
+    [data-theme="light"] .fallback-del { background: rgba(239, 68, 68, 0.18); color: #b91c1c; }
+    [data-theme="light"] .fallback-gap {
+      background: repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.04) 6px, transparent 6px, transparent 12px);
+    }
   </style>
 </head>
 <body>
@@ -671,6 +756,15 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       <span class="report-date-text">Generated On: <span id="reportDate">...</span></span>
     </div>
     <div class="header-right">
+      <button type="button" class="btn-theme-toggle" id="btnThemeToggle" onclick="toggleTheme()" title="Switch to Light mode">
+        <svg id="themeIconSun" width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
+        </svg>
+        <svg id="themeIconMoon" width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="display: none;">
+          <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278zM4.858 1.311A7.269 7.269 0 0 0 1.02 7.71c0 4.02 3.279 7.276 7.319 7.276a7.316 7.316 0 0 0 5.205-2.162c-.337.042-.68.063-1.029.063-4.61 0-8.343-3.714-8.343-8.29 0-1.167.242-2.278.686-3.286z"/>
+        </svg>
+      </button>
+      <span class="header-divider" style="margin: 0 4px;">|</span>
       <span class="header-credit-text">Generated by</span>
       <a href="https://apps.microsoft.com/store/detail/9NF6M6NT09BM?cid=DevShareMCLPCS" target="_blank" rel="noopener noreferrer" class="header-credit-link" title="Open ExploreDB on Microsoft Store">
         <span>ExploreDB</span>
@@ -753,12 +847,12 @@ public class HtmlReportGenerator : IHtmlReportGenerator
           <span class="status-tag" id="selectedObjBadge" style="display: none;"></span>
         </div>
         <div class="diff-toolbar-actions">
-          <button type="button" class="btn-tool btn-tool-icon" id="btnPrevDiff" onclick="navigateDiffBlock('prev')" title="Previous difference block">
+          <button type="button" class="btn-tool btn-tool-icon" id="btnPrevDiff" style="display: none;" onclick="navigateDiffBlock('prev')" title="Previous difference block">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
               <path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"/>
             </svg>
           </button>
-          <button type="button" class="btn-tool btn-tool-icon" id="btnNextDiff" onclick="navigateDiffBlock('next')" title="Next difference block">
+          <button type="button" class="btn-tool btn-tool-icon" id="btnNextDiff" style="display: none;" onclick="navigateDiffBlock('next')" title="Next difference block">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
               <path fill-rule="evenodd" d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/>
             </svg>
@@ -825,6 +919,47 @@ public class HtmlReportGenerator : IHtmlReportGenerator
     let isSideBySide = true;
     let monacoReady = false;
     let fallbackActivated = false;
+
+    let currentTheme = 'dark';
+    try {
+      const saved = localStorage.getItem('exploredb_report_theme');
+      if (saved === 'light' || saved === 'dark') {
+        currentTheme = saved;
+      }
+    } catch (e) {}
+
+    function applyTheme(theme) {
+      currentTheme = theme;
+      document.documentElement.setAttribute('data-theme', theme);
+
+      const sun = document.getElementById('themeIconSun');
+      const moon = document.getElementById('themeIconMoon');
+      const toggleBtn = document.getElementById('btnThemeToggle');
+
+      if (theme === 'light') {
+        if (sun) sun.style.display = 'none';
+        if (moon) moon.style.display = 'inline';
+        if (toggleBtn) toggleBtn.title = 'Switch to Dark mode';
+      } else {
+        if (sun) sun.style.display = 'inline';
+        if (moon) moon.style.display = 'none';
+        if (toggleBtn) toggleBtn.title = 'Switch to Light mode';
+      }
+
+      if (typeof monacoReady !== 'undefined' && monacoReady && typeof monaco !== 'undefined' && monaco.editor) {
+        monaco.editor.setTheme(theme === 'light' ? 'vs' : 'vs-dark');
+      }
+
+      try {
+        localStorage.setItem('exploredb_report_theme', theme);
+      } catch (e) {}
+    }
+
+    function toggleTheme() {
+      applyTheme(currentTheme === 'light' ? 'dark' : 'light');
+    }
+
+    applyTheme(currentTheme);
 
     const srcName = reportData.sourceDisplayName || 'Source';
     const tgtName = reportData.targetDisplayName || 'Target';
@@ -912,9 +1047,14 @@ public class HtmlReportGenerator : IHtmlReportGenerator
               const btnToggle = document.getElementById('btnToggleSideBySide');
               if (btnToggle) btnToggle.style.display = 'inline-flex';
 
+              const btnPrev = document.getElementById('btnPrevDiff');
+              const btnNext = document.getElementById('btnNextDiff');
+              if (btnPrev) btnPrev.style.display = 'inline-flex';
+              if (btnNext) btnNext.style.display = 'inline-flex';
+
               const container = document.getElementById('monacoDiffContainer');
               monacoDiffEditor = monaco.editor.createDiffEditor(container, {
-                theme: 'vs-dark',
+                theme: currentTheme === 'light' ? 'vs' : 'vs-dark',
                 readOnly: true,
                 renderSideBySide: isSideBySide,
                 automaticLayout: true,
@@ -989,6 +1129,11 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       const btnToggle = document.getElementById('btnToggleSideBySide');
       if (btnToggle) btnToggle.style.display = 'none';
 
+      const btnPrev = document.getElementById('btnPrevDiff');
+      const btnNext = document.getElementById('btnNextDiff');
+      if (btnPrev) btnPrev.style.display = 'none';
+      if (btnNext) btnNext.style.display = 'none';
+
       const monacoContainer = document.getElementById('monacoDiffContainer');
       if (monacoContainer) monacoContainer.style.display = 'none';
 
@@ -1031,124 +1176,79 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       }, 50);
     }
 
-    let currentFallbackBlockIdx = -1;
-
     function navigateDiffBlock(direction) {
-      if (monacoReady && monacoDiffEditor) {
-        const changes = monacoDiffEditor.getLineChanges();
-        if (!changes || changes.length === 0) return;
+      if (!monacoReady || !monacoDiffEditor) return;
 
-        const origEditor = monacoDiffEditor.getOriginalEditor();
-        const modEditor = monacoDiffEditor.getModifiedEditor();
-        const isOrigFocused = origEditor && typeof origEditor.hasTextFocus === 'function' && origEditor.hasTextFocus();
-        const activeEditor = isOrigFocused ? origEditor : modEditor;
+      const changes = monacoDiffEditor.getLineChanges();
+      if (!changes || changes.length === 0) return;
 
-        const currentPos = (activeEditor && typeof activeEditor.getPosition === 'function' && activeEditor.getPosition()) || { lineNumber: 1, column: 1 };
-        const currentLine = currentPos.lineNumber;
+      const origEditor = monacoDiffEditor.getOriginalEditor();
+      const modEditor = monacoDiffEditor.getModifiedEditor();
+      const isOrigFocused = origEditor && typeof origEditor.hasTextFocus === 'function' && origEditor.hasTextFocus();
+      const activeEditor = isOrigFocused ? origEditor : modEditor;
 
-        function getChangeRange(c) {
-          if (isOrigFocused) {
-            const start = c.originalStartLineNumber > 0 ? c.originalStartLineNumber : (c.originalEndLineNumber > 0 ? c.originalEndLineNumber : 1);
-            const end = c.originalEndLineNumber > 0 ? c.originalEndLineNumber : start;
-            return { start, end };
-          } else {
-            const start = c.modifiedStartLineNumber > 0 ? c.modifiedStartLineNumber : (c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : 1);
-            const end = c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : start;
-            return { start, end };
-          }
-        }
+      const currentPos = (activeEditor && typeof activeEditor.getPosition === 'function' && activeEditor.getPosition()) || { lineNumber: 1, column: 1 };
+      const currentLine = currentPos.lineNumber;
 
-        let currentDiffIdx = -1;
-        for (let i = 0; i < changes.length; i++) {
-          const range = getChangeRange(changes[i]);
-          if (currentLine >= range.start && currentLine <= range.end) {
-            currentDiffIdx = i;
-            break;
-          }
-        }
-
-        let targetChange = null;
-        if (direction === 'next') {
-          if (currentDiffIdx !== -1) {
-            targetChange = changes[(currentDiffIdx + 1) % changes.length];
-          } else {
-            for (let i = 0; i < changes.length; i++) {
-              const range = getChangeRange(changes[i]);
-              if (range.start > currentLine) {
-                targetChange = changes[i];
-                break;
-              }
-            }
-            if (!targetChange) targetChange = changes[0];
-          }
+      function getChangeRange(c) {
+        if (isOrigFocused) {
+          const start = c.originalStartLineNumber > 0 ? c.originalStartLineNumber : (c.originalEndLineNumber > 0 ? c.originalEndLineNumber : 1);
+          const end = c.originalEndLineNumber > 0 ? c.originalEndLineNumber : start;
+          return { start, end };
         } else {
-          if (currentDiffIdx !== -1) {
-            targetChange = changes[(currentDiffIdx - 1 + changes.length) % changes.length];
-          } else {
-            for (let i = changes.length - 1; i >= 0; i--) {
-              const range = getChangeRange(changes[i]);
-              if (range.end < currentLine) {
-                targetChange = changes[i];
-                break;
-              }
-            }
-            if (!targetChange) targetChange = changes[changes.length - 1];
-          }
-        }
-
-        if (targetChange) {
-          const targetEditor = targetChange.modifiedStartLineNumber > 0 ? modEditor : origEditor;
-          const targetLine = targetChange.modifiedStartLineNumber > 0 ? targetChange.modifiedStartLineNumber : targetChange.originalStartLineNumber;
-          if (targetEditor) {
-            const line = targetLine > 0 ? targetLine : 1;
-            targetEditor.revealLineInCenter(line);
-            targetEditor.setPosition({ lineNumber: line, column: 1 });
-            targetEditor.focus();
-          }
-        }
-      } else if (fallbackActivated) {
-        navigateFallbackDiffBlock(direction);
-      }
-    }
-
-    function navigateFallbackDiffBlock(direction) {
-      const pane = document.getElementById('paneRight') || document.querySelector('.fallback-pane');
-      if (!pane) return;
-
-      const diffLines = Array.from(pane.querySelectorAll('.fallback-add, .fallback-del'));
-      if (diffLines.length === 0) return;
-
-      const blocks = [];
-      let currentBlock = [];
-
-      for (let i = 0; i < diffLines.length; i++) {
-        if (currentBlock.length === 0) {
-          currentBlock.push(diffLines[i]);
-        } else {
-          const prev = currentBlock[currentBlock.length - 1];
-          if (diffLines[i].previousElementSibling === prev) {
-            currentBlock.push(diffLines[i]);
-          } else {
-            blocks.push(currentBlock[0]);
-            currentBlock = [diffLines[i]];
-          }
+          const start = c.modifiedStartLineNumber > 0 ? c.modifiedStartLineNumber : (c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : 1);
+          const end = c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : start;
+          return { start, end };
         }
       }
-      if (currentBlock.length > 0) {
-        blocks.push(currentBlock[0]);
+
+      let currentDiffIdx = -1;
+      for (let i = 0; i < changes.length; i++) {
+        const range = getChangeRange(changes[i]);
+        if (currentLine >= range.start && currentLine <= range.end) {
+          currentDiffIdx = i;
+          break;
+        }
       }
 
-      if (blocks.length === 0) return;
-
+      let targetChange = null;
       if (direction === 'next') {
-        currentFallbackBlockIdx = (currentFallbackBlockIdx + 1) % blocks.length;
+        if (currentDiffIdx !== -1) {
+          targetChange = changes[(currentDiffIdx + 1) % changes.length];
+        } else {
+          for (let i = 0; i < changes.length; i++) {
+            const range = getChangeRange(changes[i]);
+            if (range.start > currentLine) {
+              targetChange = changes[i];
+              break;
+            }
+          }
+          if (!targetChange) targetChange = changes[0];
+        }
       } else {
-        currentFallbackBlockIdx = (currentFallbackBlockIdx - 1 + blocks.length) % blocks.length;
+        if (currentDiffIdx !== -1) {
+          targetChange = changes[(currentDiffIdx - 1 + changes.length) % changes.length];
+        } else {
+          for (let i = changes.length - 1; i >= 0; i--) {
+            const range = getChangeRange(changes[i]);
+            if (range.end < currentLine) {
+              targetChange = changes[i];
+              break;
+            }
+          }
+          if (!targetChange) targetChange = changes[changes.length - 1];
+        }
       }
 
-      const targetEl = blocks[currentFallbackBlockIdx];
-      if (targetEl) {
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (targetChange) {
+        const targetEditor = targetChange.modifiedStartLineNumber > 0 ? modEditor : origEditor;
+        const targetLine = targetChange.modifiedStartLineNumber > 0 ? targetChange.modifiedStartLineNumber : targetChange.originalStartLineNumber;
+        if (targetEditor) {
+          const line = targetLine > 0 ? targetLine : 1;
+          targetEditor.revealLineInCenter(line);
+          targetEditor.setPosition({ lineNumber: line, column: 1 });
+          targetEditor.focus();
+        }
       }
     }
 
@@ -1227,9 +1327,14 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       const hasDiff = obj && obj.changeType !== 'Identical' && obj.hasDifference !== false;
       const btnPrev = document.getElementById('btnPrevDiff');
       const btnNext = document.getElementById('btnNextDiff');
-      if (btnPrev) btnPrev.disabled = !hasDiff;
-      if (btnNext) btnNext.disabled = !hasDiff;
-      currentFallbackBlockIdx = -1;
+      if (btnPrev) {
+        btnPrev.disabled = !hasDiff;
+        if (!monacoReady) btnPrev.style.display = 'none';
+      }
+      if (btnNext) {
+        btnNext.disabled = !hasDiff;
+        if (!monacoReady) btnNext.style.display = 'none';
+      }
 
       if (monacoReady && monacoDiffEditor) {
         updateMonacoDiff(obj);
