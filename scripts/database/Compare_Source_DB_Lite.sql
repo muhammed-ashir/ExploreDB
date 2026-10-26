@@ -1,5 +1,5 @@
 -- =======================================================================================
--- EXPLOREDB: SQL COMPARE TEST DATABASE - SOURCE (CompareDB_Source)
+-- EXPLOREDB: SQL COMPARE TEST DATABASE - SOURCE LITE (CompareDB_Source_Lite)
 -- =======================================================================================
 -- Purpose: Reference "Source" schema (Development/Staging) featuring:
 --   - Added objects (Discounts, SecurityLog, Sequences, Triggers, Views, Procedures)
@@ -9,23 +9,23 @@
 --   - Dedicated Comparison Option test objects (Whitespace, Comments, Collation, Identity Seed, Permissions, Constraint Names)
 --
 -- Execution Time: ~1 to 2 seconds
--- Target Database: CompareDB_Source
+-- Target Database: CompareDB_Source_Lite
 -- =======================================================================================
 
 USE master;
 GO
 
-IF DB_ID('CompareDB_Source') IS NOT NULL
+IF DB_ID('CompareDB_Source_Lite') IS NOT NULL
 BEGIN
-    ALTER DATABASE CompareDB_Source SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE CompareDB_Source;
+    ALTER DATABASE CompareDB_Source_Lite SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE CompareDB_Source_Lite;
 END
 GO
 
-CREATE DATABASE CompareDB_Source;
+CREATE DATABASE CompareDB_Source_Lite;
 GO
 
-USE CompareDB_Source;
+USE CompareDB_Source_Lite;
 GO
 
 SET ANSI_NULLS ON;
@@ -443,5 +443,5 @@ INSERT INTO dbo.IdentityTest (Name) VALUES ('Seed Row 1'), ('Seed Row 2');
 INSERT INTO dbo.CollationTest (ID, Code, Description) VALUES (1, 'ALPHA', 'Collation sample record');
 INSERT INTO dbo.SystemConstraintTest (StatusCode) VALUES (1);
 
-PRINT '>>> CompareDB_Source created and populated successfully.';
+PRINT '>>> CompareDB_Source_Lite created and populated successfully.';
 GO

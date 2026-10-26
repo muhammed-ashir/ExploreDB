@@ -62,8 +62,8 @@ This folder contains database setup and test scripts for ExploreDB, organized by
 
 ### B. Lightweight Test Pair (Fast Validation & Comparison Options Testing)
 - **Scripts & Packages**:
-  1. [`Compare_Source_DB_Lite.sql`](Compare_Source_DB_Lite.sql) & [`CompareDB_Source_Lite.dacpac`](CompareDB_Source_Lite.dacpac) - Target DB: `CompareDB_Source`
-  2. [`Compare_Target_DB_Lite.sql`](Compare_Target_DB_Lite.sql) & [`CompareDB_Target_Lite.dacpac`](CompareDB_Target_Lite.dacpac) - Target DB: `CompareDB_Target`
+  1. [`Compare_Source_DB_Lite.sql`](Compare_Source_DB_Lite.sql) & [`CompareDB_Source_Lite.dacpac`](CompareDB_Source_Lite.dacpac) - Target DB: `CompareDB_Source_Lite`
+  2. [`Compare_Target_DB_Lite.sql`](Compare_Target_DB_Lite.sql) & [`CompareDB_Target_Lite.dacpac`](CompareDB_Target_Lite.dacpac) - Target DB: `CompareDB_Target_Lite`
 - **Execution Time**: **~0.5 seconds**
 - **Scale**: ~25 schema differences for quick spot checks and rapid UI feedback.
 - **Dedicated Comparison Options Test Matrix**:

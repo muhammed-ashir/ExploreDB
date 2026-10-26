@@ -1,5 +1,5 @@
 -- =======================================================================================
--- EXPLOREDB: SQL COMPARE TEST DATABASE - TARGET (CompareDB_Target)
+-- EXPLOREDB: SQL COMPARE TEST DATABASE - TARGET LITE (CompareDB_Target_Lite)
 -- =======================================================================================
 -- Purpose: Destination "Target" schema (e.g. Production/Older Environment) featuring:
 --   - Missing objects (Discounts, SecurityLog, Sequences, Triggers, Views that are added in Source)
@@ -9,23 +9,23 @@
 --   - Dedicated Comparison Option test objects (Whitespace, Comments, Collation, Identity Seed, Permissions, Constraint Names)
 --
 -- Execution Time: ~1 to 2 seconds
--- Target Database: CompareDB_Target
+-- Target Database: CompareDB_Target_Lite
 -- =======================================================================================
 
 USE master;
 GO
 
-IF DB_ID('CompareDB_Target') IS NOT NULL
+IF DB_ID('CompareDB_Target_Lite') IS NOT NULL
 BEGIN
-    ALTER DATABASE CompareDB_Target SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE CompareDB_Target;
+    ALTER DATABASE CompareDB_Target_Lite SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE CompareDB_Target_Lite;
 END
 GO
 
-CREATE DATABASE CompareDB_Target;
+CREATE DATABASE CompareDB_Target_Lite;
 GO
 
-USE CompareDB_Target;
+USE CompareDB_Target_Lite;
 GO
 
 SET ANSI_NULLS ON;
@@ -338,5 +338,5 @@ INSERT INTO dbo.IdentityTest (Name) VALUES ('Seed Row 1'), ('Seed Row 2');
 INSERT INTO dbo.CollationTest (ID, Code, Description) VALUES (1, 'ALPHA', 'Collation sample record');
 INSERT INTO dbo.SystemConstraintTest (StatusCode) VALUES (1);
 
-PRINT '>>> CompareDB_Target created and populated successfully.';
+PRINT '>>> CompareDB_Target_Lite created and populated successfully.';
 GO
