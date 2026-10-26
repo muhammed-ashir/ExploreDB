@@ -672,7 +672,11 @@
                     {
                         <div class="row g-3 pt-3 mt-1 border-top" style="border-color: var(--app-border) !important;">
                             <div class="col-12 col-md-4">
-                                <div class="form-check">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Whitespace</b><br/>Ignores differences in spaces, tabs, line breaks, and indentation within object definitions.">
                                     <input class="form-check-input" type="checkbox" id="optWhitespace" @bind="_options.IgnoreWhitespace" />
                                     <label class="form-check-label small" for="optWhitespace" style="color: var(--app-text); cursor: pointer;">
                                         Ignore Whitespace
@@ -680,7 +684,11 @@
                                 </div>
                             </div>
                             <div class="col-12 col-md-4">
-                                <div class="form-check">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore System Constraint Names</b><br/>Ignores system-generated constraint names (e.g. <code>DF__tbl__col__12345</code>) to avoid false differences when constraints lack explicit names.">
                                     <input class="form-check-input" type="checkbox" id="optConstraintNames" @bind="_options.IgnoreSystemConstraintNames" />
                                     <label class="form-check-label small" for="optConstraintNames" style="color: var(--app-text); cursor: pointer;">
                                         Ignore System Constraint Names
@@ -688,7 +696,11 @@
                                 </div>
                             </div>
                             <div class="col-12 col-md-4">
-                                <div class="form-check">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Comments</b><br/>Ignores SQL comment blocks (<code>/* ... */</code>) and single-line comments (<code>--</code>) within object definitions.">
                                     <input class="form-check-input" type="checkbox" id="optComments" @bind="_options.IgnoreComments" />
                                     <label class="form-check-label small" for="optComments" style="color: var(--app-text); cursor: pointer;">
                                         Ignore Comments
@@ -696,7 +708,11 @@
                                 </div>
                             </div>
                             <div class="col-12 col-md-4">
-                                <div class="form-check">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Collation Differences</b><br/>Ignores differences in database, table, and column collations (e.g. <code>Latin1_General_CI_AS</code> vs <code>SQL_Latin1_General_CP1_CI_AS</code>).">
                                     <input class="form-check-input" type="checkbox" id="optCollation" @bind="_options.IgnoreCollation" />
                                     <label class="form-check-label small" for="optCollation" style="color: var(--app-text); cursor: pointer;">
                                         Ignore Collation Differences
@@ -704,7 +720,11 @@
                                 </div>
                             </div>
                             <div class="col-12 col-md-4">
-                                <div class="form-check">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Identity (Seed &amp; Increment)</b><br/>Ignores differences in identity column starting seed and step increment values (e.g. <code>IDENTITY(1,1)</code> vs <code>IDENTITY(1000,10)</code>). Structural identity column mismatches are still compared.">
                                     <input class="form-check-input" type="checkbox" id="optIdentity" @bind="_options.IgnoreIdentitySeed" />
                                     <label class="form-check-label small" for="optIdentity" style="color: var(--app-text); cursor: pointer;">
                                         Ignore Identity (Seed &amp; Increment)
@@ -712,7 +732,11 @@
                                 </div>
                             </div>
                             <div class="col-12 col-md-4">
-                                <div class="form-check">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Permissions &amp; Roles</b><br/>Ignores user permissions (<code>GRANT</code>, <code>DENY</code>, <code>REVOKE</code>), database roles, and role membership assignments.">
                                     <input class="form-check-input" type="checkbox" id="optPermissions" @bind="_options.IgnorePermissions" />
                                     <label class="form-check-label small" for="optPermissions" style="color: var(--app-text); cursor: pointer;">
                                         Ignore Permissions &amp; Roles

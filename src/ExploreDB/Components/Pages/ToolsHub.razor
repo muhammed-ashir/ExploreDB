@@ -72,8 +72,7 @@
                 <div class="col-12 col-md-6 col-xl-4">
                     <div class="card h-100 p-4 rounded-3 shadow-sm transition-transform hover-scale"
                          style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: @(tool.IsAvailable ? "pointer" : "default");"
-                         @onclick="() => LaunchTool(tool)"
-                         title="@(tool.IsAvailable ? (ToolService.ShouldOpenInPopout(tool.Id) ? $"Click to open {tool.Title} in a separate window" : (tool.IsBeta ? $"Click to open {tool.Title} (Beta)" : $"Click to open {tool.Title}")) : "Coming soon")">
+                         @onclick="() => LaunchTool(tool)">
                         <div class="d-flex align-items-start justify-content-between mb-3">
                             <div class="rounded-3 d-flex align-items-center justify-content-center shadow-sm"
                                  style="width: 48px; height: 48px; background-color: @tool.IconBg; color: @tool.IconColor; font-size: 1.4rem;">
@@ -82,7 +81,7 @@
                             <div class="d-flex align-items-center gap-2">
                                 @if (tool.IsAvailable && !string.IsNullOrEmpty(tool.Route) && ToolService.ShouldOpenInPopout(tool.Id))
                                 {
-                                    <span class="text-muted p-1" title="Opens in a separate window">
+                                    <span class="text-muted p-1" data-bs-tooltip="true" data-bs-placement="top" data-bs-title="Opens in a separate window">
                                         <i class="bi bi-box-arrow-up-right"></i>
                                     </span>
                                 }
