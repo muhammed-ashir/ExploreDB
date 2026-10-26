@@ -374,7 +374,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       flex-shrink: 0;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
     .search-input-wrap {
       position: relative;
@@ -383,7 +383,8 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       flex: 1;
       min-width: 0;
     }
-    .btn-collapse-sidebar {
+    .btn-collapse-sidebar,
+    .btn-nav-obj {
       background: transparent;
       border: 1px solid var(--border);
       color: var(--text-muted);
@@ -398,10 +399,15 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       transition: all 0.15s ease;
       padding: 0;
     }
-    .btn-collapse-sidebar:hover {
+    .btn-collapse-sidebar:hover,
+    .btn-nav-obj:hover:not(:disabled) {
       background: var(--surface-hover);
       color: var(--text);
       border-color: #475569;
+    }
+    .btn-nav-obj:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
     .search-icon {
       position: absolute;
@@ -824,6 +830,16 @@ public class HtmlReportGenerator : IHtmlReportGenerator
             </svg>
           </button>
         </div>
+        <button type="button" class="btn-nav-obj" id="btnPrevObject" onclick="navigateObject(-1)" title="Previous difference in object list">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"/>
+          </svg>
+        </button>
+        <button type="button" class="btn-nav-obj" id="btnNextObject" onclick="navigateObject(1)" title="Next difference in object list">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/>
+          </svg>
+        </button>
         <button type="button" class="btn-collapse-sidebar" onclick="toggleSidebar()" title="Collapse sidebar">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
             <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
@@ -1270,16 +1286,10 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       }
     }
 
-    function applyFilters() {
+    function getFilteredDifferences() {
       const qInput = document.getElementById('searchInput');
       const q = (qInput ? qInput.value : '').toLowerCase().trim();
-      const clearBtn = document.getElementById('clearSearchBtn');
-      if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
-
-      const listEl = document.getElementById('objectList');
-      listEl.innerHTML = '';
-
-      const filtered = reportData.differences.filter(d => {
+      return reportData.differences.filter(d => {
         let matchesFilter = true;
         if (currentFilter === 'All') {
           matchesFilter = (d.hasDifference !== false);
@@ -1289,6 +1299,61 @@ public class HtmlReportGenerator : IHtmlReportGenerator
         const matchesQuery = !q || d.name.toLowerCase().includes(q) || d.category.toLowerCase().includes(q);
         return matchesFilter && matchesQuery;
       });
+    }
+
+    function updateObjectNavButtons(filteredList) {
+      const list = filteredList || getFilteredDifferences();
+      const btnPrev = document.getElementById('btnPrevObject');
+      const btnNext = document.getElementById('btnNextObject');
+      if (!list || list.length <= 1) {
+        if (btnPrev) btnPrev.disabled = true;
+        if (btnNext) btnNext.disabled = true;
+        return;
+      }
+
+      const currentIndex = list.findIndex(d => d.id === selectedId);
+      if (btnPrev) btnPrev.disabled = (currentIndex <= 0);
+      if (btnNext) btnNext.disabled = (currentIndex === -1 || currentIndex >= list.length - 1);
+    }
+
+    function navigateObject(delta) {
+      const list = getFilteredDifferences();
+      if (!list || list.length === 0) return;
+
+      let currentIndex = list.findIndex(d => d.id === selectedId);
+      if (currentIndex === -1) {
+        currentIndex = delta > 0 ? -1 : list.length;
+      }
+
+      let targetIndex = currentIndex + delta;
+      if (targetIndex < 0) {
+        targetIndex = 0;
+      } else if (targetIndex >= list.length) {
+        targetIndex = list.length - 1;
+      }
+
+      if (targetIndex === currentIndex) return;
+
+      const targetObj = list[targetIndex];
+      if (targetObj) {
+        selectObject(targetObj);
+        const itemEl = document.querySelector(`.object-item[data-id="${targetObj.id}"]`);
+        if (itemEl) {
+          itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }
+    }
+
+    function applyFilters() {
+      const qInput = document.getElementById('searchInput');
+      const q = (qInput ? qInput.value : '').toLowerCase().trim();
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
+
+      const listEl = document.getElementById('objectList');
+      listEl.innerHTML = '';
+
+      const filtered = getFilteredDifferences();
 
       filtered.forEach(d => {
         const item = document.createElement('div');
@@ -1305,8 +1370,12 @@ public class HtmlReportGenerator : IHtmlReportGenerator
         listEl.appendChild(item);
       });
 
-      if (filtered.length > 0 && !selectedId) {
-        selectObject(filtered[0]);
+      updateObjectNavButtons(filtered);
+
+      if (filtered.length > 0) {
+        if (!selectedId || !filtered.some(d => d.id === selectedId)) {
+          selectObject(filtered[0]);
+        }
       }
     }
 
@@ -1317,6 +1386,7 @@ public class HtmlReportGenerator : IHtmlReportGenerator
       document.querySelectorAll('.object-item').forEach(el => el.classList.remove('selected'));
       const found = document.querySelector(`.object-item[data-id="${obj.id}"]`);
       if (found) found.classList.add('selected');
+      updateObjectNavButtons();
 
       document.getElementById('selectedObjTitle').textContent = obj.name;
       const badge = document.getElementById('selectedObjBadge');

@@ -53,6 +53,7 @@ public class CleanupPlanResult
     public long TotalEstimatedRows { get; set; } = 0;
     public int TotalTables => Steps.Count;
     public string DatabaseName { get; set; } = string.Empty;
+    public string ServerName { get; set; } = string.Empty;
     public DateTime GeneratedAt { get; set; } = DateTime.Now;
     public CleanupStrategy Strategy { get; set; } = CleanupStrategy.ConstraintDisabling;
     public bool ReseedIdentities { get; set; } = true;
@@ -172,13 +173,26 @@ public class DataCleanupService
         IEnumerable<CleanupTableItem> selectedTables,
         CleanupStrategy strategy = CleanupStrategy.ConstraintDisabling,
         bool reseedIdentities = true,
-        string databaseName = "")
+        string databaseName = "",
+        string serverName = "")
     {
+        string resolvedServer = serverName;
+        if (string.IsNullOrWhiteSpace(resolvedServer) && !string.IsNullOrEmpty(_connectionService.ConnectionString))
+        {
+            try
+            {
+                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(_connectionService.ConnectionString);
+                resolvedServer = builder.DataSource ?? string.Empty;
+            }
+            catch { }
+        }
+
         var plan = new CleanupPlanResult
         {
             Strategy = strategy,
             ReseedIdentities = reseedIdentities,
             DatabaseName = string.IsNullOrWhiteSpace(databaseName) ? _schemaService.ActiveDatabase : databaseName,
+            ServerName = resolvedServer,
             GeneratedAt = DateTime.Now
         };
 
@@ -480,6 +494,21 @@ public class DataCleanupService
     {
         var sb = new StringBuilder();
         var dbName = string.IsNullOrWhiteSpace(plan.DatabaseName) ? "Current Database" : plan.DatabaseName;
+        var serverName = plan.ServerName;
+        if (string.IsNullOrWhiteSpace(serverName) && !string.IsNullOrEmpty(_connectionService.ConnectionString))
+        {
+            try
+            {
+                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(_connectionService.ConnectionString);
+                serverName = builder.DataSource ?? string.Empty;
+            }
+            catch { }
+        }
+
+        var dbTooltip = string.IsNullOrWhiteSpace(serverName)
+            ? $"Database: {EscapeHtml(dbName)}"
+            : $"Database: {EscapeHtml(dbName)}&#10;Server: {EscapeHtml(serverName)}";
+
         var strategyText = plan.Strategy == CleanupStrategy.ConstraintDisabling
             ? "Constraint Disabling"
             : "Topological Sort";
@@ -493,12 +522,32 @@ public class DataCleanupService
         sb.AppendLine("    <style>");
         sb.AppendLine(@"
         :root {
+            --bg-color: #0b1120;
+            --surface-color: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+            --primary-color: #38bdf8;
+            --badge-leaf-bg: #064e3b;
+            --badge-leaf: #6ee7b7;
+            --badge-inter-bg: #0c4a6e;
+            --badge-inter: #7dd3fc;
+            --badge-root-bg: #3b0764;
+            --badge-root: #c084fc;
+            --badge-warn-bg: #451a03;
+            --badge-warn: #fcd34d;
+            --badge-auto-bg: #164e63;
+            --badge-auto: #67e8f9;
+            --badge-child-bg: #451a03;
+            --badge-child: #fcd34d;
+        }
+        [data-theme=""light""] {
             --bg-color: #f8fafc;
             --surface-color: #ffffff;
             --text-primary: #0f172a;
             --text-secondary: #475569;
             --border-color: #e2e8f0;
-            --primary-color: #2563eb;
+            --primary-color: #0284c7;
             --badge-leaf: #059669;
             --badge-leaf-bg: #ecfdf5;
             --badge-inter: #0284c7;
@@ -512,27 +561,25 @@ public class DataCleanupService
             --badge-child: #d97706;
             --badge-child-bg: #fffbeb;
         }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-color: #0b1120;
-                --surface-color: #1e293b;
-                --text-primary: #f8fafc;
-                --text-secondary: #94a3b8;
-                --border-color: #334155;
-                --primary-color: #38bdf8;
-                --badge-leaf-bg: #064e3b;
-                --badge-leaf: #6ee7b7;
-                --badge-inter-bg: #0c4a6e;
-                --badge-inter: #7dd3fc;
-                --badge-root-bg: #3b0764;
-                --badge-root: #c084fc;
-                --badge-warn-bg: #451a03;
-                --badge-warn: #fcd34d;
-                --badge-auto-bg: #164e63;
-                --badge-auto: #67e8f9;
-                --badge-child-bg: #451a03;
-                --badge-child: #fcd34d;
-            }
+        [data-theme=""dark""] {
+            --bg-color: #0b1120;
+            --surface-color: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+            --primary-color: #38bdf8;
+            --badge-leaf-bg: #064e3b;
+            --badge-leaf: #6ee7b7;
+            --badge-inter-bg: #0c4a6e;
+            --badge-inter: #7dd3fc;
+            --badge-root-bg: #3b0764;
+            --badge-root: #c084fc;
+            --badge-warn-bg: #451a03;
+            --badge-warn: #fcd34d;
+            --badge-auto-bg: #164e63;
+            --badge-auto: #67e8f9;
+            --badge-child-bg: #451a03;
+            --badge-child: #fcd34d;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -553,17 +600,64 @@ public class DataCleanupService
         }
         .header h1 { font-size: 1.6rem; font-weight: 700; }
         .header .meta { color: var(--text-secondary); font-size: 0.9rem; }
-        .print-btn {
-            background-color: var(--primary-color);
-            color: #ffffff;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 0.9rem;
+        .meta-db {
+            cursor: help;
+            border-bottom: 1px dotted var(--border-color);
+            transition: border-color 0.15s ease;
+        }
+        .meta-db:hover {
+            border-bottom-color: var(--text-secondary);
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .btn-theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            border-radius: 4px;
+            width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            padding: 0;
+        }
+        .btn-theme-toggle:hover {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--text-primary);
+            border-color: var(--text-secondary);
+        }
+        .header-credit-text {
+            color: var(--text-secondary);
+            cursor: default;
+        }
+        .header-credit-link {
+            color: var(--primary-color);
             font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
             cursor: pointer;
         }
-        .print-btn:hover { opacity: 0.9; }
+        .header-credit-link:hover {
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .header-credit-link svg {
+            opacity: 0.8;
+            transition: opacity 0.15s ease;
+        }
+        .header-credit-link:hover svg {
+            opacity: 1;
+        }
         .cards-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -614,26 +708,9 @@ public class DataCleanupService
         .table-name { font-family: 'Cascadia Code', Consolas, monospace; font-weight: 600; font-size: 0.92rem; }
         .th-rows { text-align: right; white-space: nowrap; }
         .rows-count { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
-        .footer {
-            margin-top: 24px;
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            text-align: center;
-        }
-        .footer a {
-            color: var(--primary-color);
-            text-decoration: none;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .footer a:hover {
-            text-decoration: underline;
-        }
         @media print {
             body { background: #ffffff !important; color: #000000 !important; padding: 0; }
-            .print-btn { display: none; }
+            .header-right { display: none !important; }
             .card, .table-container { border: 1px solid #ccc !important; box-shadow: none !important; }
             th { background-color: #f1f5f9 !important; }
         }
@@ -645,9 +722,20 @@ public class DataCleanupService
         sb.AppendLine("        <div class=\"header\">");
         sb.AppendLine("            <div>");
         sb.AppendLine($"                <h1>Table Cleanup Sequence Report</h1>");
-        sb.AppendLine($"                <div class=\"meta\">Database: <strong>{EscapeHtml(dbName)}</strong> &bull; Generated: {plan.GeneratedAt:MMMM dd, yyyy HH:mm}</div>");
+        sb.AppendLine($"                <div class=\"meta\"><span class=\"meta-db\" title=\"{dbTooltip}\">Database: <strong>{EscapeHtml(dbName)}</strong></span> &bull; Generated On: {plan.GeneratedAt:MMMM dd, yyyy HH:mm}</div>");
         sb.AppendLine("            </div>");
-        sb.AppendLine("            <button class=\"print-btn\" onclick=\"window.print()\">Print / Save as PDF</button>");
+        sb.AppendLine("            <div class=\"header-right\">");
+        sb.AppendLine("                <button type=\"button\" class=\"btn-theme-toggle\" id=\"btnThemeToggle\" onclick=\"toggleTheme()\" title=\"Switch to Light mode\">");
+        sb.AppendLine("                    <svg id=\"themeIconSun\" width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"currentColor\"><path d=\"M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z\"/></svg>");
+        sb.AppendLine("                    <svg id=\"themeIconMoon\" width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"currentColor\" style=\"display: none;\"><path d=\"M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278zM4.858 1.311A7.269 7.269 0 0 0 1.02 7.71c0 4.02 3.279 7.276 7.319 7.276a7.316 7.316 0 0 0 5.205-2.162c-.337.042-.68.063-1.029.063-4.61 0-8.343-3.714-8.343-8.29 0-1.167.242-2.278.686-3.286z\"/></svg>");
+        sb.AppendLine("                </button>");
+        sb.AppendLine("                <span style=\"color: var(--border-color); margin: 0 4px; font-weight: 300;\">|</span>");
+        sb.AppendLine("                <span class=\"header-credit-text\">Generated by</span>");
+        sb.AppendLine("                <a href=\"https://apps.microsoft.com/store/detail/9NF6M6NT09BM?cid=DevShareMCLPCS\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"header-credit-link\" title=\"Open ExploreDB on Microsoft Store\">");
+        sb.AppendLine("                    <span>ExploreDB</span>");
+        sb.AppendLine("                    <svg width=\"11\" height=\"11\" viewBox=\"0 0 16 16\" fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z\"/><path fill-rule=\"evenodd\" d=\"M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z\"/></svg>");
+        sb.AppendLine("                </a>");
+        sb.AppendLine("            </div>");
         sb.AppendLine("        </div>");
 
         sb.AppendLine("        <div class=\"cards-grid\">");
@@ -727,10 +815,42 @@ public class DataCleanupService
         sb.AppendLine("            </table>");
         sb.AppendLine("        </div>");
 
-        sb.AppendLine("        <div class=\"footer\">");
-        sb.AppendLine("            Generated by <a href=\"https://apps.microsoft.com/store/detail/9NF6M6NT09BM?cid=DevShareMCLPCS\" target=\"_blank\" rel=\"noopener noreferrer\">ExploreDB <svg width=\"11\" height=\"11\" viewBox=\"0 0 16 16\" fill=\"currentColor\" style=\"opacity: 0.75;\"><path fill-rule=\"evenodd\" d=\"M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z\"/><path fill-rule=\"evenodd\" d=\"M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z\"/></svg></a>");
-        sb.AppendLine("        </div>");
         sb.AppendLine("    </div>");
+        sb.AppendLine("    <script>");
+        sb.AppendLine("        let currentTheme = 'dark';");
+        sb.AppendLine("        try {");
+        sb.AppendLine("            const saved = localStorage.getItem('exploredb_report_theme');");
+        sb.AppendLine("            if (saved === 'light' || saved === 'dark') {");
+        sb.AppendLine("                currentTheme = saved;");
+        sb.AppendLine("            }");
+        sb.AppendLine("        } catch (e) {}");
+        sb.AppendLine("");
+        sb.AppendLine("        function applyTheme(theme) {");
+        sb.AppendLine("            currentTheme = theme;");
+        sb.AppendLine("            document.documentElement.setAttribute('data-theme', theme);");
+        sb.AppendLine("            const sun = document.getElementById('themeIconSun');");
+        sb.AppendLine("            const moon = document.getElementById('themeIconMoon');");
+        sb.AppendLine("            const toggleBtn = document.getElementById('btnThemeToggle');");
+        sb.AppendLine("            if (theme === 'light') {");
+        sb.AppendLine("                if (sun) sun.style.display = 'none';");
+        sb.AppendLine("                if (moon) moon.style.display = 'inline';");
+        sb.AppendLine("                if (toggleBtn) toggleBtn.title = 'Switch to Dark mode';");
+        sb.AppendLine("            } else {");
+        sb.AppendLine("                if (sun) sun.style.display = 'inline';");
+        sb.AppendLine("                if (moon) moon.style.display = 'none';");
+        sb.AppendLine("                if (toggleBtn) toggleBtn.title = 'Switch to Light mode';");
+        sb.AppendLine("            }");
+        sb.AppendLine("            try {");
+        sb.AppendLine("                localStorage.setItem('exploredb_report_theme', theme);");
+        sb.AppendLine("            } catch (e) {}");
+        sb.AppendLine("        }");
+        sb.AppendLine("");
+        sb.AppendLine("        function toggleTheme() {");
+        sb.AppendLine("            applyTheme(currentTheme === 'light' ? 'dark' : 'light');");
+        sb.AppendLine("        }");
+        sb.AppendLine("");
+        sb.AppendLine("        applyTheme(currentTheme);");
+        sb.AppendLine("    </script>");
         sb.AppendLine("</body>");
         sb.AppendLine("</html>");
 
