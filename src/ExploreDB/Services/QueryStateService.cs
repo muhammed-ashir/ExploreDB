@@ -77,7 +77,34 @@ public class QueryStateService
 
     private string _tabsFilePath => Path.Combine(AppEnvironmentService.AppDataDirectory, "tabs_state.json");
 
-    public bool HasSavedTabs() => File.Exists(_tabsFilePath);
+    public bool HasSavedTabs()
+    {
+        if (!File.Exists(_tabsFilePath)) return false;
+        try
+        {
+            var json = File.ReadAllText(_tabsFilePath);
+            var loadedTabs = JsonSerializer.Deserialize<List<QueryTab>>(json);
+            if (loadedTabs == null || !loadedTabs.Any())
+            {
+                ClearSavedState();
+                return false;
+            }
+
+            // Only consider restorable if at least one tab has non-empty query content or an opened file
+            bool hasMeaningfulContent = loadedTabs.Any(t => !string.IsNullOrWhiteSpace(t.Content) || !string.IsNullOrEmpty(t.FilePath));
+            if (!hasMeaningfulContent)
+            {
+                ClearSavedState();
+                return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     public void ClearSavedState()
     {
@@ -115,6 +142,14 @@ public class QueryStateService
     {
         try
         {
+            // If none of the tabs have meaningful content or opened files, don't store an empty session on disk
+            bool hasMeaningfulContent = Tabs.Any(t => !string.IsNullOrWhiteSpace(t.Content) || !string.IsNullOrEmpty(t.FilePath));
+            if (!hasMeaningfulContent)
+            {
+                ClearSavedState();
+                return;
+            }
+
             var json = JsonSerializer.Serialize(Tabs);
             await File.WriteAllTextAsync(_tabsFilePath, json);
         }

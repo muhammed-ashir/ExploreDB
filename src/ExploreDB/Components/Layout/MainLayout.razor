@@ -146,8 +146,8 @@
 
         <main class="app-shell-main d-flex flex-column" style="height: 100vh; overflow-y: auto;">
             <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top" style="background-color: var(--app-header-bg); border-color: var(--app-border) !important; backdrop-filter: blur(5px); z-index: 1020;">
-                <button class="btn btn-sm border-0 me-3" style="color: var(--app-text);" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
-                    <span style="font-size: 1.2rem; line-height: 1;">☰</span>
+                <button class="btn btn-sm border-0 me-3 d-flex align-items-center justify-content-center p-1" style="color: var(--app-text);" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="@(SidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar")">
+                    <i class="bi @(SidebarCollapsed ? "bi-chevron-right" : "bi-chevron-left")" style="font-size: 1.15rem; line-height: 1;"></i>
                 </button>
                 @{
                     string connDisplay = "";
