@@ -29,5 +29,13 @@ public partial class PopoutWindow : Window
                 { "TabId", tabId }
             }
         });
+
+        WebView2Helper.Configure(blazorWebView, $"PopoutWindow-{tabId}");
+    }
+
+    protected override async void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        await WebView2Helper.SafeDisposeAsync(blazorWebView, $"PopoutWindow-{TabId}");
     }
 }

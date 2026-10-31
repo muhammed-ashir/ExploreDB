@@ -39,6 +39,8 @@ public partial class ToolPopoutWindow : Window
             }
         });
 
+        WebView2Helper.Configure(blazorWebView, $"ToolPopoutWindow-{toolId}");
+
         Closed += (s, e) =>
         {
             if (_connectionService != null)
@@ -51,5 +53,11 @@ public partial class ToolPopoutWindow : Window
     private void HandleConnectionChanged()
     {
         Dispatcher.Invoke(Close);
+    }
+
+    protected override async void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        await WebView2Helper.SafeDisposeAsync(blazorWebView, $"ToolPopoutWindow-{Title}");
     }
 }

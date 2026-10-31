@@ -34,6 +34,8 @@ public partial class SchemaPopoutWindow : Window
             }
         });
 
+        WebView2Helper.Configure(blazorWebView, $"SchemaPopoutWindow-{title}");
+
         Closed += (s, e) =>
         {
             _connectionService.OnConnectionChanged -= HandleConnectionChanged;
@@ -43,5 +45,11 @@ public partial class SchemaPopoutWindow : Window
     private void HandleConnectionChanged()
     {
         Dispatcher.Invoke(Close);
+    }
+
+    protected override async void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        await WebView2Helper.SafeDisposeAsync(blazorWebView, $"SchemaPopoutWindow-{Title}");
     }
 }

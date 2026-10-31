@@ -18,6 +18,7 @@ public partial class MainWindow : Window
         WindowIconHelper.ApplyWindowIcon(this);
 
         blazorWebView.Services = services;
+        WebView2Helper.Configure(blazorWebView, "MainWindow");
     }
 
     public static bool IsExitingConfirmed { get; set; } = false;
@@ -45,5 +46,11 @@ public partial class MainWindow : Window
         }
 
         App.TriggerRequestAppExit();
+    }
+
+    protected override async void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        await WebView2Helper.SafeDisposeAsync(blazorWebView, "MainWindow");
     }
 }
