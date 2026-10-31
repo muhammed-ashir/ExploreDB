@@ -1,3 +1,51 @@
+// Bulletproof BlazorMonaco Interop Guard:
+// Prevents unhandled JS exceptions from crashing the WPF/Blazor dispatcher when
+// setEventListener or getEditorHolder is called during tab switching, route changes,
+// or before Monaco has fully registered.
+(function installBlazorMonacoSafetyGuard() {
+    function applyPatch() {
+        if (!window.blazorMonaco || !window.blazorMonaco.editor) {
+            setTimeout(applyPatch, 10);
+            return;
+        }
+
+        const editorObj = window.blazorMonaco.editor;
+        if (editorObj._safetyGuardInstalled) return;
+        editorObj._safetyGuardInstalled = true;
+
+        const origSetEventListener = editorObj.setEventListener;
+        if (typeof origSetEventListener === 'function') {
+            editorObj.setEventListener = function (id, eventName) {
+                try {
+                    const holder = (window.blazorMonaco.editors || []).find(h => h.id === id);
+                    if (!holder || !holder.editor) {
+                        console.warn(`[BlazorMonaco Guard] Skipping setEventListener('${eventName}') for unready editor '${id}' (registered count: ${(window.blazorMonaco.editors || []).length})`);
+                        return;
+                    }
+                    return origSetEventListener.apply(this, arguments);
+                } catch (err) {
+                    console.warn(`[BlazorMonaco Guard] Suppressed error in setEventListener('${eventName}') for '${id}':`, err);
+                }
+            };
+        }
+
+        const origGetEditorHolder = editorObj.getEditorHolder;
+        if (typeof origGetEditorHolder === 'function') {
+            editorObj.getEditorHolder = function (id, silent = false) {
+                const holder = (window.blazorMonaco.editors || []).find(h => h.id === id);
+                if (!holder) {
+                    if (silent) return null;
+                    console.warn(`[BlazorMonaco Guard] getEditorHolder requested missing editor '${id}'. Suppressing throw to prevent Dispatcher crash.`);
+                    return { id: id, editor: null, dotnetRef: null };
+                }
+                return holder;
+            };
+        }
+    }
+
+    applyPatch();
+})();
+
 window.isMonacoLoaded = function () {
     return typeof monaco !== 'undefined' && typeof monaco.editor !== 'undefined';
 };

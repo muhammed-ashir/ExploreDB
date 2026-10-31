@@ -157,9 +157,16 @@
             <div class="card shadow-sm @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1 d-flex flex-column" : "")" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="card-body p-0 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column flex-grow-1" : "")">
                     <div id="query-editor-wrapper" class="@(!ActiveTab.HasExecuted || IsMinimized ? (_customEditorHeight == null ? "flex-grow-1" : "") : "")" style="@(_customEditorHeight.HasValue ? $"height: {_customEditorHeight.Value}px;" : (ActiveTab.HasExecuted && !IsMinimized ? "height: 350px;" : "")) width: 100%; display: block; overflow: hidden; min-height: 150px;">
-                        @if (QueryStateService.Initialized)
+                        @if (QueryStateService.Initialized && _isMonacoLoaded)
                         {
                             <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
+                        }
+                        else
+                        {
+                            <div class="d-flex justify-content-center align-items-center h-100" style="min-height: 150px;">
+                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                <span class="text-muted small">Loading editor...</span>
+                            </div>
                         }
                     </div>
                 </div>
@@ -672,10 +679,12 @@
     private Guid? TabIdToClose = null;
     private System.Timers.Timer? _saveDebounceTimer;
     private bool _isEditorReady = false;
+    private bool _isMonacoLoaded = false;
 
     public void Dispose()
     {
         _isEditorReady = false;
+        _isMonacoLoaded = false;
         try { _ = JS.InvokeVoidAsync("window.globalShortcuts.unregisterQueryRunner"); } catch { }
         _objRef?.Dispose();
         _saveDebounceTimer?.Dispose();
@@ -928,9 +937,25 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            try
+            {
+                await JS.InvokeAsync<bool>("waitForMonaco", 5000);
+            }
+            catch { }
+
+            _isMonacoLoaded = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
         if (_objRef != null)
         {
-            await JS.InvokeVoidAsync("initQueryEditorSplitter", _objRef);
+            try
+            {
+                await JS.InvokeVoidAsync("initQueryEditorSplitter", _objRef);
+            }
+            catch { }
         }
     }
 
@@ -957,6 +982,7 @@
 
             // Add a slight delay to allow the DOM (e.g. modals) to stabilize before rendering Monaco
             try { await JS.InvokeAsync<bool>("waitForMonaco", 5000); } catch { }
+            _isMonacoLoaded = true;
             QueryStateService.Initialized = true;
             StateHasChanged();
         }
@@ -991,6 +1017,7 @@
         }
         
         try { await JS.InvokeAsync<bool>("waitForMonaco", 5000); } catch { }
+        _isMonacoLoaded = true;
         QueryStateService.Initialized = true;
         
         var currentTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId);
