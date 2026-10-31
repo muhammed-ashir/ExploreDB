@@ -967,6 +967,25 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 } catch (e) { }
             }
 
+            // Toggle Comment in context menu & keyboard chords
+            if (!editor.getAction('toggle-comment-action')) {
+                try {
+                    editor.addAction({
+                        id: 'toggle-comment-action',
+                        label: 'Toggle Comment (Ctrl+/)',
+                        keybindings: [
+                            monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash,
+                            monaco.KeyMod.chord(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC)
+                        ],
+                        contextMenuGroupId: '1_modification',
+                        contextMenuOrder: 2,
+                        run: function(ed) {
+                            ed.trigger('keyboard', 'editor.action.commentLine', null);
+                        }
+                    });
+                } catch (e) { }
+            }
+
             if (!editor.__listenersAttached) {
                 editor.__listenersAttached = true;
 
@@ -1622,3 +1641,51 @@ window.destroyGridColumnResizers = function (containerId) {
         container._cleanupResizers();
     }
 };
+
+window.initTabStripWheelScroll = function (containerId) {
+    var container = document.getElementById(containerId);
+    if (!container || container._wheelInit) return;
+    container._wheelInit = true;
+    container.addEventListener('wheel', function (e) {
+        if (e.deltaY !== 0) {
+            e.preventDefault();
+            container.scrollLeft += e.deltaY;
+        }
+    }, { passive: false });
+};
+
+window.scrollActiveTabIntoView = function (containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var activeTab = container.querySelector('.ssms-tab.active');
+    if (activeTab && typeof activeTab.scrollIntoView === 'function') {
+        activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+};
+
+window.toggleQueryEditorComment = function (editorId) {
+    if (typeof monaco === 'undefined' || !monaco.editor) return false;
+    var editors = monaco.editor.getEditors();
+    var editor = null;
+    
+    for (var i = 0; i < editors.length; i++) {
+        var e = editors[i];
+        var container = e.getContainerDomNode();
+        if (container && (container.id === editorId || (container.parentElement && container.parentElement.id === editorId) || (container.closest && container.closest('#' + editorId)))) {
+            editor = e;
+            break;
+        }
+    }
+    
+    if (!editor && editors.length > 0) {
+        editor = editors[0];
+    }
+    
+    if (!editor) return false;
+    
+    editor.focus();
+    editor.trigger('toolbar', 'editor.action.commentLine', null);
+    return true;
+};
+
+

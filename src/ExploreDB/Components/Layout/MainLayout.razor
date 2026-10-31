@@ -167,8 +167,9 @@
                 @if (!string.IsNullOrEmpty(connDisplay))
                 {
                     <div class="d-flex align-items-center gap-2">
-                        <div class="small fw-bold text-truncate" style="color: var(--app-text-muted); max-width: 500px;" title="@connDisplay">
-                            @connDisplay
+                        <div class="d-flex align-items-center px-2 py-1 rounded text-truncate border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; font-size: 0.85rem;" title="@connDisplay">
+                            <i class="bi bi-database me-2 text-info"></i>
+                            <span class="fw-medium text-truncate" style="color: var(--app-text); max-width: 500px;">@connDisplay</span>
                         </div>
                         <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="Refresh Schema" data-bs-tooltip="true" data-bs-placement="bottom" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
                             @if (IsRefreshingSchema)

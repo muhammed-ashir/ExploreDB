@@ -43,6 +43,9 @@
                 <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Format SQL" data-bs-placement="bottom" @onclick="FormatSqlAsync">
                     <i class="bi bi-magic text-info"></i>
                 </button>
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Toggle Comment (Ctrl+/)" data-bs-placement="bottom" @onclick="ToggleCommentAsync">
+                    <i class="bi bi-chat-left-text text-info"></i>
+                </button>
 
                 @if (ActiveTab.IsExecuting)
                 {
@@ -688,6 +691,15 @@
         {
             FormatError = "Syntax error near: " + ex.Message.Split('\n').FirstOrDefault()?.Replace("Error:", "").Trim();
         }
+    }
+
+    private async Task ToggleCommentAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("toggleQueryEditorComment", "query-editor");
+        }
+        catch { }
     }
 
     private async Task SaveActiveQueryAsync() => await SaveQueryAsync(null);

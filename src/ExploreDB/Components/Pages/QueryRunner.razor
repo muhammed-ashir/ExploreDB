@@ -28,83 +28,6 @@
     {
     <div class="row mb-3">
         <div class="col d-flex justify-content-between align-items-center flex-nowrap">
-            <div class="d-flex align-items-center me-5" style="min-width: 0;">
-                <div class="position-relative d-flex align-items-center" style="min-width: 0;">
-                    <div class="d-flex align-items-center cursor-pointer" style="color: var(--app-text); min-width: 0;" data-bs-tooltip="true" data-bs-title="@GetTabTooltip(ActiveTab)" data-bs-html="true" data-bs-placement="bottom" @onclick="() => IsTabDropdownOpen = !IsTabDropdownOpen">
-                        <span class="me-2 fs-6 text-truncate">@GetTabDisplayName(ActiveTab)</span>
-                        <i class="bi bi-chevron-down flex-shrink-0" style="font-size: 0.85rem;"></i>
-                    </div>
-                    @if (!IsTabDropdownOpen && QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
-                    {
-                        <button class="btn btn-sm btn-link text-muted p-0 ms-2 d-flex align-items-center justify-content-center flex-shrink-0 tab-close-btn" 
-                                style="width: 22px; height: 22px; border-radius: 50%; text-decoration: none; transition: all 0.15s ease;" 
-                                @onclick="() => CloseTabAsync(ActiveTab.Id)" 
-                                @onclick:stopPropagation 
-                                title="Close Tab (Ctrl+W)" 
-                                data-bs-tooltip="true" 
-                                data-bs-title="Close Tab (Ctrl+W)" 
-                                data-bs-placement="bottom">
-                            <i class="bi bi-x" style="font-size: 1.25rem; line-height: 1;"></i>
-                        </button>
-                    }
-                @if (IsTabDropdownOpen)
-                {
-                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTabDropdownOpen = false"></div>
-                    <div class="dropdown-menu show shadow-lg p-1 mt-2" style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 450px; max-width: 600px; overflow-x: hidden; background-color: var(--app-dropdown-bg); color: var(--app-text); border-color: var(--app-border);">
-                        <div class="p-1 mb-1 d-flex align-items-center">
-                            <input type="text" class="form-control form-control-sm flex-grow-1 @(QueryStateService.Tabs.Count > 1 ? "me-2" : "")" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" placeholder="Search tabs..." @bind="TabSearchTerm" @bind:event="oninput" @onclick:stopPropagation />
-                            @if (QueryStateService.Tabs.Count > 1)
-                            {
-                                <button class="btn btn-sm btn-outline-danger border-0 d-flex align-items-center justify-content-center flex-shrink-0 rounded-1" style="width: 30px; height: 30px;" @onclick="ClearAllTabsAsync" @onclick:stopPropagation data-bs-tooltip="true" data-bs-title="Clear All Tabs" data-bs-placement="bottom">
-                                    <i class="bi bi-trash" style="font-size: 1.1rem;"></i>
-                                </button>
-                            }
-                        </div>
-                        <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 300px; overflow-y: auto;">
-                            @foreach (var tab in QueryStateService.Tabs.Where(t => !t.IsPoppedOut && (string.IsNullOrEmpty(TabSearchTerm) || t.Name.Contains(TabSearchTerm, StringComparison.OrdinalIgnoreCase))))
-                        {
-                            <div class="dropdown-item d-flex justify-content-between align-items-center @(tab.Id == QueryStateService.ActiveTabId ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" style="cursor: pointer; min-width: 0; color: var(--app-text);" data-bs-tooltip="true" data-bs-title="@GetTabTooltip(tab)" data-bs-html="true" data-bs-placement="right" @onclick="async () => { await SwitchTabAsync(tab.Id); IsTabDropdownOpen = false; }">
-                                <div class="d-flex flex-column text-truncate me-3" style="flex: 1; min-width: 0;">
-                                    <span class="text-truncate">@GetTabDisplayName(tab)</span>
-                                    @if (!string.IsNullOrEmpty(GetTabConnectionSummary(tab)))
-                                    {
-                                        <span class="text-secondary text-truncate" style="font-size: 0.7rem;">@GetTabConnectionSummary(tab)</span>
-                                    }
-                                </div>
-                                <div class="d-flex align-items-center flex-shrink-0">
-                                    @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
-                                    {
-                                        <button class="btn btn-sm btn-outline-info border-0 p-0 rounded me-1 d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await PopoutTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Pop Out">
-                                            <i class="bi bi-box-arrow-up-right" style="font-size: 0.9rem;"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-danger border-0 p-0 rounded d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await CloseTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Close">
-                                            <i class="bi bi-x" style="font-size: 1.3rem;"></i>
-                                        </button>
-                                    }
-                                </div>
-                            </div>
-                        }
-                        </div>
-                        <hr class="dropdown-divider border-secondary my-2">
-                        <button class="dropdown-item text-info text-center py-1 mb-2 mt-1 rounded-2" style="border: 1px dashed var(--bs-info); margin-left: 10px; margin-right: 10px; width: calc(100% - 20px);" @onclick="async () => { await NewTabAsync(); IsTabDropdownOpen = false; }">
-                            <i class="bi bi-plus-lg me-1"></i> New Query
-                        </button>
-                    </div>
-                }
-                </div>
-                @if (!IsTabDropdownOpen)
-                {
-                    @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
-                    {
-                        <button class="btn btn-sm toolbar-icon-btn shadow-sm ms-3" data-bs-tooltip="true" data-bs-title="Pop Out" data-bs-placement="bottom" @onclick="() => PopoutTabAsync(ActiveTab.Id)">
-                            <i class="bi bi-box-arrow-up-right text-info"></i>
-                        </button>
-                    }
-                    <button class="btn btn-sm toolbar-icon-btn shadow-sm ms-2" data-bs-tooltip="true" data-bs-title="New Query" data-bs-placement="bottom" @onclick="NewTabAsync">
-                        <i class="bi bi-plus-lg"></i>
-                    </button>
-                }
-            </div>
             <div class="d-flex gap-2 flex-shrink-0 align-items-center">
                 <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Open File" data-bs-placement="bottom" @onclick="OpenFileAsync">
                     <i class="bi bi-folder2-open"></i>
@@ -121,12 +44,17 @@
                 <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Format SQL" data-bs-placement="bottom" @onclick="FormatSqlAsync">
                     <i class="bi bi-magic text-info"></i>
                 </button>
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Toggle Comment (Ctrl+/)" data-bs-placement="bottom" @onclick="ToggleCommentAsync">
+                    <i class="bi bi-chat-left-text text-info"></i>
+                </button>
                 <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="View History" data-bs-placement="bottom" @onclick='() => Nav.NavigateTo("/history")'>
                     <i class="bi bi-clock-history"></i>
                 </button>
                 <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Snippet Manager" data-bs-placement="bottom" @onclick='() => Nav.NavigateTo("/snippets")'>
                     <i class="bi bi-bookmarks text-info"></i>
                 </button>
+            </div>
+            <div class="d-flex align-items-center flex-shrink-0">
                 @if (ActiveTab.IsExecuting)
                 {
                     <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
@@ -155,6 +83,114 @@
     <div class="row g-4 mb-4 @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")">
         <div class="col-12 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column" : "")">
             <div class="card shadow-sm @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1 d-flex flex-column" : "")" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <!-- SSMS-Style Tab Strip -->
+                <div class="ssms-tab-strip d-flex align-items-stretch justify-content-between">
+                    <div id="ssms-tab-scroll" class="ssms-tab-scroll d-flex align-items-stretch flex-grow-1">
+                        @foreach (var tab in QueryStateService.Tabs.Where(t => !t.IsPoppedOut))
+                        {
+                            var isCurrent = tab.Id == QueryStateService.ActiveTabId;
+                            <div class="ssms-tab @(isCurrent ? "active" : "") d-flex align-items-center user-select-none" 
+                                 @onclick="() => SwitchTabAsync(tab.Id)"
+                                 @onmouseup="(e) => OnTabMouseUpAsync(e, tab.Id)"
+                                 data-bs-tooltip="true" 
+                                 data-bs-title="@GetTabTooltip(tab)" 
+                                 data-bs-html="true" 
+                                 data-bs-placement="bottom">
+                                <i class="bi bi-file-earmark-code me-1 ssms-tab-icon @(isCurrent ? "text-primary" : "text-muted")"></i>
+                                <span class="ssms-tab-name text-truncate">@tab.Name</span>
+                                @if (tab.IsDirty)
+                                {
+                                    <span class="ssms-tab-dirty ms-1 text-warning fw-bold" title="Unsaved changes">*</span>
+                                }
+                                @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+                                {
+                                    <button type="button" 
+                                            class="btn btn-sm btn-link p-0 ms-2 ssms-tab-close-btn d-flex align-items-center justify-content-center" 
+                                            @onclick="() => CloseTabAsync(tab.Id)" 
+                                            @onclick:stopPropagation 
+                                            title="Close Tab (Ctrl+W)">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                }
+                            </div>
+                        }
+                        <button type="button" 
+                                class="btn btn-sm btn-link ssms-new-tab-btn d-flex align-items-center justify-content-center px-2" 
+                                @onclick="NewTabAsync" 
+                                title="New Query (Ctrl+N)">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+
+                    <!-- Right Controls: Tab Search Dropdown & Popout -->
+                    <div class="d-flex align-items-center flex-shrink-0 px-2 gap-1 border-start" style="border-color: var(--app-border) !important;">
+                        <div class="position-relative">
+                            <button type="button" 
+                                    class="btn btn-sm toolbar-icon-btn border-0 shadow-none @(IsTabDropdownOpen ? "active" : "")" 
+                                    style="width: 28px; height: 28px; min-width: 28px; min-height: 28px;"
+                                    @onclick="() => IsTabDropdownOpen = !IsTabDropdownOpen" 
+                                    title="All Tabs & Search">
+                                <i class="bi bi-chevron-down" style="font-size: 0.8rem;"></i>
+                            </button>
+                            @if (IsTabDropdownOpen)
+                            {
+                                <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsTabDropdownOpen = false"></div>
+                                <div class="dropdown-menu show shadow-lg p-1 mt-1" style="position: absolute; top: 100%; right: 0; left: auto; z-index: 1050; min-width: 400px; max-width: 550px; overflow-x: hidden; background-color: var(--app-dropdown-bg); color: var(--app-text); border-color: var(--app-border);">
+                                    <div class="p-1 mb-1 d-flex align-items-center">
+                                        <input type="text" class="form-control form-control-sm flex-grow-1 @(QueryStateService.Tabs.Count > 1 ? "me-2" : "")" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" placeholder="Search tabs..." @bind="TabSearchTerm" @bind:event="oninput" @onclick:stopPropagation />
+                                        @if (QueryStateService.Tabs.Count > 1)
+                                        {
+                                            <button class="btn btn-sm btn-outline-danger border-0 d-flex align-items-center justify-content-center flex-shrink-0 rounded-1" style="width: 30px; height: 30px;" @onclick="ClearAllTabsAsync" @onclick:stopPropagation data-bs-tooltip="true" data-bs-title="Clear All Tabs" data-bs-placement="bottom">
+                                                <i class="bi bi-trash" style="font-size: 1.1rem;"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                    <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 300px; overflow-y: auto;">
+                                        @foreach (var tab in QueryStateService.Tabs.Where(t => !t.IsPoppedOut && (string.IsNullOrEmpty(TabSearchTerm) || t.Name.Contains(TabSearchTerm, StringComparison.OrdinalIgnoreCase))))
+                                        {
+                                            <div class="dropdown-item d-flex justify-content-between align-items-center @(tab.Id == QueryStateService.ActiveTabId ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" style="cursor: pointer; min-width: 0; color: var(--app-text);" data-bs-tooltip="true" data-bs-title="@GetTabTooltip(tab)" data-bs-html="true" data-bs-placement="left" @onclick="async () => { await SwitchTabAsync(tab.Id); IsTabDropdownOpen = false; }">
+                                                <div class="d-flex flex-column text-truncate me-3" style="flex: 1; min-width: 0;">
+                                                    <span class="text-truncate">@GetTabDisplayName(tab)</span>
+                                                    @if (!string.IsNullOrEmpty(GetTabConnectionSummary(tab)))
+                                                    {
+                                                        <span class="text-secondary text-truncate" style="font-size: 0.7rem;">@GetTabConnectionSummary(tab)</span>
+                                                    }
+                                                </div>
+                                                <div class="d-flex align-items-center flex-shrink-0">
+                                                    @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-info border-0 p-0 rounded me-1 d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await PopoutTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Pop Out">
+                                                            <i class="bi bi-box-arrow-up-right" style="font-size: 0.9rem;"></i>
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger border-0 p-0 rounded d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await CloseTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Close">
+                                                            <i class="bi bi-x" style="font-size: 1.3rem;"></i>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                    <hr class="dropdown-divider border-secondary my-2">
+                                    <button class="dropdown-item text-info text-center py-1 mb-2 mt-1 rounded-2" style="border: 1px dashed var(--bs-info); margin-left: 10px; margin-right: 10px; width: calc(100% - 20px);" @onclick="async () => { await NewTabAsync(); IsTabDropdownOpen = false; }">
+                                        <i class="bi bi-plus-lg me-1"></i> New Query
+                                    </button>
+                                </div>
+                            }
+                        </div>
+
+                        @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+                        {
+                            <button type="button" 
+                                    class="btn btn-sm toolbar-icon-btn border-0 shadow-none" 
+                                    style="width: 28px; height: 28px; min-width: 28px; min-height: 28px;"
+                                    title="Pop Out Active Tab" 
+                                    @onclick="() => PopoutTabAsync(ActiveTab.Id)">
+                                <i class="bi bi-box-arrow-up-right text-info" style="font-size: 0.8rem;"></i>
+                            </button>
+                        }
+                    </div>
+                </div>
+
                 <div class="card-body p-0 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column flex-grow-1" : "")">
                     <div id="query-editor-wrapper" class="@(!ActiveTab.HasExecuted || IsMinimized ? (_customEditorHeight == null ? "flex-grow-1" : "") : "")" style="@(_customEditorHeight.HasValue ? $"height: {_customEditorHeight.Value}px;" : (ActiveTab.HasExecuted && !IsMinimized ? "height: 350px;" : "")) width: 100%; display: block; overflow: hidden; min-height: 150px;">
                         @if (QueryStateService.Initialized && _isMonacoLoaded)
@@ -949,6 +985,12 @@
             await InvokeAsync(StateHasChanged);
         }
 
+        try
+        {
+            await JS.InvokeVoidAsync("initTabStripWheelScroll", "ssms-tab-scroll");
+        }
+        catch { }
+
         if (_objRef != null)
         {
             try
@@ -957,6 +999,26 @@
             }
             catch { }
         }
+    }
+
+    private async Task OnTabMouseUpAsync(MouseEventArgs e, Guid tabId)
+    {
+        if (e.Button == 1) // Middle click (wheel click)
+        {
+            if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+            {
+                await CloseTabAsync(tabId);
+            }
+        }
+    }
+
+    private async Task ScrollActiveTabIntoViewAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("scrollActiveTabIntoView", "ssms-tab-scroll");
+        }
+        catch { }
     }
 
     private async Task InitializeSessionAsync()
@@ -1057,6 +1119,7 @@
         }
         
         await QueryStateService.SaveTabsAsync();
+        await ScrollActiveTabIntoViewAsync();
     }
 
     private async Task NewTabAsync()
@@ -1092,6 +1155,7 @@
             await _editor.SetValue(newTab.Content);
         }
         await QueryStateService.SaveTabsAsync();
+        await ScrollActiveTabIntoViewAsync();
     }
 
         private async Task OpenFileAsync()
@@ -1209,10 +1273,24 @@
             }
             QueryStateService.Tabs.Remove(tabToRemove);
 
-            if (QueryStateService.ActiveTabId == idToClose)
+            if (QueryStateService.Tabs.Count == 0)
             {
-                QueryStateService.ActiveTabId = QueryStateService.Tabs.First().Id;
-                var newTab = QueryStateService.Tabs.First();
+                var freshTab = new ExploreDB.Services.QueryTab
+                {
+                    Name = "SQLQuery1.sql",
+                    ConnectionString = ConnectionService.ConnectionString
+                };
+                QueryStateService.Tabs.Add(freshTab);
+                QueryStateService.ActiveTabId = freshTab.Id;
+                if (_editor != null)
+                {
+                    await _editor.SetValue("");
+                }
+            }
+            else if (QueryStateService.ActiveTabId == idToClose)
+            {
+                var newTab = QueryStateService.Tabs.FirstOrDefault(t => !t.IsPoppedOut) ?? QueryStateService.Tabs.First();
+                QueryStateService.ActiveTabId = newTab.Id;
                 if (_editor != null)
                 {
                     await _editor.SetValue(newTab.Content);
@@ -1224,6 +1302,7 @@
                 }
             }
             await QueryStateService.SaveTabsAsync();
+            await ScrollActiveTabIntoViewAsync();
         }
 
         ShowCloseTabConfirmation = false;
@@ -1437,6 +1516,15 @@
         {
             FormatError = "Syntax error near: " + ex.Message.Split('\n').FirstOrDefault()?.Replace("Error:", "").Trim();
         }
+    }
+
+    private async Task ToggleCommentAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("toggleQueryEditorComment", "query-editor");
+        }
+        catch { }
     }
 
     private async Task SaveActiveQueryAsync() => await SaveQueryAsync(null);
