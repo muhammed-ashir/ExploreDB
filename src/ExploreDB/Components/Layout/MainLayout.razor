@@ -9,6 +9,7 @@
 @inject ExploreDB.Services.StoreUpdateService StoreUpdateService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject WindowManagerService WindowManager
+@inject UserSettingsService UserSettingsService
 
 <div class="container-fluid p-0">
     @if (IsSwitchingDatabaseGlobal)
@@ -474,6 +475,45 @@
         </div>
     }
 
+    @if (UserSettingsService.IsSettingsModalOpen)
+    {
+        <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2500;" @onclick="UserSettingsService.CloseSettingsModal">
+            <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation>
+                <div class="modal-content shadow-lg" style="background-color: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 10px;">
+                    <div class="modal-header py-2 px-3 d-flex align-items-center justify-content-between" style="border-bottom: 1px solid var(--app-border);">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-gear text-info fs-5"></i>
+                            <h6 class="modal-title fw-bold mb-0">Settings</h6>
+                        </div>
+                        <button type="button" class="btn-close" @onclick="UserSettingsService.CloseSettingsModal"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <h6 class="fw-bold mb-3 text-info"><i class="bi bi-code-slash me-2"></i>Query Editor & Autocomplete</h6>
+                        
+                        <div class="form-check form-switch mb-3 d-flex align-items-center justify-content-between ps-0">
+                            <div>
+                                <label class="form-check-label fw-medium d-block cursor-pointer" for="autoAliasToggle">Auto-generate Table Aliases</label>
+                                <small class="text-muted d-block">Automatically adds an uppercase alias (e.g. <code>FROM Customers AS C</code>) when completing a table or view.</small>
+                            </div>
+                            <input class="form-check-input ms-3 flex-shrink-0 cursor-pointer" type="checkbox" id="autoAliasToggle" style="transform: scale(1.2);" checked="@UserSettingsService.Settings.AutoGenerateAliases" @onchange="OnAutoAliasToggleChanged" />
+                        </div>
+
+                        <div class="form-check form-switch mb-2 d-flex align-items-center justify-content-between ps-0 @(!UserSettingsService.Settings.AutoGenerateAliases ? "opacity-50" : "")">
+                            <div>
+                                <label class="form-check-label fw-medium d-block cursor-pointer" for="useAsToggle">Include 'AS' Keyword in Aliases</label>
+                                <small class="text-muted d-block">Insert <code>AS</code> keyword (e.g. <code>Customers AS C</code> vs <code>Customers C</code>).</small>
+                            </div>
+                            <input class="form-check-input ms-3 flex-shrink-0 cursor-pointer" type="checkbox" id="useAsToggle" style="transform: scale(1.2);" disabled="@(!UserSettingsService.Settings.AutoGenerateAliases)" checked="@UserSettingsService.Settings.UseAsKeyword" @onchange="OnUseAsToggleChanged" />
+                        </div>
+                    </div>
+                    <div class="modal-footer py-2 px-3 border-top" style="border-color: var(--app-border) !important;">
+                        <button type="button" class="btn btn-sm btn-primary px-4 fw-medium" @onclick="UserSettingsService.CloseSettingsModal">Done</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (ShowToast)
     {
         <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
@@ -603,6 +643,7 @@
         SchemaService.OnError += HandleSchemaError;
         ThemeService.OnThemeChanged += HandleThemeChanged;
         WindowManager.OnNavigateMainWindowRequested += HandleNavigateMainWindowRequested;
+        UserSettingsService.OnSettingsModalStateChanged += OnSettingsModalStateChangedHandler;
 
         if (!Config.GetValue<bool>("DisableAutoUpdates", false))
         {
@@ -636,6 +677,7 @@
             try
             {
                 await ThemeService.InitializeAsync(JS);
+                await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
                 // Signal to MAUI that the Blazor UI is ready
                 // App ready
             }
@@ -677,8 +719,36 @@
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
         ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
         SchemaService.OnError -= HandleSchemaError;
+        UserSettingsService.OnSettingsModalStateChanged -= OnSettingsModalStateChangedHandler;
         Nav.LocationChanged -= OnLocationChanged;
         _updateTimer?.Dispose();
+    }
+
+    private void OnSettingsModalStateChangedHandler()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnAutoAliasToggleChanged(ChangeEventArgs e)
+    {
+        bool val = (bool)(e.Value ?? false);
+        UserSettingsService.UpdateSettings(val, UserSettingsService.Settings.UseAsKeyword);
+        try
+        {
+            await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+        }
+        catch { }
+    }
+
+    private async Task OnUseAsToggleChanged(ChangeEventArgs e)
+    {
+        bool val = (bool)(e.Value ?? false);
+        UserSettingsService.UpdateSettings(UserSettingsService.Settings.AutoGenerateAliases, val);
+        try
+        {
+            await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+        }
+        catch { }
     }
 
     private void HandleNavigateMainWindowRequested(string route)

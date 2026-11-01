@@ -17,6 +17,7 @@
 @inject ThemeService ThemeService
 @inject SnippetService SnippetService
 @inject WindowManagerService WindowManager
+@inject UserSettingsService UserSettingsService
 @implements IDisposable
 
 <div class="container-fluid d-flex flex-column h-100">
@@ -732,6 +733,16 @@
         SchemaService.OnFunctionsLoaded -= OnSchemaLoadedHandler;
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
+    }
+
+    private async void HandleSettingsChanged()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+        }
+        catch { }
     }
 
     private async void HandleThemeChanged()
@@ -958,6 +969,7 @@
         SchemaService.OnFunctionsLoaded += OnSchemaLoadedHandler;
         QueryStateService.OnTabUpdated += HandleTabUpdated;
         ThemeService.OnThemeChanged += HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged += HandleSettingsChanged;
         
         if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
         {
@@ -987,6 +999,7 @@
 
         try
         {
+            await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
             await JS.InvokeVoidAsync("initTabStripWheelScroll", "ssms-tab-scroll");
         }
         catch { }

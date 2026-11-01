@@ -12,6 +12,7 @@
 @inject IJSRuntime JS
 @inject ThemeService ThemeService
 @inject WindowManagerService WindowManager
+@inject UserSettingsService UserSettingsService
 @implements IDisposable
 
 <div class="container-fluid d-flex flex-column h-100 p-4" style="background-color: var(--app-bg); color: var(--app-text);">
@@ -259,6 +260,7 @@
         SchemaService.OnViewsLoaded += OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded += OnSchemaLoadedHandler;
         ThemeService.OnThemeChanged += HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged += HandleSettingsChanged;
         _objRef = DotNetObjectReference.Create(this);
     }
 
@@ -266,6 +268,12 @@
     {
         if (firstRender)
         {
+            try
+            {
+                await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+            }
+            catch { }
+
             if (_objRef != null)
             {
                 try
@@ -297,10 +305,20 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private async void HandleSettingsChanged()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+        }
+        catch { }
+    }
+
     public void Dispose()
     {
         _isEditorReady = false;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
         SchemaService.OnTablesLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnViewsLoaded -= OnSchemaLoadedHandler;

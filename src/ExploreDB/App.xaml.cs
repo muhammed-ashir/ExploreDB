@@ -100,6 +100,7 @@ public partial class App : Application
             services.AddSingleton<ISchemaComparisonService, SchemaComparisonService>();
             services.AddSingleton<IHtmlReportGenerator, HtmlReportGenerator>();
             services.AddSingleton<ToolRegistryService>();
+            services.AddSingleton<UserSettingsService>();
 
             // Register Windows
             services.AddTransient<MainWindow>();

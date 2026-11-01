@@ -428,6 +428,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             var suggestSps = false;
             var suggestKeywords = true;
 
+            var lastTableKeyword = null;
             if (matches && matches.length > 0) {
                 var tableKeywords = new Set(['from', 'join', 'into', 'update', 'table']);
                 var columnKeywords = new Set(['select', 'where', 'on', 'by', 'having', 'set', 'and', 'or']);
@@ -442,6 +443,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         if (i >= matches.length - 2) suggestKeywords = false;
                         break;
                     } else if (tableKeywords.has(token)) {
+                        lastTableKeyword = token;
                         // Find the text from this table keyword up to the cursor
                         var lastTableKwIndex = fullTextUntilPosition.toLowerCase().lastIndexOf(token);
                         var textAfterTableKw = lastTableKwIndex >= 0 ? fullTextUntilPosition.substring(lastTableKwIndex) : fullTextUntilPosition;
@@ -492,30 +494,70 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
             }
 
+            var autoAlias = (window.userSettings ? window.userSettings.autoGenerateAliases !== false : true) &&
+                            (lastTableKeyword === 'from' || lastTableKeyword === 'join' || lastTableKeyword === 'update');
+            var useAs = window.userSettings ? window.userSettings.useAsKeyword !== false : true;
+
+            var existingAliases = new Set();
+            if (autoAlias) {
+                var allDocText = model.getValue();
+                var aliasRegex = /(?:from|join|update)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?([a-zA-Z0-9_]+)/gi;
+                var aMatch;
+                var reservedKw = new Set(['WHERE', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'OUTER', 'ON', 'GROUP', 'ORDER', 'HAVING', 'SET', 'AS']);
+                while ((aMatch = aliasRegex.exec(allDocText)) !== null) {
+                    if (aMatch[1]) {
+                        var u = aMatch[1].trim().toUpperCase();
+                        if (!reservedKw.has(u)) {
+                            existingAliases.add(u);
+                        }
+                    }
+                }
+            }
+
             if (suggestTables && window.sqlTables) {
                 window.sqlTables.forEach(t => {
+                    var insText = t.fullName;
+                    var detailText = 'Table';
+                    var alias = null;
+
+                    if (autoAlias) {
+                        alias = window.generateTableAlias(t.name || t.fullName, existingAliases);
+                        insText = t.fullName + (useAs ? " AS " : " ") + alias;
+                        detailText = 'Table (' + (useAs ? 'AS ' : '') + alias + ')';
+                    }
+
                     suggestions.push({
                         label: t.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
-                        insertText: t.fullName,
-                        filterText: t.name + " " + t.fullName,
+                        insertText: insText,
+                        filterText: t.name + " " + t.fullName + (autoAlias && alias ? (" " + alias) : ""),
                         sortText: String(t.name.length).padStart(4, '0') + '_' + t.name + '_' + t.fullName,
                         range: replaceRange,
-                        detail: 'Table'
+                        detail: detailText
                     });
                 });
             }
 
             if (suggestTables && window.sqlViews) {
                 window.sqlViews.forEach(v => {
+                    var insText = v.fullName;
+                    var detailText = 'View';
+                    var alias = null;
+
+                    if (autoAlias) {
+                        alias = window.generateTableAlias(v.name || v.fullName, existingAliases);
+                        insText = v.fullName + (useAs ? " AS " : " ") + alias;
+                        detailText = 'View (' + (useAs ? 'AS ' : '') + alias + ')';
+                    }
+
                     suggestions.push({
                         label: v.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
-                        insertText: v.fullName,
-                        filterText: v.name + " " + v.fullName,
+                        insertText: insText,
+                        filterText: v.name + " " + v.fullName + (autoAlias && alias ? (" " + alias) : ""),
                         sortText: String(v.name.length).padStart(4, '0') + '_' + v.name + '_' + v.fullName,
                         range: replaceRange,
-                        detail: 'View'
+                        detail: detailText
                     });
                 });
             }
@@ -550,10 +592,10 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 var tableRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)([a-zA-Z0-9_]+)/gi;
                 var match;
                 while ((match = tableRegex.exec(allText)) !== null) {
-                    var tableName = match[1];
-                    var possibleAlias = match[2].toLowerCase().trim();
-                    if (!sqlKw.has(possibleAlias)) {
-                        aliasMap[possibleAlias] = tableName.toLowerCase().trim();
+                    var tableName = match[1].trim();
+                    var rawAlias = match[2].trim();
+                    if (!sqlKw.has(rawAlias.toLowerCase())) {
+                        aliasMap[rawAlias] = tableName;
                     }
                 }
                 
@@ -569,8 +611,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 var rawPrefix = "";
                 if (dotMatch) {
                     rawPrefix = dotMatch[1];
-                    var prefix = rawPrefix.toLowerCase();
-                    explicitTableName = aliasMap[prefix] || prefix;
+                    var prefixLower = rawPrefix.toLowerCase();
+                    var foundAliasKey = Object.keys(aliasMap).find(k => k.toLowerCase() === prefixLower);
+                    explicitTableName = foundAliasKey ? aliasMap[foundAliasKey] : rawPrefix;
                 }
 
                 if (suggestColumns) {
@@ -656,7 +699,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         var onMatch = joinSegment.match(/^join\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)?([a-zA-Z0-9_]+)?\s+on\s*([a-zA-Z0-9_\.]*)$/i);
                         if (onMatch) {
                             var joinTableRaw = onMatch[1];
-                            var joinAlias = (onMatch[2] || "").toLowerCase();
+                            var joinAlias = (onMatch[2] || "").trim();
                             var typedRel = onMatch[3] || "";
 
                             var matchedTable = window.sqlTables.find(x => tablesMatch(x.fullName, joinTableRaw));
@@ -918,7 +961,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     acceptSuggestionOnEnter: 'on',
                     wordBasedSuggestions: 'off',
                     suggest: {
-                        showWords: false
+                        showWords: false,
+                        snippetsPreventQuickSuggestions: false
                     }
                 });
             } catch (e) { }
@@ -1686,6 +1730,63 @@ window.toggleQueryEditorComment = function (editorId) {
     editor.focus();
     editor.trigger('toolbar', 'editor.action.commentLine', null);
     return true;
+};
+
+window.userSettings = {
+    autoGenerateAliases: true,
+    useAsKeyword: true
+};
+
+window.setUserSettings = function (settings) {
+    if (settings) {
+        window.userSettings = settings;
+    }
+};
+
+window.generateTableAlias = function (tableName, existingAliases) {
+    if (!tableName) return "T";
+    var cleanName = tableName.replace(/[\[\]]/g, "").trim();
+    if (cleanName.indexOf('.') !== -1) {
+        cleanName = cleanName.split('.').pop().trim();
+    }
+    cleanName = cleanName.replace(/^(?:tbl_|vw_|tbl|vw)(?=[a-zA-Z])/i, "");
+    
+    var alias = "";
+    if (cleanName.indexOf('_') !== -1) {
+        var parts = cleanName.split('_').filter(Boolean);
+        for (var i = 0; i < parts.length; i++) {
+            if (parts[i].length > 0) {
+                alias += parts[i][0];
+            }
+        }
+    } else {
+        var capitals = cleanName.match(/[A-Z]/g);
+        if (capitals && capitals.length > 1) {
+            alias = capitals.join('');
+        } else {
+            alias = cleanName[0];
+        }
+    }
+    
+    alias = alias.toUpperCase();
+    if (!alias) alias = "T";
+    
+    var reserved = new Set(['ON', 'IN', 'OR', 'BY', 'AS', 'TO', 'IS', 'AT', 'DO', 'IF', 'GO', 'NO']);
+    var finalAlias = reserved.has(alias) ? (alias + "1") : alias;
+    var suffix = 2;
+    var upperExisting = new Set();
+    if (existingAliases) {
+        existingAliases.forEach(function (a) {
+            if (a) upperExisting.add(String(a).toUpperCase());
+        });
+    }
+    
+    while (upperExisting.has(finalAlias)) {
+        finalAlias = alias + suffix;
+        suffix++;
+    }
+    
+    return finalAlias;
 };
 
 

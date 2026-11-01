@@ -3,6 +3,7 @@
 @inject ConnectionService ConnectionService
 @inject SchemaService SchemaService
 @inject ThemeService ThemeService
+@inject UserSettingsService UserSettingsService
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -158,8 +159,18 @@
         </div>
     </div>
     
-    <div class="px-3 py-2 d-flex align-items-center border-top border-secondary mt-auto" style="border-color: var(--app-border) !important;">
+    <div class="px-3 py-2 d-flex align-items-center justify-content-between border-top border-secondary mt-auto" style="border-color: var(--app-border) !important;">
         <small class="text-muted" style="font-size: 0.75rem;">v @AppEnvironmentService.VersionString</small>
+        <button type="button" 
+                class="btn btn-sm btn-link text-muted p-0 border-0 d-flex align-items-center justify-content-center sidebar-settings-btn" 
+                style="width: 24px; height: 24px; text-decoration: none;" 
+                @onclick="() => UserSettingsService.OpenSettingsModal()" 
+                title="Settings" 
+                data-bs-tooltip="true" 
+                data-bs-title="Settings" 
+                data-bs-placement="top">
+            <i class="bi bi-gear" style="font-size: 0.95rem;"></i>
+        </button>
     </div>
 </div>
 

@@ -254,6 +254,17 @@ body {
     border-left: 3px solid var(--primary-color) !important;
 }
 
+.sidebar-settings-btn {
+    color: var(--app-text-muted) !important;
+    border-radius: 4px;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.sidebar-settings-btn:hover {
+    color: var(--app-text) !important;
+    background-color: var(--app-sidebar-hover);
+}
+
 .node-card {
     transition: all 0.3s ease;
     border: 1px solid var(--app-border) !important;
