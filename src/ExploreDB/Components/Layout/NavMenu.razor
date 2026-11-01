@@ -122,40 +122,59 @@
                 <span>Query Builder</span>
             </a>
 
-            <a href="explorer"
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsExplorerActive ? "active" : "")">
-                <span>Table Explorer</span>
-            </a>
+            <div class="sidebar-divider"></div>
 
-            <a href="views"
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsViewExplorerActive ? "active" : "")">
-                <span>View Explorer</span>
-            </a>
+            <button type="button" 
+                    class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item d-flex align-items-center justify-content-between @(IsAnyExplorerActive && !IsExplorersExpanded ? "active" : "")"
+                    @onclick="ToggleExplorers">
+                <span>Explorers</span>
+                <i class="bi bi-chevron-down text-muted" 
+                   style="font-size: 0.75rem; transition: transform 0.2s ease; transform: @(IsExplorersExpanded ? "rotate(0deg)" : "rotate(-90deg)");"></i>
+            </button>
 
-            <a href="procs"
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsSpExplorerActive ? "active" : "")">
-                <span>SP Explorer</span>
-            </a>
+            @if (IsExplorersExpanded)
+            {
+                <div class="sidebar-submenu">
+                    <a href="explorer"
+                       class="list-group-item list-group-item-action bg-transparent border-0 sidebar-subitem @(IsExplorerActive ? "active" : "")">
+                        <span>Tables</span>
+                    </a>
 
-            <a href="functions"
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsFunctionExplorerActive ? "active" : "")">
-                <span>Function Explorer</span>
-            </a>
+                    <a href="views"
+                       class="list-group-item list-group-item-action bg-transparent border-0 sidebar-subitem @(IsViewExplorerActive ? "active" : "")">
+                        <span>Views</span>
+                    </a>
 
-            <a href="types"
-               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsTypeExplorerActive ? "active" : "")">
-                <span>Type Explorer</span>
-            </a>
+                    <a href="procs"
+                       class="list-group-item list-group-item-action bg-transparent border-0 sidebar-subitem @(IsSpExplorerActive ? "active" : "")">
+                        <span>Stored Procedures</span>
+                    </a>
+
+                    <a href="functions"
+                       class="list-group-item list-group-item-action bg-transparent border-0 sidebar-subitem @(IsFunctionExplorerActive ? "active" : "")">
+                        <span>Functions</span>
+                    </a>
+
+                    <a href="types"
+                       class="list-group-item list-group-item-action bg-transparent border-0 sidebar-subitem @(IsTypeExplorerActive ? "active" : "")">
+                        <span>Types</span>
+                    </a>
+                </div>
+            }
+
+            <div class="sidebar-divider"></div>
 
             <a href="tools"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsToolsActive ? "active" : "")">
-                <span>Tools</span>
+                <span>Tools Hub</span>
             </a>
 
             <a href="learning"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsLearningActive ? "active" : "")">
                 <span>Learning Hub</span>
             </a>
+
+            <div class="sidebar-divider"></div>
 
             <a href="app-center"
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsAppCenterActive ? "active" : "")">
@@ -175,6 +194,7 @@
     private bool IsConnectionDropdownOpen = false;
     private List<string> ServerDatabases = new();
     private bool IsLoadingDBs = false;
+    private bool IsExplorersExpanded = true;
 
     private bool IsRunnerActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
     private bool IsPathfinderActive => CurrentUrl.Contains("/builder");
@@ -186,6 +206,12 @@
     private bool IsFunctionExplorerActive => CurrentUrl.Contains("/functions") || CurrentUrl.Contains("/function/");
     private bool IsTypeExplorerActive => CurrentUrl.Contains("/types") || CurrentUrl.Contains("/type/");
     private bool IsAppCenterActive => CurrentUrl.Contains("/app-center");
+    private bool IsAnyExplorerActive => IsExplorerActive || IsViewExplorerActive || IsSpExplorerActive || IsFunctionExplorerActive || IsTypeExplorerActive;
+
+    private void ToggleExplorers()
+    {
+        IsExplorersExpanded = !IsExplorersExpanded;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -383,6 +409,10 @@
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         CurrentUrl = e.Location;
+        if (IsAnyExplorerActive)
+        {
+            IsExplorersExpanded = true;
+        }
         StateHasChanged();
     }
 
