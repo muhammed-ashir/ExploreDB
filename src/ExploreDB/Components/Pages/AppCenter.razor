@@ -92,8 +92,8 @@
                             <div class="mb-2">
                                 <span class="text-muted small fw-bold text-uppercase" style="letter-spacing: 0.5px; font-size: 0.7rem;">Syntax Preview</span>
                             </div>
-                            <pre class="mb-0 p-3 rounded text-light" style="background-color: #141619; font-family: 'Cascadia Code', Consolas, monospace; font-size: 0.9rem;"><code><span style="color: #569cd6;">SELECT</span> * <span style="color: #569cd6;">FROM</span> [dbo].[Customers]@(UserSettingsService.Settings.AutoGenerateAliases ? (UserSettingsService.Settings.UseAsKeyword ? " AS C" : " C") : "")
-<span style="color: #569cd6;">INNER JOIN</span> [dbo].[Orders]@(UserSettingsService.Settings.AutoGenerateAliases ? (UserSettingsService.Settings.UseAsKeyword ? " AS O" : " O") : "") <span style="color: #569cd6;">ON</span> @(UserSettingsService.Settings.AutoGenerateAliases ? "O.CustomerId = C.Id" : "[dbo].[Orders].CustomerId = [dbo].[Customers].Id")</code></pre>
+                            <pre class="editor-syntax-preview mb-0 p-3 rounded"><code><span class="keyword">SELECT</span> * <span class="keyword">FROM</span> [dbo].[Customers]@GetCustomerAliasPreview()
+<span class="keyword">INNER JOIN</span> [dbo].[Orders]@GetOrderAliasPreview() <span class="keyword">ON</span> @GetJoinConditionPreview()</code></pre>
                         </div>
                     </div>
                 </div>
@@ -406,10 +406,39 @@
 
     protected override void OnInitialized()
     {
+        ThemeService.OnThemeChanged += HandleThemeChanged;
         UserSettingsService.OnSettingsChanged += HandleSettingsChanged;
         ProfileName = !string.IsNullOrWhiteSpace(UserSettingsService.Settings.DisplayName)
             ? UserSettingsService.Settings.DisplayName
             : Environment.UserName;
+    }
+
+    private void HandleThemeChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private MarkupString GetCustomerAliasPreview()
+    {
+        if (!UserSettingsService.Settings.AutoGenerateAliases) return (MarkupString)"";
+        return UserSettingsService.Settings.UseAsKeyword
+            ? (MarkupString)@" <span class=""keyword"">AS</span> C"
+            : (MarkupString)@" C";
+    }
+
+    private MarkupString GetOrderAliasPreview()
+    {
+        if (!UserSettingsService.Settings.AutoGenerateAliases) return (MarkupString)"";
+        return UserSettingsService.Settings.UseAsKeyword
+            ? (MarkupString)@" <span class=""keyword"">AS</span> O"
+            : (MarkupString)@" O";
+    }
+
+    private string GetJoinConditionPreview()
+    {
+        return UserSettingsService.Settings.AutoGenerateAliases
+            ? "O.CustomerId = C.Id"
+            : "[dbo].[Orders].CustomerId = [dbo].[Customers].Id";
     }
 
     private string GetDisplayName()
@@ -599,6 +628,7 @@
 
     public void Dispose()
     {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
         UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
     }
 }

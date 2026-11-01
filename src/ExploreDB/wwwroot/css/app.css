@@ -26,6 +26,11 @@
     --app-table-header-text: #0dcaf0;
     --app-table-index-bg: #181a1d;
     --app-table-border: rgba(255, 255, 255, 0.12);
+
+    /* Editor Syntax Preview Tokens */
+    --app-editor-preview-bg: #141619;
+    --app-editor-preview-text: #d4d4d4;
+    --app-editor-keyword: #569cd6;
 }
 
 [data-bs-theme="light"] {
@@ -55,6 +60,11 @@
     --app-table-header-text: #0284c7;
     --app-table-index-bg: #f1f5f9;
     --app-table-border: rgba(0, 0, 0, 0.1);
+
+    /* Editor Syntax Preview Tokens */
+    --app-editor-preview-bg: #ffffff;
+    --app-editor-preview-text: #212529;
+    --app-editor-keyword: #0000ff;
 }
 
 html,
@@ -282,6 +292,38 @@ body {
     margin: 8px 16px;
     background-color: var(--app-border);
     opacity: 0.6;
+}
+
+/* Editor Syntax Preview & Inline Code */
+.editor-syntax-preview {
+    background-color: var(--app-editor-preview-bg) !important;
+    color: var(--app-editor-preview-text) !important;
+    border: 1px solid var(--app-border) !important;
+    font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.editor-syntax-preview code {
+    color: var(--app-editor-preview-text) !important;
+    background: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+.editor-syntax-preview .keyword {
+    color: var(--app-editor-keyword) !important;
+    font-weight: 600;
+}
+
+code:not(.editor-syntax-preview code) {
+    color: var(--app-text) !important;
+    background-color: var(--app-border);
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.85em;
 }
 
 .sidebar-settings-btn {
