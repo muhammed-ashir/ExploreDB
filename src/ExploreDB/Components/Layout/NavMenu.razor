@@ -156,21 +156,12 @@
                class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsLearningActive ? "active" : "")">
                 <span>Learning Hub</span>
             </a>
+
+            <a href="app-center"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsAppCenterActive ? "active" : "")">
+                <span>App Center</span>
+            </a>
         </div>
-    </div>
-    
-    <div class="px-3 py-2 d-flex align-items-center justify-content-between border-top border-secondary mt-auto" style="border-color: var(--app-border) !important;">
-        <small class="text-muted" style="font-size: 0.75rem;">v @AppEnvironmentService.VersionString</small>
-        <button type="button" 
-                class="btn btn-sm btn-link text-muted p-0 border-0 d-flex align-items-center justify-content-center sidebar-settings-btn" 
-                style="width: 24px; height: 24px; text-decoration: none;" 
-                @onclick="() => UserSettingsService.OpenSettingsModal()" 
-                title="Settings" 
-                data-bs-tooltip="true" 
-                data-bs-title="Settings" 
-                data-bs-placement="top">
-            <i class="bi bi-gear" style="font-size: 0.95rem;"></i>
-        </button>
     </div>
 </div>
 
@@ -194,6 +185,7 @@
     private bool IsSpExplorerActive => CurrentUrl.Contains("/procs") || CurrentUrl.Contains("/proc/");
     private bool IsFunctionExplorerActive => CurrentUrl.Contains("/functions") || CurrentUrl.Contains("/function/");
     private bool IsTypeExplorerActive => CurrentUrl.Contains("/types") || CurrentUrl.Contains("/type/");
+    private bool IsAppCenterActive => CurrentUrl.Contains("/app-center");
 
     protected override async Task OnInitializedAsync()
     {

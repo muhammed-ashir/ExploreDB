@@ -8,6 +8,8 @@ public class UserSettings
 {
     public bool AutoGenerateAliases { get; set; } = true;
     public bool UseAsKeyword { get; set; } = true;
+    public string DisplayName { get; set; } = "";
+    public string LicenseKey { get; set; } = "";
 }
 
 public class UserSettingsService
@@ -43,6 +45,20 @@ public class UserSettingsService
     {
         Settings.AutoGenerateAliases = autoGenerateAliases;
         Settings.UseAsKeyword = useAsKeyword;
+        SaveSettings();
+        OnSettingsChanged?.Invoke();
+    }
+
+    public void UpdateDisplayName(string displayName)
+    {
+        Settings.DisplayName = displayName;
+        SaveSettings();
+        OnSettingsChanged?.Invoke();
+    }
+
+    public void UpdateLicenseKey(string licenseKey)
+    {
+        Settings.LicenseKey = licenseKey;
         SaveSettings();
         OnSettingsChanged?.Invoke();
     }
