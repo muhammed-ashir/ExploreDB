@@ -32,10 +32,10 @@
                 <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Dock to Main Window" data-bs-placement="bottom" @onclick="DockTab">
                     <i class="bi bi-box-arrow-in-down-right"></i>
                 </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save Query" data-bs-placement="bottom" @onclick="SaveActiveQueryAsync">
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save Query (Ctrl+S)" data-bs-placement="bottom" @onclick="SaveActiveQueryAsync">
                     <i class="bi bi-floppy"></i>
                 </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save As..." data-bs-placement="bottom" @onclick="SaveAsQueryAsync">
+                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save As... (Ctrl+Shift+S)" data-bs-placement="bottom" @onclick="SaveAsQueryAsync">
                     <i class="bi bi-file-earmark-plus"></i>
                 </button>
                 <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Clear Editor" data-bs-placement="bottom" @onclick="() => ShowClearConfirmation = true">
@@ -50,13 +50,13 @@
 
                 @if (ActiveTab.IsExecuting)
                 {
-                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" @onclick="CancelExecution">
+                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
                         <i class="bi bi-stop-fill me-1"></i>Stop
                     </button>
                 }
                 else
                 {
-                    <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center" style="height: 32px;" @onclick="ExecuteAsync">
+                    <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Execute Query (F5)" data-bs-placement="bottom" @onclick="ExecuteAsync">
                         <i class="bi bi-play-fill me-1"></i>Execute
                     </button>
                 }
@@ -333,6 +333,14 @@
     public async Task SaveQueryFromShortcut()
     {
         await SaveActiveQueryAsync();
+        UpdateMauiWindowTitle();
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task SaveAsQueryFromShortcut()
+    {
+        await SaveAsQueryAsync();
         UpdateMauiWindowTitle();
         StateHasChanged();
     }
