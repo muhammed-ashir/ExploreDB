@@ -194,7 +194,7 @@
     private bool IsConnectionDropdownOpen = false;
     private List<string> ServerDatabases = new();
     private bool IsLoadingDBs = false;
-    private bool IsExplorersExpanded = true;
+    private bool IsExplorersExpanded = false;
 
     private bool IsRunnerActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
     private bool IsPathfinderActive => CurrentUrl.Contains("/builder");
@@ -219,6 +219,10 @@
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
         ThemeService.OnThemeChanged += HandleThemeChanged;
         CurrentUrl = Nav.Uri;
+        if (IsAnyExplorerActive)
+        {
+            IsExplorersExpanded = true;
+        }
         await LoadServerDatabases();
         ConnectionSearch = GetActiveConnectionDisplayName();
     }
