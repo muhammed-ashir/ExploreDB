@@ -85,6 +85,12 @@
             @if (!IsPopout)
             {
                 <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="ToggleFullScreen"
+                        title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")">
+                    <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                </button>
+
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
                         @onclick="PopoutWindow"
                         title="Open SQL Profiler in dedicated window">
                     <i class="bi bi-box-arrow-up-right"></i>
@@ -225,8 +231,13 @@
         </div>
     </div>
 
-    <!-- FILTER BAR -->
-    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2 filter-bar p-2 rounded border">
+    <!-- PROFILER WORKSPACE (GRID + INSPECTOR + FILTER CONTROLS) -->
+    <div id="profiler-results-container"
+         class="@(_isFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3 d-flex flex-column gap-2 overflow-hidden" : "d-flex flex-column flex-grow-1 overflow-hidden")"
+         style="@(_isFullScreen ? "background-color: var(--app-bg); z-index: 9999;" : "")">
+
+        <!-- FILTER BAR -->
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 filter-bar p-2 rounded border flex-shrink-0 @(_isFullScreen ? "" : "mb-2")">
         <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 550px;">
             <div class="input-group input-group-sm">
                 <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-search text-muted"></i></span>
@@ -300,6 +311,52 @@
 
         <!-- View Controls (Sort & Auto-Scroll) -->
         <div class="d-flex align-items-center gap-1 flex-wrap">
+            @if (_isFullScreen)
+            {
+                <div class="d-flex align-items-center gap-1 me-2 pe-2 border-end" style="border-color: var(--app-border) !important;">
+                    @if (!Profiler.IsStreaming)
+                    {
+                        <button class="btn btn-xs btn-success d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                                @onclick="StartTraceAsync"
+                                disabled="@(!CanStartLiveTrace)">
+                            <i class="bi bi-play-fill"></i>
+                            <span>Start</span>
+                        </button>
+                    }
+                    else
+                    {
+                        if (Profiler.IsPaused)
+                        {
+                            <button class="btn btn-xs btn-warning d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                                    @onclick="ResumeTrace">
+                                <i class="bi bi-play-fill"></i>
+                                <span>Resume</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-xs btn-outline-warning d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                                    @onclick="PauseTrace">
+                                <i class="bi bi-pause-fill"></i>
+                                <span>Pause</span>
+                            </button>
+                        }
+
+                        <button class="btn btn-xs btn-danger d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                                @onclick="StopTraceAsync">
+                            <i class="bi bi-stop-fill"></i>
+                            <span>Stop</span>
+                        </button>
+                    }
+                    <button class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                            @onclick="ClearEvents"
+                            title="Clear current event buffer and query aggregates">
+                        <i class="bi bi-trash3"></i>
+                        <span>Clear</span>
+                    </button>
+                </div>
+            }
+
             <!-- Sort direction -->
             <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 btn-chip"
                     @onclick="ToggleSortOrder"
@@ -353,11 +410,17 @@
                 </li>
             </ul>
 
-            <div class="small text-muted d-none d-md-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2">
                 @if (_selectedEvent != null)
                 {
-                    <span>Selected Event ID: <strong>#@_selectedEvent.Id</strong></span>
+                    <span class="small text-muted d-none d-md-inline">Selected Event ID: <strong>#@_selectedEvent.Id</strong></span>
                 }
+                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                        title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")"
+                        @onclick="ToggleFullScreen">
+                    <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                </button>
             </div>
         </div>
 
@@ -728,6 +791,7 @@
             </div>
         }
     </div>
+    </div>
     }
 </div>
 
@@ -900,6 +964,8 @@
 
     [CascadingParameter(Name = "IsPopout")]
     public bool IsPopout { get; set; } = false;
+
+    private bool _isFullScreen = false;
 
     private MainTab _activeMainTab = MainTab.Stream;
     private InspectorTab _activeInspectorTab = InspectorTab.Sql;
@@ -1364,6 +1430,11 @@
     private void PopoutWindow()
     {
         WindowManager.OpenToolPopout("sql-profiler", "/tools/sql-profiler", "SQL Profiler - ExploreDB", closeOnConnectionChange: false);
+    }
+
+    private void ToggleFullScreen()
+    {
+        _isFullScreen = !_isFullScreen;
     }
 
     private static string GetEventBadgeClass(TraceEventType type) => type switch
