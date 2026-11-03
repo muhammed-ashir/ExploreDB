@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Windows;
 using ExploreDB.Services;
+using ExploreDB.Services.Profiler;
 using ExploreDB.Services.SqlCompare;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -97,6 +98,7 @@ public partial class App : Application
             services.AddSingleton<SnippetService>();
             services.AddSingleton<WindowManagerService>();
             services.AddSingleton<DataCleanupService>();
+            services.AddSingleton<ProfilerService>();
             services.AddSingleton<ISchemaComparisonService, SchemaComparisonService>();
             services.AddSingleton<IHtmlReportGenerator, HtmlReportGenerator>();
             services.AddSingleton<ToolRegistryService>();
@@ -126,6 +128,16 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        try
+        {
+            var profiler = Services?.GetService<ProfilerService>();
+            if (profiler != null && profiler.IsStreaming)
+            {
+                profiler.StopAsync().GetAwaiter().GetResult();
+            }
+        }
+        catch { }
+
         Log.CloseAndFlush();
         base.OnExit(e);
     }

@@ -95,6 +95,7 @@ public class DataCleanupService
     {
         _connectionService = connectionService;
         _schemaService = schemaService;
+        _connectionService.OnConnectionChanged += ClearSessionState;
     }
 
     /// <summary>

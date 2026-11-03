@@ -741,10 +741,81 @@ code:not(.editor-syntax-preview code) {
     cursor: pointer;
 }
 
-/* Allow Bootstrap tooltips to dynamically stretch but cap at 450px so long text wraps globally */
+/* Global Bootstrap Tooltip Enhancements - 100% Opaque, High z-index & Sleek Theme Adaptive */
+.tooltip {
+    --bs-tooltip-opacity: 1 !important;
+    opacity: 1 !important;
+    z-index: 100000 !important;
+    pointer-events: none;
+}
+
+.tooltip.show {
+    opacity: 1 !important;
+}
+
 .tooltip-inner {
     max-width: 450px !important;
     text-align: left !important;
+    padding: 8px 12px !important;
+    font-size: 0.82rem !important;
+    line-height: 1.45 !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+}
+
+[data-bs-theme="dark"] .tooltip-inner {
+    background-color: #24292e !important;
+    color: #f0f6fc !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-top .tooltip-arrow::before,
+[data-bs-theme="dark"] .bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before {
+    border-top-color: #24292e !important;
+}
+[data-bs-theme="dark"] .bs-tooltip-bottom .tooltip-arrow::before,
+[data-bs-theme="dark"] .bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before {
+    border-bottom-color: #24292e !important;
+}
+[data-bs-theme="dark"] .bs-tooltip-start .tooltip-arrow::before,
+[data-bs-theme="dark"] .bs-tooltip-auto[data-popper-placement^="left"] .tooltip-arrow::before {
+    border-left-color: #24292e !important;
+}
+[data-bs-theme="dark"] .bs-tooltip-end .tooltip-arrow::before,
+[data-bs-theme="dark"] .bs-tooltip-auto[data-popper-placement^="right"] .tooltip-arrow::before {
+    border-right-color: #24292e !important;
+}
+
+.tooltip-inner code {
+    color: #e2e8f0 !important;
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    padding: 2px 5px !important;
+    border-radius: 4px !important;
+    font-family: var(--bs-font-monospace) !important;
+    font-size: 0.85em !important;
+}
+
+[data-bs-theme="light"] .tooltip-inner {
+    background-color: #1f2937 !important;
+    color: #f9fafb !important;
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
+}
+
+[data-bs-theme="light"] .bs-tooltip-top .tooltip-arrow::before,
+[data-bs-theme="light"] .bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before {
+    border-top-color: #1f2937 !important;
+}
+[data-bs-theme="light"] .bs-tooltip-bottom .tooltip-arrow::before,
+[data-bs-theme="light"] .bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before {
+    border-bottom-color: #1f2937 !important;
+}
+[data-bs-theme="light"] .bs-tooltip-start .tooltip-arrow::before,
+[data-bs-theme="light"] .bs-tooltip-auto[data-popper-placement^="left"] .tooltip-arrow::before {
+    border-left-color: #1f2937 !important;
+}
+[data-bs-theme="light"] .bs-tooltip-end .tooltip-arrow::before,
+[data-bs-theme="light"] .bs-tooltip-auto[data-popper-placement^="right"] .tooltip-arrow::before {
+    border-right-color: #1f2937 !important;
 }
 
 /* Result Set Table Theme Adaptive Styling */

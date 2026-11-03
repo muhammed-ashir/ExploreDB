@@ -134,11 +134,6 @@ public class ToolRegistryService
             return tool.CloseOnConnectionChange.Value;
         }
 
-        if (toolId.Equals("data-cleanup", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
         return false;
     }
 
@@ -157,7 +152,7 @@ public class ToolRegistryService
                 Route = "/tools/data-cleanup",
                 Status = "Live",
                 IsVisible = true,
-                CloseOnConnectionChange = true
+                CloseOnConnectionChange = false
             },
             new ToolItem
             {
@@ -180,9 +175,10 @@ public class ToolRegistryService
                 Icon = "bi-activity",
                 IconBg = "rgba(14, 165, 233, 0.12)",
                 IconColor = "#0ea5e9",
-                Route = "",
-                Status = "Coming Soon",
-                IsVisible = true
+                Route = "/tools/sql-profiler",
+                Status = "Live",
+                IsVisible = true,
+                CloseOnConnectionChange = false
             }
         };
     }

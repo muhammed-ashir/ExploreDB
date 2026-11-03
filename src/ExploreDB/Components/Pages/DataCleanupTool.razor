@@ -3,6 +3,7 @@
 @using System.IO
 @inject DataCleanupService CleanupService
 @inject SchemaService SchemaService
+@inject ConnectionService ConnectionService
 @inject QueryStateService QueryStateService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -487,6 +488,7 @@
             return;
         }
 
+        ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
         SchemaService.OnTablesLoaded += OnTablesLoadedHandler;
 
         var currentDb = SchemaService.ActiveDatabase;
@@ -518,13 +520,43 @@
         }
     }
 
-    private void OnTablesLoadedHandler()
+    private void OnDatabaseSwitchedHandler()
     {
         _ = InvokeAsync(async () =>
         {
             CleanupService.ClearSessionState();
-            await LoadTablesAsync();
-            StateHasChanged();
+            _plan = null;
+            _tableFilter = string.Empty;
+            _tables.Clear();
+
+            if (SchemaService.IsLoadingTables)
+            {
+                _isLoading = true;
+                StateHasChanged();
+            }
+            else
+            {
+                await LoadTablesAsync();
+            }
+        });
+    }
+
+    private void OnTablesLoadedHandler()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            if (SchemaService.IsLoadingTables)
+            {
+                _isLoading = true;
+                StateHasChanged();
+                return;
+            }
+
+            if (_isLoading || _tables.Count == 0 || !string.Equals(CleanupService.SessionState?.DatabaseName, SchemaService.ActiveDatabase, StringComparison.OrdinalIgnoreCase))
+            {
+                CleanupService.ClearSessionState();
+                await LoadTablesAsync();
+            }
         });
     }
 
@@ -816,6 +848,7 @@
 
     public void Dispose()
     {
+        ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
         SchemaService.OnTablesLoaded -= OnTablesLoadedHandler;
         SaveSession();
     }

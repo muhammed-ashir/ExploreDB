@@ -969,7 +969,10 @@
                                                 <td class="text-center">
                                                     <span class="badge @GetChangeBadgeClass(diff.ChangeType) d-inline-flex align-items-center justify-content-center gap-1"
                                                           style="font-size: 0.68rem; padding: 4px 8px; cursor: help;"
-                                                          title="@GetChangeTooltip(diff.ChangeType)">
+                                                          data-bs-tooltip="true"
+                                                          data-bs-html="true"
+                                                          data-bs-placement="top"
+                                                          data-bs-title="@GetChangeTooltip(diff.ChangeType)">
                                                         <span>@GetChangeBadgeText(diff.ChangeType)</span>
                                                         <i class="bi bi-info-circle opacity-75" style="font-size: 0.62rem;"></i>
                                                     </span>
@@ -1005,7 +1008,10 @@
                                 <span class="fw-bold text-truncate" style="color: var(--app-text); font-size: 0.95rem;">@_selectedItem.Name</span>
                                 <span class="badge @GetChangeBadgeClass(_selectedItem.ChangeType) d-inline-flex align-items-center gap-1"
                                       style="font-size: 0.68rem; cursor: help;"
-                                      title="@GetChangeTooltip(_selectedItem.ChangeType)">
+                                      data-bs-tooltip="true"
+                                      data-bs-html="true"
+                                      data-bs-placement="top"
+                                      data-bs-title="@GetChangeTooltip(_selectedItem.ChangeType)">
                                     <span>@GetChangeBadgeText(_selectedItem.ChangeType)</span>
                                     <i class="bi bi-info-circle opacity-75" style="font-size: 0.62rem;"></i>
                                 </span>
@@ -2000,15 +2006,15 @@
 
     private string GetChangeTooltip(ChangeType type)
     {
-        var sourceDb = !string.IsNullOrWhiteSpace(_result?.SourceEndpoint.Database) ? _result.SourceEndpoint.Database : "Source";
-        var targetDb = !string.IsNullOrWhiteSpace(_result?.TargetEndpoint.Database) ? _result.TargetEndpoint.Database : "Target";
+        var sourceDb = !string.IsNullOrWhiteSpace(_result?.SourceEndpoint.Database) ? System.Net.WebUtility.HtmlEncode(_result.SourceEndpoint.Database) : "Source";
+        var targetDb = !string.IsNullOrWhiteSpace(_result?.TargetEndpoint.Database) ? System.Net.WebUtility.HtmlEncode(_result.TargetEndpoint.Database) : "Target";
 
         return type switch
         {
-            ChangeType.Added => $"Only in Source: Exists in Source ({sourceDb}), but missing in Target ({targetDb}). Synchronization will CREATE it in Target.",
-            ChangeType.Deleted => $"Only in Target: Exists in Target ({targetDb}), but missing in Source ({sourceDb}). Synchronization will DROP it from Target.",
-            ChangeType.Modified => $"Different: Exists in both databases, but schemas differ. Synchronization will ALTER Target to match Source.",
-            ChangeType.Identical => $"Identical: Schema matches exactly in both databases ({sourceDb} and {targetDb}). No action needed.",
+            ChangeType.Added => $"<div class='fw-bold mb-1'>Only in Source</div>Exists in Source (<b>{sourceDb}</b>), but missing in Target (<b>{targetDb}</b>).<br/>Synchronization will <b style='color: #4ade80;'>CREATE</b> it in Target.",
+            ChangeType.Deleted => $"<div class='fw-bold mb-1'>Only in Target</div>Exists in Target (<b>{targetDb}</b>), but missing in Source (<b>{sourceDb}</b>).<br/>Synchronization will <b style='color: #f87171;'>DROP</b> it from Target.",
+            ChangeType.Modified => $"<div class='fw-bold mb-1'>Different</div>Exists in both databases, but schemas differ.<br/>Synchronization will <b style='color: #fbbf24;'>ALTER</b> Target to match Source.",
+            ChangeType.Identical => $"<div class='fw-bold mb-1'>Identical</div>Schema matches exactly in both databases (<b>{sourceDb}</b> and <b>{targetDb}</b>). No action needed.",
             _ => "Schema difference status relative to Target"
         };
     }
