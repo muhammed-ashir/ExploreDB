@@ -417,6 +417,13 @@
                 }
                 <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
                         style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                        title="@(_isGridCollapsed ? "Expand stream grid" : "Collapse stream grid for larger inspector view")"
+                        @onclick="ToggleGridCollapse">
+                    <i class="bi @(_isGridCollapsed ? "bi-chevron-down" : "bi-chevron-up")"></i>
+                    <span>@(_isGridCollapsed ? "Expand" : "Collapse")</span>
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
                         title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")"
                         @onclick="ToggleFullScreen">
                     <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
@@ -425,7 +432,9 @@
         </div>
 
         <!-- UPPER GRID AREA -->
-        <div class="flex-grow-1 overflow-auto" id="profiler-grid-container" style="min-height: 180px;">
+        @if (!_isGridCollapsed)
+        {
+            <div class="@(_isInspectorCollapsed ? "flex-grow-1" : "flex-shrink-0") overflow-auto" id="profiler-grid-container" style="@(_isInspectorCollapsed ? "min-height: 120px;" : $"height: {_gridHeight}px; min-height: 120px;")">
             @if (_activeMainTab == MainTab.Stream)
             {
                 <!-- LIVE EVENT STREAM TABLE -->
@@ -567,11 +576,21 @@
                 }
             }
         </div>
+        }
 
-        <!-- RESIZABLE SPLITTER BAR -->
-        <div class="profiler-splitter d-flex align-items-center justify-content-between px-3 py-1 border-top border-bottom"
-             style="height: 32px; background: var(--app-surface-secondary); cursor: row-resize;"
-             title="Drag to resize inspector pane">
+        @if (!_isInspectorCollapsed && !_isGridCollapsed)
+        {
+            <!-- Splitter Bar (Drag to Resize Grid vs Inspector) -->
+            <div id="profiler-inspector-splitter"
+                 class="sql-compare-splitter"
+                 title="Drag up or down to resize inspector">
+                <div class="sql-compare-splitter-handle"></div>
+            </div>
+        }
+
+        <!-- INSPECTOR HEADER BAR -->
+        <div class="profiler-inspector-header d-flex align-items-center justify-content-between px-3 py-1 border-top border-bottom user-select-none"
+             style="height: 32px; background: var(--app-surface-secondary);">
             <div class="d-flex align-items-center gap-2">
                 <span class="small fw-semibold text-app">
                     @(_selectedEvent != null ? $"Inspector: Event #{_selectedEvent.Id} ({_selectedEvent.Name})" : "Event Inspector")
@@ -591,7 +610,7 @@
         <!-- BOTTOM INSPECTOR PANE -->
         @if (!_isInspectorCollapsed)
         {
-            <div class="profiler-inspector d-flex flex-column" style="height: @(_inspectorHeight)px; min-height: 120px; background: var(--app-surface);">
+            <div id="profiler-inspector-panel" class="profiler-inspector d-flex flex-column flex-grow-1 overflow-hidden" style="min-height: 120px; background: var(--app-surface);">
                 <!-- Inspector Tabs & Actions -->
                 <div class="d-flex align-items-center justify-content-between ps-0 pe-3 border-bottom profiler-tab-header">
                     <ul class="nav nav-tabs border-bottom-0 ms-0 ps-0">
@@ -655,7 +674,7 @@
                 </div>
 
                 <!-- Inspector Content -->
-                <div class="flex-grow-1 overflow-auto position-relative p-2">
+                <div class="flex-grow-1 overflow-auto position-relative p-2" style="min-height: 0;">
                     @if (_activeInspectorTab == InspectorTab.Sql)
                     {
                         @if (string.IsNullOrWhiteSpace(CurrentInspectorSql))
@@ -996,7 +1015,8 @@
     private int _bufferCapacityChoice = 100000;
 
     private bool _isInspectorCollapsed = false;
-    private int _inspectorHeight = 240;
+    private bool _isGridCollapsed = false;
+    private int _gridHeight = 320;
 
     private StandaloneCodeEditor? _monacoEditor;
     private bool _isMonacoReady = false;
@@ -1027,8 +1047,29 @@
         ConnectionService.OnConnectionChanged += HandleConnectionChanged;
     }
 
+    private DotNetObjectReference<ProfilerTool>? _dotNetRef;
+
+    [JSInvokable]
+    public void SetGridHeight(int height)
+    {
+        _gridHeight = height;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!_isInspectorCollapsed && !_isGridCollapsed)
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("initProfilerSplitter", _dotNetRef);
+            }
+            catch
+            {
+                // Ignore JS interop errors if unmounted
+            }
+        }
+
         if (_needsAutoScroll && _autoScroll && _activeMainTab == MainTab.Stream)
         {
             _needsAutoScroll = false;
@@ -1324,9 +1365,34 @@
         return _aggregateSortAsc ? "▲" : "▼";
     }
 
-    private void ToggleInspectorCollapse()
+    private async Task ToggleGridCollapse()
+    {
+        _isGridCollapsed = !_isGridCollapsed;
+        if (_isGridCollapsed && _isInspectorCollapsed)
+        {
+            _isInspectorCollapsed = false;
+        }
+        await Task.Yield();
+        try
+        {
+            await JS.InvokeVoidAsync("triggerWindowResize");
+        }
+        catch { }
+    }
+
+    private async Task ToggleInspectorCollapse()
     {
         _isInspectorCollapsed = !_isInspectorCollapsed;
+        if (_isInspectorCollapsed && _isGridCollapsed)
+        {
+            _isGridCollapsed = false;
+        }
+        await Task.Yield();
+        try
+        {
+            await JS.InvokeVoidAsync("triggerWindowResize");
+        }
+        catch { }
     }
 
     private void SaveSettings()
@@ -1478,6 +1544,7 @@
 
     public void Dispose()
     {
+        _dotNetRef?.Dispose();
         ConnectionService.OnConnectionChanged -= HandleConnectionChanged;
         ConnectionService.OnDatabaseSwitched -= HandleDatabaseSwitched;
         Profiler.EventsBatchAvailable -= HandleNewEventsBatch;

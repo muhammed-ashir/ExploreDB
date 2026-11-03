@@ -1804,3 +1804,65 @@ window.profilerScrollToLatest = function (containerId, newestFirst) {
 
 
 
+
+
+// SQL Profiler: Resizable Splitter (resizes top grid panel, matching SQL Compare)
+window.initProfilerSplitter = function (dotNetRef) {
+    var splitter = document.getElementById('profiler-inspector-splitter');
+    var grid = document.getElementById('profiler-grid-container');
+    var mainBox = document.querySelector('.profiler-main-box');
+
+    if (splitter && grid && !splitter._hasSplitterHandler) {
+        splitter._hasSplitterHandler = true;
+        splitter.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            try { splitter.setPointerCapture(e.pointerId); } catch (err) {}
+
+            var startY = e.clientY;
+            var startHeight = grid.offsetHeight;
+            var minHeight = 120;
+            var maxContainerHeight = mainBox ? mainBox.offsetHeight : (window.innerHeight - 200);
+            var maxHeight = Math.max(minHeight + 60, maxContainerHeight - 160);
+            var lastHeight = startHeight;
+
+            splitter.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+
+            function onPointerMove(moveEvent) {
+                var deltaY = moveEvent.clientY - startY;
+                var newHeight = Math.round(Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY)));
+                lastHeight = newHeight;
+                grid.style.height = newHeight + 'px';
+                grid.style.flexGrow = '0';
+                grid.style.flexShrink = '0';
+                window.dispatchEvent(new Event('resize'));
+            }
+
+            function onPointerUp(upEvent) {
+                try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+                splitter.removeEventListener('pointermove', onPointerMove);
+                splitter.removeEventListener('pointerup', onPointerUp);
+                splitter.removeEventListener('pointercancel', onPointerUp);
+                splitter.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                window.dispatchEvent(new Event('resize'));
+
+                if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                    dotNetRef.invokeMethodAsync('SetGridHeight', lastHeight);
+                }
+            }
+
+            splitter.addEventListener('pointermove', onPointerMove);
+            splitter.addEventListener('pointerup', onPointerUp);
+            splitter.addEventListener('pointercancel', onPointerUp);
+        });
+    }
+
+    return true;
+};
+
+window.triggerWindowResize = function () {
+    window.dispatchEvent(new Event('resize'));
+};
