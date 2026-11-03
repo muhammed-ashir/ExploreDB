@@ -34,13 +34,6 @@
                     <i class="bi bi-play-fill fs-6"></i>
                     <span>Start Trace</span>
                 </button>
-
-                <button class="btn btn-sm btn-outline-info d-inline-flex align-items-center gap-1 shadow-sm"
-                        @onclick="StartDemoAsync"
-                        title="Simulate realistic queries, RPC, errors and deadlocks without server permissions">
-                    <i class="bi bi-lightning-charge-fill"></i>
-                    <span>⚡ Demo Mode</span>
-                </button>
             }
             else
             {
@@ -125,7 +118,7 @@
         </div>
     }
 
-    @if (!SchemaService.IsDatabaseConnected && !Profiler.IsDemoMode)
+    @if (!SchemaService.IsDatabaseConnected)
     {
         <NoDatabaseBanner Height="calc(100vh - 150px)" />
     }
@@ -444,13 +437,12 @@
                         <i class="bi bi-activity fs-1 opacity-50 mb-2"></i>
                         <h5>No Events Captured</h5>
                         <p class="small mb-3">
-                            @(Profiler.IsStreaming ? "Waiting for matching SQL Server events..." : "Click 'Start Trace' or '⚡ Demo Mode' to start capturing SQL queries.")
+                            @(Profiler.IsStreaming ? "Waiting for matching SQL Server events..." : "Click 'Start Trace' to start capturing SQL queries.")
                         </p>
                         @if (!Profiler.IsStreaming)
                         {
                             <div class="d-flex gap-2">
                                 <button class="btn btn-sm btn-success px-3" @onclick="StartTraceAsync" disabled="@(!CanStartLiveTrace)">Start Trace</button>
-                                <button class="btn btn-sm btn-outline-info" @onclick="StartDemoAsync">⚡ Try Demo Simulation</button>
                             </div>
                         }
                     </div>
@@ -1206,12 +1198,6 @@
         }
     }
 
-    private async Task StartDemoAsync()
-    {
-        _errorMessage = null;
-        await Profiler.StartDemoModeAsync();
-    }
-
     private void PauseTrace() => Profiler.Pause();
 
     private void ResumeTrace() => Profiler.Resume();
@@ -1569,7 +1555,7 @@
     {
         InvokeAsync(() =>
         {
-            if (Profiler.IsStreaming && !Profiler.IsDemoMode)
+            if (Profiler.IsStreaming)
             {
                 _statusMessage = $"Sidebar database switched to '{SchemaService.ActiveDatabase}'. (Active trace is profiling '{_sessionConfig.Filters.DatabaseName}').";
             }
