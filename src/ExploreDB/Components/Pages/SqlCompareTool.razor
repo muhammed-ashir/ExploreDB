@@ -671,6 +671,12 @@
                     @if (_optionsExpanded)
                     {
                         <div class="row g-3 pt-3 mt-1 border-top" style="border-color: var(--app-border) !important;">
+                            <!-- Category: General & Syntax -->
+                            <div class="col-12 pb-1">
+                                <div class="text-uppercase fw-semibold" style="font-size: 0.72rem; color: var(--app-accent, #38bdf8); letter-spacing: 0.5px;">
+                                    <i class="bi bi-fonts me-1"></i>General &amp; Syntax
+                                </div>
+                            </div>
                             <div class="col-12 col-md-4">
                                 <div class="form-check"
                                      data-bs-tooltip="true"
@@ -680,18 +686,6 @@
                                     <input class="form-check-input" type="checkbox" id="optWhitespace" @bind="_options.IgnoreWhitespace" />
                                     <label class="form-check-label small" for="optWhitespace" style="color: var(--app-text); cursor: pointer;">
                                         Ignore Whitespace
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="col-12 col-md-4">
-                                <div class="form-check"
-                                     data-bs-tooltip="true"
-                                     data-bs-html="true"
-                                     data-bs-placement="top"
-                                     data-bs-title="<b>Ignore System Constraint Names</b><br/>Ignores system-generated constraint names (e.g. <code>DF__tbl__col__12345</code>) to avoid false differences when constraints lack explicit names.">
-                                    <input class="form-check-input" type="checkbox" id="optConstraintNames" @bind="_options.IgnoreSystemConstraintNames" />
-                                    <label class="form-check-label small" for="optConstraintNames" style="color: var(--app-text); cursor: pointer;">
-                                        Ignore System Constraint Names
                                     </label>
                                 </div>
                             </div>
@@ -712,11 +706,133 @@
                                      data-bs-tooltip="true"
                                      data-bs-html="true"
                                      data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Keyword Casing</b><br/>Ignores casing differences in SQL keywords (e.g. <code>SELECT</code> vs <code>select</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optKeywordCasing" @bind="_options.IgnoreKeywordCasing" />
+                                    <label class="form-check-label small" for="optKeywordCasing" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Keyword Casing
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Semicolons</b><br/>Ignores statement terminator semicolons (<code>;</code>) between T-SQL statements.">
+                                    <input class="form-check-input" type="checkbox" id="optSemicolons" @bind="_options.IgnoreSemicolonBetweenStatements" />
+                                    <label class="form-check-label small" for="optSemicolons" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Semicolons
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
                                      data-bs-title="<b>Ignore Collation Differences</b><br/>Ignores differences in database, table, and column collations (e.g. <code>Latin1_General_CI_AS</code> vs <code>SQL_Latin1_General_CP1_CI_AS</code>).">
                                     <input class="form-check-input" type="checkbox" id="optCollation" @bind="_options.IgnoreCollation" />
                                     <label class="form-check-label small" for="optCollation" style="color: var(--app-text); cursor: pointer;">
                                         Ignore Collation Differences
                                     </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore System Constraint Names</b><br/>Ignores system-generated constraint names (e.g. <code>DF__tbl__col__12345</code>) to avoid false differences when constraints lack explicit names.">
+                                    <input class="form-check-input" type="checkbox" id="optConstraintNames" @bind="_options.IgnoreSystemConstraintNames" />
+                                    <label class="form-check-label small" for="optConstraintNames" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore System Constraint Names
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Category: Indexes & Constraints -->
+                            <div class="col-12 pt-2 pb-1 border-top" style="border-color: var(--app-border) !important;">
+                                <div class="text-uppercase fw-semibold" style="font-size: 0.72rem; color: var(--app-accent, #38bdf8); letter-spacing: 0.5px;">
+                                    <i class="bi bi-sort-numeric-down me-1"></i>Indexes &amp; Constraints
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Indexes</b><br/>Ignores clustered, non-clustered, and columnstore index differences on tables and views entirely.">
+                                    <input class="form-check-input" type="checkbox" id="optIndexes" @bind="_options.IgnoreIndexes" />
+                                    <label class="form-check-label small" for="optIndexes" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Indexes
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Constraints</b><br/>Ignores foreign keys, check constraints, and default constraints on tables entirely.">
+                                    <input class="form-check-input" type="checkbox" id="optConstraints" @bind="_options.IgnoreConstraints" />
+                                    <label class="form-check-label small" for="optConstraints" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Constraints
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Index Options</b><br/>Ignores physical index storage options (such as <code>STATISTICS_NORECOMPUTE</code>, <code>SORT_IN_TEMPDB</code>, <code>DROP_EXISTING</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optIndexOptions" @bind="_options.IgnoreIndexOptions" />
+                                    <label class="form-check-label small" for="optIndexOptions" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Index Options
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Fill Factor</b><br/>Ignores index fill factor percentage settings (e.g. <code>FILLFACTOR = 80</code> vs <code>FILLFACTOR = 90</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optFillFactor" @bind="_options.IgnoreFillFactor" />
+                                    <label class="form-check-label small" for="optFillFactor" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Fill Factor
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Index Padding</b><br/>Ignores index space padding settings (<code>PAD_INDEX = ON</code> vs <code>PAD_INDEX = OFF</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optIndexPadding" @bind="_options.IgnoreIndexPadding" />
+                                    <label class="form-check-label small" for="optIndexPadding" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Index Padding
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Index Lock Hints</b><br/>Ignores row/page locking granularities on indexes (<code>ALLOW_ROW_LOCKS</code>, <code>ALLOW_PAGE_LOCKS</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optLockHints" @bind="_options.IgnoreLockHintsOnIndexes" />
+                                    <label class="form-check-label small" for="optLockHints" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Index Lock Hints
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Category: Schema & Table Rules -->
+                            <div class="col-12 pt-2 pb-1 border-top" style="border-color: var(--app-border) !important;">
+                                <div class="text-uppercase fw-semibold" style="font-size: 0.72rem; color: var(--app-accent, #38bdf8); letter-spacing: 0.5px;">
+                                    <i class="bi bi-table me-1"></i>Schema &amp; Table Rules
                                 </div>
                             </div>
                             <div class="col-12 col-md-4">
@@ -736,10 +852,89 @@
                                      data-bs-tooltip="true"
                                      data-bs-html="true"
                                      data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Table Options</b><br/>Ignores storage and operational table options (such as <code>LOCK_ESCALATION</code>, <code>DATA_COMPRESSION</code>, <code>FILESTREAM_ON</code>) to prevent false differences on identical schemas.">
+                                    <input class="form-check-input" type="checkbox" id="optTableOptions" @bind="_options.IgnoreTableOptions" />
+                                    <label class="form-check-label small" for="optTableOptions" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Table Options
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
                                      data-bs-title="<b>Ignore Permissions &amp; Roles</b><br/>Ignores user permissions (<code>GRANT</code>, <code>DENY</code>, <code>REVOKE</code>), database roles, and role membership assignments.">
                                     <input class="form-check-input" type="checkbox" id="optPermissions" @bind="_options.IgnorePermissions" />
                                     <label class="form-check-label small" for="optPermissions" style="color: var(--app-text); cursor: pointer;">
                                         Ignore Permissions &amp; Roles
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Extended Properties</b><br/>Ignores object descriptions, documentation metadata, and <code>MS_Description</code> properties.">
+                                    <input class="form-check-input" type="checkbox" id="optExtProps" @bind="_options.IgnoreExtendedProperties" />
+                                    <label class="form-check-label small" for="optExtProps" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Extended Properties
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Filegroups &amp; Partitions</b><br/>Ignores filegroup placement (e.g. <code>ON [PRIMARY]</code>) and table/index partition schemes.">
+                                    <input class="form-check-input" type="checkbox" id="optFilegroups" @bind="_options.IgnoreFilegroups" />
+                                    <label class="form-check-label small" for="optFilegroups" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Filegroups &amp; Partitions
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore NOT FOR REPLICATION</b><br/>Ignores <code>NOT FOR REPLICATION</code> settings on identity columns, foreign keys, and check constraints.">
+                                    <input class="form-check-input" type="checkbox" id="optReplication" @bind="_options.IgnoreNotForReplication" />
+                                    <label class="form-check-label small" for="optReplication" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore NOT FOR REPLICATION
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Category: Environment & Session Settings -->
+                            <div class="col-12 pt-2 pb-1 border-top" style="border-color: var(--app-border) !important;">
+                                <div class="text-uppercase fw-semibold" style="font-size: 0.72rem; color: var(--app-accent, #38bdf8); letter-spacing: 0.5px;">
+                                    <i class="bi bi-gear-wide-connected me-1"></i>Environment &amp; Session Settings
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore ANSI_NULLS</b><br/>Ignores the <code>SET ANSI_NULLS</code> setting saved when views, procedures, and tables were created.">
+                                    <input class="form-check-input" type="checkbox" id="optAnsiNulls" @bind="_options.IgnoreAnsiNulls" />
+                                    <label class="form-check-label small" for="optAnsiNulls" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore ANSI_NULLS
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore QUOTED_IDENTIFIER</b><br/>Ignores the <code>SET QUOTED_IDENTIFIER</code> setting saved when views, procedures, and tables were created.">
+                                    <input class="form-check-input" type="checkbox" id="optQuotedIdentifiers" @bind="_options.IgnoreQuotedIdentifiers" />
+                                    <label class="form-check-label small" for="optQuotedIdentifiers" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore QUOTED_IDENTIFIER
                                     </label>
                                 </div>
                             </div>

@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ExploreDB.Services.SqlCompare.Models;
@@ -343,7 +345,7 @@ public class SchemaComparisonService : ISchemaComparisonService
                             return new SchemaComparisonResultModel { IsCancelled = true, SourceEndpoint = source, TargetEndpoint = target };
                         }
 
-                        var item = MapDacDifference(diff);
+                        var item = MapDacDifference(diff, options);
                         diffItems.Add(item);
 
                         switch (item.ChangeType)
@@ -437,7 +439,7 @@ public class SchemaComparisonService : ISchemaComparisonService
         }, cancellationToken);
     }
 
-    private static SchemaDifferenceItem MapDacDifference(SchemaDifference diff)
+    private static SchemaDifferenceItem MapDacDifference(SchemaDifference diff, ComparisonOptions options, bool isChild = false)
     {
         var item = new SchemaDifferenceItem
         {
@@ -465,6 +467,21 @@ public class SchemaComparisonService : ISchemaComparisonService
             item.Name = diff.Name ?? "Unknown Object";
         }
 
+        // Suppress top-level difference if filter options ignore this category
+        if (!isChild)
+        {
+            if (options.IgnoreIndexes && item.Category == ObjectCategory.Index)
+            {
+                item.ChangeType = ChangeType.Identical;
+                item.IsSelected = false;
+            }
+            else if (options.IgnoreConstraints && item.Category == ObjectCategory.Constraint)
+            {
+                item.ChangeType = ChangeType.Identical;
+                item.IsSelected = false;
+            }
+        }
+
         // Extract DDL script definitions
         try
         {
@@ -490,16 +507,161 @@ public class SchemaComparisonService : ISchemaComparisonService
             item.TargetScript = $"-- Definition unavailable for {item.Name}";
         }
 
-        // Map sub-differences (columns, constraints, etc.)
+        // Map sub-differences (indexes, constraints, columns, triggers, etc.)
         if (diff.Children != null)
         {
             foreach (var child in diff.Children)
             {
-                item.Children.Add(MapDacDifference(child));
+                var childItem = MapDacDifference(child, options, isChild: true);
+
+                // Filter child differences based on options
+                bool shouldIgnoreChild = false;
+                if (options.IgnoreIndexes && childItem.Category == ObjectCategory.Index)
+                {
+                    shouldIgnoreChild = true;
+                }
+                else if (options.IgnoreConstraints && childItem.Category == ObjectCategory.Constraint)
+                {
+                    shouldIgnoreChild = true;
+                }
+                else if (options.IgnoreExtendedProperties &&
+                         (childItem.Category == ObjectCategory.Other ||
+                          child.SourceObject?.ObjectType?.Name?.Contains("ExtendedProperty", StringComparison.OrdinalIgnoreCase) == true ||
+                          child.TargetObject?.ObjectType?.Name?.Contains("ExtendedProperty", StringComparison.OrdinalIgnoreCase) == true))
+                {
+                    shouldIgnoreChild = true;
+                }
+
+                if (!shouldIgnoreChild)
+                {
+                    item.Children.Add(childItem);
+                }
             }
         }
 
+        // Solution 1: Append child object DDL scripts to parent scripts so Monaco Diff Viewer displays all differences
+        if (!isChild && item.Children.Count > 0)
+        {
+            var srcSb = new StringBuilder(item.SourceScript?.TrimEnd() ?? string.Empty);
+            var tgtSb = new StringBuilder(item.TargetScript?.TrimEnd() ?? string.Empty);
+
+            foreach (var child in item.Children)
+            {
+                string statusDesc = child.ChangeType switch
+                {
+                    ChangeType.Added => "Added in Source",
+                    ChangeType.Deleted => "Missing in Source",
+                    ChangeType.Modified => "Modified",
+                    _ => "Identical"
+                };
+
+                string childTitle = $"[{child.CategoryDisplayName}] {child.Name} ({statusDesc})";
+                string separator = $"\n\n-- --------------------------------------------------\n-- {childTitle}\n-- --------------------------------------------------";
+
+                srcSb.Append(separator);
+                tgtSb.Append(separator);
+
+                if (child.ChangeType == ChangeType.Added)
+                {
+                    string ddl = !string.IsNullOrWhiteSpace(child.SourceScript)
+                        ? child.SourceScript.Trim()
+                        : $"-- Definition detected in source: {child.Name}";
+                    srcSb.Append('\n').Append(ddl);
+                    tgtSb.Append('\n').Append("-- (Not present in target database)");
+                }
+                else if (child.ChangeType == ChangeType.Deleted)
+                {
+                    string ddl = !string.IsNullOrWhiteSpace(child.TargetScript)
+                        ? child.TargetScript.Trim()
+                        : $"-- Definition detected in target: {child.Name}";
+                    srcSb.Append('\n').Append("-- (Not present in source database)");
+                    tgtSb.Append('\n').Append(ddl);
+                }
+                else if (child.ChangeType == ChangeType.Modified)
+                {
+                    string srcDdl = !string.IsNullOrWhiteSpace(child.SourceScript)
+                        ? child.SourceScript.Trim()
+                        : $"-- Source definition: {child.Name}";
+                    string tgtDdl = !string.IsNullOrWhiteSpace(child.TargetScript)
+                        ? child.TargetScript.Trim()
+                        : $"-- Target definition: {child.Name}";
+                    srcSb.Append('\n').Append(srcDdl);
+                    tgtSb.Append('\n').Append(tgtDdl);
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(child.SourceScript))
+                        srcSb.Append('\n').Append(child.SourceScript.Trim());
+                    if (!string.IsNullOrWhiteSpace(child.TargetScript))
+                        tgtSb.Append('\n').Append(child.TargetScript.Trim());
+                }
+            }
+
+            item.SourceScript = srcSb.ToString();
+            item.TargetScript = tgtSb.ToString();
+        }
+
+        // Solution 3: If flagged as Modified but scripts are equivalent
+        if (!isChild && item.ChangeType == ChangeType.Modified)
+        {
+            bool scriptsMatch = AreScriptsEquivalent(item.SourceScript, item.TargetScript, options);
+            if (scriptsMatch)
+            {
+                // If there are no child differences (or child differences were ignored by user options)
+                // and the scripts are equivalent, treat as Identical.
+                if (item.Children.Count == 0)
+                {
+                    item.ChangeType = ChangeType.Identical;
+                    item.IsSelected = false;
+                }
+                else
+                {
+                    string notice = "\n\n-- [Notice] Base object scripts match. Differences detected in metadata or options.";
+                    item.SourceScript += notice;
+                    item.TargetScript += notice;
+                }
+            }
+        }
+
+        if (item.ChangeType == ChangeType.Identical)
+        {
+            item.IsSelected = false;
+        }
+
         return item;
+    }
+
+    private static bool AreScriptsEquivalent(string? s1, string? s2, ComparisonOptions options)
+    {
+        var comparison = options.IgnoreKeywordCasing ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(s1, s2, comparison)) return true;
+        if (string.IsNullOrWhiteSpace(s1) && string.IsNullOrWhiteSpace(s2)) return true;
+        if (string.IsNullOrWhiteSpace(s1) || string.IsNullOrWhiteSpace(s2)) return false;
+
+        string clean1 = s1;
+        string clean2 = s2;
+
+        if (options.IgnoreComments)
+        {
+            clean1 = Regex.Replace(clean1, @"/\*.*?\*/", "", RegexOptions.Singleline);
+            clean1 = Regex.Replace(clean1, @"--[^\r\n]*", "");
+            clean2 = Regex.Replace(clean2, @"/\*.*?\*/", "", RegexOptions.Singleline);
+            clean2 = Regex.Replace(clean2, @"--[^\r\n]*", "");
+        }
+
+        if (options.IgnoreSemicolonBetweenStatements)
+        {
+            clean1 = clean1.Replace(";", "");
+            clean2 = clean2.Replace(";", "");
+        }
+
+        if (options.IgnoreWhitespace)
+        {
+            clean1 = Regex.Replace(clean1.Trim(), @"\s+", " ");
+            clean2 = Regex.Replace(clean2.Trim(), @"\s+", " ");
+        }
+
+        return string.Equals(clean1.Trim(), clean2.Trim(), comparison);
     }
 
     private static ObjectCategory MapObjectCategory(string? typeName)
