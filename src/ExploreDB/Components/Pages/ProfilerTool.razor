@@ -530,26 +530,25 @@
         {
             <div class="profiler-inspector d-flex flex-column" style="height: @(_inspectorHeight)px; min-height: 120px; background: var(--app-surface);">
                 <!-- Inspector Tabs & Actions -->
-                <div class="d-flex align-items-center justify-content-between px-3 border-bottom py-1">
-                    <ul class="nav nav-pills nav-fill gap-1">
+                <div class="d-flex align-items-center justify-content-between ps-0 pe-3 border-bottom profiler-tab-header">
+                    <ul class="nav nav-tabs border-bottom-0 ms-0 ps-0">
                         <li class="nav-item">
-                            <button class="nav-link py-1 px-3 small @(_activeInspectorTab == InspectorTab.Sql ? "active" : "")"
+                            <button class="nav-link py-2 px-3 small @(_activeInspectorTab == InspectorTab.Sql ? "active" : "")"
                                     @onclick="() => _activeInspectorTab = InspectorTab.Sql">
-                                <i class="bi bi-code-slash me-1"></i> SQL Text
+                                SQL Text
                             </button>
                         </li>
                         <li class="nav-item">
-                            <button class="nav-link py-1 px-3 small @(_activeInspectorTab == InspectorTab.Details ? "active" : "")"
+                            <button class="nav-link py-2 px-3 small @(_activeInspectorTab == InspectorTab.Details ? "active" : "")"
                                     @onclick="() => _activeInspectorTab = InspectorTab.Details">
-                                <i class="bi bi-info-circle me-1"></i> Execution Details
+                                Execution Details
                             </button>
                         </li>
                         @if (_selectedEvent?.EventType == TraceEventType.Deadlock || _selectedEvent?.EventType == TraceEventType.ErrorReported)
                         {
                             <li class="nav-item">
-                                <button class="nav-link py-1 px-3 small @(_activeInspectorTab == InspectorTab.ErrorOrDeadlock ? "active" : "") @(_selectedEvent.EventType == TraceEventType.ErrorReported ? "text-danger" : "text-warning")"
+                                <button class="nav-link py-2 px-3 small @(_activeInspectorTab == InspectorTab.ErrorOrDeadlock ? "active" : "") @(_selectedEvent.EventType == TraceEventType.ErrorReported ? "text-danger" : "text-warning")"
                                         @onclick="() => _activeInspectorTab = InspectorTab.ErrorOrDeadlock">
-                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
                                     @(_selectedEvent.EventType == TraceEventType.ErrorReported ? "Error Details" : "Deadlock Graph")
                                 </button>
                             </li>
@@ -557,7 +556,7 @@
                     </ul>
 
                     <!-- SQL Actions -->
-                    <div class="d-flex align-items-center gap-1">
+                    <div class="d-flex align-items-center gap-1 my-1">
                         @if (_activeInspectorTab == InspectorTab.Sql)
                         {
                             <button class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1 py-1"
