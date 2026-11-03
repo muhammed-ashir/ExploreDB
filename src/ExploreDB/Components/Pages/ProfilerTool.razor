@@ -17,7 +17,7 @@
 @inject WindowManagerService WindowManager
 @implements IDisposable
 
-<div class="container-fluid h-100 d-flex flex-column pb-2 overflow-hidden profiler-container">
+<div class="container-fluid d-flex flex-column pb-2 overflow-hidden profiler-container" style="@(IsPopout ? "height: calc(100vh - 45px); max-height: calc(100vh - 45px);" : "")">
     <!-- TOP BAR -->
     <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2 pt-2">
         <div>
@@ -434,7 +434,7 @@
         <!-- UPPER GRID AREA -->
         @if (!_isGridCollapsed)
         {
-            <div class="@(_isInspectorCollapsed ? "flex-grow-1" : "flex-shrink-0") overflow-auto" id="profiler-grid-container" style="@(_isInspectorCollapsed ? "min-height: 120px;" : $"height: {_gridHeight}px; min-height: 120px;")">
+            <div class="overflow-auto" id="profiler-grid-container" style="@GetGridStyle()">
             @if (_activeMainTab == MainTab.Stream)
             {
                 <!-- LIVE EVENT STREAM TABLE -->
@@ -610,7 +610,7 @@
         <!-- BOTTOM INSPECTOR PANE -->
         @if (!_isInspectorCollapsed)
         {
-            <div id="profiler-inspector-panel" class="profiler-inspector d-flex flex-column flex-grow-1 overflow-hidden" style="min-height: 120px; background: var(--app-surface);">
+            <div id="profiler-inspector-panel" class="profiler-inspector d-flex flex-column overflow-hidden" style="@GetInspectorStyle()">
                 <!-- Inspector Tabs & Actions -->
                 <div class="d-flex align-items-center justify-content-between ps-0 pe-3 border-bottom profiler-tab-header">
                     <ul class="nav nav-tabs border-bottom-0 ms-0 ps-0">
@@ -917,7 +917,8 @@
         overflow-anchor: none;
     }
     .profiler-container {
-        height: 100vh;
+        height: calc(100vh - 90px);
+        max-height: calc(100vh - 90px);
         background: var(--app-bg);
     }
     .metric-card {
@@ -1016,7 +1017,7 @@
 
     private bool _isInspectorCollapsed = false;
     private bool _isGridCollapsed = false;
-    private int _gridHeight = 320;
+    private int _gridHeight = 220;
 
     private StandaloneCodeEditor? _monacoEditor;
     private bool _isMonacoReady = false;
@@ -1053,6 +1054,24 @@
     public void SetGridHeight(int height)
     {
         _gridHeight = height;
+    }
+
+    private string GetGridStyle()
+    {
+        if (_isInspectorCollapsed)
+        {
+            return "flex: 1 1 auto; height: 100%; min-height: 80px;";
+        }
+        return $"height: {_gridHeight}px; flex: 0 0 {_gridHeight}px; min-height: 80px; max-height: calc(100% - 110px);";
+    }
+
+    private string GetInspectorStyle()
+    {
+        if (_isGridCollapsed)
+        {
+            return "flex: 1 1 auto; height: 100%; min-height: 80px; background: var(--app-surface);";
+        }
+        return "flex: 1 1 0; min-height: 80px; background: var(--app-surface);";
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -1476,21 +1495,37 @@
         }
     }
 
-    private void OpenInQueryEditor()
+    private async Task OpenInQueryEditor()
     {
         string sql = CurrentInspectorSql;
         if (string.IsNullOrEmpty(sql)) return;
 
+        string tabName = _selectedEvent != null
+            ? $"Trace_Event_{_selectedEvent.Id}_{DateTime.Now:HHmmss}.sql"
+            : $"TraceQuery_{DateTime.Now:HHmmss}.sql";
+
         var newTab = new QueryTab
         {
             Id = Guid.NewGuid(),
-            Name = $"TraceQuery_{DateTime.Now:HHmmss}.sql",
-            Content = sql
+            Name = tabName,
+            Content = sql,
+            OriginalContent = sql,
+            ConnectionString = ConnectionService.ConnectionString
         };
+
         QueryStateService.Tabs.Add(newTab);
         QueryStateService.ActiveTabId = newTab.Id;
-        _ = QueryStateService.SaveTabsAsync();
-        Nav.NavigateTo("/");
+        QueryStateService.NotifyTabUpdated(newTab.Id);
+        await QueryStateService.SaveTabsAsync();
+
+        if (IsPopout)
+        {
+            WindowManager.NavigateMainWindow("/runner");
+        }
+        else
+        {
+            Nav.NavigateTo("/runner");
+        }
     }
 
     private void PopoutWindow()

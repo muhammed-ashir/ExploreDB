@@ -1820,10 +1820,11 @@ window.initProfilerSplitter = function (dotNetRef) {
 
             var startY = e.clientY;
             var startHeight = grid.offsetHeight;
-            var minHeight = 120;
+            var minHeight = 80;
             var maxContainerHeight = mainBox ? mainBox.offsetHeight : (window.innerHeight - 200);
-            var maxHeight = Math.max(minHeight + 60, maxContainerHeight - 160);
+            var maxHeight = Math.max(minHeight + 40, maxContainerHeight - 110);
             var lastHeight = startHeight;
+            var rafId = null;
 
             splitter.classList.add('dragging');
             document.body.style.cursor = 'row-resize';
@@ -1834,9 +1835,14 @@ window.initProfilerSplitter = function (dotNetRef) {
                 var newHeight = Math.round(Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY)));
                 lastHeight = newHeight;
                 grid.style.height = newHeight + 'px';
-                grid.style.flexGrow = '0';
-                grid.style.flexShrink = '0';
-                window.dispatchEvent(new Event('resize'));
+                grid.style.flex = '0 0 ' + newHeight + 'px';
+
+                if (!rafId) {
+                    rafId = requestAnimationFrame(function () {
+                        rafId = null;
+                        window.dispatchEvent(new Event('resize'));
+                    });
+                }
             }
 
             function onPointerUp(upEvent) {
@@ -1847,6 +1853,10 @@ window.initProfilerSplitter = function (dotNetRef) {
                 splitter.classList.remove('dragging');
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
                 window.dispatchEvent(new Event('resize'));
 
                 if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
