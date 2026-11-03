@@ -310,7 +310,7 @@
 
             <!-- Auto-scroll toggle -->
             <button class="btn btn-sm @(_autoScroll ? "btn-outline-primary active" : "btn-outline-secondary") btn-chip"
-                    @onclick="() => _autoScroll = !_autoScroll"
+                    @onclick="ToggleAutoScroll"
                     title="Auto-scroll to latest event">
                 <i class="bi bi-arrow-down-circle"></i>
                 <span>Auto-Scroll</span>
@@ -325,7 +325,7 @@
             <ul class="nav nav-tabs border-bottom-0 ms-0 ps-0">
                 <li class="nav-item">
                     <button class="nav-link @(_activeMainTab == MainTab.Stream ? "active" : "") d-flex align-items-center gap-2 py-2 px-3"
-                            @onclick="() => _activeMainTab = MainTab.Stream">
+                            @onclick="() => SwitchMainTab(MainTab.Stream)">
                         <span class="d-inline-flex align-items-center gap-1">
                             <span>Live Event Stream</span>
                             <i class="bi bi-info-circle opacity-75"
@@ -339,7 +339,7 @@
                 </li>
                 <li class="nav-item">
                     <button class="nav-link @(_activeMainTab == MainTab.Aggregates ? "active" : "") d-flex align-items-center gap-2 py-2 px-3"
-                            @onclick="() => _activeMainTab = MainTab.Aggregates">
+                            @onclick="() => SwitchMainTab(MainTab.Aggregates)">
                         <span class="d-inline-flex align-items-center gap-1">
                             <span>Query Aggregates</span>
                             <i class="bi bi-info-circle opacity-75"
@@ -832,6 +832,9 @@
 }
 
 <style>
+    #profiler-grid-container {
+        overflow-anchor: none;
+    }
     .profiler-container {
         height: 100vh;
         background: var(--app-bg);
@@ -910,6 +913,7 @@
     private string _filterText = string.Empty;
     private bool _newestFirst = true;
     private bool _autoScroll = true;
+    private bool _needsAutoScroll = false;
 
     private List<TraceEvent> _events = new();
     private List<TraceEvent> _filteredEvents = new();
@@ -957,6 +961,22 @@
         Profiler.ErrorOccurred += HandleErrorOccurred;
         ConnectionService.OnDatabaseSwitched += HandleDatabaseSwitched;
         ConnectionService.OnConnectionChanged += HandleConnectionChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_needsAutoScroll && _autoScroll && _activeMainTab == MainTab.Stream)
+        {
+            _needsAutoScroll = false;
+            try
+            {
+                await JS.InvokeVoidAsync("profilerScrollToLatest", "profiler-grid-container", _newestFirst);
+            }
+            catch
+            {
+                // Ignore JS interop errors if disposed or unmounted
+            }
+        }
     }
 
     private void HandleConnectionChanged()
@@ -1008,6 +1028,11 @@
                 SortAggregatesList();
 
                 ApplyFilter();
+
+                if (_autoScroll && _activeMainTab == MainTab.Stream)
+                {
+                    _needsAutoScroll = true;
+                }
             }
 
             StateHasChanged();
@@ -1101,11 +1126,48 @@
         SetPreset(preset);
     }
 
-    private void ToggleSortOrder()
+    private async Task ToggleSortOrder()
     {
         _newestFirst = !_newestFirst;
         _events.Reverse();
         ApplyFilter();
+        if (_autoScroll && _activeMainTab == MainTab.Stream)
+        {
+            _needsAutoScroll = true;
+            try
+            {
+                await JS.InvokeVoidAsync("profilerScrollToLatest", "profiler-grid-container", _newestFirst);
+            }
+            catch { }
+        }
+    }
+
+    private async Task ToggleAutoScroll()
+    {
+        _autoScroll = !_autoScroll;
+        if (_autoScroll && _activeMainTab == MainTab.Stream)
+        {
+            _needsAutoScroll = true;
+            try
+            {
+                await JS.InvokeVoidAsync("profilerScrollToLatest", "profiler-grid-container", _newestFirst);
+            }
+            catch { }
+        }
+    }
+
+    private async Task SwitchMainTab(MainTab tab)
+    {
+        _activeMainTab = tab;
+        if (tab == MainTab.Stream && _autoScroll)
+        {
+            _needsAutoScroll = true;
+            try
+            {
+                await JS.InvokeVoidAsync("profilerScrollToLatest", "profiler-grid-container", _newestFirst);
+            }
+            catch { }
+        }
     }
 
     private void ApplyFilter()

@@ -1789,4 +1789,18 @@ window.generateTableAlias = function (tableName, existingAliases) {
     return finalAlias;
 };
 
+// SQL Profiler: Scroll to latest event
+window.profilerScrollToLatest = function (containerId, newestFirst) {
+    requestAnimationFrame(function () {
+        var el = document.getElementById(containerId);
+        if (!el) return;
+        if (newestFirst) {
+            el.scrollTop = 0;
+        } else {
+            el.scrollTop = el.scrollHeight;
+        }
+    });
+};
+
+
 
