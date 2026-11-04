@@ -101,7 +101,7 @@ else
     <div class="row">
         <!-- Column Picker -->
         <!-- Builder Panel -->
-        <div class="col-md-4 d-flex flex-column gap-3" style="position: sticky; top: 20px; height: calc(100vh - 60px);">
+        <div class="col-md-5 d-flex flex-column gap-3" style="position: sticky; top: 20px; height: calc(100vh - 60px);">
             <div class="btn-group shadow-sm w-100 flex-shrink-0">
                 <button class="btn @(CurrentMode == QueryMode.Select ? "btn-primary" : (ThemeService.IsDark ? "btn-dark border-secondary text-light" : "btn-outline-secondary"))" @onclick="() => SetMode(QueryMode.Select)">SELECT</button>
                 <button class="btn @(CurrentMode == QueryMode.Update ? "btn-primary" : (ThemeService.IsDark ? "btn-dark border-secondary text-light" : "btn-outline-secondary"))" @onclick="() => SetMode(QueryMode.Update)">UPDATE</button>
@@ -144,15 +144,34 @@ else
                                                  style="background: var(--app-input-bg); color: var(--app-input-text); border: 1px solid var(--app-input-border);"
                                                  @onclick="() => IsTargetTableDropdownOpen = !IsTargetTableDropdownOpen">
                                                 @{
-                                                    var targetTableNameOnly = string.IsNullOrEmpty(TargetTable) ? "Select Target Table..." : TargetTable.Replace("[", "").Replace("]", "").Split('.').LastOrDefault();
                                                     var targetTooltipHtml = string.IsNullOrEmpty(TargetTable) ? null : GetTooltipHtml(TargetTable);
+                                                    string? targetSchema = null;
+                                                    string targetTableName = "Select Target Table...";
+                                                    if (!string.IsNullOrEmpty(TargetTable))
+                                                    {
+                                                        var cleanTarget = TargetTable.Replace("[", "").Replace("]", "");
+                                                        var targetParts = cleanTarget.Split('.');
+                                                        if (targetParts.Length > 1)
+                                                        {
+                                                            targetSchema = targetParts[0];
+                                                            targetTableName = targetParts[1];
+                                                        }
+                                                        else
+                                                        {
+                                                            targetTableName = cleanTarget;
+                                                        }
+                                                    }
                                                 }
                                                 <div class="text-truncate" style="padding-right: 20px;"
                                                      data-bs-tooltip="@(!string.IsNullOrEmpty(TargetTable) ? "true" : null)" 
                                                      data-bs-html="@(!string.IsNullOrEmpty(TargetTable) ? "true" : null)" 
                                                      data-bs-title="@targetTooltipHtml" 
                                                      data-bs-placement="bottom">
-                                                    @targetTableNameOnly
+                                                    @if (!string.IsNullOrEmpty(targetSchema))
+                                                    {
+                                                        <span class="text-muted fw-normal opacity-75" style="color: var(--app-text-muted) !important;">@targetSchema.</span>
+                                                    }
+                                                    <span>@targetTableName</span>
                                                 </div>
                                                 <div class="position-absolute h-100 d-flex align-items-center" style="right: 12px; top: 0; pointer-events: none;">
                                                     <i class="bi bi-chevron-down text-muted" style="font-size: 0.85rem;"></i>
@@ -165,12 +184,16 @@ else
                                                     <div class="p-1 mb-1">
                                                         <input type="text" class="form-control form-control-sm" style="background: var(--app-input-bg); color: var(--app-input-text); border: 1px solid var(--app-input-border);" placeholder="Search tables..." @bind="TargetTableSearch" @bind:event="oninput" @onclick:stopPropagation />
                                                     </div>
-                                                    @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
+                                                    @foreach (var table in SchemaService.Tables.Where(t => string.IsNullOrEmpty(TargetTableSearch) || t.Name.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase) || t.Schema.Contains(TargetTableSearch, StringComparison.OrdinalIgnoreCase)))
                                                         {
                                                             <button class="dropdown-item py-1 text-truncate @(TargetTable == table.FullName ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" type="button" 
                                                                     style="color: var(--app-text);"
                                                                     data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(table.FullName)" data-bs-placement="right" 
                                                                     @onclick="() => SelectTargetTable(table.FullName)">
+                                                                @if (!string.IsNullOrEmpty(table.Schema))
+                                                                {
+                                                                    <span class="text-muted fw-normal opacity-75" style="color: var(--app-text-muted) !important;">@table.Schema.</span>
+                                                                }
                                                                 @table.Name
                                                             </button>
                                                         }
@@ -262,7 +285,7 @@ else
                                                            @onclick:stopPropagation 
                                                            style="width: 0.85rem; height: 0.85rem; cursor: pointer; margin-top: 2px !important; border-color: var(--app-input-border);" />
                                                 </div>
-                                                <button class="accordion-button collapsed bg-transparent shadow-none fw-bold text-uppercase px-2" 
+                                                <button class="accordion-button collapsed bg-transparent shadow-none fw-bold px-2" 
                                                         type="button" 
                                                         data-bs-toggle="collapse" 
                                                         data-bs-target="#collapse_@tableId" 
@@ -270,7 +293,13 @@ else
                                                         aria-controls="collapse_@tableId"
                                                         style="font-size: 0.75rem; min-height: 28px; padding-top: 0.35rem !important; padding-bottom: 0.35rem !important; flex: 1; min-width: 0;"
                                                         data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @table.Name<br/><b>Schema:</b> @table.Schema.ToLower()" data-bs-placement="bottom">
-                                                    <span class="text-truncate text-start flex-grow-1 pe-2 table-title-text" style="min-width: 0;">@table.Name</span>
+                                                    <span class="text-truncate text-start flex-grow-1 pe-2" style="min-width: 0;">
+                                                        @if (!string.IsNullOrEmpty(table.Schema))
+                                                        {
+                                                            <span class="text-muted fw-normal opacity-75" style="color: var(--app-text-muted) !important;">@table.Schema.</span>
+                                                        }
+                                                        <span class="table-title-text fw-bold">@table.Name</span>
+                                                    </span>
                                                 </button>
                                             </div>
                                         </h2>
@@ -328,7 +357,11 @@ else
                                                 <div class="fw-bold text-truncate cursor-pointer" style="font-size: 0.85rem; color: var(--app-text);" 
                                                      data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @tableName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom"
                                                      @onclick="() => NavigateToDetails(table)">
-                                                    @tableName
+                                                    @if (!string.IsNullOrEmpty(schemaName))
+                                                    {
+                                                        <span class="text-muted fw-normal opacity-75" style="color: var(--app-text-muted) !important;">@schemaName.</span>
+                                                    }
+                                                    <span>@tableName</span>
                                                 </div>
                                                 <div class="d-flex gap-1 flex-shrink-0 align-items-center">
                                                     <button class="btn btn-sm btn-link text-secondary p-0" style="text-decoration: none; @(isFirst ? "cursor: not-allowed; pointer-events: auto;" : "")" title="@(isFirst ? "Cannot move up - already at the top" : "Move Up")" disabled="@isFirst" @onclick="() => MoveTable(table, -1)"><i class="bi bi-arrow-up-short fs-5"></i></button>
@@ -357,7 +390,7 @@ else
         </div>
 
         <!-- Result Area -->
-        <div class="col-md-8 d-flex flex-column gap-4">
+        <div class="col-md-7 d-flex flex-column gap-4">
                 @if (CurrentMode == QueryMode.Update && !string.IsNullOrEmpty(TargetTable))
                 {
                     <div class="card shadow-sm" style="background: var(--app-surface); border: 1px solid var(--app-border);">
@@ -1134,9 +1167,10 @@ else
             bool tableMatches = false;
             if (tableFilter)
             {
-                if (ExactMatch) tableMatches = string.Equals(table.Name, searchTerm, comp);
-                else if (MatchWholeWord) tableMatches = MatchesWord(table.Name, searchTerm, comp);
-                else tableMatches = table.Name.Contains(searchTerm, comp);
+                var fullCleanName = $"{table.Schema}.{table.Name}";
+                if (ExactMatch) tableMatches = string.Equals(table.Name, searchTerm, comp) || string.Equals(fullCleanName, searchTerm, comp);
+                else if (MatchWholeWord) tableMatches = MatchesWord(table.Name, searchTerm, comp) || MatchesWord(fullCleanName, searchTerm, comp);
+                else tableMatches = table.Name.Contains(searchTerm, comp) || fullCleanName.Contains(searchTerm, comp);
             }
 
             List<ColumnInfo> matchingColumns;
