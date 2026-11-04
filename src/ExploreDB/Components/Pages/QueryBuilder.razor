@@ -452,8 +452,8 @@ else
                          </button>
                          <button class="btn btn-sm btn-primary fw-semibold d-flex align-items-center gap-1 shadow-sm px-3" 
                                  @onclick="OpenQueryModal" 
-                                 disabled="@(SelectedColumns.Count == 0 && string.IsNullOrEmpty(TargetTable))"
-                                 title="View generated SQL query">
+                                 disabled="@(TotalSelectedTablesCount <= 1)"
+                                 title="@(TotalSelectedTablesCount <= 1 ? "Select at least 2 tables to view query" : "View generated SQL query")">
                              <i class="bi bi-code-slash"></i>
                              <span>Show Query</span>
                          </button>
@@ -476,8 +476,8 @@ else
                          {
                              <!-- Empty state when no tables are selected -->
                              <div class="d-flex flex-column align-items-center justify-content-center flex-grow-1 text-center p-4 my-auto">
-                                 <div class="p-3 rounded-circle mb-3" style="background: rgba(13, 110, 253, 0.1); color: #0d6efd;">
-                                     <i class="bi bi-diagram-3" style="font-size: 2.5rem;"></i>
+                                 <div class="d-flex align-items-center justify-content-center rounded-circle mb-3" style="width: 72px; height: 72px; background: rgba(13, 110, 253, 0.1); color: #0d6efd;">
+                                     <i class="bi bi-diagram-3" style="font-size: 2.2rem; line-height: 1;"></i>
                                  </div>
                                  <h6 class="fw-bold mb-1" style="color: var(--app-text);">No Tables Selected</h6>
                                  <p class="text-muted small mb-0" style="max-width: 360px;">
@@ -489,21 +489,14 @@ else
                          {
                              <!-- Single table selected state -->
                              <div class="d-flex flex-column align-items-center justify-content-center flex-grow-1 text-center p-4 my-auto">
-                                 <div class="p-3 rounded-circle mb-3" style="background: rgba(13, 202, 240, 0.1); color: #0dcaf0;">
-                                     <i class="bi bi-table" style="font-size: 2.5rem;"></i>
+                                 <div class="d-flex align-items-center justify-content-center rounded-circle mb-3" style="width: 72px; height: 72px; background: rgba(13, 202, 240, 0.1); color: #0dcaf0;">
+                                     <i class="bi bi-table" style="font-size: 2.2rem; line-height: 1;"></i>
                                  </div>
-                                 <h6 class="fw-bold mb-1" style="color: var(--app-text);">Single Table Selected</h6>
-                                 <div class="badge bg-secondary px-3 py-2 my-2 font-monospace" style="font-size: 0.9rem;">
-                                     @selectedDistinctTables[0].Split('.').Last().Replace("[", "").Replace("]", "")
-                                 </div>
-                                 <p class="text-muted small mb-3" style="max-width: 420px;">
-                                     No join paths are needed for a single table. Select another table to discover relationships, or finalize now to generate the single-table query.
+                                 <h6 class="fw-bold mb-2" style="color: var(--app-text);">Single Table Selected</h6>
+                                 <p class="text-muted small mb-0" style="max-width: 420px;">
+                                     No join paths are needed for a single table. Select another table to discover relationships.
                                  </p>
-                                 <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm px-4 py-2 fw-semibold" 
-                                         @onclick="OpenQueryModal">
-                                     <i class="bi bi-code-slash"></i>
-                                     Show Query
-                                 </button>
+
                              </div>
                          }
                          else
@@ -941,6 +934,26 @@ else
 }
 
 @code {
+    private int TotalSelectedTablesCount
+    {
+        get
+        {
+            var count = SelectedColumns
+                .Select(k => k.Substring(0, k.LastIndexOf('.')))
+                .Distinct()
+                .Count();
+            if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable))
+            {
+                var tables = SelectedColumns.Select(k => k.Substring(0, k.LastIndexOf('.'))).Distinct();
+                if (!tables.Contains(TargetTable, StringComparer.OrdinalIgnoreCase))
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+    }
+
     private string? ActiveOffcanvasTable = null;
     private string GetTooltipHtml(string fullName)
     {
