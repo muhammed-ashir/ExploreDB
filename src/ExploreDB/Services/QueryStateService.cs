@@ -8,6 +8,22 @@ using System.Threading.Tasks;
 
 namespace ExploreDB.Services;
 
+public class QueryOutputMessage
+{
+    public string Text { get; set; } = string.Empty;
+    public bool IsError { get; set; } = false;
+
+    public QueryOutputMessage() { }
+    public QueryOutputMessage(string text, bool isError = false)
+    {
+        Text = text;
+        IsError = isError;
+    }
+
+    public static implicit operator QueryOutputMessage(string text) => new(text);
+    public override string ToString() => Text;
+}
+
 public class QueryTab
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -35,7 +51,7 @@ public class QueryTab
     }
     
     [System.Text.Json.Serialization.JsonIgnore]
-    public List<string> Messages { get; set; } = new();
+    public List<QueryOutputMessage> Messages { get; set; } = new();
     
     [System.Text.Json.Serialization.JsonIgnore]
     public bool HasExecuted { get; set; }

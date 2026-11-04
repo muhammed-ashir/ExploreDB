@@ -337,9 +337,19 @@
                             }
                             else if (ResultTab == "Messages")
                             {
-                                <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap;">
+                                <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap; font-family: Consolas, 'Courier New', monospace;">
 @if (ActiveTab.Messages.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
-@foreach (var msg in ActiveTab.Messages) { @msg<br/> }
+@foreach (var msg in ActiveTab.Messages)
+{
+    @if (msg.IsError)
+    {
+        <span class="text-danger fw-semibold">@msg.Text</span><br/>
+    }
+    else
+    {
+        <span>@msg.Text</span><br/>
+    }
+}
                                 </pre>
                             }
                         </div>
@@ -2015,7 +2025,22 @@
             serverName = conn.DataSource;
             conn.InfoMessage += (sender, args) =>
             {
-                ActiveTab.Messages.Add(args.Message);
+                foreach (SqlError err in args.Errors)
+                {
+                    if (err.Class > 10)
+                    {
+                        ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {err.Number}, Level {err.Class}, State {err.State}, Line {err.LineNumber}", isError: true));
+                        ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true));
+                    }
+                    else
+                    {
+                        ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: false));
+                    }
+                }
+                if (args.Errors.Count == 0 && !string.IsNullOrEmpty(args.Message))
+                {
+                    ActiveTab.Messages.Add(new QueryOutputMessage(args.Message, isError: false));
+                }
                 InvokeAsync(StateHasChanged);
             };
             await conn.OpenAsync();
@@ -2056,6 +2081,7 @@
             
             using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
             int totalRows = 0;
+            int affectedStatementCount = 0;
             
             do
             {
@@ -2098,22 +2124,30 @@
                     {
                         if (reader.RecordsAffected >= 0)
                         {
-                            ActiveTab.Messages.Add($"({reader.RecordsAffected} row(s) affected)");
+                            var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
+                            ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
+                            affectedStatementCount++;
                         }
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException && !(ActiveTab.QueryCts?.IsCancellationRequested ?? false) && !ActiveTab.IsCancelling)
                 {
-                    // If a specific result set fails (e.g. invalid column in the second query), 
-                    // we log it as a message and break out.
-                    ActiveTab.Messages.Add($"Error reading result set: {ex.Message}");
+                    ActiveTab.Messages.Add(new QueryOutputMessage($"Error reading result set: {ex.Message}", isError: true));
                     break;
                 }
             }
             while (await reader.NextResultAsync(ActiveTab.QueryCts.Token));
             
-            ActiveTab.Messages.Add("Executed custom query.");
-            ActiveTab.Messages.Add($"Result Sets: {ActiveTab.ResultSets.Count}, Total Rows: {totalRows}");
+            if (affectedStatementCount == 0 && reader.RecordsAffected >= 0)
+            {
+                var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
+                ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
+            }
+
+            ActiveTab.Messages.Add("");
+            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
+
+            ResultTab = ActiveTab.ResultSets.Count == 0 ? "Messages" : "Results";
             isSuccess = true;
         }
         catch (Exception ex)
@@ -2121,12 +2155,33 @@
             if ((ActiveTab.QueryCts != null && ActiveTab.QueryCts.IsCancellationRequested) || ActiveTab.IsCancelling || ex is OperationCanceledException)
             {
                 ActiveTab.Messages.Add("Execution cancelled by user.");
+                ActiveTab.Messages.Add("");
+                ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
                 ResultTab = "Messages";
                 errorMessage = "Cancelled";
             }
+            else if (ex is SqlException sqlEx)
+            {
+                ResultTab = "Messages";
+                errorMessage = sqlEx.Message;
+                foreach (SqlError err in sqlEx.Errors)
+                {
+                    ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {err.Number}, Level {err.Class}, State {err.State}, Line {err.LineNumber}", isError: true));
+                    ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true));
+                }
+                if (sqlEx.Errors.Count == 0)
+                {
+                    ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {sqlEx.Number}, Level {sqlEx.Class}, State {sqlEx.State}, Line {sqlEx.LineNumber}", isError: true));
+                    ActiveTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true));
+                }
+                ActiveTab.Messages.Add("");
+                ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
+            }
             else
             {
-                ActiveTab.Messages.Add($"ERROR: {ex.Message}");
+                ActiveTab.Messages.Add(new QueryOutputMessage($"ERROR: {ex.Message}", isError: true));
+                ActiveTab.Messages.Add("");
+                ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
                 ResultTab = "Messages";
                 errorMessage = ex.Message;
             }

@@ -201,9 +201,19 @@
                         }
                         else if (ResultTab == "Messages")
                         {
-                            <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap;">
+                            <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap; font-family: Consolas, 'Courier New', monospace;">
 @if (ActiveTab.Messages.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
-@foreach (var msg in ActiveTab.Messages) { @msg<br/> }
+@foreach (var msg in ActiveTab.Messages)
+{
+    @if (msg.IsError)
+    {
+        <span class="text-danger fw-semibold">@msg.Text</span><br/>
+    }
+    else
+    {
+        <span>@msg.Text</span><br/>
+    }
+}
                             </pre>
                         }
                         </div>
@@ -634,6 +644,7 @@
 
             using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
             int totalRows = 0;
+            int affectedStatementCount = 0;
             
             do
             {
@@ -676,30 +687,58 @@
                     {
                         if (reader.RecordsAffected >= 0)
                         {
-                            ActiveTab.Messages.Add($"({reader.RecordsAffected} row(s) affected)");
+                            var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
+                            ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
+                            affectedStatementCount++;
                         }
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException && !(ActiveTab.QueryCts?.IsCancellationRequested ?? false) && !ActiveTab.IsCancelling)
                 {
-                    ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Error reading result set: {ex.Message}");
+                    ActiveTab.Messages.Add(new QueryOutputMessage($"Error reading result set: {ex.Message}", isError: true));
                     break;
                 }
             } while (await reader.NextResultAsync(ActiveTab.QueryCts.Token));
 
-            if (ActiveTab.ResultSets.Count == 0 && ResultTab == "Results")
+            if (affectedStatementCount == 0 && reader.RecordsAffected >= 0)
             {
-                ResultTab = "Messages";
+                var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
+                ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
             }
+
+            ActiveTab.Messages.Add("");
+            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
+
+            ResultTab = ActiveTab.ResultSets.Count == 0 ? "Messages" : "Results";
         }
         catch (Exception ex) when (ex is OperationCanceledException || (ActiveTab.QueryCts != null && ActiveTab.QueryCts.IsCancellationRequested) || ActiveTab.IsCancelling)
         {
-            ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Query execution was canceled by the user.");
+            ActiveTab.Messages.Add("Query execution was canceled by the user.");
+            ActiveTab.Messages.Add("");
+            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
             ResultTab = "Messages";
+        }
+        catch (SqlException sqlEx)
+        {
+            ResultTab = "Messages";
+            foreach (SqlError err in sqlEx.Errors)
+            {
+                ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {err.Number}, Level {err.Class}, State {err.State}, Line {err.LineNumber}", isError: true));
+                ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true));
+            }
+            if (sqlEx.Errors.Count == 0)
+            {
+                ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {sqlEx.Number}, Level {sqlEx.Class}, State {sqlEx.State}, Line {sqlEx.LineNumber}", isError: true));
+                ActiveTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true));
+            }
+            ActiveTab.Messages.Add("");
+            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
         }
         catch (Exception ex)
         {
-            ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Error: {ex.Message}");
+            ActiveTab.Messages.Add(new QueryOutputMessage($"Error: {ex.Message}", isError: true));
+            ActiveTab.Messages.Add("");
+            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
             ResultTab = "Messages";
         }
         finally
