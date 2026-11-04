@@ -9,6 +9,7 @@
 @inject QueryStateService QueryStateService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject ThemeService ThemeService
+@inject ConnectionService ConnectionService
 @implements IDisposable
 
 <style>
@@ -268,6 +269,10 @@ else
                             }
                             else
                             {
+                                @if (FilteredTableResults.Count == 0 && SchemaService.Tables.Count > 0 && string.IsNullOrWhiteSpace(SearchCol))
+                                {
+                                    UpdateFilteredResults();
+                                }
                                 @foreach (var result in FilteredTableResults)
                                 {
                                     var table = result.Table;
@@ -1248,13 +1253,21 @@ else
         IsLoading = true;
         
         _searchColInput = SearchCol; // Sync initial value
-        UpdateFilteredResults();
 
-        await Task.Yield();
-
+        ConnectionService.OnConnectionChanged += HandleDatabaseOrConnectionChanged;
+        ConnectionService.OnDatabaseSwitched += HandleDatabaseOrConnectionChanged;
         ThemeService.OnThemeChanged += HandleThemeChanged;
         SchemaService.OnTablesLoaded += Refresh;
         SchemaService.OnViewsLoaded += Refresh;
+
+        if (SchemaService.IsDatabaseConnected && !SchemaService.AreTablesLoaded && !SchemaService.IsLoadingTables)
+        {
+            await SchemaService.LoadSchemaAsync();
+        }
+
+        UpdateFilteredResults();
+
+        await Task.Yield();
         
         if (SelectedColumns.Count > 0 || !string.IsNullOrEmpty(TargetTable))
         {
@@ -1266,8 +1279,30 @@ else
 
     private void Refresh()
     {
-        UpdateFilteredResults();
-        InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(() =>
+        {
+            UpdateFilteredResults();
+            StateHasChanged();
+        });
+    }
+
+    private async void HandleDatabaseOrConnectionChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            ClearAll();
+
+            if (SchemaService.IsDatabaseConnected && !SchemaService.AreTablesLoaded && !SchemaService.IsLoadingTables)
+            {
+                IsLoading = true;
+                StateHasChanged();
+                await SchemaService.LoadSchemaAsync();
+            }
+
+            UpdateFilteredResults();
+            IsLoading = false;
+            StateHasChanged();
+        });
     }
 
 
@@ -1806,6 +1841,8 @@ else
 
     public void Dispose()
     {
+        ConnectionService.OnConnectionChanged -= HandleDatabaseOrConnectionChanged;
+        ConnectionService.OnDatabaseSwitched -= HandleDatabaseOrConnectionChanged;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         SchemaService.OnTablesLoaded -= Refresh;
         SchemaService.OnViewsLoaded -= Refresh;
