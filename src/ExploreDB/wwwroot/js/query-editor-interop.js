@@ -274,6 +274,197 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         }
     }
 
+    function getActiveStatementContext(model, position) {
+        var lineCount = model.getLineCount();
+        var curLine = position.lineNumber;
+        var curCol = position.column;
+
+        var stmtStarters = /^\s*(?:--.*)?(?:;?\s*WITH|SELECT|INSERT|UPDATE|DELETE|MERGE|EXEC|EXECUTE|CREATE|ALTER|DROP|TRUNCATE|DECLARE|SET|USE)\b/i;
+        var setOps = /^\s*(?:UNION(?:\s+ALL)?|EXCEPT|INTERSECT)\b/i;
+        var batchSep = /^\s*GO\s*(?:--.*)?$/i;
+
+        function stripCommentsAndStrings(text) {
+            return (text || "").replace(/'(?:''|[^'])*'/g, "''").replace(/--.*$/, "");
+        }
+
+        function countParens(str) {
+            var clean = stripCommentsAndStrings(str);
+            var open = 0, close = 0;
+            for (var i = 0; i < clean.length; i++) {
+                if (clean[i] === '(') open++;
+                else if (clean[i] === ')') close++;
+            }
+            return { open: open, close: close };
+        }
+
+        var curLineText = model.getLineContent(curLine) || "";
+
+        // If current line is completely blank and next non-empty line starts a new statement,
+        // this blank line is an independent statement insertion point
+        if (!curLineText.trim()) {
+            var nextNonEmptyIdx = -1;
+            for (var n = curLine + 1; n <= lineCount; n++) {
+                var nText = stripCommentsAndStrings(model.getLineContent(n)).trim();
+                if (nText) { nextNonEmptyIdx = n; break; }
+            }
+            if (nextNonEmptyIdx > 0 && stmtStarters.test(stripCommentsAndStrings(model.getLineContent(nextNonEmptyIdx)))) {
+                return {
+                    startLineNumber: curLine,
+                    startColumn: 1,
+                    endLineNumber: curLine,
+                    endColumn: 1,
+                    statementText: "",
+                    textUntilCursor: ""
+                };
+            }
+        }
+
+        // 1. Scan upwards to find start
+        var startLine = 1;
+        var startCol = 1;
+
+        var curLineBeforeCursor = curLineText.substring(0, curCol - 1);
+        var cleanBefore = stripCommentsAndStrings(curLineBeforeCursor);
+        var lastSemiOnCurLine = cleanBefore.lastIndexOf(';');
+        if (lastSemiOnCurLine >= 0) {
+            startLine = curLine;
+            startCol = lastSemiOnCurLine + 2;
+        } else {
+            var parenDepth = 0;
+            for (var i = curLine; i >= 1; i--) {
+                var line = model.getLineContent(i) || "";
+                var clean = stripCommentsAndStrings(line);
+                var p = countParens(line);
+                
+                parenDepth += (p.close - p.open);
+
+                if (i < curLine) {
+                    if (batchSep.test(clean)) {
+                        startLine = i + 1;
+                        startCol = 1;
+                        break;
+                    }
+
+                    var semiIdx = clean.lastIndexOf(';');
+                    if (semiIdx >= 0) {
+                        var afterSemi = clean.substring(semiIdx + 1).trim();
+                        if (afterSemi.length > 0) {
+                            startLine = i;
+                            startCol = semiIdx + 2;
+                        } else {
+                            startLine = i + 1;
+                            startCol = 1;
+                        }
+                        break;
+                    }
+
+                    var nextLineClean = stripCommentsAndStrings(model.getLineContent(i + 1) || "");
+                    if (parenDepth <= 0 && stmtStarters.test(nextLineClean)) {
+                        if (!clean.trim() || stmtStarters.test(clean)) {
+                            startLine = i + 1;
+                            startCol = 1;
+                            break;
+                        }
+                    }
+
+                    if (parenDepth <= 0 && stmtStarters.test(clean)) {
+                        var prevClean = i > 1 ? stripCommentsAndStrings(model.getLineContent(i - 1)).trim() : "";
+                        if (i === 1 || !prevClean || prevClean.endsWith(';') || batchSep.test(prevClean) || stmtStarters.test(prevClean)) {
+                            startLine = i;
+                            startCol = 1;
+                            break;
+                        }
+                    }
+                } else if (i === curLine) {
+                    if (parenDepth <= 0 && stmtStarters.test(clean)) {
+                        var prevClean = i > 1 ? stripCommentsAndStrings(model.getLineContent(i - 1)).trim() : "";
+                        if (i === 1 || !prevClean || prevClean.endsWith(';') || batchSep.test(prevClean) || stmtStarters.test(prevClean)) {
+                            startLine = i;
+                            startCol = 1;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Scan downwards to find end
+        var endLine = lineCount;
+        var lastLineText = model.getLineContent(lineCount) || "";
+        var endCol = lastLineText.length + 1;
+
+        var curLineAfterCursor = curLineText.substring(curCol - 1);
+        var cleanAfter = stripCommentsAndStrings(curLineAfterCursor);
+        var firstSemiAfter = cleanAfter.indexOf(';');
+        if (firstSemiAfter >= 0) {
+            endLine = curLine;
+            endCol = curCol + firstSemiAfter + 1;
+        } else {
+            var downParenDepth = 0;
+            for (var j = curLine; j <= lineCount; j++) {
+                var line = model.getLineContent(j) || "";
+                var clean = stripCommentsAndStrings(line);
+                var p = countParens(line);
+                downParenDepth += (p.open - p.close);
+
+                if (j > curLine) {
+                    if (batchSep.test(clean)) {
+                        endLine = j - 1;
+                        endCol = (model.getLineContent(j - 1) || "").length + 1;
+                        break;
+                    }
+
+                    if (downParenDepth <= 0 && stmtStarters.test(clean)) {
+                        var prevLineClean = stripCommentsAndStrings(model.getLineContent(j - 1) || "").trim();
+                        if (!setOps.test(clean) && !setOps.test(prevLineClean)) {
+                            var actualEndLine = j - 1;
+                            while (actualEndLine > curLine && !stripCommentsAndStrings(model.getLineContent(actualEndLine) || "").trim()) {
+                                actualEndLine--;
+                            }
+                            endLine = actualEndLine;
+                            endCol = (model.getLineContent(actualEndLine) || "").length + 1;
+                            break;
+                        }
+                    }
+
+                    var semiIdx = clean.indexOf(';');
+                    if (semiIdx >= 0) {
+                        endLine = j;
+                        endCol = semiIdx + 2;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (startLine < 1) startLine = 1;
+        if (startCol < 1) startCol = 1;
+        if (endLine > lineCount) endLine = lineCount;
+        if (endLine < startLine) endLine = startLine;
+
+        var statementText = model.getValueInRange({
+            startLineNumber: startLine,
+            startColumn: startCol,
+            endLineNumber: endLine,
+            endColumn: endCol
+        });
+
+        var textUntilCursor = model.getValueInRange({
+            startLineNumber: startLine,
+            startColumn: startCol,
+            endLineNumber: curLine,
+            endColumn: curCol
+        });
+
+        return {
+            startLineNumber: startLine,
+            startColumn: startCol,
+            endLineNumber: endLine,
+            endColumn: endCol,
+            statementText: statementText,
+            textUntilCursor: textUntilCursor
+        };
+    }
     monaco.languages.registerCompletionItemProvider('sql', {
         triggerCharacters: ['.', "'", '['],
         provideCompletionItems: function(model, position) {
@@ -399,13 +590,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 });
             }
 
-            // Intelligent context detection
-            var fullTextUntilPosition = model.getValueInRange({
-                startLineNumber: 1,
-                startColumn: 1,
-                endLineNumber: position.lineNumber,
-                endColumn: position.column
-            });
+            // Intelligent context detection scoped to active statement
+            var stmtContext = getActiveStatementContext(model, position);
+            var fullTextUntilPosition = stmtContext.textUntilCursor;
 
             // PRIORITY CHECK: Suppress suggestions when typing a table alias on the same line.
             // Must run BEFORE the keyword scan because an alias like 'or', 'and', 'on', 'as' etc.
@@ -500,7 +687,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
             var existingAliases = new Set();
             if (autoAlias) {
-                var allDocText = model.getValue();
+                var allDocText = stmtContext.statementText;
                 var aliasRegex = /(?:from|join|update)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?([a-zA-Z0-9_]+)/gi;
                 var aMatch;
                 var reservedKw = new Set(['WHERE', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'OUTER', 'ON', 'GROUP', 'ORDER', 'HAVING', 'SET', 'AS']);
@@ -563,7 +750,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             }
 
             if (suggestColumns || suggestTables) {
-                var allText = model.getValue();
+                var allText = stmtContext.statementText;
 
                 function normalizeTableName(tbl) {
                     if (!tbl) return "";
