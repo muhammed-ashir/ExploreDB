@@ -50,9 +50,18 @@
 
                 @if (ActiveTab.IsExecuting)
                 {
-                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
-                        <i class="bi bi-stop-fill me-1"></i>Stop
-                    </button>
+                    @if (ActiveTab.IsCancelling)
+                    {
+                        <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center opacity-75" style="height: 32px;" disabled>
+                            <span class="spinner-border spinner-border-sm me-1" role="status" style="width: 12px; height: 12px;"></span>Stopping...
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
+                            <i class="bi bi-stop-fill me-1"></i>Stop
+                        </button>
+                    }
                 }
                 else
                 {
@@ -155,8 +164,17 @@
                             if (ActiveTab.IsExecuting)
                             {
                                 <div class="text-center mt-5">
-                                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div>
-                                    <div class="mt-3 text-muted fs-5">Executing... (@(TimeSpan.FromSeconds(ActiveTab.ExecElapsedSeconds).ToString(@"mm\:ss")))</div>
+                                    <div class="spinner-border @(ActiveTab.IsCancelling ? "text-warning" : "text-primary")" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div>
+                                    <div class="mt-3 text-muted fs-5">
+                                        @if (ActiveTab.IsCancelling)
+                                        {
+                                            <span class="text-warning"><i class="bi bi-exclamation-circle me-1"></i>Cancelling query...</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Executing... (@(TimeSpan.FromSeconds(ActiveTab.ExecElapsedSeconds).ToString(@"mm\:ss")))</span>
+                                        }
+                                    </div>
                                 </div>
                             }
                             else if (ActiveTab.ResultSets == null || ActiveTab.ResultSets.Count == 0)
@@ -547,6 +565,7 @@
         }
 
         ActiveTab.IsExecuting = true;
+        ActiveTab.IsCancelling = false;
         ActiveTab.HasExecuted = true;
         ActiveTab.ResultSets.Clear();
         ActiveTab.Messages.Clear();
@@ -600,8 +619,15 @@
             cmd.CommandText = queryToRun;
             cmd.CommandTimeout = 0;
             
+            ActiveTab.CancelAction = () =>
+            {
+                try { cmd.Cancel(); } catch { }
+                try { conn.Close(); } catch { }
+            };
+
             using var ctr = ActiveTab.QueryCts.Token.Register(() => {
                 try { cmd.Cancel(); } catch { }
+                try { conn.Close(); } catch { }
             });
             
             ActiveTab.IsCurrentQuerySelect = IsReadOnlyQuery(queryToRun);
@@ -628,6 +654,11 @@
                         int yieldCount = 0;
                         while (await reader.ReadAsync(ActiveTab.QueryCts.Token))
                         {
+                            if (ActiveTab.QueryCts.IsCancellationRequested || ActiveTab.IsCancelling)
+                            {
+                                throw new OperationCanceledException(ActiveTab.QueryCts.Token);
+                            }
+
                             var row = new System.Dynamic.ExpandoObject() as IDictionary<string, object>;
                             for (int i = 0; i < fieldCount; i++)
                             {
@@ -635,7 +666,7 @@
                             }
                             rs.Add(row);
                             
-                            if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                            if (++yieldCount % 1000 == 0) await Task.Delay(1);
                         }
                         
                         ActiveTab.ResultSets.Add(rs);
@@ -649,9 +680,10 @@
                         }
                     }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException && !(ActiveTab.QueryCts?.IsCancellationRequested ?? false) && !ActiveTab.IsCancelling)
                 {
                     ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Error reading result set: {ex.Message}");
+                    break;
                 }
             } while (await reader.NextResultAsync(ActiveTab.QueryCts.Token));
 
@@ -660,7 +692,7 @@
                 ResultTab = "Messages";
             }
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (ex is OperationCanceledException || (ActiveTab.QueryCts != null && ActiveTab.QueryCts.IsCancellationRequested) || ActiveTab.IsCancelling)
         {
             ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Query execution was canceled by the user.");
             ResultTab = "Messages";
@@ -675,7 +707,11 @@
             watch.Stop();
             _execTimer?.Stop();
             ActiveTab.IsExecuting = false;
+            ActiveTab.IsCancelling = false;
+            ActiveTab.CancelAction = null;
             ActiveTab.LastExecutionTimeMs = watch.ElapsedMilliseconds;
+            ActiveTab.QueryCts?.Dispose();
+            ActiveTab.QueryCts = null;
             StateHasChanged();
         }
     }
@@ -806,9 +842,16 @@
 
     private void CancelExecution()
     {
-        if (ActiveTab.IsExecuting && ActiveTab.QueryCts != null)
+        if (ActiveTab.IsExecuting && !ActiveTab.IsCancelling)
         {
-            ActiveTab.QueryCts.Cancel();
+            ActiveTab.IsCancelling = true;
+            StateHasChanged();
+
+            Task.Run(() =>
+            {
+                try { ActiveTab.CancelAction?.Invoke(); } catch { }
+                try { ActiveTab.QueryCts?.Cancel(); } catch { }
+            });
         }
     }
 

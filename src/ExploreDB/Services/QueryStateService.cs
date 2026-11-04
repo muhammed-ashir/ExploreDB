@@ -42,6 +42,12 @@ public class QueryTab
     
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsExecuting { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsCancelling { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Action? CancelAction { get; set; }
     
     [System.Text.Json.Serialization.JsonIgnore]
     public long LastExecutionTimeMs { get; set; }
