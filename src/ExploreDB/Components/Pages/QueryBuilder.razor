@@ -181,20 +181,29 @@ else
                                 }
                                 <div class="col-12 d-flex flex-column gap-2 position-relative">
                                     <div class="input-group input-group-sm shadow-sm">
-                                        <input type="text" class="form-control" 
+                                        <input type="text" class="form-control @(!string.IsNullOrEmpty(_searchColInput) ? "border-end-0" : "")" 
                                                style="background: var(--app-input-bg); color: var(--app-input-text); border: 1px solid var(--app-input-border);"
-                                               placeholder="Search... (Enter to filter)" 
-                                               @bind="_searchColInput" 
-                                               @bind:event="oninput"
+                                               placeholder="Search..." 
+                                               value="@_searchColInput" 
+                                               @oninput="OnSearchInput"
                                                @onkeydown="OnSearchKeyDown"
-                                               @onblur="(_ => ApplySearch())" />
-                                        <button class="btn btn-sm @(CaseSensitive ? "btn-primary" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(!CaseSensitive ? "background: var(--app-input-bg); color: var(--app-text-muted);" : "")" title="Match Case" @onclick="() => CaseSensitive = !CaseSensitive">
+                                               @onblur="OnSearchBlur" />
+                                        @if (!string.IsNullOrEmpty(_searchColInput))
+                                        {
+                                            <button class="btn btn-outline-secondary border-start-0" 
+                                                    style="background: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" 
+                                                    title="Clear filter" 
+                                                    @onclick="ClearSearch">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        }
+                                        <button class="btn btn-sm @(CaseSensitive ? "btn-primary" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(!CaseSensitive ? "background: var(--app-input-bg); color: var(--app-text-muted);" : "")" title="Match Case" @onclick="ToggleCaseSensitive">
                                             <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                         </button>
-                                        <button class="btn btn-sm @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(!MatchWholeWord ? "background: var(--app-input-bg); color: var(--app-text-muted);" : "")" title="Match Whole Word" @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
+                                        <button class="btn btn-sm @(MatchWholeWord ? "btn-primary" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(!MatchWholeWord ? "background: var(--app-input-bg); color: var(--app-text-muted);" : "")" title="Match Whole Word" @onclick="ToggleMatchWholeWord">
                                             <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
                                         </button>
-                                        <button class="btn btn-sm @(ExactMatch ? "btn-primary" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(!ExactMatch ? "background: var(--app-input-bg); color: var(--app-text-muted);" : "")" title="Exact Match" @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
+                                        <button class="btn btn-sm @(ExactMatch ? "btn-primary" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(!ExactMatch ? "background: var(--app-input-bg); color: var(--app-text-muted);" : "")" title="Exact Match" @onclick="ToggleExactMatch">
                                             <i class="bi bi-bullseye"></i>
                                         </button>
                                     </div>
@@ -203,27 +212,13 @@ else
                                         <div class="form-check form-check-inline mb-0">
                                             <input class="form-check-input cursor-pointer" style="border-color: var(--app-input-border);" type="checkbox" id="searchTable" 
                                                    checked="@(SearchFilter == "All" || SearchFilter == "Table")" 
-                                                   @onchange='(e) => { 
-                                                       bool isChecked = (bool)(e.Value ?? false);
-                                                       bool isColumnChecked = SearchFilter == "All" || SearchFilter == "Column";
-                                                       if (isChecked && isColumnChecked) SearchFilter = "All";
-                                                       else if (isChecked) SearchFilter = "Table";
-                                                       else if (isColumnChecked) SearchFilter = "Column";
-                                                       else SearchFilter = "None";
-                                                   }'>
+                                                   @onchange='(e) => ToggleSearchFilter("Table", (bool)(e.Value ?? false))'>
                                             <label class="form-check-label small cursor-pointer user-select-none" style="color: var(--app-text);" for="searchTable">Table</label>
                                         </div>
                                         <div class="form-check form-check-inline mb-0">
                                             <input class="form-check-input cursor-pointer" style="border-color: var(--app-input-border);" type="checkbox" id="searchColumn" 
                                                    checked="@(SearchFilter == "All" || SearchFilter == "Column")" 
-                                                   @onchange='(e) => { 
-                                                       bool isChecked = (bool)(e.Value ?? false);
-                                                       bool isTableChecked = SearchFilter == "All" || SearchFilter == "Table";
-                                                       if (isChecked && isTableChecked) SearchFilter = "All";
-                                                       else if (isChecked) SearchFilter = "Column";
-                                                       else if (isTableChecked) SearchFilter = "Table";
-                                                       else SearchFilter = "None";
-                                                   }'>
+                                                   @onchange='(e) => ToggleSearchFilter("Column", (bool)(e.Value ?? false))'>
                                             <label class="form-check-label small cursor-pointer user-select-none" style="color: var(--app-text);" for="searchColumn">Column</label>
                                         </div>
                                     </div>
@@ -238,113 +233,65 @@ else
                             {
                                 <div class="p-3 text-center text-muted">Connect to a database to start.</div>
                             }
+                            else if (FilteredTableResults.Count == 0 && !string.IsNullOrWhiteSpace(SearchCol))
+                            {
+                                <div class="p-4 text-center">
+                                    <div class="text-muted mb-2"><i class="bi bi-search fs-3"></i></div>
+                                    <div class="fw-bold" style="color: var(--app-text);">No results found</div>
+                                    <div class="text-muted small mt-1">Try adjusting your search criteria</div>
+                                </div>
+                            }
                             else
                             {
-                                bool hasResults = false;
-                                bool hasSearch = !string.IsNullOrWhiteSpace(SearchCol);
-                                string searchTerm = hasSearch ? SearchCol : "";
-                                bool tableFilter = SearchFilter == "All" || SearchFilter == "Table";
-                                bool colFilter = SearchFilter == "All" || SearchFilter == "Column";
-                                StringComparison comp = CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-
-                                foreach (var table in FilteredTables)
+                                @foreach (var result in FilteredTableResults)
                                 {
-                                    List<ColumnInfo> matchingColumns;
-                                    
-                                    if (!hasSearch)
-                                    {
-                                        matchingColumns = table.Columns;
-                                    }
-                                    else
-                                    {
-                                        bool tableMatches = false;
-                                        if (tableFilter)
-                                        {
-                                            if (ExactMatch) tableMatches = string.Equals(table.Name, searchTerm, comp);
-                                            else if (MatchWholeWord) tableMatches = table.Name.Split(' ', '.', '_').Any(p => string.Equals(p, searchTerm, comp));
-                                            else tableMatches = table.Name.Contains(searchTerm, comp);
-                                        }
-
-                                        if (tableMatches)
-                                        {
-                                            matchingColumns = table.Columns; // If table matches, show all columns
-                                        }
-                                        else if (colFilter)
-                                        {
-                                            matchingColumns = new List<ColumnInfo>();
-                                            foreach (var c in table.Columns)
-                                            {
-                                                bool colMatches = false;
-                                                if (ExactMatch) colMatches = string.Equals(c.Name, searchTerm, comp);
-                                                else if (MatchWholeWord) colMatches = c.Name.Split(' ', '.', '_').Any(p => string.Equals(p, searchTerm, comp));
-                                                else colMatches = c.Name.Contains(searchTerm, comp);
-                                                
-                                                if (colMatches) matchingColumns.Add(c);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            matchingColumns = new List<ColumnInfo>();
-                                        }
-                                    }
-
-                                    if (matchingColumns.Count > 0)
-                                    {
-                                        hasResults = true;
-                                        var tableId = "table_" + table.FullName.Replace(".", "_").Replace("\"", "");
-                                        <div class="accordion-item bg-transparent" style="border-bottom: 1px solid var(--app-border) !important;">
-                                            <h2 class="accordion-header" id="heading_@tableId">
-                                                <div class="d-flex align-items-center table-accordion-row">
-                                                    <div class="ps-3 pe-1 py-0 d-flex align-items-center gap-2">
-                                                        <input class="form-check-input m-0 cursor-pointer"
-                                                               type="checkbox"
-                                                               id="@GetTableCheckboxId(table)"
-                                                               checked="@AreAllColumnsSelected(table)"
-                                                               @onchange="(e) => ToggleTableColumns(table, e.Value is true)" 
-                                                               @onclick:stopPropagation 
-                                                               style="width: 0.85rem; height: 0.85rem; cursor: pointer; margin-top: 2px !important; border-color: var(--app-input-border);" />
-                                                    </div>
-                                                    <button class="accordion-button collapsed bg-transparent shadow-none fw-bold text-uppercase px-2" 
-                                                            type="button" 
-                                                            data-bs-toggle="collapse" 
-                                                            data-bs-target="#collapse_@tableId" 
-                                                            aria-expanded="false" 
-                                                            aria-controls="collapse_@tableId"
-                                                            style="font-size: 0.75rem; min-height: 28px; padding-top: 0.35rem !important; padding-bottom: 0.35rem !important; flex: 1; min-width: 0;"
-                                                            data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @table.Name<br/><b>Schema:</b> @table.Schema.ToLower()" data-bs-placement="bottom">
-                                                        <span class="text-truncate text-start flex-grow-1 pe-2 table-title-text" style="min-width: 0;">@table.Name</span>
-                                                    </button>
+                                    var table = result.Table;
+                                    var matchingColumns = result.MatchingColumns;
+                                    var tableId = result.TableId;
+                                    <div class="accordion-item bg-transparent" @key="table.FullName" style="border-bottom: 1px solid var(--app-border) !important;">
+                                        <h2 class="accordion-header" id="heading_@tableId">
+                                            <div class="d-flex align-items-center table-accordion-row">
+                                                <div class="ps-3 pe-1 py-0 d-flex align-items-center gap-2">
+                                                    <input class="form-check-input m-0 cursor-pointer"
+                                                           type="checkbox"
+                                                           id="@GetTableCheckboxId(table)"
+                                                           checked="@AreAllColumnsSelected(table)"
+                                                           @onchange="(e) => ToggleTableColumns(table, e.Value is true)" 
+                                                           @onclick:stopPropagation 
+                                                           style="width: 0.85rem; height: 0.85rem; cursor: pointer; margin-top: 2px !important; border-color: var(--app-input-border);" />
                                                 </div>
-                                            </h2>
-                                            <div id="collapse_@tableId" class="accordion-collapse collapse" aria-labelledby="heading_@tableId" data-bs-parent="#availableTablesAccordion">
-                                                <div class="accordion-body py-2 px-0" style="background: var(--app-surface-secondary);">
-                                                    <div class="list-group list-group-flush">
-                                                        @foreach(var col in matchingColumns)
-                                                        {
-                                                            var key = GetColumnKey(table, col.Name);
-                                                            var isSelected = SelectedColumns.Contains(key);
-                                                            <div class="list-group-item bg-transparent border-0 py-1 ps-4 pe-2 d-flex align-items-center" style="min-height: 28px; color: var(--app-text);">
-                                                                <input class="form-check-input me-2 mt-0 cursor-pointer" type="checkbox" id="@key" 
-                                                                       checked="@isSelected" 
-                                                                       @onchange="(e) => ToggleColumn(key, table.FullName, e.Value is true)" 
-                                                                       style="width: 0.8rem; height: 0.8rem; cursor: pointer; border-color: var(--app-input-border);" />
-                                                                <label class="form-check-label text-truncate cursor-pointer flex-grow-1" for="@key" style="font-size: 0.75rem; margin-top: 1px; min-width: 0; color: var(--app-text);" title="@col.Name">
-                                                                    @col.Name
-                                                                </label>
-                                                            </div>
-                                                        }
-                                                    </div>
+                                                <button class="accordion-button collapsed bg-transparent shadow-none fw-bold text-uppercase px-2" 
+                                                        type="button" 
+                                                        data-bs-toggle="collapse" 
+                                                        data-bs-target="#collapse_@tableId" 
+                                                        aria-expanded="false" 
+                                                        aria-controls="collapse_@tableId"
+                                                        style="font-size: 0.75rem; min-height: 28px; padding-top: 0.35rem !important; padding-bottom: 0.35rem !important; flex: 1; min-width: 0;"
+                                                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @table.Name<br/><b>Schema:</b> @table.Schema.ToLower()" data-bs-placement="bottom">
+                                                    <span class="text-truncate text-start flex-grow-1 pe-2 table-title-text" style="min-width: 0;">@table.Name</span>
+                                                </button>
+                                            </div>
+                                        </h2>
+                                        <div id="collapse_@tableId" class="accordion-collapse collapse" aria-labelledby="heading_@tableId" data-bs-parent="#availableTablesAccordion">
+                                            <div class="accordion-body py-2 px-0" style="background: var(--app-surface-secondary);">
+                                                <div class="list-group list-group-flush">
+                                                    @foreach(var col in matchingColumns)
+                                                    {
+                                                        var key = GetColumnKey(table, col.Name);
+                                                        var isSelected = SelectedColumns.Contains(key);
+                                                        <div class="list-group-item bg-transparent border-0 py-1 ps-4 pe-2 d-flex align-items-center" @key="key" style="min-height: 28px; color: var(--app-text);">
+                                                            <input class="form-check-input me-2 mt-0 cursor-pointer" type="checkbox" id="@key" 
+                                                                   checked="@isSelected" 
+                                                                   @onchange="(e) => ToggleColumn(key, table.FullName, e.Value is true)" 
+                                                                   style="width: 0.8rem; height: 0.8rem; cursor: pointer; border-color: var(--app-input-border);" />
+                                                            <label class="form-check-label text-truncate cursor-pointer flex-grow-1" for="@key" style="font-size: 0.75rem; margin-top: 1px; min-width: 0; color: var(--app-text);" title="@col.Name">
+                                                                @col.Name
+                                                            </label>
+                                                        </div>
+                                                    }
                                                 </div>
                                             </div>
                                         </div>
-                                    }
-                                }
-                                if (!hasResults && !string.IsNullOrWhiteSpace(SearchCol))
-                                {
-                                    <div class="p-4 text-center">
-                                        <div class="text-muted mb-2"><i class="bi bi-search fs-3"></i></div>
-                                        <div class="fw-bold" style="color: var(--app-text);">No results found</div>
-                                        <div class="text-muted small mt-1">Try adjusting your search criteria</div>
                                     </div>
                                 }
                             }
@@ -849,27 +796,113 @@ else
     private string ActiveBuilderTab { get => QueryStateService.ActiveBuilderTab; set => QueryStateService.ActiveBuilderTab = value; }
     private string SearchCol = "";
     private string _searchColInput = "";
+    private CancellationTokenSource? _debounceCts;
+    private static readonly char[] WordSeparators = new[] { ' ', '.', '_' };
 
-    private string SearchColInput
+    private void OnSearchInput(ChangeEventArgs e)
     {
-        get => _searchColInput;
-        set => _searchColInput = value;
+        _searchColInput = e.Value?.ToString() ?? "";
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(200, token);
+                if (!token.IsCancellationRequested)
+                {
+                    await InvokeAsync(() =>
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            SearchCol = _searchColInput;
+                            UpdateFilteredResults();
+                            StateHasChanged();
+                        }
+                    });
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
     }
 
     private void OnSearchKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-            ApplySearch();
+        {
+            ApplySearchImmediately();
+        }
         else if (e.Key == "Escape")
         {
-            _searchColInput = "";
-            ApplySearch();
+            ClearSearch();
         }
     }
 
-    private void ApplySearch()
+    private void ClearSearch()
     {
+        _debounceCts?.Cancel();
+        _searchColInput = "";
+        ApplySearchImmediately();
+    }
+
+    private void ApplySearchImmediately()
+    {
+        _debounceCts?.Cancel();
         SearchCol = _searchColInput;
+        UpdateFilteredResults();
+        StateHasChanged();
+    }
+
+    private void OnSearchBlur()
+    {
+        if (SearchCol != _searchColInput)
+        {
+            ApplySearchImmediately();
+        }
+    }
+
+    private void ToggleCaseSensitive()
+    {
+        CaseSensitive = !CaseSensitive;
+        ApplySearchImmediately();
+    }
+
+    private void ToggleMatchWholeWord()
+    {
+        MatchWholeWord = !MatchWholeWord;
+        if (MatchWholeWord) ExactMatch = false;
+        ApplySearchImmediately();
+    }
+
+    private void ToggleExactMatch()
+    {
+        ExactMatch = !ExactMatch;
+        if (ExactMatch) MatchWholeWord = false;
+        ApplySearchImmediately();
+    }
+
+    private void ToggleSearchFilter(string type, bool isChecked)
+    {
+        if (type == "Table")
+        {
+            bool isCol = SearchFilter == "All" || SearchFilter == "Column";
+            if (isChecked && isCol) SearchFilter = "All";
+            else if (isChecked) SearchFilter = "Table";
+            else if (isCol) SearchFilter = "Column";
+            else SearchFilter = "None";
+        }
+        else if (type == "Column")
+        {
+            bool isTable = SearchFilter == "All" || SearchFilter == "Table";
+            if (isChecked && isTable) SearchFilter = "All";
+            else if (isChecked) SearchFilter = "Column";
+            else if (isTable) SearchFilter = "Table";
+            else SearchFilter = "None";
+        }
+        ApplySearchImmediately();
     }
 
 
@@ -906,7 +939,111 @@ else
     }
     private PathfinderJoinPlan? LastJoinPlan;
 
-    private IEnumerable<TableInfo> FilteredTables => SchemaService.Tables; // We filter columns inside
+    public class TableSearchResult
+    {
+        public TableInfo Table { get; set; } = default!;
+        public List<ColumnInfo> MatchingColumns { get; set; } = new();
+        public string TableId { get; set; } = "";
+    }
+
+    private List<TableSearchResult> FilteredTableResults = new();
+
+    private void UpdateFilteredResults()
+    {
+        var tables = SchemaService.Tables;
+        if (tables == null || tables.Count == 0)
+        {
+            FilteredTableResults.Clear();
+            return;
+        }
+
+        bool hasSearch = !string.IsNullOrWhiteSpace(SearchCol);
+        string searchTerm = hasSearch ? SearchCol.Trim() : "";
+        bool tableFilter = SearchFilter == "All" || SearchFilter == "Table";
+        bool colFilter = SearchFilter == "All" || SearchFilter == "Column";
+        StringComparison comp = CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+        if (!hasSearch)
+        {
+            var list = new List<TableSearchResult>(tables.Count);
+            foreach (var table in tables)
+            {
+                list.Add(new TableSearchResult
+                {
+                    Table = table,
+                    MatchingColumns = table.Columns,
+                    TableId = "table_" + table.FullName.Replace(".", "_").Replace("\"", "")
+                });
+            }
+            FilteredTableResults = list;
+            return;
+        }
+
+        var filtered = new List<TableSearchResult>();
+        foreach (var table in tables)
+        {
+            bool tableMatches = false;
+            if (tableFilter)
+            {
+                if (ExactMatch) tableMatches = string.Equals(table.Name, searchTerm, comp);
+                else if (MatchWholeWord) tableMatches = MatchesWord(table.Name, searchTerm, comp);
+                else tableMatches = table.Name.Contains(searchTerm, comp);
+            }
+
+            List<ColumnInfo> matchingColumns;
+            if (tableMatches)
+            {
+                matchingColumns = table.Columns;
+            }
+            else if (colFilter)
+            {
+                matchingColumns = new List<ColumnInfo>();
+                foreach (var c in table.Columns)
+                {
+                    bool colMatches = false;
+                    if (ExactMatch) colMatches = string.Equals(c.Name, searchTerm, comp);
+                    else if (MatchWholeWord) colMatches = MatchesWord(c.Name, searchTerm, comp);
+                    else colMatches = c.Name.Contains(searchTerm, comp);
+
+                    if (colMatches) matchingColumns.Add(c);
+                }
+            }
+            else
+            {
+                matchingColumns = new List<ColumnInfo>();
+            }
+
+            if (matchingColumns.Count > 0)
+            {
+                filtered.Add(new TableSearchResult
+                {
+                    Table = table,
+                    MatchingColumns = matchingColumns,
+                    TableId = "table_" + table.FullName.Replace(".", "_").Replace("\"", "")
+                });
+            }
+        }
+
+        FilteredTableResults = filtered;
+    }
+
+    private static bool MatchesWord(string text, string term, StringComparison comp)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(term)) return false;
+        int startIndex = 0;
+        while (startIndex < text.Length)
+        {
+            int nextSep = text.IndexOfAny(WordSeparators, startIndex);
+            int len = (nextSep == -1) ? text.Length - startIndex : nextSep - startIndex;
+            if (len == term.Length && string.Compare(text, startIndex, term, 0, len, comp) == 0)
+            {
+                return true;
+            }
+            if (nextSep == -1) break;
+            startIndex = nextSep + 1;
+        }
+        return false;
+    }
 
     private bool IsLoading = true;
     
@@ -915,6 +1052,7 @@ else
         IsLoading = true;
         
         _searchColInput = SearchCol; // Sync initial value
+        UpdateFilteredResults();
 
         await Task.Yield();
 
@@ -932,6 +1070,7 @@ else
 
     private void Refresh()
     {
+        UpdateFilteredResults();
         InvokeAsync(StateHasChanged);
     }
 
@@ -1355,6 +1494,10 @@ else
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         SchemaService.OnTablesLoaded -= Refresh;
         SchemaService.OnViewsLoaded -= Refresh;
+
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+        _debounceCts = null;
     }
 
     private void HandleThemeChanged()
