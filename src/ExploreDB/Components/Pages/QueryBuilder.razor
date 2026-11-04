@@ -1,5 +1,7 @@
 @page "/builder"
 @using ExploreDB.Services
+@using BlazorMonaco
+@using BlazorMonaco.Editor
 @inject SchemaService SchemaService
 @inject PathfinderService PathfinderService
 @inject IJSRuntime JS
@@ -404,130 +406,273 @@ else
                     </div>
                 }
 
-             <!-- Generated SQL Box -->
-             <div class="card shadow-sm" style="flex: 1; background: var(--app-surface); border: 1px solid var(--app-border);">
-                 <div class="card-header d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border); color: var(--app-text);">
-                     <span class="fw-bold">Generated SQL</span>
-                     <div class="d-flex gap-2">
+             <!-- Right Card: Join Path Routing -->
+             <div class="card shadow-sm d-flex flex-column" style="flex: 1; min-height: calc(100vh - 100px); background: var(--app-surface); border: 1px solid var(--app-border);">
+                 <!-- Header: Join Path Routing & Action Buttons -->
+                 <div class="card-header d-flex justify-content-between align-items-center py-2 px-3" style="position: sticky; top: 0; z-index: 30; background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border) !important;">
+                     <div class="d-flex align-items-center">
+                         <span class="fw-bold" style="color: var(--app-text);">Join Path Routing</span>
+                     </div>
+                     <div class="d-flex align-items-center gap-2">
                          <button class="btn btn-sm btn-outline-warning" @onclick="() => ShowClearConfirmation = true" title="Clear all selections">
-                             <i class="bi bi-eraser-fill"></i> Clear
+                             <i class="bi bi-eraser-fill me-1"></i> Clear
                          </button>
-                         <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
-                             @if (CopyLabel == "Copy")
-                             {
-                                 <i class="bi bi-clipboard me-1"></i>
-                             }
-                             @CopyLabel
-                         </button>
-                         <button class="btn btn-sm btn-primary" @onclick="RunInRunner" disabled="@(SelectedColumns.Count == 0)">
-                             <i class="bi bi-play-fill"></i> Run
+                         <button class="btn btn-sm btn-primary fw-semibold d-flex align-items-center gap-1 shadow-sm px-3" 
+                                 @onclick="OpenQueryModal" 
+                                 disabled="@(SelectedColumns.Count == 0 && string.IsNullOrEmpty(TargetTable))"
+                                 title="View generated SQL query">
+                             <i class="bi bi-code-slash"></i>
+                             <span>Show Query</span>
                          </button>
                      </div>
                  </div>
-                 <div class="card-body p-0 position-relative d-flex flex-column">
-                     @if (HasOneToMany)
+                 @{
+                     var selectedDistinctTables = SelectedColumns
+                         .Select(k => k.Substring(0, k.LastIndexOf('.')))
+                         .Distinct()
+                         .ToList();
+                     if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable) && !selectedDistinctTables.Contains(TargetTable, StringComparer.OrdinalIgnoreCase))
                      {
-                         <button class="btn btn-sm btn-dark text-warning border-warning position-absolute top-0 end-0 m-3 shadow" style="z-index: 10;" @onclick="() => ShowWarningModal = true" title="View Join Warning">
-                             <i class="bi bi-exclamation-triangle-fill"></i>
-                         </button>
+                         selectedDistinctTables.Insert(0, TargetTable);
                      }
-                     <textarea class="form-control query-builder-sql border-0 font-monospace p-3 d-block flex-grow-1" 
-                               style="resize: vertical; min-height: 150px;" readonly>@GeneratedSql</textarea>
-                 </div>
-                 @if ((LastJoinPlan != null && LastJoinPlan.Steps.Count > 0) || IgnoredRoutingTables.Count > 0 || IgnoredRoutingEdges.Count > 0)
-                 {
-                     <div class="card-footer p-3 border-top-0 border-top mt-2" style="background: var(--app-surface-secondary); border-color: var(--app-border) !important;">
-                         @if (LastJoinPlan != null && LastJoinPlan.Steps.Count > 0)
+                     var totalTablesCount = selectedDistinctTables.Count;
+                 }
+
+                 <div class="card-body p-3 d-flex flex-column" style="flex: 1; overflow-y: auto;">
+                         @if (totalTablesCount == 0)
                          {
-                             <div class="d-flex align-items-center mb-3">
-                                 <h6 class="text-info fw-bold mb-0">Join Path Routing</h6>
-                                 <i class="bi bi-info-circle ms-2 text-muted" style="font-size: 0.9rem; cursor: help;" data-bs-tooltip="true" data-bs-placement="right" title="Visualizes the automatic JOIN path between tables. Use the orange alternative route button to explore other paths or block a node — selecting a path will block the other paths on that segment, so they won't be used for that specific connection (but those tables can still appear elsewhere in the JOIN). Blocking a node will add it to Blocked Hubs, preventing the query from routing through it anywhere in the entire JOIN."></i>
-                             </div>
-                             <div class="d-flex flex-wrap gap-2 align-items-center small mb-3">
-                                 <div class="btn-group btn-group-sm shadow-sm">
-                                     <span class="btn btn-sm py-1 fw-bold cursor-pointer text-truncate d-inline-block align-middle join-path-badge" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(LastJoinPlan.RootTable)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(LastJoinPlan.RootTable)">
-                                         @LastJoinPlan.RootTable.Split('.').Last().Replace("[", "").Replace("]", "")
-                                     </span>
+                             <!-- Empty state when no tables are selected -->
+                             <div class="d-flex flex-column align-items-center justify-content-center flex-grow-1 text-center p-4 my-auto">
+                                 <div class="p-3 rounded-circle mb-3" style="background: rgba(13, 110, 253, 0.1); color: #0d6efd;">
+                                     <i class="bi bi-diagram-3" style="font-size: 2.5rem;"></i>
                                  </div>
-                                 @foreach (var step in LastJoinPlan.Steps)
-                                 {
-                                     <span class="text-secondary fw-bold fs-5">➔</span>
-                                     var isIgnored = IgnoredRoutingTables.Contains(step.FullName);
-                                     <div class="btn-group btn-group-sm shadow-sm @(!step.IsSelectedTable ? "dropdown" : "")">
-                                         <span class="btn btn-sm py-1 fw-bold cursor-pointer text-truncate d-inline-block align-middle join-path-badge" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(step.FullName)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(step.FullName)">
-                                             @step.FullName.Split('.').Last().Replace("[", "").Replace("]", "")
-                                         </span>
-                                         @if (!step.IsSelectedTable)
+                                 <h6 class="fw-bold mb-1" style="color: var(--app-text);">No Tables Selected</h6>
+                                 <p class="text-muted small mb-0" style="max-width: 360px;">
+                                     Select columns or tables from the left panel to discover automatic join paths and construct your query.
+                                 </p>
+                             </div>
+                         }
+                         else if (totalTablesCount == 1)
+                         {
+                             <!-- Single table selected state -->
+                             <div class="d-flex flex-column align-items-center justify-content-center flex-grow-1 text-center p-4 my-auto">
+                                 <div class="p-3 rounded-circle mb-3" style="background: rgba(13, 202, 240, 0.1); color: #0dcaf0;">
+                                     <i class="bi bi-table" style="font-size: 2.5rem;"></i>
+                                 </div>
+                                 <h6 class="fw-bold mb-1" style="color: var(--app-text);">Single Table Selected</h6>
+                                 <div class="badge bg-secondary px-3 py-2 my-2 font-monospace" style="font-size: 0.9rem;">
+                                     @selectedDistinctTables[0].Split('.').Last().Replace("[", "").Replace("]", "")
+                                 </div>
+                                 <p class="text-muted small mb-3" style="max-width: 420px;">
+                                     No join paths are needed for a single table. Select another table to discover relationships, or finalize now to generate the single-table query.
+                                 </p>
+                                 <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm px-4 py-2 fw-semibold" 
+                                         @onclick="OpenQueryModal">
+                                     <i class="bi bi-code-slash"></i>
+                                     Show Query
+                                 </button>
+                             </div>
+                         }
+                         else
+                         {
+                             <!-- Multiple tables selected: Join Path display -->
+                             <div class="d-flex flex-column gap-3 flex-grow-1">
+
+                                 <div class="d-none">
+                                     <div class="d-flex align-items-center">
+                                         <h6 class="text-info fw-bold mb-0">Join Path Routing</h6>
+                                         <i class="bi bi-info-circle ms-2 text-muted" style="font-size: 0.9rem; cursor: help;" data-bs-tooltip="true" data-bs-placement="right" title="Visualizes the automatic JOIN path between tables. Use the orange alternative route button to explore other paths or block a node - selecting a path will block the other paths on that segment. Blocking a node adds it to Blocked Hubs, preventing routing through it anywhere in the JOIN."></i>
+                                         @if (IsQueryOutdated)
                                          {
-                                             <button type="button" class="btn py-1 btn-warning border-warning text-dark" style="background-color: #ffc107;" data-bs-tooltip="true" data-bs-title="View alternative routes" @onclick="() => ActiveOffcanvasTable = step.FullName" @onclick:stopPropagation>
-                                                 <i class="bi bi-diagram-3"></i>
-                                             </button>
+                                             <span class="badge bg-warning text-dark ms-2 rounded-pill px-2 py-1" style="font-size: 0.72rem;">
+                                                 <i class="bi bi-exclamation-triangle-fill me-1"></i>Path / Selection Modified
+                                             </span>
+                                         }
+                                     </div>
+                                     <div class="d-flex align-items-center gap-2">
+                                         <button class="btn btn-primary btn-sm d-flex align-items-center gap-2 fw-bold px-3 py-1 shadow-sm" 
+                                                 @onclick="OpenQueryModal">
+                                             <i class="bi @(IsPathFinalized ? (IsQueryOutdated ? "bi-arrow-repeat" : "bi-check2-circle") : "bi-check2-circle") fs-6"></i>
+                                             @(IsPathFinalized ? (IsQueryOutdated ? "Update Query" : "Re-generate Query") : "Finalize Path & Generate Query")
+                                         </button>
+                                     </div>
+                                 </div>
+
+                                 <!-- One-to-Many Duplication Alert -->
+                                 @if (HasOneToMany)
+                                 {
+                                     <div class="alert alert-warning py-2 px-3 d-flex align-items-center justify-content-between mb-0 rounded-3 shadow-sm border border-warning border-opacity-25" style="background: rgba(255, 193, 7, 0.1);">
+                                         <div class="d-flex align-items-center small text-warning">
+                                             <i class="bi bi-exclamation-triangle-fill fs-5 me-2"></i>
+                                             <span>One-to-many join detected.</span>
+                                         </div>
+                                         <button class="btn btn-sm btn-outline-warning fw-semibold ms-2 text-nowrap" @onclick="() => ShowWarningModal = true">
+                                             View Details
+                                         </button>
+                                     </div>
+                                 }
+
+                                 @if (LastJoinPlan != null && LastJoinPlan.Steps.Count > 0)
+                                 {
+                                     <!-- Active Route Sequence -->
+                                     <div class="card p-3 shadow-sm" style="background: var(--app-surface-secondary); border: 1px solid var(--app-border);">
+                                         <div class="small fw-semibold text-muted mb-2 text-uppercase" style="letter-spacing: 0.5px; font-size: 0.75rem;">Active Join Sequence</div>
+                                         <div class="d-flex flex-wrap gap-2 align-items-center small">
+                                             <div class="btn-group btn-group-sm shadow-sm">
+                                                 <span class="btn btn-sm py-1 fw-bold cursor-pointer text-truncate d-inline-block align-middle join-path-badge" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(LastJoinPlan.RootTable)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(LastJoinPlan.RootTable)">
+                                                     @LastJoinPlan.RootTable.Split('.').Last().Replace("[", "").Replace("]", "")
+                                                 </span>
+                                             </div>
+                                             @foreach (var step in LastJoinPlan.Steps)
+                                             {
+                                                 <i class="bi bi-arrow-right text-secondary fs-5 align-middle"></i>
+                                                 var isIgnored = IgnoredRoutingTables.Contains(step.FullName);
+                                                 <div class="btn-group btn-group-sm shadow-sm @(!step.IsSelectedTable ? "dropdown" : "")">
+                                                     <span class="btn btn-sm py-1 fw-bold cursor-pointer text-truncate d-inline-block align-middle join-path-badge" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(step.FullName)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(step.FullName)">
+                                                         @step.FullName.Split('.').Last().Replace("[", "").Replace("]", "")
+                                                     </span>
+                                                     @if (!step.IsSelectedTable)
+                                                     {
+                                                         <button type="button" class="btn py-1 btn-warning border-warning text-dark" style="background-color: #ffc107;" data-bs-tooltip="true" data-bs-title="View alternative routes" @onclick="() => ActiveOffcanvasTable = step.FullName" @onclick:stopPropagation>
+                                                             <i class="bi bi-diagram-3"></i>
+                                                         </button>
+                                                     }
+                                                 </div>
+                                             }
+                                         </div>
+                                     </div>
+                                 }
+                                 else if (LastJoinPlan != null && !string.IsNullOrEmpty(LastJoinPlan.ErrorMessage))
+                                 {
+                                     <div class="alert alert-danger py-2 px-3 small rounded-3">
+                                         <i class="bi bi-x-circle-fill me-2"></i>@LastJoinPlan.ErrorMessage
+                                     </div>
+                                 }
+                                 else if (LastJoinPlan != null && LastJoinPlan.UnreachableTables.Count > 0)
+                                 {
+                                     <div class="alert alert-warning py-2 px-3 small rounded-3">
+                                         <i class="bi bi-exclamation-triangle-fill me-2"></i>Unreachable tables: @string.Join(", ", LastJoinPlan.UnreachableTables)
+                                     </div>
+                                 }
+
+                                 <!-- Blocked Hubs & Paths -->
+                                 @if (IgnoredRoutingTables.Count > 0 || IgnoredRoutingEdges.Count > 0)
+                                 {
+                                     <div class="d-flex flex-column gap-3 mt-1">
+                                         @if (IgnoredRoutingTables.Count > 0)
+                                         {
+                                             <div>
+                                                 <div class="d-flex align-items-center mb-2 mt-1">
+                                                     <span class="text-danger small fw-bold me-2" style="letter-spacing: 0.5px;">Blocked Hubs</span>
+                                                     <hr class="flex-grow-1 m-0 me-2" style="opacity: 0.3; border-color: var(--app-border) !important;">
+                                                     <button type="button" class="btn btn-sm flex-shrink-0" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; background-color: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.35); color: #ff98a3; border-radius: 0.375rem;" @onclick="() => ShowClearBlockedHubsConfirmation = true" onmouseover="this.style.backgroundColor='rgba(220,53,69,0.25)'" onmouseout="this.style.backgroundColor='rgba(220,53,69,0.12)'">Clear All</button>
+                                                 </div>
+                                                 <div class="d-flex flex-wrap gap-2">
+                                                     @foreach(var ignored in IgnoredRoutingTables)
+                                                     {
+                                                         var parts = ignored.Replace("[", "").Replace("]", "").Split('.');
+                                                         var schemaName = parts.Length > 1 ? parts[0] : "dbo";
+                                                         var cleanName = parts.Length > 1 ? parts[1] : parts[0];
+                                                         <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start cursor-pointer" style="background-color: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.4); color: #ff98a3; font-size: 0.85rem; max-width: 100%;" 
+                                                               data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @cleanName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom">
+                                                             <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(ignored)">@cleanName</span>
+                                                             <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #ff98a3; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleIgnoreRoutingTable(ignored)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
+                                                         </span>
+                                                     }
+                                                 </div>
+                                             </div>
+                                         }
+                                         @if (IgnoredRoutingEdges.Count > 0)
+                                         {
+                                             <div>
+                                                 <div class="d-flex align-items-center mb-2 mt-1">
+                                                     <span class="text-danger small fw-bold me-2" style="letter-spacing: 0.5px;">Blocked Paths</span>
+                                                     <hr class="flex-grow-1 m-0 me-2" style="opacity: 0.3; border-color: var(--app-border) !important;">
+                                                     <button type="button" class="btn btn-sm flex-shrink-0" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; background-color: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.35); color: #ff98a3; border-radius: 0.375rem;" @onclick="() => ShowClearBlockedPathsConfirmation = true" onmouseover="this.style.backgroundColor='rgba(220,53,69,0.25)'" onmouseout="this.style.backgroundColor='rgba(220,53,69,0.12)'">Clear All</button>
+                                                 </div>
+                                                 <div class="d-flex flex-wrap gap-2">
+                                                     @foreach(var edgeKey in IgnoredRoutingEdges)
+                                                     {
+                                                         var parts = edgeKey.Split('|');
+                                                         if (parts.Length == 4)
+                                                         {
+                                                             var sourceTable = parts[0].Split('.').Last().Replace("[", "").Replace("]", "");
+                                                             var targetTable = parts[1].Split('.').Last().Replace("[", "").Replace("]", "");
+                                                             var tooltipText = sourceTable + " -> " + targetTable;
+                                                             <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start" style="background-color: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.4); color: #ff98a3; font-size: 0.85rem; max-width: 100%;" data-bs-tooltip="true" data-bs-placement="top" title="@tooltipText">
+                                                                 <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;">@sourceTable <i class="bi bi-arrow-right mx-1"></i> @targetTable</span>
+                                                                 <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #ff98a3; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleIgnoreRoutingEdge(edgeKey)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
+                                                             </span>
+                                                         }
+                                                     }
+                                                 </div>
+                                             </div>
                                          }
                                      </div>
                                  }
                              </div>
                          }
-
-                         @if (IgnoredRoutingTables.Count > 0 || IgnoredRoutingEdges.Count > 0)
-                         {
-                             <div class="@(LastJoinPlan != null && LastJoinPlan.Steps.Count > 0 ? "mt-3" : "") d-flex flex-column gap-3">
-                                 @if (IgnoredRoutingTables.Count > 0)
-                                 {
-                                     <div>
-                                         <div class="d-flex align-items-center mb-3 mt-1">
-                                             <span class="text-danger small fw-bold me-2" style="letter-spacing: 0.5px;">Blocked Hubs</span>
-                                             <hr class="flex-grow-1 m-0 me-2" style="opacity: 0.3; border-color: var(--app-border) !important;">
-                                             <button type="button" class="btn btn-sm flex-shrink-0" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; background-color: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.35); color: #ff98a3; border-radius: 0.375rem;" @onclick="() => ShowClearBlockedHubsConfirmation = true" onmouseover="this.style.backgroundColor='rgba(220,53,69,0.25)'" onmouseout="this.style.backgroundColor='rgba(220,53,69,0.12)'">Clear All</button>
-                                         </div>
-                                         <div class="d-flex flex-wrap gap-2">
-                                             @foreach(var ignored in IgnoredRoutingTables)
-                                             {
-                                                 var parts = ignored.Replace("[", "").Replace("]", "").Split('.');
-                                                 var schemaName = parts.Length > 1 ? parts[0] : "dbo";
-                                                 var cleanName = parts.Length > 1 ? parts[1] : parts[0];
-                                                 <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start cursor-pointer" style="background-color: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.4); color: #ff98a3; font-size: 0.85rem; max-width: 100%;" 
-                                                       data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> Table<br/><b>Name:</b> @cleanName<br/><b>Schema:</b> @schemaName.ToLower()" data-bs-placement="bottom">
-                                                     <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;" @onclick="() => NavigateToDetails(ignored)">@cleanName</span>
-                                                     <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #ff98a3; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleIgnoreRoutingTable(ignored)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
-                                                 </span>
-                                             }
-                                         </div>
-                                     </div>
-                                 }
-                                 @if (IgnoredRoutingEdges.Count > 0)
-                                 {
-                                     <div>
-                                         <div class="d-flex align-items-center mb-3 mt-1">
-                                             <span class="text-danger small fw-bold me-2" style="letter-spacing: 0.5px;">Blocked Paths</span>
-                                             <hr class="flex-grow-1 m-0 me-2" style="opacity: 0.3; border-color: var(--app-border) !important;">
-                                             <button type="button" class="btn btn-sm flex-shrink-0" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; background-color: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.35); color: #ff98a3; border-radius: 0.375rem;" @onclick="() => ShowClearBlockedPathsConfirmation = true" onmouseover="this.style.backgroundColor='rgba(220,53,69,0.25)'" onmouseout="this.style.backgroundColor='rgba(220,53,69,0.12)'">Clear All</button>
-                                         </div>
-                                         <div class="d-flex flex-wrap gap-2">
-                                             @foreach(var edgeKey in IgnoredRoutingEdges)
-                                             {
-                                                 var parts = edgeKey.Split('|');
-                                                 if (parts.Length == 4)
-                                                 {
-                                                     var sourceTable = parts[0].Split('.').Last().Replace("[", "").Replace("]", "");
-                                                     var targetTable = parts[1].Split('.').Last().Replace("[", "").Replace("]", "");
-                                                      var tooltipText = sourceTable + " -> " + targetTable;
-                                                      <span class="badge d-flex align-items-center gap-2 px-2 py-1 text-wrap text-start" style="background-color: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.4); color: #ff98a3; font-size: 0.85rem; max-width: 100%;" data-bs-tooltip="true" data-bs-placement="top" title="@tooltipText">
-                                                         <span class="flex-grow-1 text-truncate d-inline-block align-middle" style="max-width: 300px;">@sourceTable ➔ @targetTable</span>
-                                                         <i class="bi bi-x-lg" style="cursor: pointer; font-size: 0.75rem; padding-left: 0.25rem; color: #ff98a3; opacity: 0.8;" aria-label="Remove" @onclick="() => ToggleIgnoreRoutingEdge(edgeKey)" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"></i>
-                                                     </span>
-                                                 }
-                                             }
-                                         </div>
-                                     </div>
-                                 }
-                             </div>
-                         }
                      </div>
-                 }
              </div>
         </div>
     </div>
 </div>
+}
+
+@if (ShowQueryModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.65); backdrop-filter: blur(3px); z-index: 1050;">
+        <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 960px; height: 80vh;">
+            <div class="modal-content shadow-lg d-flex flex-column h-100" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <!-- Modal Header -->
+                <div class="modal-header py-2 px-3 d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-code-slash text-primary fs-5"></i>
+                        <h6 class="modal-title fw-bold mb-0" style="color: var(--app-text);">Generated SQL Query</h6>
+                    </div>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="CloseQueryModal"></button>
+                </div>
+
+                <!-- Modal Body: Monaco Editor -->
+                <div class="modal-body p-0 flex-grow-1 position-relative" style="min-height: 400px; overflow: hidden; background: var(--app-surface);">
+                    @if (_isMonacoLoaded)
+                    {
+                        <StandaloneCodeEditor @ref="_popupEditor" 
+                                              Id="query-builder-monaco-popup" 
+                                              CssClass="w-100 h-100" 
+                                              ConstructionOptions="PopupEditorConstructionOptions" 
+                                              OnDidInit="PopupEditorOnDidInit" />
+                    }
+                    else
+                    {
+                        <div class="d-flex align-items-center justify-content-center h-100">
+                            <span class="text-muted small">Loading editor...</span>
+                        </div>
+                    }
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="modal-footer py-2 px-3 d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-top: 1px solid var(--app-border);">
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle me-1"></i> Click <strong>Open in Query editor</strong> to execute or edit.
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm @(CopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary")" @onclick="CopySql" title="Copy to clipboard">
+                            @if (CopyLabel == "Copy")
+                            {
+                                <i class="bi bi-clipboard me-1"></i>
+                            }
+                            @CopyLabel
+                        </button>
+                        <button class="btn btn-sm btn-primary" @onclick="RunInRunner" title="Open in Query editor">
+                            <i class="bi bi-play-fill me-1"></i> Open in Query editor
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @if (ShowWarningModal)
 {
@@ -572,7 +717,7 @@ else
                                                 
                                                 @if (i < OptimalTableOrder.Count - 1)
                                                 {
-                                                    <span class="text-secondary fw-bold fs-5">➔</span>
+                                                    <i class="bi bi-arrow-right text-secondary fs-5 align-middle"></i>
                                                 }
                                             }
                                         </div>
@@ -741,7 +886,7 @@ else
                                     <div class="card-body p-3">
                                         <div class="d-flex align-items-center justify-content-between gap-2">
                                             <div class="text-info fw-bold" style="font-size: 0.8rem; word-break: break-word; white-space: normal; min-width: 0; flex: 1 1 auto;">
-                                                @string.Join(" ➔ ", route.NewTables.Select(t => t.Split('.').Last().Replace("[", "").Replace("]", "")))
+                                                @string.Join(" \u2192 ", route.NewTables.Select(t => t.Split('.').Last().Replace("[", "").Replace("]", "")))
                                             </div>
                                             <i class="bi bi-chevron-right text-muted fs-5 flex-shrink-0"></i>
                                         </div>
@@ -793,6 +938,9 @@ else
     private bool ShowResetModal = false;
     private string TableToDelete = "";
     private bool ShowWarningModal { get; set; } = false;
+    private bool ShowQueryModal = false;
+    private bool _isMonacoLoaded = false;
+    private StandaloneCodeEditor? _popupEditor;
     private string ActiveBuilderTab { get => QueryStateService.ActiveBuilderTab; set => QueryStateService.ActiveBuilderTab = value; }
     private string SearchCol = "";
     private string _searchColInput = "";
@@ -921,7 +1069,10 @@ else
     
     // List (not HashSet) preserves insertion order — first selected table becomes the JOIN root
     private List<string> SelectedColumns { get => QueryStateService.SelectedColumns; set => QueryStateService.SelectedColumns = value; }
-    private string GeneratedSql = "-- Select columns on the left to generate a query.";
+    private string ActiveRightTab { get => QueryStateService.ActiveRightTab; set => QueryStateService.ActiveRightTab = value; }
+    private bool IsPathFinalized { get => QueryStateService.IsPathFinalized; set => QueryStateService.IsPathFinalized = value; }
+    private bool IsQueryOutdated { get => QueryStateService.IsQueryOutdated; set => QueryStateService.IsQueryOutdated = value; }
+    private string GeneratedSql { get => QueryStateService.GeneratedSql; set => QueryStateService.GeneratedSql = value; }
     private bool HasOneToMany = false;
     private List<string>? OptimalTableOrder = null;
     private HashSet<string> IgnoredRoutingTables => QueryStateService.IgnoredRoutingTables;
@@ -1062,7 +1213,7 @@ else
         
         if (SelectedColumns.Count > 0 || !string.IsNullOrEmpty(TargetTable))
         {
-            Generate();
+            UpdateJoinPath();
         }
         
         IsLoading = false;
@@ -1134,7 +1285,123 @@ else
             .Replace(" ", "-");
     }
 
-    private void Generate()
+    private void UpdateJoinPath()
+    {
+        OptimalTableOrder = null;
+
+        var tables = SelectedColumns
+            .Select(k => k.Substring(0, k.LastIndexOf('.')))
+            .Distinct()
+            .ToList();
+
+        if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable))
+        {
+            if (!tables.Contains(TargetTable))
+            {
+                tables.Insert(0, TargetTable);
+            }
+            else
+            {
+                tables.Remove(TargetTable);
+                tables.Insert(0, TargetTable);
+            }
+        }
+
+        if (tables.Count <= 1)
+        {
+            HasOneToMany = false;
+            LastJoinPlan = null;
+            AlternativeRoutes.Clear();
+            return;
+        }
+
+        if (CurrentMode == QueryMode.Select)
+        {
+            LastJoinPlan = PathfinderService.GenerateJoinPlan(tables, ignoredRoutingTables: IgnoredRoutingTables, ignoredRoutingEdges: IgnoredRoutingEdges);
+            HasOneToMany = LastJoinPlan?.HasOneToMany ?? false;
+
+            if (HasOneToMany && tables.Count > 1)
+            {
+                foreach (var candidate in tables.Skip(1))
+                {
+                    var testOrder = new List<string> { candidate };
+                    testOrder.AddRange(tables.Where(t => t != candidate));
+
+                    var plan = PathfinderService.GenerateJoinPlan(testOrder, ignoredRoutingTables: IgnoredRoutingTables, ignoredRoutingEdges: IgnoredRoutingEdges);
+                    if (plan != null && string.IsNullOrEmpty(plan.ErrorMessage) && !plan.HasOneToMany && plan.UnreachableTables.Count == 0)
+                    {
+                        OptimalTableOrder = plan.Steps.Select(s => s.FullName).ToList();
+                        OptimalTableOrder.Insert(0, plan.RootTable);
+                        break;
+                    }
+                }
+            }
+        }
+        else if (CurrentMode == QueryMode.Update)
+        {
+            LastJoinPlan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j", ignoredRoutingTables: IgnoredRoutingTables, ignoredRoutingEdges: IgnoredRoutingEdges);
+            HasOneToMany = LastJoinPlan?.HasOneToMany ?? false;
+        }
+        else if (CurrentMode == QueryMode.Delete)
+        {
+            LastJoinPlan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j");
+            HasOneToMany = LastJoinPlan?.HasOneToMany ?? false;
+        }
+
+        _ = CalculateAlternativeRoutesAsync();
+    }
+
+    private async Task OpenQueryModal()
+    {
+        GenerateSqlInternal();
+        ShowQueryModal = true;
+        try 
+        { 
+            await JS.InvokeAsync<bool>("waitForMonaco", 3000); 
+        } 
+        catch { }
+        _isMonacoLoaded = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CloseQueryModal()
+    {
+        ShowQueryModal = false;
+        _isMonacoLoaded = false;
+    }
+
+    private StandaloneEditorConstructionOptions PopupEditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            AutomaticLayout = true,
+            Language = "sql",
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
+            Value = GeneratedSql,
+            ReadOnly = true,
+            FontSize = 13,
+            LineNumbers = "on",
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            Scrollbar = new EditorScrollbarOptions { UseShadows = false },
+            WordWrap = "on"
+        };
+    }
+
+    private async Task PopupEditorOnDidInit()
+    {
+        try
+        {
+            if (_popupEditor != null)
+            {
+                await _popupEditor.SetValue(GeneratedSql);
+                await Task.Delay(100);
+                await _popupEditor.Layout();
+            }
+        }
+        catch { }
+    }
+
+    private void GenerateSqlInternal()
     {
         OptimalTableOrder = null;
 
@@ -1157,8 +1424,6 @@ else
             .Select(k => k.Substring(0, k.LastIndexOf('.')))
             .Distinct()
             .ToList();
-
-
 
         if (CurrentMode != QueryMode.Select && !string.IsNullOrEmpty(TargetTable))
         {
@@ -1213,9 +1478,11 @@ else
             HasOneToMany = result.HasOneToMany;
             LastJoinPlan = plan;
         }
-        
+
         _ = CalculateAlternativeRoutesAsync();
     }
+
+    private void Generate() => UpdateJoinPath();
 
     private void SetMode(QueryMode mode)
     {
@@ -1325,7 +1592,9 @@ else
         GeneratedSql = "-- Select columns on the left to generate a query.";
         HasOneToMany = false;
         LastJoinPlan = null;
+        OptimalTableOrder = null;
         ShowClearConfirmation = false;
+        ShowQueryModal = false;
         StateHasChanged();
     }
 
@@ -1463,6 +1732,7 @@ else
 
     private void RunInRunner()
     {
+        ShowQueryModal = false;
         if (QueryStateService.Tabs.Count >= Config.GetValue<int>("MaxOpenTabs", 20))
         {
             ShowLimitAlert = true;

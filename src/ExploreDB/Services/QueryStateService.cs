@@ -171,5 +171,9 @@ public class QueryStateService
     public string TargetTable { get; set; } = "";
     public QueryMode CurrentMode { get; set; } = QueryMode.Select;
     public string ActiveBuilderTab { get; set; } = "Available";
+    public string ActiveRightTab { get; set; } = "JoinPath";
+    public bool IsPathFinalized { get; set; } = false;
+    public bool IsQueryOutdated { get; set; } = false;
+    public string GeneratedSql { get; set; } = "-- Select columns on the left to generate a query.";
     public Dictionary<string, string?> UpdateMappings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

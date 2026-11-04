@@ -743,7 +743,8 @@
         _isEditorReady = false;
         _isMonacoLoaded = false;
         try { _ = JS.InvokeVoidAsync("window.globalShortcuts.unregisterQueryRunner"); } catch { }
-        _objRef?.Dispose();
+        try { _objRef?.Dispose(); } catch { }
+        _objRef = null;
         _saveDebounceTimer?.Dispose();
         ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
@@ -1462,47 +1463,59 @@
 
     private async Task RegisterAutocompleteItemsAsync()
     {
-        if (!_isEditorReady) return;
+        if (!_isEditorReady || _objRef == null) return;
 
-        // Chunk 1: Tables and Views
-        var tables = SchemaService.Tables.Select(t => new { 
-            name = t.Name, 
-            fullName = t.FullName, 
-            columns = t.Columns.Select(c => c.Name).ToList(),
-            relations = t.OutgoingKeys.Select(k => new { fromCol = k.FromColumn, toTable = k.ToTable.ToLower(), toCol = k.ToColumn })
-                         .Concat(t.IncomingKeys.Select(k => new { fromCol = k.ToColumn, toTable = k.FromTable.ToLower(), toCol = k.FromColumn }))
-                         .ToList()
-        }).ToList();
-        var views = SchemaService.Views.Select(v => new { name = v.Name, fullName = v.FullName, columns = v.Columns.Select(c => c.Name).ToList() }).ToList();
-        await JS.InvokeVoidAsync("updateSqlAutocompleteData", tables, views, null, null, null);
-        await Task.Delay(1); // Yield to keep UI responsive
+        try
+        {
+            // Chunk 1: Tables and Views
+            var tables = SchemaService.Tables.Select(t => new { 
+                name = t.Name, 
+                fullName = t.FullName, 
+                columns = t.Columns.Select(c => c.Name).ToList(),
+                relations = t.OutgoingKeys.Select(k => new { fromCol = k.FromColumn, toTable = k.ToTable.ToLower(), toCol = k.ToColumn })
+                             .Concat(t.IncomingKeys.Select(k => new { fromCol = k.ToColumn, toTable = k.FromTable.ToLower(), toCol = k.FromColumn }))
+                             .ToList()
+            }).ToList();
+            var views = SchemaService.Views.Select(v => new { name = v.Name, fullName = v.FullName, columns = v.Columns.Select(c => c.Name).ToList() }).ToList();
+            if (!_isEditorReady || _objRef == null) return;
+            await JS.InvokeVoidAsync("updateSqlAutocompleteData", tables, views, null, null, null);
+            await Task.Delay(1); // Yield to keep UI responsive
 
-        // Chunk 2: Columns (Heavy CPU operation)
-        var columns = SchemaService.Tables.SelectMany(t => t.Columns)
-                        .Concat(SchemaService.Views.SelectMany(v => v.Columns))
-                        .Select(c => c.Name)
-                        .Distinct()
-                        .ToList();
-        await JS.InvokeVoidAsync("updateSqlAutocompleteData", null, null, columns, null, null);
-        await Task.Delay(1); // Yield
+            if (!_isEditorReady || _objRef == null) return;
 
-        // Chunk 3: Stored Procedures
-        var sps = SchemaService.StoredProcedures.Select(s => new { 
-            name = s.Name, 
-            fullName = s.FullName, 
-            parameters = s.Parameters.Select(p => new { name = p.Name, type = p.DisplayType }).ToList() 
-        }).ToList();
-        
-        // Register the provider and set dotNetHelper, retaining existing data
-        var functions = SchemaService.Functions.Select(f => new {
-            name = f.Name,
-            fullName = f.FullName,
-            functionType = f.FunctionType,
-            parameters = f.Parameters.Select(p => new { name = p.Name, type = p.DisplayType }).ToList()
-        }).ToList();
-        
-        await JS.InvokeVoidAsync("registerSqlAutocomplete", null, null, null, sps, functions, _objRef);
-        await UpdateEditorSnippetsAsync();
+            // Chunk 2: Columns (Heavy CPU operation)
+            var columns = SchemaService.Tables.SelectMany(t => t.Columns)
+                            .Concat(SchemaService.Views.SelectMany(v => v.Columns))
+                            .Select(c => c.Name)
+                            .Distinct()
+                            .ToList();
+            if (!_isEditorReady || _objRef == null) return;
+            await JS.InvokeVoidAsync("updateSqlAutocompleteData", null, null, columns, null, null);
+            await Task.Delay(1); // Yield
+
+            if (!_isEditorReady || _objRef == null) return;
+
+            // Chunk 3: Stored Procedures
+            var sps = SchemaService.StoredProcedures.Select(s => new { 
+                name = s.Name, 
+                fullName = s.FullName, 
+                parameters = s.Parameters.Select(p => new { name = p.Name, type = p.DisplayType }).ToList() 
+            }).ToList();
+            
+            // Register the provider and set dotNetHelper, retaining existing data
+            var functions = SchemaService.Functions.Select(f => new {
+                name = f.Name,
+                fullName = f.FullName,
+                functionType = f.FunctionType,
+                parameters = f.Parameters.Select(p => new { name = p.Name, type = p.DisplayType }).ToList()
+            }).ToList();
+            
+            if (!_isEditorReady || _objRef == null) return;
+            await JS.InvokeVoidAsync("registerSqlAutocomplete", null, null, null, sps, functions, _objRef);
+            await UpdateEditorSnippetsAsync();
+        }
+        catch (ObjectDisposedException) { }
+        catch (Exception) { }
     }
 
     private void EditorOnDidChangeModelContent(ModelContentChangedEvent e)
