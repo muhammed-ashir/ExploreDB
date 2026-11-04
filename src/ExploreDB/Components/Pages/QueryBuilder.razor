@@ -907,8 +907,6 @@ else
     </div>
 }
 
-}
-
 @code {
     private string? ActiveOffcanvasTable = null;
     private string GetTooltipHtml(string fullName)
@@ -1339,12 +1337,12 @@ else
         }
         else if (CurrentMode == QueryMode.Update)
         {
-            LastJoinPlan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j", ignoredRoutingTables: IgnoredRoutingTables, ignoredRoutingEdges: IgnoredRoutingEdges);
+            LastJoinPlan = PathfinderService.GenerateJoinPlan(tables, TargetTable, ignoredRoutingTables: IgnoredRoutingTables, ignoredRoutingEdges: IgnoredRoutingEdges);
             HasOneToMany = LastJoinPlan?.HasOneToMany ?? false;
         }
         else if (CurrentMode == QueryMode.Delete)
         {
-            LastJoinPlan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j");
+            LastJoinPlan = PathfinderService.GenerateJoinPlan(tables, TargetTable);
             HasOneToMany = LastJoinPlan?.HasOneToMany ?? false;
         }
 
@@ -1464,7 +1462,7 @@ else
         }
         else if (CurrentMode == QueryMode.Update)
         {
-            var plan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j", ignoredRoutingTables: IgnoredRoutingTables, ignoredRoutingEdges: IgnoredRoutingEdges);
+            var plan = PathfinderService.GenerateJoinPlan(tables, TargetTable, ignoredRoutingTables: IgnoredRoutingTables, ignoredRoutingEdges: IgnoredRoutingEdges);
             var result = PathfinderService.GenerateJoinedUpdateQuery(plan, UpdateMappings);
             GeneratedSql = result.Sql;
             HasOneToMany = result.HasOneToMany;
@@ -1472,7 +1470,7 @@ else
         }
         else if (CurrentMode == QueryMode.Delete)
         {
-            var plan = PathfinderService.GenerateJoinPlan(tables, TargetTable, "t", "j");
+            var plan = PathfinderService.GenerateJoinPlan(tables, TargetTable);
             var result = PathfinderService.GenerateJoinedDeleteQuery(plan);
             GeneratedSql = result.Sql;
             HasOneToMany = result.HasOneToMany;

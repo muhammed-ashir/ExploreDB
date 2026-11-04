@@ -1958,7 +1958,7 @@ window.generateTableAlias = function (tableName, existingAliases) {
     alias = alias.toUpperCase();
     if (!alias) alias = "T";
     
-    var reserved = new Set(['ON', 'IN', 'OR', 'BY', 'AS', 'TO', 'IS', 'AT', 'DO', 'IF', 'GO', 'NO']);
+    var reserved = new Set(['ON', 'IN', 'OR', 'BY', 'AS', 'TO', 'IS', 'AT', 'DO', 'IF', 'GO', 'NO', 'ADD', 'ALL', 'AND', 'SET', 'FOR', 'NOT', 'OUT', 'TOP', 'USE', 'KEY', 'ROW']);
     var finalAlias = reserved.has(alias) ? (alias + "1") : alias;
     var suffix = 2;
     var upperExisting = new Set();
