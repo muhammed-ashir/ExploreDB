@@ -145,8 +145,28 @@
             <NavMenu />
         </aside>
 
-        <main class="app-shell-main d-flex flex-column" style="height: 100vh; overflow-y: auto;">
-            <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top" style="background-color: var(--app-header-bg); border-color: var(--app-border) !important; backdrop-filter: blur(5px); z-index: 1020;">
+        @{
+            bool isDatabaseSelected = false;
+            string relativePath = Nav.ToBaseRelativePath(Nav.Uri);
+            bool isLearningHub = relativePath.Contains("learning", StringComparison.OrdinalIgnoreCase);
+            bool isQueryRunner = string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("runner", StringComparison.OrdinalIgnoreCase);
+            bool isHistory = relativePath.StartsWith("history", StringComparison.OrdinalIgnoreCase);
+            bool isSnippets = relativePath.StartsWith("snippets", StringComparison.OrdinalIgnoreCase);
+            bool isTools = relativePath.StartsWith("tools", StringComparison.OrdinalIgnoreCase);
+            bool isAppCenter = relativePath.Contains("app-center", StringComparison.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
+            {
+                try
+                {
+                    var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                    isDatabaseSelected = !string.IsNullOrEmpty(builder.InitialCatalog);
+                }
+                catch { }
+            }
+        }
+        <main class="app-shell-main d-flex flex-column" style="height: 100vh; @(isQueryRunner ? "overflow: hidden;" : "overflow-y: auto;")">
+            <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top flex-shrink-0" style="background-color: var(--app-header-bg); border-color: var(--app-border) !important; backdrop-filter: blur(5px); z-index: 1020;">
                 <button class="btn btn-sm toolbar-icon-btn me-2" 
                         style="width: 28px; height: 28px; min-width: 28px; min-height: 28px; max-width: 28px; max-height: 28px; border-radius: 6px;" 
                         @onclick="() => SidebarCollapsed = !SidebarCollapsed" 
@@ -206,27 +226,7 @@
                     </button>
                 </div>
             </div>
-            <div class="app-shell-content flex-grow-1">
-                @{
-                    bool isDatabaseSelected = false;
-                    string relativePath = Nav.ToBaseRelativePath(Nav.Uri);
-                    bool isLearningHub = relativePath.Contains("learning", StringComparison.OrdinalIgnoreCase);
-                    bool isQueryRunner = string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("runner", StringComparison.OrdinalIgnoreCase);
-                    bool isHistory = relativePath.StartsWith("history", StringComparison.OrdinalIgnoreCase);
-                    bool isSnippets = relativePath.StartsWith("snippets", StringComparison.OrdinalIgnoreCase);
-                    bool isTools = relativePath.StartsWith("tools", StringComparison.OrdinalIgnoreCase);
-                    bool isAppCenter = relativePath.Contains("app-center", StringComparison.OrdinalIgnoreCase);
-
-                    if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
-                    {
-                        try
-                        {
-                            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
-                            isDatabaseSelected = !string.IsNullOrEmpty(builder.InitialCatalog);
-                        }
-                        catch { }
-                    }
-                }
+            <div class="app-shell-content flex-grow-1 @(isQueryRunner ? "p-3 d-flex flex-column overflow-hidden" : "")" style="@(isQueryRunner ? "min-height: 0;" : "")">
                 @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner && !isHistory && !isSnippets && !isTools && !isAppCenter)
                 {
                     <div class="w-100 h-100 d-flex justify-content-center align-items-center" style="min-height: 80vh;">

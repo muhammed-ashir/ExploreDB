@@ -1503,6 +1503,26 @@ a.card.glow-highlight:hover,
     background-color: rgba(0, 0, 0, 0.05);
 }
 
+/* ==========================================================
+   Query Runner IDE Split-Pane Layout
+   ========================================================== */
+.query-runner-container {
+    height: 100%;
+    min-height: 0;
+    position: relative;
+}
+
+.query-runner-toolbar {
+    position: relative;
+    z-index: 10;
+    min-height: 38px;
+}
+
+.query-runner-workspace {
+    min-height: 0;
+    position: relative;
+}
+
 
 
 

@@ -1587,16 +1587,19 @@ window.initQueryEditorSplitter = function (dotNetRef, splitterId, wrapperId) {
 
         var startY = e.clientY;
         var startHeight = wrapper.offsetHeight;
-        var minHeight = 150;
+        var minHeight = 120;
         var lastHeight = startHeight;
 
         splitter.classList.add('dragging');
         document.body.style.cursor = 'row-resize';
         document.body.style.userSelect = 'none';
 
+        var workspace = wrapper.closest('.query-runner-workspace') || document.querySelector('.query-runner-workspace');
+        var maxAllowed = workspace ? Math.max(minHeight, workspace.offsetHeight - 120) : (window.innerHeight - 250);
+
         function onPointerMove(moveEvent) {
             var deltaY = moveEvent.clientY - startY;
-            var newHeight = Math.round(Math.max(minHeight, startHeight + deltaY));
+            var newHeight = Math.round(Math.min(maxAllowed, Math.max(minHeight, startHeight + deltaY)));
             lastHeight = newHeight;
             wrapper.style.height = newHeight + 'px';
             wrapper.style.flexGrow = '0';

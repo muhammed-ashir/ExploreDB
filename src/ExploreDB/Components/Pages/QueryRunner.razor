@@ -20,82 +20,81 @@
 @inject UserSettingsService UserSettingsService
 @implements IDisposable
 
-<div class="container-fluid d-flex flex-column h-100">
+<div class="query-runner-container d-flex flex-column h-100 p-0 overflow-hidden" style="min-height: 0;">
     @if (string.IsNullOrEmpty(ConnectionService.ConnectionString))
     {
         <ExploreDB.Components.Shared.NoDatabaseBanner Height="100%" />
     }
     else
     {
-    <div class="row mb-3">
-        <div class="col d-flex justify-content-between align-items-center flex-nowrap">
-            <div class="d-flex gap-2 flex-shrink-0 align-items-center">
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Open File (Ctrl+O)" data-bs-placement="bottom" @onclick="OpenFileAsync">
-                    <i class="bi bi-folder2-open"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save Query (Ctrl+S)" data-bs-placement="bottom" @onclick="SaveActiveQueryAsync">
-                    <i class="bi bi-floppy"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save As... (Ctrl+Shift+S)" data-bs-placement="bottom" @onclick="SaveAsQueryAsync">
-                    <i class="bi bi-file-earmark-plus"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Clear Editor" data-bs-placement="bottom" @onclick="() => ShowClearConfirmation = true">
-                    <i class="bi bi-eraser text-warning"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Format SQL" data-bs-placement="bottom" @onclick="FormatSqlAsync">
-                    <i class="bi bi-magic text-info"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Toggle Comment (Ctrl+/)" data-bs-placement="bottom" @onclick="ToggleCommentAsync">
-                    <i class="bi bi-chat-left-text text-info"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="View History" data-bs-placement="bottom" @onclick='() => Nav.NavigateTo("/history")'>
-                    <i class="bi bi-clock-history"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Snippet Manager (Alt+S)" data-bs-placement="bottom" @onclick='() => Nav.NavigateTo("/snippets")'>
-                    <i class="bi bi-bookmarks text-info"></i>
-                </button>
-            </div>
-            <div class="d-flex align-items-center flex-shrink-0">
-                @if (ActiveTab.IsExecuting)
+    <!-- Fixed Top Action Toolbar -->
+    <div class="query-runner-toolbar d-flex justify-content-between align-items-center flex-nowrap pb-2 flex-shrink-0">
+        <div class="d-flex gap-2 flex-shrink-0 align-items-center">
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Open File (Ctrl+O)" data-bs-placement="bottom" @onclick="OpenFileAsync">
+                <i class="bi bi-folder2-open"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save Query (Ctrl+S)" data-bs-placement="bottom" @onclick="SaveActiveQueryAsync">
+                <i class="bi bi-floppy"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save As... (Ctrl+Shift+S)" data-bs-placement="bottom" @onclick="SaveAsQueryAsync">
+                <i class="bi bi-file-earmark-plus"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Clear Editor" data-bs-placement="bottom" @onclick="() => ShowClearConfirmation = true">
+                <i class="bi bi-eraser text-warning"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Format SQL" data-bs-placement="bottom" @onclick="FormatSqlAsync">
+                <i class="bi bi-magic text-info"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Toggle Comment (Ctrl+/)" data-bs-placement="bottom" @onclick="ToggleCommentAsync">
+                <i class="bi bi-chat-left-text text-info"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="View History" data-bs-placement="bottom" @onclick='() => Nav.NavigateTo("/history")'>
+                <i class="bi bi-clock-history"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Snippet Manager (Alt+S)" data-bs-placement="bottom" @onclick='() => Nav.NavigateTo("/snippets")'>
+                <i class="bi bi-bookmarks text-info"></i>
+            </button>
+        </div>
+        <div class="d-flex align-items-center flex-shrink-0">
+            @if (ActiveTab.IsExecuting)
+            {
+                @if (ActiveTab.IsCancelling)
                 {
-                    @if (ActiveTab.IsCancelling)
-                    {
-                        <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center opacity-75" style="height: 32px;" disabled>
-                            <span class="spinner-border spinner-border-sm me-1" role="status" style="width: 12px; height: 12px;"></span><span>Stopping...</span>
-                        </button>
-                    }
-                    else
-                    {
-                        <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
-                            <i class="bi bi-stop-fill me-1"></i><span>Stop</span>
-                        </button>
-                    }
+                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center opacity-75" style="height: 32px;" disabled>
+                        <span class="spinner-border spinner-border-sm me-1" role="status" style="width: 12px; height: 12px;"></span><span>Stopping...</span>
+                    </button>
                 }
                 else
                 {
-                    <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Execute Query (F5)" data-bs-placement="bottom" @onclick="ExecuteAsync">
-                        <i class="bi bi-play-fill me-1"></i><span>Execute</span>
+                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
+                        <i class="bi bi-stop-fill me-1"></i><span>Stop</span>
                     </button>
                 }
-            </div>
+            }
+            else
+            {
+                <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Execute Query (F5)" data-bs-placement="bottom" @onclick="ExecuteAsync">
+                    <i class="bi bi-play-fill me-1"></i><span>Execute</span>
+                </button>
+            }
         </div>
     </div>
     
     @if (!string.IsNullOrEmpty(FormatError))
     {
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-2 flex-shrink-0" role="alert">
             <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Format Error:</strong> @FormatError
             <button type="button" class="btn-close" @onclick="() => FormatError = null" aria-label="Close"></button>
         </div>
     }
 
-    <!-- Execution Harness Area -->
-    <div class="row g-4 mb-4 @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")">
-        <div class="col-12 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column" : "")">
-            <div class="card shadow-sm @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1 d-flex flex-column" : "")" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
-                <!-- SSMS-Style Tab Strip -->
-                <div class="ssms-tab-strip d-flex align-items-stretch justify-content-between">
-                    <div id="ssms-tab-scroll" class="ssms-tab-scroll d-flex align-items-stretch flex-grow-1">
+    <!-- Split-Pane Workspace Area -->
+    <div class="query-runner-workspace d-flex flex-column flex-grow-1 overflow-hidden" style="min-height: 0;">
+        <!-- Execution Harness Area (Editor) -->
+        <div class="card shadow-sm @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "flex-shrink-0") d-flex flex-column overflow-hidden" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); min-height: 120px;">
+            <!-- SSMS-Style Tab Strip -->
+            <div class="ssms-tab-strip d-flex align-items-stretch justify-content-between flex-shrink-0">
+                <div id="ssms-tab-scroll" class="ssms-tab-scroll d-flex align-items-stretch flex-grow-1">
                         @foreach (var tab in QueryStateService.Tabs.Where(t => !t.IsPoppedOut))
                         {
                             var isCurrent = tab.Id == QueryStateService.ActiveTabId;
@@ -203,15 +202,15 @@
                     </div>
                 </div>
 
-                <div class="card-body p-0 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column flex-grow-1" : "")">
-                    <div id="query-editor-wrapper" class="@(!ActiveTab.HasExecuted || IsMinimized ? (_customEditorHeight == null ? "flex-grow-1" : "") : "")" style="@(_customEditorHeight.HasValue ? $"height: {_customEditorHeight.Value}px;" : (ActiveTab.HasExecuted && !IsMinimized ? "height: 350px;" : "")) width: 100%; display: block; overflow: hidden; min-height: 150px;">
+                <div class="card-body p-0 d-flex flex-column flex-grow-1" style="min-height: 0; overflow: hidden;">
+                    <div id="query-editor-wrapper" class="@(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")" style="@(!ActiveTab.HasExecuted || IsMinimized ? "height: 100%;" : (_customEditorHeight.HasValue ? $"height: {_customEditorHeight.Value}px;" : "height: 280px;")) width: 100%; display: block; overflow: hidden; min-height: 120px;">
                         @if (QueryStateService.Initialized && _isMonacoLoaded)
                         {
                             <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
                         }
                         else
                         {
-                            <div class="d-flex justify-content-center align-items-center h-100" style="min-height: 150px;">
+                            <div class="d-flex justify-content-center align-items-center h-100" style="min-height: 120px;">
                                 <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                                 <span class="text-muted small">Loading editor...</span>
                             </div>
@@ -220,63 +219,61 @@
                 </div>
                 <!-- Resizer Bar (Drag to Resize Query Editor) -->
                 <div id="query-editor-resizer"
-                     class="sql-compare-splitter"
+                     class="sql-compare-splitter flex-shrink-0"
+                     style="@(ActiveTab.HasExecuted && !IsMinimized && !IsFullScreen ? "" : "display: none;")"
                      title="Drag up or down to resize query editor">
                     <div class="sql-compare-splitter-handle"></div>
                 </div>
             </div>
-        </div>
-    </div>
 
     <!-- Results Area --> 
     @if (ActiveTab.HasExecuted)
     {
-        <div class="@(IsFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3" : IsMinimized ? "position-sticky bottom-0 w-100 p-0 mt-auto" : "row")" 
-             style="@(IsFullScreen ? "background-color: var(--app-bg); z-index: 9999;" : IsMinimized ? "z-index: 1030;" : "")">
-            <div class="@(IsFullScreen || IsMinimized ? "w-100 h-100" : "col-12")">
-                <div class="card shadow-sm d-flex flex-column" style="@(IsFullScreen ? "height: 100%;" : IsMinimized ? "border-bottom-left-radius: 0; border-bottom-right-radius: 0;" : "min-height: 400px;") background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
-                    <div class="card-header p-0 d-flex justify-content-between align-items-center" style="border-bottom: 1px solid var(--app-border); background-color: var(--app-surface-secondary);">
-                        <ul class="nav nav-tabs flex-grow-1 border-bottom-0" style="border-color: var(--app-border);">
-                            <li class="nav-item">
-                                <a class="nav-link @(ResultTab == "Results" ? "active border-bottom-0" : "border-transparent")"
-                                   style="@(ResultTab == "Results" ? "background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" : "color: var(--app-text-muted);") cursor:pointer;"
-                                   @onclick='() => { ResultTab = "Results"; IsMinimized = false; }'>Results</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link @(ResultTab == "Messages" ? "active border-bottom-0" : "border-transparent")"
-                                   style="@(ResultTab == "Messages" ? "background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" : "color: var(--app-text-muted);") cursor:pointer;"
-                                   @onclick='() => { ResultTab = "Messages"; IsMinimized = false; }'>
-                                    Messages
-                                    @if (ActiveTab.Messages.Count > 0) { <span class="badge bg-secondary ms-1">@ActiveTab.Messages.Count</span> }
-                                </a>
-                            </li>
-                        </ul>
-                        <div class="d-flex align-items-center pe-2">
-                            @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
-                            {
-                                <span class="text-muted small me-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
-                            }
-                            @if (!IsFullScreen)
-                            {
-                                <button class="btn btn-sm btn-outline-secondary border-0 me-1" style="color: var(--app-text);" @onclick="ToggleMinimize" title="@(IsMinimized ? "Restore Up" : "Minimize")">
-                                    <i class="bi @(IsMinimized ? "bi-chevron-up" : "bi-chevron-down")"></i>
-                                </button>
-                            }
-                            <button class="btn btn-sm btn-outline-secondary border-0 @(!IsFullScreen ? "me-1" : "")" style="color: var(--app-text);" @onclick="ToggleFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
-                                <i class="bi @(IsFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+        <div class="@(IsFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3" : IsMinimized ? "mt-2 flex-shrink-0" : "mt-2 flex-grow-1 d-flex flex-column overflow-hidden")" 
+             style="@(IsFullScreen ? "background-color: var(--app-bg); z-index: 9999;" : IsMinimized ? "" : "min-height: 0;")">
+            <div class="card shadow-sm d-flex flex-column h-100" style="@(IsFullScreen ? "height: 100%;" : IsMinimized ? "border-bottom-left-radius: 0; border-bottom-right-radius: 0;" : "min-height: 0;") background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); overflow: hidden;">
+                <div class="card-header p-0 d-flex justify-content-between align-items-center flex-shrink-0" style="border-bottom: 1px solid var(--app-border); background-color: var(--app-surface-secondary);">
+                    <ul class="nav nav-tabs flex-grow-1 border-bottom-0" style="border-color: var(--app-border);">
+                        <li class="nav-item">
+                            <a class="nav-link @(ResultTab == "Results" ? "active border-bottom-0" : "border-transparent")"
+                               style="@(ResultTab == "Results" ? "background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" : "color: var(--app-text-muted);") cursor:pointer;"
+                               @onclick='() => { ResultTab = "Results"; IsMinimized = false; }'>Results</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ResultTab == "Messages" ? "active border-bottom-0" : "border-transparent")"
+                               style="@(ResultTab == "Messages" ? "background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" : "color: var(--app-text-muted);") cursor:pointer;"
+                               @onclick='() => { ResultTab = "Messages"; IsMinimized = false; }'>
+                                Messages
+                                @if (ActiveTab.Messages.Count > 0) { <span class="badge bg-secondary ms-1">@ActiveTab.Messages.Count</span> }
+                            </a>
+                        </li>
+                    </ul>
+                    <div class="d-flex align-items-center pe-2">
+                        @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
+                        {
+                            <span class="text-muted small me-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+                        }
+                        @if (!IsFullScreen)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary border-0 me-1" style="color: var(--app-text);" @onclick="ToggleMinimize" title="@(IsMinimized ? "Restore Up" : "Minimize")">
+                                <i class="bi @(IsMinimized ? "bi-chevron-up" : "bi-chevron-down")"></i>
                             </button>
-                            
-                            @if (!IsFullScreen)
-                            {
-                                <button class="btn btn-sm btn-outline-secondary border-0" style="color: var(--app-text);" @onclick="() => ActiveTab.HasExecuted = false" title="Close Results">
-                                    <i class="bi bi-x-lg"></i>
-                                </button>
-                            }
-                        </div>
+                        }
+                        <button class="btn btn-sm btn-outline-secondary border-0 @(!IsFullScreen ? "me-1" : "")" style="color: var(--app-text);" @onclick="ToggleFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
+                            <i class="bi @(IsFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                        </button>
+                        
+                        @if (!IsFullScreen)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary border-0" style="color: var(--app-text);" @onclick="() => ActiveTab.HasExecuted = false" title="Close Results">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        }
                     </div>
-                    @if (!IsMinimized)
-                    {
-                        <div class="card-body overflow-auto flex-grow-1">
+                </div>
+                @if (!IsMinimized)
+                {
+                    <div class="card-body overflow-auto flex-grow-1 custom-scrollbar-light" style="min-height: 0;">
                             @if (ResultTab == "Results")
                             {
                                 if (ActiveTab.IsExecuting)
@@ -356,8 +353,8 @@
                     }
                 </div>
             </div>
-        </div>
-    }
+        }
+    </div> <!-- /query-runner-workspace -->
     }
 </div>
 
