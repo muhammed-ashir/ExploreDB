@@ -401,18 +401,29 @@
             }
             else if (ActiveTab == "Definition")
             {
-                <div class="card glass-card mb-4" style="border: 1px solid var(--app-border); color: var(--app-text);">
-                    <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center detail-card-header">
-                        <span class="fw-bold" style="font-size: 0.95rem;">Function Definition</span>
-                        @if (!IsDefinitionLoading && !string.IsNullOrEmpty(Fn?.Definition))
-                        {
-                            <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 @(DefinitionCopied ? "btn-success text-white" : "")"
-                                    @onclick="CopyDefinition" title="Copy to clipboard">
-                                <i class="bi @(DefinitionCopied ? "bi-check2" : "bi-clipboard")"></i> @(DefinitionCopied ? "Copied" : "Copy")
-                            </button>
-                        }
+                <div class="card glass-card @(IsDefinitionExpanded ? "position-fixed top-0 start-0 w-100 h-100 m-0 rounded-0" : "mb-4")" 
+                     style="@(IsDefinitionExpanded ? "z-index: 2100; height: 100vh; background-color: var(--app-bg);" : "border: 1px solid var(--app-border); color: var(--app-text);")"
+                     @onkeydown="HandleDefinitionKeyDown" tabindex="@(IsDefinitionExpanded ? "0" : "-1")">
+                    <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center detail-card-header" style="border-bottom: 1px solid var(--app-border);">
+                        <span class="fw-bold" style="font-size: 0.95rem;">
+                            @(IsDefinitionExpanded ? $"{Fn.Schema}.{Fn.Name} — Function Definition" : "Function Definition")
+                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            @if (!IsDefinitionLoading && !string.IsNullOrEmpty(Fn?.Definition))
+                            {
+                                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 @(DefinitionCopied ? "btn-success text-white" : "")"
+                                        @onclick="CopyDefinition" title="Copy to clipboard">
+                                    <i class="bi @(DefinitionCopied ? "bi-check2" : "bi-clipboard")"></i> @(DefinitionCopied ? "Copied" : "Copy")
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center"
+                                        @onclick="ToggleExpandDefinition" 
+                                        title="@(IsDefinitionExpanded ? "Restore down (Esc)" : "Expand to full screen")">
+                                    <i class="bi @(IsDefinitionExpanded ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                                </button>
+                            }
+                        </div>
                     </div>
-                    <div class="card-body p-0 position-relative">
+                    <div class="card-body p-0 position-relative" style="@(IsDefinitionExpanded ? "height: calc(100vh - 49px);" : "")">
                         @if (IsDefinitionLoading)
                         {
                             <div class="d-flex justify-content-center align-items-center" style="padding: 4rem 1rem;">
@@ -430,7 +441,7 @@
                         }
                         else
                         {
-                            <div style="height: 500px; min-height: 300px; resize: vertical; overflow: hidden;">
+                            <div style="@(IsDefinitionExpanded ? "height: 100%;" : "height: 500px; min-height: 300px; resize: vertical;") overflow: hidden;">
                                 <StandaloneCodeEditor @ref="_definitionEditor" Id="fn-definition-editor" CssClass="w-100 h-100" ConstructionOptions="DefinitionEditorOptions" />
                             </div>
                         }
@@ -498,6 +509,7 @@
 
     private bool IsDefinitionLoading = false;
     private bool DefinitionCopied = false;
+    private bool IsDefinitionExpanded = false;
     private StandaloneCodeEditor? _definitionEditor;
 
     private string ActiveTab = "Parameters";
@@ -717,6 +729,10 @@
     private async Task SetActiveTab(string tab)
     {
         ActiveTab = tab;
+        if (tab != "Definition")
+        {
+            IsDefinitionExpanded = false;
+        }
         if (tab == "Definition" && Fn != null && !Fn.IsDefinitionLoaded && !IsDefinitionLoading)
         {
             IsDefinitionLoading = true;
@@ -726,6 +742,25 @@
         if (tab == "Definition" && _definitionEditor != null && Fn?.Definition != null)
         {
             await _definitionEditor.SetValue(Fn.Definition);
+        }
+    }
+
+    private async Task ToggleExpandDefinition()
+    {
+        IsDefinitionExpanded = !IsDefinitionExpanded;
+        StateHasChanged();
+        await Task.Delay(50);
+        if (_definitionEditor != null)
+        {
+            await _definitionEditor.Layout();
+        }
+    }
+
+    private async Task HandleDefinitionKeyDown(KeyboardEventArgs e)
+    {
+        if (IsDefinitionExpanded && e.Key == "Escape")
+        {
+            await ToggleExpandDefinition();
         }
     }
 
@@ -808,6 +843,7 @@
 
     private ValueTask OnLocationChanging(LocationChangingContext context)
     {
+        IsDefinitionExpanded = false;
         if (!string.IsNullOrEmpty(FullName))
         {
             var decoded = Uri.UnescapeDataString(FullName);
