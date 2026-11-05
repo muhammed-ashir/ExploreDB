@@ -10,6 +10,7 @@
 @inject QueryStateService QueryStateService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject ThemeService ThemeService
+@inject WindowManagerService WindowManager
 <div class="container-fluid">
     @if (IsLoading)
     {
@@ -29,6 +30,10 @@
                         <h5 class="mb-0 fw-bold text-wrap d-flex align-items-center gap-2" style="color: var(--app-text); letter-spacing: 0.5px; word-break: break-word;">
                             @Fn.Name
                             <span class="badge bg-primary text-white fw-normal align-middle" style="font-size: 0.45em; padding: 0.35em 0.6em;">FUNCTION</span>
+                            @if (!IsPopout)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary border-0 ms-2" style="padding: 2px 6px;" title="Pop Out" @onclick="PopOutSchema"><i class="bi bi-box-arrow-up-right popout-icon"></i></button>
+                            }
                         </h5>
                         <small class="text-muted fw-bold" style="font-size: 0.7em; letter-spacing: 1px; margin-top: 2px;">
                             SCHEMA: <span class="text-lowercase">@Fn.Schema</span> | TYPE: @Fn.FunctionType
@@ -37,7 +42,7 @@
                 </div>
             </div>
             <div class="col-auto">
-                @if (!string.IsNullOrEmpty(ReturnUrl)) { <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
+                @if ((IsPopout && !IsPopoutRoot) || (!IsPopout && !string.IsNullOrEmpty(ReturnUrl))) { <a href="javascript:void(0)" @onclick="NavigateBack" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 hover-scale transition-transform fw-medium rounded-pill px-3 py-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
                     <i class="bi bi-arrow-left"></i> Back </a> }
             </div>
         </div>
@@ -435,7 +440,7 @@
 
 @if (ShowLimitAlert)
 {
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
@@ -454,6 +459,27 @@
     </div>
 }
 
+@if (ShowPopoutLimitAlert)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
+                    <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Popout Limit Reached</h5>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowPopoutLimitAlert = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxSchemaPopouts", 5))</strong> open popout windows.</p>
+                    <p class="text-muted small mt-2 mb-0">Please close some existing popout windows before opening new ones.</p>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--app-border);">
+                    <button type="button" class="btn btn-primary px-4" @onclick="() => ShowPopoutLimitAlert = false">Got it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter]
     public string FullName { get; set; } = string.Empty;
@@ -462,6 +488,7 @@
     public string? ReturnUrl { get; set; }
 
     private bool ShowLimitAlert = false;
+    private bool ShowPopoutLimitAlert = false;
     private bool IsLoading = true;
     private FunctionInfo? Fn;
     private bool Copied = false;
@@ -727,11 +754,41 @@
         QueryStateService.ActiveTabId = newTab.Id;
         await QueryStateService.SaveTabsAsync();
         
-        Navigation.NavigateTo("/runner");
+        if (IsPopout)
+        {
+            WindowManager.NavigateMainWindow("/runner");
+        }
+        else
+        {
+            Navigation.NavigateTo("/runner");
+        }
     }
 
-    private void NavigateBack()
+    [CascadingParameter(Name = "IsPopout")] 
+    public bool IsPopout { get; set; }
+
+    [CascadingParameter(Name = "IsPopoutRoot")] 
+    public bool IsPopoutRoot { get; set; }
+
+    private void PopOutSchema()
     {
+        var startPath = $"/function/{Uri.EscapeDataString(FullName)}";
+        var windowTitle = $"{Fn.Schema}.{Fn.Name} (Function)";
+        bool opened = WindowManager.OpenSchemaPopout(startPath, windowTitle);
+        if (!opened)
+        {
+            ShowPopoutLimitAlert = true;
+        }
+    }
+
+    private async Task NavigateBack()
+    {
+        if (IsPopout)
+        {
+            await JS.InvokeVoidAsync("history.back");
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(ReturnUrl))
         {
             Navigation.NavigateTo(ReturnUrl);

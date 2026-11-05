@@ -439,7 +439,7 @@
 
 @if (ShowLimitAlert)
 {
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
@@ -458,6 +458,27 @@
     </div>
 }
 
+@if (ShowPopoutLimitAlert)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
+                    <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Popout Limit Reached</h5>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowPopoutLimitAlert = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxSchemaPopouts", 5))</strong> open popout windows.</p>
+                    <p class="text-muted small mt-2 mb-0">Please close some existing popout windows before opening new ones.</p>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--app-border);">
+                    <button type="button" class="btn btn-primary px-4" @onclick="() => ShowPopoutLimitAlert = false">Got it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter]
     public string FullName { get; set; } = string.Empty;
@@ -466,6 +487,7 @@
     public string? ReturnUrl { get; set; }
 
     private bool ShowLimitAlert = false;
+    private bool ShowPopoutLimitAlert = false;
     private bool IsLoading = true;
     private ViewInfo? View;
     private bool IsDefinitionLoading = false;
@@ -652,7 +674,14 @@
         QueryStateService.ActiveTabId = newTab.Id;
         await QueryStateService.SaveTabsAsync();
         
-        Navigation.NavigateTo("/runner");
+        if (IsPopout)
+        {
+            WindowManager.NavigateMainWindow("/runner");
+        }
+        else
+        {
+            Navigation.NavigateTo("/runner");
+        }
     }
 
     [CascadingParameter(Name = "IsPopout")] 
@@ -667,8 +696,7 @@
         bool opened = WindowManager.OpenSchemaPopout(startPath, windowTitle);
         if (!opened)
         {
-            var maxSchemaPopouts = Config.GetValue<int>("MaxSchemaPopouts", 5);
-            JS.InvokeVoidAsync("alert", $"Maximum schema popouts ({maxSchemaPopouts}) reached.");
+            ShowPopoutLimitAlert = true;
         }
     }
 
