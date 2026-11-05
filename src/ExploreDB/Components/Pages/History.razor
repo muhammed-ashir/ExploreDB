@@ -25,11 +25,11 @@
     </div>
 
     <div class="row flex-grow-1 overflow-hidden" style="min-height: 500px;">
-        <!-- Left Pane: List -->
+        <!-- Left Pane: Tabs List -->
         <div class="col-md-4 d-flex flex-column h-100">
             <div class="card shadow-sm h-100" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="card-header py-2" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border); color: var(--app-text);">
-                    <h6 class="m-0 mb-2" style="color: var(--app-text);">Past Executions</h6>
+                    <h6 class="m-0 mb-2" style="color: var(--app-text);">Past Tabs</h6>
                     <div class="d-flex align-items-center w-100">
                         <CustomDatePicker @bind-Value="_filterDate" />
                     </div>
@@ -59,18 +59,10 @@
                                         class="list-group-item list-group-item-action py-3 history-item @(isSelected ? "history-item-selected" : "")" 
                                         style="border-bottom: 1px solid var(--app-border) !important;" 
                                         @onclick="() => SelectItem(item)">
-                                    <div class="d-flex align-items-center mb-1">
-                                        @if (item.IsSuccess)
-                                        {
-                                            <i class="bi bi-check-circle-fill text-success me-2" title="Success"></i>
-                                        }
-                                        else
-                                        {
-                                            <i class="bi bi-x-circle-fill text-danger me-2" title="Failed"></i>
-                                        }
-                                        <span class="fw-bold history-item-title" style="font-size: 0.95rem;">@item.ExecutedAt.ToString("MMM dd, yyyy")</span>
+                                    <div class="fw-bold history-item-title text-truncate mb-1" style="font-size: 0.95rem;">
+                                        @(string.IsNullOrWhiteSpace(item.TabName) ? "SQLQuery.sql" : item.TabName)
                                     </div>
-                                    <div class="history-item-subtitle text-truncate" style="font-size: 0.85rem; margin-left: 1.5rem;" title="@($"{item.ExecutedAt:h:mm tt} - {GetRelativeTime(item.ExecutedAt)}")">
+                                    <div class="history-item-subtitle text-truncate text-muted" style="font-size: 0.85rem;" title="@($"{item.ExecutedAt:h:mm tt} - {GetRelativeTime(item.ExecutedAt)}")">
                                         @item.ExecutedAt.ToString("h:mm tt") - @GetRelativeTime(item.ExecutedAt)
                                     </div>
                                 </button>
@@ -81,19 +73,21 @@
             </div>
         </div>
 
-        <!-- Right Pane: Viewer -->
+        <!-- Right Pane: Script Viewer -->
         <div class="@(IsFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-4 p-md-5 d-flex flex-column" : "col-md-8 h-100 d-flex flex-column")" style="@(IsFullScreen ? "z-index: 1050; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);" : "")">
             <div class="card shadow-sm flex-grow-1 d-flex flex-column overflow-hidden @(IsFullScreen ? "shadow-lg border-2" : "")" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="card-header py-2 d-flex justify-content-between align-items-center" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border); color: var(--app-text);">
-                    <h6 class="m-0" style="color: var(--app-text);">Query Details</h6>
-                    <div class="d-flex align-items-center">
-                        <button class="btn btn-sm btn-outline-secondary me-2" style="color: var(--app-text); border-color: var(--app-border);" disabled="@(_selectedItem == null)" @onclick="CopyQueryAsync">
-                            <i class="bi bi-clipboard me-1"></i> Copy
+                    <h6 class="m-0 text-truncate" style="color: var(--app-text);">
+                        @(_selectedItem != null ? (!string.IsNullOrWhiteSpace(_selectedItem.TabName) ? _selectedItem.TabName : "Tab Details") : "Tab Details")
+                    </h6>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" style="color: var(--app-text); border-color: var(--app-border);" disabled="@(_selectedItem == null)" @onclick="CopyQueryAsync" title="Copy script to clipboard">
+                            <i class="bi bi-clipboard"></i> Copy
                         </button>
-                        <button class="btn btn-sm btn-primary me-2" disabled="@(_selectedItem == null)" @onclick="LoadAndRunQuery">
-                            <i class="bi bi-play-fill me-1"></i> Load
+                        <button class="btn btn-sm btn-primary d-flex align-items-center gap-1 shadow-sm" disabled="@(_selectedItem == null)" @onclick="LoadAndRunQuery" title="Open this tab in Query Runner">
+                            <i class="bi bi-play-fill"></i> Load
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary border-0" style="color: var(--app-text);" @onclick="() => IsFullScreen = !IsFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
+                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center" style="color: var(--app-text); border-color: var(--app-border);" @onclick="() => IsFullScreen = !IsFullScreen" title="@(IsFullScreen ? "Restore Down" : "Expand to Full Screen")">
                             <i class="bi @(IsFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
                         </button>
                     </div>
@@ -103,30 +97,15 @@
                     {
                         <div class="d-flex justify-content-center align-items-center h-100 text-muted">
                             <div class="text-center">
-                                Select a query from the history list to view details.
+                                Select a tab from the history list to view its script.
                             </div>
                         </div>
                     }
                     else
                     {
-                        <div class="flex-grow-1 w-100" style="min-height: 0;">
+                        <div class="flex-grow-1 w-100 h-100" style="min-height: 0;">
                             <StandaloneCodeEditor @ref="_editor" Id="history-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" />
                         </div>
-                        
-                        @if (!_selectedItem.IsSuccess && !string.IsNullOrEmpty(_selectedItem.ErrorMessage) && !IsFullScreen)
-                        {
-                            <div class="bg-danger bg-opacity-10 border-top border-danger p-3" style="max-height: 150px; overflow-y: auto; flex-shrink: 0;">
-                                <h6 class="text-danger mb-1"><i class="bi bi-exclamation-triangle-fill me-2"></i>Execution Error</h6>
-                                <pre class="m-0 text-danger" style="font-size: 0.85em; white-space: pre-wrap;">@_selectedItem.ErrorMessage</pre>
-                            </div>
-                        }
-                        
-                        @if (!IsFullScreen)
-                        {
-                            <div class="card-footer border-top p-2 d-flex align-items-center" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; color: var(--app-text-muted); flex-shrink: 0;">
-                                <small class="fw-semibold text-info"><i class="bi bi-server me-1"></i>@(string.IsNullOrWhiteSpace(_selectedItem.ServerName) ? "localhost" : _selectedItem.ServerName) <i class="bi bi-arrow-right mx-1"></i> @(string.IsNullOrWhiteSpace(_selectedItem.DatabaseName) ? "master" : _selectedItem.DatabaseName)</small>
-                            </div>
-                        }
                     }
                 </div>
             </div>
@@ -156,13 +135,13 @@
 }
 
 @code {
-    private List<QueryHistoryItem>? _historyItems;
-    private QueryHistoryItem? _selectedItem;
+    private List<TabHistoryItem>? _historyItems;
+    private TabHistoryItem? _selectedItem;
     private StandaloneCodeEditor _editor = default!;
     private bool IsFullScreen = false;
     private bool ShowLimitAlert = false;
     private DateTime? _filterDate = null;
-    private IEnumerable<QueryHistoryItem>? FilteredHistoryItems => 
+    private IEnumerable<TabHistoryItem>? FilteredHistoryItems => 
         _filterDate.HasValue && _historyItems != null
             ? _historyItems.Where(x => x.ExecutedAt.Date == _filterDate.Value.Date)
             : _historyItems;
@@ -171,6 +150,10 @@
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
         _historyItems = await HistoryService.GetHistoryAsync();
+        if (_historyItems != null && _historyItems.Count > 0)
+        {
+            _selectedItem = _historyItems[0];
+        }
     }
 
     private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
@@ -179,7 +162,7 @@
         {
             Language = "sql",
             Theme = ThemeService.IsDark ? "vs-dark" : "vs",
-            Value = _selectedItem?.QueryText ?? "",
+            Value = _selectedItem?.ScriptText ?? "",
             AutomaticLayout = true,
             Minimap = new EditorMinimapOptions { Enabled = false },
             LineNumbers = "on",
@@ -193,12 +176,12 @@
         };
     }
 
-    private async Task SelectItem(QueryHistoryItem item)
+    private async Task SelectItem(TabHistoryItem item)
     {
         _selectedItem = item;
         if (_editor != null)
         {
-            await _editor.SetValue(item.QueryText);
+            await _editor.SetValue(item.ScriptText);
         }
     }
 
@@ -210,18 +193,31 @@
             return;
         }
 
-        if (_selectedItem != null)
+        if (_selectedItem != null && !string.IsNullOrWhiteSpace(_selectedItem.ScriptText))
         {
-            int newCount = 1;
-            while (QueryStateService.Tabs.Any(t => t.Name == $"History_{newCount}.sql"))
+            string baseName = !string.IsNullOrWhiteSpace(_selectedItem.TabName) ? _selectedItem.TabName : "SQLQuery1.sql";
+            string uniqueName = baseName;
+            int copyIndex = 1;
+            while (QueryStateService.Tabs.Any(t => t.Name.Equals(uniqueName, StringComparison.OrdinalIgnoreCase)))
             {
-                newCount++;
+                var dot = baseName.LastIndexOf('.');
+                if (dot > 0)
+                {
+                    uniqueName = $"{baseName[..dot]} ({copyIndex}){baseName[dot..]}";
+                }
+                else
+                {
+                    uniqueName = $"{baseName} ({copyIndex})";
+                }
+                copyIndex++;
             }
             
             var newTab = new ExploreDB.Services.QueryTab 
             { 
-                Name = $"History_{newCount}.sql",
-                Content = _selectedItem.QueryText
+                Name = uniqueName,
+                Content = _selectedItem.ScriptText,
+                ConnectionString = _selectedItem.ConnectionString,
+                ConnectionName = _selectedItem.ConnectionName
             };
             QueryStateService.Tabs.Add(newTab);
             QueryStateService.ActiveTabId = newTab.Id;
@@ -233,9 +229,9 @@
 
     private async Task CopyQueryAsync()
     {
-        if (_selectedItem != null)
+        if (_selectedItem != null && !string.IsNullOrEmpty(_selectedItem.ScriptText))
         {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selectedItem.QueryText);
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selectedItem.ScriptText);
         }
     }
 

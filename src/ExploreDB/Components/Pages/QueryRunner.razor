@@ -1817,11 +1817,17 @@
         var queryText = "";
         try
         {
-            var selection = await _editor.GetSelection();
-            if (selection != null && (selection.StartLineNumber != selection.EndLineNumber || selection.StartColumn != selection.EndColumn))
+            if (_editor != null)
             {
-                var model = await _editor.GetModel();
-                queryText = await model.GetValueInRange(selection, EndOfLinePreference.TextDefined);
+                var selection = await _editor.GetSelection();
+                if (selection != null && (selection.StartLineNumber != selection.EndLineNumber || selection.StartColumn != selection.EndColumn))
+                {
+                    var model = await _editor.GetModel();
+                    if (model != null)
+                    {
+                        queryText = await model.GetValueInRange(selection, EndOfLinePreference.TextDefined);
+                    }
+                }
             }
         }
         catch { }
@@ -1958,20 +1964,37 @@
         if (ActiveTab.IsExecuting) return;
 
         var queryText = "";
+        var fullScript = "";
         try
         {
-            var selection = await _editor.GetSelection();
-            if (selection != null && (selection.StartLineNumber != selection.EndLineNumber || selection.StartColumn != selection.EndColumn))
+            if (_editor != null)
             {
-                var model = await _editor.GetModel();
-                queryText = await model.GetValueInRange(selection, EndOfLinePreference.TextDefined);
+                fullScript = await _editor.GetValue();
+                ActiveTab.Content = fullScript;
+            }
+        }
+        catch { }
+
+        try
+        {
+            if (_editor != null)
+            {
+                var selection = await _editor.GetSelection();
+                if (selection != null && (selection.StartLineNumber != selection.EndLineNumber || selection.StartColumn != selection.EndColumn))
+                {
+                    var model = await _editor.GetModel();
+                    if (model != null)
+                    {
+                        queryText = await model.GetValueInRange(selection, EndOfLinePreference.TextDefined);
+                    }
+                }
             }
         }
         catch { }
 
         if (string.IsNullOrWhiteSpace(queryText))
         {
-            queryText = await _editor.GetValue();
+            queryText = fullScript;
         }
 
         if (string.IsNullOrWhiteSpace(queryText))
@@ -2193,9 +2216,17 @@
             ActiveTab.IsExecuting = false;
             ActiveTab.IsCancelling = false;
             ActiveTab.CancelAction = null;
-            if (!string.IsNullOrWhiteSpace(QueryStateService.CustomQuery))
+            if (!string.IsNullOrWhiteSpace(fullScript) || !string.IsNullOrWhiteSpace(ActiveTab.Content))
             {
-                await HistoryService.AddHistoryItemAsync(QueryStateService.CustomQuery, serverName, dbName, watch.ElapsedMilliseconds, isSuccess, errorMessage);
+                var scriptToSave = !string.IsNullOrWhiteSpace(fullScript) ? fullScript : ActiveTab.Content;
+                await HistoryService.SaveTabHistoryAsync(
+                    ActiveTab.Id,
+                    ActiveTab.Name,
+                    scriptToSave,
+                    serverName,
+                    dbName,
+                    ActiveTab.ConnectionString,
+                    ActiveTab.ConnectionName);
             }
             ActiveTab.QueryCts?.Dispose();
             ActiveTab.QueryCts = null;
