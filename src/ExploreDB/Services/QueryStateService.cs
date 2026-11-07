@@ -39,7 +39,7 @@ public class QueryTab
     public string ConnectionName { get; set; } = string.Empty;
 
     [System.Text.Json.Serialization.JsonIgnore]
-    public List<IEnumerable<dynamic>> ResultSets { get; set; } = new();
+    public List<object> ResultSets { get; set; } = new();
 
     [System.Text.Json.Serialization.JsonIgnore]
     public HashSet<int> CollapsedResultSets { get; set; } = new();

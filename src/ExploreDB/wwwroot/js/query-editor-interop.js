@@ -2063,6 +2063,131 @@ window.initProfilerSplitter = function (dotNetRef) {
     return true;
 };
 
+window.resetGridScrollTop = function (containerId) { var el = document.getElementById(containerId); if (el) el.scrollTop = 0; };
 window.triggerWindowResize = function () {
     window.dispatchEvent(new Event('resize'));
+};
+
+
+window.initGridVirtualScroll = function (containerId, dotNetRef, totalRowCount) {
+    var container = document.getElementById(containerId);
+    if (!container) return false;
+
+    if (totalRowCount !== undefined) {
+        container._totalRowCount = totalRowCount;
+    }
+
+    if (container._hasVirtualScroll) {
+        container._dotNetRef = dotNetRef;
+        return true;
+    }
+    container._hasVirtualScroll = true;
+    container._dotNetRef = dotNetRef;
+
+    var ticking = false;
+
+    function handleScroll() {
+        if (!ticking) {
+            ticking = true;
+            window.requestAnimationFrame(function () {
+                if (container && container._dotNetRef) {
+                    try {
+                        container._dotNetRef.invokeMethodAsync('OnVirtualScroll', container.scrollTop, container.clientHeight);
+                    } catch (e) {}
+                }
+                ticking = false;
+            });
+        }
+    }
+
+    function handleWheel(e) {
+        if (e.shiftKey) return;
+        if (container._totalRowCount && container._totalRowCount > 300000) {
+            e.preventDefault();
+            var maxScroll = Math.max(1, container.scrollHeight - container.clientHeight);
+            var pxPerRow = maxScroll / container._totalRowCount;
+            var step = Math.max(1, Math.round(Math.abs(e.deltaY) / 33));
+            var rowsToScroll = Math.sign(e.deltaY) * Math.min(30, step);
+            var newTop = container.scrollTop + (rowsToScroll * pxPerRow);
+            container.scrollTop = Math.max(0, Math.min(maxScroll, newTop));
+        }
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    var resizeTimer = null;
+    function handleResize() {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+            if (container && container._dotNetRef) {
+                try {
+                    container._dotNetRef.invokeMethodAsync('OnVirtualScroll', container.scrollTop, container.clientHeight);
+                } catch (e) {}
+            }
+        }, 150);
+    }
+    window.addEventListener('resize', handleResize, { passive: true });
+
+    setTimeout(function () {
+        if (container && container._dotNetRef) {
+            try {
+                container._dotNetRef.invokeMethodAsync('OnVirtualScroll', container.scrollTop, container.clientHeight);
+            } catch (e) {}
+        }
+    }, 20);
+
+    return true;
+};
+
+window.initResultSetSplitters = function (containerId) {
+    var container = document.getElementById(containerId || 'results-multi-container');
+    if (!container) return false;
+
+    var splitters = container.querySelectorAll('.sql-compare-splitter');
+    splitters.forEach(function (splitter) {
+        if (splitter._hasMultiSplitterHandler) return;
+        splitter._hasMultiSplitterHandler = true;
+
+        splitter.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            try { splitter.setPointerCapture(e.pointerId); } catch (err) {}
+
+            var prevPane = splitter.previousElementSibling;
+            if (!prevPane) return;
+
+            var startY = e.clientY;
+            var startHeight = prevPane.offsetHeight;
+            var minHeight = 60;
+            var maxHeight = Math.max(minHeight, container.offsetHeight - 100);
+
+            splitter.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+
+            function onPointerMove(moveEvent) {
+                var deltaY = moveEvent.clientY - startY;
+                var newHeight = Math.round(Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY)));
+                prevPane.style.flex = '0 0 ' + newHeight + 'px';
+                prevPane.style.height = newHeight + 'px';
+            }
+
+            function onPointerUp(upEvent) {
+                try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+                splitter.removeEventListener('pointermove', onPointerMove);
+                splitter.removeEventListener('pointerup', onPointerUp);
+                splitter.removeEventListener('pointercancel', onPointerUp);
+                splitter.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                window.dispatchEvent(new Event('resize'));
+            }
+
+            splitter.addEventListener('pointermove', onPointerMove);
+            splitter.addEventListener('pointerup', onPointerUp);
+            splitter.addEventListener('pointercancel', onPointerUp);
+        });
+    });
+
+    return true;
 };

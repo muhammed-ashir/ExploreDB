@@ -114,7 +114,8 @@
              style="@(IsFullScreen ? "background-color: rgba(15, 15, 20, 0.95); z-index: 9999;" : IsMinimized ? "" : "min-height: 0;")">
             <div class="card glass-card text-white d-flex flex-column h-100" style="@(IsFullScreen ? "height: 100%;" : IsMinimized ? "border-bottom-left-radius: 0; border-bottom-right-radius: 0;" : "min-height: 0;") overflow: hidden;">
                 <div class="card-header border-secondary p-0 d-flex justify-content-between align-items-center flex-shrink-0">
-                        <ul class="nav nav-tabs border-secondary flex-grow-1 border-bottom-0">
+                        <div class="d-flex align-items-center flex-grow-1 overflow-hidden">
+                            <ul class="nav nav-tabs border-secondary border-bottom-0">
                             <li class="nav-item">
                                 <a class="nav-link @(ResultTab == "Results" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted border-transparent")"
                                    @onclick='() => { ResultTab = "Results"; IsMinimized = false; }' style="cursor:pointer">Results</a>
@@ -127,10 +128,34 @@
                                 </a>
                             </li>
                         </ul>
-                        <div class="d-flex align-items-center pe-2">
+                        <div class="d-flex align-items-center ms-3 gap-3">
+                            @if (ResultTab == "Results" && ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 0 && !ActiveTab.IsExecuting)
+                            {
+                                var totalRows = GetTotalRowCount(ActiveTab.ResultSets);
+                                <span class="text-muted small fw-medium" style="font-size: 0.82rem; white-space: nowrap;">
+                                    @(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")
+                                </span>
+                            }
                             @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
                             {
-                                <span class="text-muted small me-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+                                <span class="text-muted small" style="white-space: nowrap;"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center pe-2 gap-1">
+                        @if (ResultTab == "Results" && ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 0 && !ActiveTab.IsExecuting)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary border-0 d-flex align-items-center gap-1 me-1 @(_isSearchOpen ? "text-primary active" : "")" 
+                                    style="color: var(--app-text); font-size: 0.8rem; padding: 2px 8px;" 
+                                    @onclick="ToggleSearch" 
+                                    title="Find in results (Ctrl+F)">
+                                <i class="bi bi-search"></i>
+                                <span>Search</span>
+                            </button>
+                        }
+                            @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
+                            {
+
                             }
                             @if (!IsFullScreen)
                             {
@@ -153,7 +178,7 @@
                     
                     @if (!IsMinimized)
                     {
-                        <div class="card-body overflow-auto flex-grow-1 custom-scrollbar-light" style="min-height: 0;">
+                        <div class="card-body p-0 d-flex flex-column flex-grow-1 position-relative overflow-hidden" style="min-height: 0;">
                         @if (ResultTab == "Results")
                         {
                             if (ActiveTab.IsExecuting)
@@ -178,6 +203,87 @@
                             }
                             else
                             {
+                                <div id="results-multi-container" class="w-100 h-100 d-flex flex-column position-relative overflow-hidden" style="min-height: 0;">
+                                    @if (_isSearchOpen)
+                                    {
+                                        <div class="position-absolute shadow-lg rounded-pill d-flex align-items-center px-2 py-1 gap-2" 
+                                             style="top: 10px; right: 20px; z-index: 1050; background: var(--app-surface); border: 1px solid var(--app-border); backdrop-filter: blur(8px); box-shadow: 0 4px 20px rgba(0,0,0,0.35);">
+                                            <i class="bi bi-search text-muted small ms-1"></i>
+                                            <input type="text" 
+                                                   class="form-control form-control-sm border-0 bg-transparent py-0 px-1 shadow-none" 
+                                                   placeholder="Find in results (Ctrl+F)..." 
+                                                   style="color: var(--app-text); width: 180px; font-size: 0.82rem;"
+                                                   @bind="_globalSearchTerm" 
+                                                   @bind:event="oninput" 
+                                                   id="global-results-search-input" />
+                                            
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-sm py-0 px-1 @(_searchCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary")" 
+                                                        style="font-size: 0.72rem; border-radius: 4px;" 
+                                                        @onclick="() => _searchCaseSensitive = !_searchCaseSensitive" 
+                                                        title="Match Case (Aa)">
+                                                    Aa
+                                                </button>
+                                                <button class="btn btn-sm py-0 px-1 ms-1 @(_searchMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary")" 
+                                                        style="font-size: 0.72rem; border-radius: 4px;" 
+                                                        @onclick="() => _searchMatchWholeWord = !_searchMatchWholeWord" 
+                                                        title="Match Whole Word ([ab])">
+                                                    [ab]
+                                                </button>
+                                                <button class="btn btn-sm py-0 px-1 ms-1 @(_searchExactMatch ? "btn-primary text-white" : "btn-outline-secondary")" 
+                                                        style="font-size: 0.72rem; border-radius: 4px;" 
+                                                        @onclick="() => _searchExactMatch = !_searchExactMatch" 
+                                                        title="Exact Match (⊚)">
+                                                    ⊚
+                                                </button>
+                                            </div>
+
+                                            @if (!string.IsNullOrEmpty(_globalSearchTerm))
+                                            {
+                                                <button class="btn btn-sm btn-link text-muted p-0 border-0 ms-1" 
+                                                        @onclick="() => _globalSearchTerm = string.Empty" 
+                                                        title="Clear search">
+                                                    <i class="bi bi-x-circle-fill" style="font-size: 0.8rem;"></i>
+                                                </button>
+                                            }
+
+                                            <button class="btn btn-sm btn-link text-muted p-0 border-0 ms-1 me-1" 
+                                                    @onclick="ToggleSearch" 
+                                                    title="Close (Esc)">
+                                                <i class="bi bi-x-lg" style="font-size: 0.8rem;"></i>
+                                            </button>
+                                        </div>
+                                    }
+
+                                    @for (int i = 0; i < ActiveTab.ResultSets.Count; i++)
+                                    {
+                                        var rsItem = ActiveTab.ResultSets[i];
+                                        var capturedIndex = i + 1;
+                                        var totalCount = ActiveTab.ResultSets.Count;
+
+                                        <div id="@($"rs-pane-{capturedIndex}")" 
+                                             class="d-flex flex-column overflow-hidden" 
+                                             style="flex: 1 1 @(100.0 / totalCount)%; min-height: 80px; position: relative;">
+                                            <ExploreDB.Components.Pages.ResultSetGrid Data="rsItem" 
+                                                           ResultSetIndex="capturedIndex" 
+                                                           TotalResultSets="totalCount" 
+                                                           SearchTerm="@_globalSearchTerm" 
+                                                           SearchCaseSensitive="@_searchCaseSensitive" 
+                                                           SearchMatchWholeWord="@_searchMatchWholeWord" 
+                                                           SearchExactMatch="@_searchExactMatch" 
+                                                           OnToggleSearch="ToggleSearch"
+                                                           OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
+                                        </div>
+
+                                        @if (i < ActiveTab.ResultSets.Count - 1)
+                                        {
+                                            <div class="sql-compare-splitter">
+                                                <div class="sql-compare-splitter-handle"></div>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                                if (false) {
                                 int rsIndex = 1;
                                 foreach (var rs in ActiveTab.ResultSets)
                                 {
@@ -192,10 +298,14 @@
                                     <ExploreDB.Components.Pages.ResultSetGrid Data="rs" OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
                                     rsIndex++;
                                 }
+                                }
+                                if (false) {
+                                }
                             }
                         }
                         else if (ResultTab == "Messages")
                         {
+                            <div class="p-3 overflow-auto flex-grow-1 custom-scrollbar-light" style="min-height: 0;">
                             <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap; font-family: Consolas, 'Courier New', monospace;">
 @if (ActiveTab.Messages.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
 @foreach (var msg in ActiveTab.Messages)
@@ -210,6 +320,7 @@
     }
 }
                             </pre>
+                            </div>
                         }
                         </div>
                     }
@@ -264,6 +375,40 @@
     private bool IsFullScreen = false;
     private bool IsMinimized = false;
 
+    // Results Search State
+    private bool _isSearchOpen = false;
+    private string _globalSearchTerm = "";
+    private bool _searchCaseSensitive = false;
+    private bool _searchMatchWholeWord = false;
+    private bool _searchExactMatch = false;
+
+    private async Task ToggleSearch()
+    {
+        _isSearchOpen = !_isSearchOpen;
+        if (_isSearchOpen)
+        {
+            await Task.Delay(50);
+            try
+            {
+                await JS.InvokeVoidAsync("eval", "var el = document.getElementById('global-results-search-input'); if(el) el.focus();");
+            }
+            catch { }
+        }
+    }
+
+    private int GetTotalRowCount(List<object> resultSets)
+    {
+        if (resultSets == null || resultSets.Count == 0) return 0;
+        int sum = 0;
+        foreach (var rs in resultSets)
+        {
+            if (rs is QueryResultTable qrt) sum += qrt.RowCount;
+            else if (rs is IEnumerable<dynamic> d) sum += d.Count();
+            else if (rs is System.Collections.ICollection c) sum += c.Count;
+        }
+        return sum;
+    }
+
     private void ToggleFullScreen()
     {
         IsFullScreen = !IsFullScreen;
@@ -314,6 +459,10 @@
             catch { }
 
             _isReady = true;
+            if (ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 1 && ResultTab == "Results")
+            {
+                try { await JS.InvokeVoidAsync("initResultSetSplitters", "results-multi-container"); } catch { }
+            }
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -645,7 +794,7 @@
             {
                 try
                 {
-                    var rs = new List<dynamic>();
+                    // High-performance streaming rowstore
                     int fieldCount = reader.FieldCount;
                     
                     if (fieldCount > 0)
@@ -657,6 +806,8 @@
                             if (string.IsNullOrEmpty(columnNames[i])) columnNames[i] = $"Column{i}";
                         }
 
+                        var table = new QueryResultTable(columnNames);
+                        var batch = new List<object?[]>(1000);
                         int yieldCount = 0;
                         while (await reader.ReadAsync(ActiveTab.QueryCts.Token))
                         {
@@ -665,18 +816,39 @@
                                 throw new OperationCanceledException(ActiveTab.QueryCts.Token);
                             }
 
-                            var row = new System.Dynamic.ExpandoObject() as IDictionary<string, object>;
+                            var rowValues = new object?[fieldCount];
+                            reader.GetValues(rowValues);
+                            for (int colIdx = 0; colIdx < fieldCount; colIdx++)
+                            {
+                                if (rowValues[colIdx] is DBNull) rowValues[colIdx] = null;
+                            }
+                            batch.Add(rowValues);
+                            if (batch.Count >= 1000)
+                            {
+                                table.AddRows(batch);
+                                batch.Clear();
+                                if (++yieldCount % 5 == 0)
+                                {
+                                    await Task.Delay(1);
+                                    await InvokeAsync(StateHasChanged);
+                                }
+                            }
                             for (int i = 0; i < fieldCount; i++)
                             {
-                                row[columnNames[i]] = await reader.IsDBNullAsync(i, ActiveTab.QueryCts.Token) ? null! : reader.GetValue(i);
+                                // Value populated above via reader.GetValues
                             }
-                            rs.Add(row);
+                            // Row added to batch above
                             
                             if (++yieldCount % 1000 == 0) await Task.Delay(1);
                         }
                         
-                        ActiveTab.ResultSets.Add(rs);
-                        totalRows += rs.Count;
+                        if (batch.Count > 0)
+                        {
+                            table.AddRows(batch);
+                        }
+                        table.IsComplete = true;
+                        ActiveTab.ResultSets.Add(table);
+                        totalRows += table.RowCount;
                     }
                     else
                     {
