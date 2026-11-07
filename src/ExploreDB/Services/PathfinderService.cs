@@ -233,11 +233,82 @@ public sealed class PathfinderService
         };
     }
 
+    private static readonly HashSet<string> ReservedAliasKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ON", "IN", "OR", "BY", "AS", "TO", "IS", "AT", "DO", "IF", "GO", "NO",
+        "ADD", "ALL", "AND", "ANY", "ASC", "AVG", "CASE", "CUBE", "DESC", "DROP",
+        "ELSE", "EXEC", "FILE", "FILL", "FOR", "FROM", "FULL", "GOTO", "HOLD",
+        "INTO", "JOIN", "KEY", "KILL", "LEFT", "LIKE", "LOAD", "MAX", "MIN", "NOT",
+        "NULL", "OFF", "OPEN", "OUT", "OVER", "PLAN", "POOL", "PROC", "READ",
+        "REAL", "REST", "RULE", "SAVE", "SEEK", "SET", "SOME", "SUM", "TEXT",
+        "THEN", "TIES", "TOP", "TRAN", "TRUE", "UNION", "UPDL", "USE", "USER",
+        "VIEW", "WAIT", "WHEN", "WITH", "WORK"
+    };
+
+    public static string GenerateTableAlias(string tableName, ISet<string>? existingAliases = null)
+    {
+        if (string.IsNullOrWhiteSpace(tableName)) return "T";
+
+        var cleanName = tableName.Replace("[", "").Replace("]", "").Trim();
+        var dotIndex = cleanName.LastIndexOf('.');
+        if (dotIndex >= 0)
+        {
+            cleanName = cleanName.Substring(dotIndex + 1).Trim();
+        }
+
+        cleanName = System.Text.RegularExpressions.Regex.Replace(cleanName, @"^(?:tbl_|vw_|tbl|vw)(?=[a-zA-Z])", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        string alias = "";
+        if (cleanName.Contains('_'))
+        {
+            var parts = cleanName.Split('_', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                if (part.Length > 0)
+                    alias += part[0];
+            }
+        }
+        else
+        {
+            var capitals = System.Text.RegularExpressions.Regex.Matches(cleanName, @"[A-Z]");
+            // PascalCase table names (e.g. AccountAddressCache, AccountDiscountData)
+            if (capitals.Count > 1 && cleanName.Any(char.IsLower))
+            {
+                alias = string.Concat(capitals.Select(m => m.Value));
+            }
+            else if (cleanName.Length <= 3)
+            {
+                alias = cleanName;
+            }
+            else
+            {
+                alias = cleanName.Substring(0, 3);
+            }
+        }
+
+        alias = alias.ToUpperInvariant();
+        if (string.IsNullOrEmpty(alias)) alias = "T";
+
+        var finalAlias = ReservedAliasKeywords.Contains(alias) ? $"{alias}1" : alias;
+
+        if (existingAliases != null && existingAliases.Count > 0)
+        {
+            var suffix = 2;
+            while (existingAliases.Contains(finalAlias))
+            {
+                finalAlias = $"{alias}{suffix}";
+                suffix++;
+            }
+        }
+
+        return finalAlias;
+    }
+
     public PathfinderJoinPlan GenerateJoinPlan(
         IReadOnlyList<string> selectedTableNames,
         string? rootTable = null,
-        string rootAlias = "t0",
-        string joinedAliasPrefix = "j",
+        string? rootAlias = null,
+        string? joinedAliasPrefix = null,
         IReadOnlySet<string>? ignoredRoutingTables = null,
         IReadOnlySet<string>? ignoredRoutingEdges = null)
     {
@@ -275,13 +346,21 @@ public sealed class PathfinderService
             adjacency[resolvedRoot] = new List<GraphEdge>();
         }
 
+        var existingAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var actualRootAlias = !string.IsNullOrWhiteSpace(rootAlias) && rootAlias != "t0" && rootAlias != "t"
+            ? rootAlias
+            : GenerateTableAlias(resolvedRoot, existingAliases);
+
+        existingAliases.Add(actualRootAlias);
+
         var aliasByTable = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            [resolvedRoot] = rootAlias
+            [resolvedRoot] = actualRootAlias
         };
         var steps = new List<PathfinderJoinStep>();
         var unreachableTables = new List<string>();
-        int nextAliasIndex = 1;
+
 
         foreach (var target in targets)
         {
@@ -305,7 +384,11 @@ public sealed class PathfinderService
                     break;
                 }
 
-                var targetAlias = $"{joinedAliasPrefix}{nextAliasIndex++}";
+                var targetAlias = !string.IsNullOrWhiteSpace(joinedAliasPrefix) && joinedAliasPrefix != "j"
+                    ? $"{joinedAliasPrefix}{steps.Count + 1}"
+                    : GenerateTableAlias(edge.TargetTable, existingAliases);
+
+                existingAliases.Add(targetAlias);
                 aliasByTable[edge.TargetTable] = targetAlias;
 
                 steps.Add(new PathfinderJoinStep
@@ -342,7 +425,7 @@ public sealed class PathfinderService
         return new PathfinderJoinPlan
         {
             RootTable = resolvedRoot,
-            RootAlias = rootAlias,
+            RootAlias = actualRootAlias,
             Steps = steps,
             UnreachableTables = unreachableTables,
             HasOneToMany = steps.Any(step => step.IsOneToMany)

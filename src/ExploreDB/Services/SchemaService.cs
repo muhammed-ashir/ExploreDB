@@ -225,6 +225,23 @@ public class SchemaService
     public bool AreStoredProceduresLoaded { get; private set; } = false;
     public bool AreTypesLoaded { get; private set; } = false;
 
+    public string ActiveDatabase
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return string.Empty;
+            try
+            {
+                var builder = new SqlConnectionStringBuilder(_connectionService.ConnectionString);
+                return builder.InitialCatalog ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+    }
+
     public bool IsDatabaseConnected
     {
         get

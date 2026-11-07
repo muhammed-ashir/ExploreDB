@@ -81,11 +81,11 @@
 
     <script src="js/bootstrap.bundle.min.js"></script>
     <script src="js/sql-formatter.min.js"></script>
-    <script src="_framework/blazor.webview.js"></script>
     <script src="_content/BlazorMonaco/jsInterop.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/loader.js"></script>
     <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/editor/editor.main.js"></script>
     <script src="js/query-editor-interop.js"></script>
+    <script src="_framework/blazor.webview.js"></script>
     <script>
         // Global Theme Switcher
         window.setAppTheme = function (theme) {
@@ -182,8 +182,8 @@
         };
 
         document.addEventListener('keydown', function (e) {
-            // Intercept F5
-            if (e.key === 'F5' || e.keyCode === 116) {
+            // Intercept F5 and Ctrl+E (Execute Query)
+            if (e.key === 'F5' || e.keyCode === 116 || (e.ctrlKey && !e.shiftKey && (e.key === 'e' || e.key === 'E'))) {
                 e.preventDefault(); // Block browser refresh completely
                 
                 // If Query Runner is active, execute the query
@@ -193,15 +193,30 @@
             }
 
             // Intercept Ctrl+N
-            if (e.ctrlKey && (e.key === 'n' || e.key === 'N')) {
+            if (e.ctrlKey && !e.shiftKey && (e.key === 'n' || e.key === 'N')) {
                 e.preventDefault(); // Block default new window shortcut
                 if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
                     window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('NewTabFromShortcut');
                 }
             }
 
-            // Intercept Ctrl+S
-            if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
+            // Intercept Ctrl+O (Open File)
+            if (e.ctrlKey && !e.shiftKey && (e.key === 'o' || e.key === 'O')) {
+                e.preventDefault();
+                if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                    window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('OpenFileFromShortcut');
+                }
+            }
+
+            // Intercept Ctrl+Shift+S (Save As)
+            if (e.ctrlKey && e.shiftKey && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                    window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('SaveAsQueryFromShortcut');
+                }
+            }
+            // Intercept Ctrl+S (Save Query)
+            else if (e.ctrlKey && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
                 e.preventDefault(); // Block default save page shortcut
                 if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
                     window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('SaveQueryFromShortcut');

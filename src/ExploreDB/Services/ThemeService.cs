@@ -1,13 +1,13 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.JSInterop;
-using Microsoft.Maui.Storage;
 
 namespace ExploreDB.Services;
 
 public class ThemeService
 {
-    private const string ThemeKey = "AppTheme";
+    private readonly string _themeFilePath = Path.Combine(AppEnvironmentService.AppDataDirectory, "theme.txt");
     private string _currentTheme = "dark";
     private IJSRuntime? _js;
 
@@ -20,16 +20,18 @@ public class ThemeService
     {
         try
         {
-            _currentTheme = Preferences.Default.Get<string>(ThemeKey, "dark");
-            if (_currentTheme != "light" && _currentTheme != "dark")
+            if (File.Exists(_themeFilePath))
             {
-                _currentTheme = "dark";
+                var saved = File.ReadAllText(_themeFilePath).Trim();
+                if (saved == "light" || saved == "dark")
+                {
+                    _currentTheme = saved;
+                    return;
+                }
             }
         }
-        catch
-        {
-            _currentTheme = "dark";
-        }
+        catch { }
+        _currentTheme = "dark";
     }
 
     public async Task InitializeAsync(IJSRuntime js)
@@ -51,7 +53,7 @@ public class ThemeService
         _currentTheme = theme;
         try
         {
-            Preferences.Default.Set<string>(ThemeKey, _currentTheme);
+            File.WriteAllText(_themeFilePath, _currentTheme);
         }
         catch { }
 

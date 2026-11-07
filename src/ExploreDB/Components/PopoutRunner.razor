@@ -1,3 +1,4 @@
+@using System.IO
 @using BlazorMonaco.Editor
 @using BlazorMonaco
 @using ExploreDB.Services
@@ -10,88 +11,111 @@
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject IJSRuntime JS
 @inject ThemeService ThemeService
+@inject WindowManagerService WindowManager
+@inject UserSettingsService UserSettingsService
 @implements IDisposable
 
-<div class="container-fluid d-flex flex-column h-100 p-4" style="background-color: var(--app-bg); color: var(--app-text);">
-    <div class="row mb-3">
-        <div class="col d-flex justify-content-between align-items-center flex-nowrap">
-            <div class="d-flex flex-column justify-content-center" style="min-width: 0; color: var(--app-text-muted); font-size: 0.85rem;">
-                <div class="d-flex align-items-center mb-1">
-                    <i class="bi bi-database me-2"></i>
-                    <span class="fw-medium text-truncate" title="@GetTabConnectionSummary(ActiveTab)">@GetTabConnectionSummary(ActiveTab)</span>
-                </div>
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-file-earmark-code me-2"></i>
-                    <span class="text-truncate" title="@(string.IsNullOrEmpty(ActiveTab.FilePath) ? "Unsaved" : ActiveTab.FilePath)">@(string.IsNullOrEmpty(ActiveTab.FilePath) ? "Unsaved" : ActiveTab.FilePath)</span>
-                </div>
+<div class="query-runner-container d-flex flex-column h-100 p-3 overflow-hidden" style="background-color: var(--app-bg); color: var(--app-text); min-height: 0;">
+    <div class="query-runner-toolbar d-flex justify-content-between align-items-center flex-nowrap pb-2 flex-shrink-0">
+        <div class="d-flex flex-column justify-content-center" style="min-width: 0; color: var(--app-text-muted); font-size: 0.85rem;">
+            <div class="d-flex align-items-center mb-1">
+                <i class="bi bi-database me-2"></i>
+                <span class="fw-medium text-truncate" title="@GetTabConnectionSummary(ActiveTab)">@GetTabConnectionSummary(ActiveTab)</span>
             </div>
-            <div class="d-flex gap-2 flex-shrink-0 align-items-center">
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Dock to Main Window" data-bs-placement="bottom" @onclick="DockTab">
-                    <i class="bi bi-box-arrow-in-down-right"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save Query" data-bs-placement="bottom" @onclick="SaveActiveQueryAsync">
-                    <i class="bi bi-floppy"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save As..." data-bs-placement="bottom" @onclick="SaveAsQueryAsync">
-                    <i class="bi bi-file-earmark-plus"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Clear Editor" data-bs-placement="bottom" @onclick="() => ShowClearConfirmation = true">
-                    <i class="bi bi-eraser text-warning"></i>
-                </button>
-                <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Format SQL" data-bs-placement="bottom" @onclick="FormatSqlAsync">
-                    <i class="bi bi-magic text-info"></i>
-                </button>
+            <div class="d-flex align-items-center">
+                <i class="bi bi-file-earmark-code me-2"></i>
+                <span class="text-truncate" title="@(string.IsNullOrEmpty(ActiveTab.FilePath) ? "Unsaved" : ActiveTab.FilePath)">@(string.IsNullOrEmpty(ActiveTab.FilePath) ? "Unsaved" : ActiveTab.FilePath)</span>
+            </div>
+        </div>
+        <div class="d-flex gap-2 flex-shrink-0 align-items-center">
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Dock to Main Window" data-bs-placement="bottom" @onclick="DockTab">
+                <i class="bi bi-box-arrow-in-down-right"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save Query (Ctrl+S)" data-bs-placement="bottom" @onclick="SaveActiveQueryAsync">
+                <i class="bi bi-floppy"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Save As... (Ctrl+Shift+S)" data-bs-placement="bottom" @onclick="SaveAsQueryAsync">
+                <i class="bi bi-file-earmark-plus"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Clear Editor" data-bs-placement="bottom" @onclick="() => ShowClearConfirmation = true">
+                <i class="bi bi-eraser text-warning"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Format SQL" data-bs-placement="bottom" @onclick="FormatSqlAsync">
+                <i class="bi bi-magic text-info"></i>
+            </button>
+            <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Toggle Comment (Ctrl+/)" data-bs-placement="bottom" @onclick="ToggleCommentAsync">
+                <i class="bi bi-chat-left-text text-info"></i>
+            </button>
 
-                @if (ActiveTab.IsExecuting)
+            @if (ActiveTab.IsExecuting)
+            {
+                @if (ActiveTab.IsCancelling)
                 {
-                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" @onclick="CancelExecution">
-                        <i class="bi bi-stop-fill me-1"></i>Stop
+                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center opacity-75" style="height: 32px;" disabled>
+                        <span class="spinner-border spinner-border-sm me-1" role="status" style="width: 12px; height: 12px;"></span>Stopping...
                     </button>
                 }
                 else
                 {
-                    <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center" style="height: 32px;" @onclick="ExecuteAsync">
-                        <i class="bi bi-play-fill me-1"></i>Execute
+                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
+                        <i class="bi bi-stop-fill me-1"></i>Stop
                     </button>
                 }
-            </div>
+            }
+            else
+            {
+                <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Execute Query (F5)" data-bs-placement="bottom" @onclick="ExecuteAsync">
+                    <i class="bi bi-play-fill me-1"></i>Execute
+                </button>
+            }
         </div>
     </div>
 
     @if (!string.IsNullOrEmpty(FormatError))
     {
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-2 flex-shrink-0" role="alert">
             <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Format Error:</strong> @FormatError
             <button type="button" class="btn-close" @onclick="() => FormatError = null" aria-label="Close"></button>
         </div>
     }
 
-    <!-- Execution Harness Area -->
-    <div class="row g-4 mb-4 @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")">
-        <div class="col-12 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column" : "")">
-            <div class="card shadow-sm @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1 d-flex flex-column" : "")" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
-                
-                <div class="card-body p-0 @(!ActiveTab.HasExecuted || IsMinimized ? "d-flex flex-column flex-grow-1" : "")">
-                    <div class="@(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")" style="@(ActiveTab.HasExecuted && !IsMinimized ? "height: 350px;" : "") width: 100%; display: block; resize: vertical; overflow: hidden; min-height: 150px; padding-bottom: 2px;">
-                        @if (_isReady)
-                        {
-                            <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
-                        }
-                    </div>
+    <!-- Split-Pane Workspace Area -->
+    <div class="query-runner-workspace d-flex flex-column flex-grow-1 overflow-hidden" style="min-height: 0;">
+        <!-- Execution Harness Area (Editor) -->
+        <div class="card shadow-sm @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "flex-shrink-0") d-flex flex-column overflow-hidden" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); min-height: 120px;">
+            <div class="card-body p-0 d-flex flex-column flex-grow-1" style="min-height: 0; overflow: hidden;">
+                <div id="popout-editor-wrapper" class="@(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")" style="@(!ActiveTab.HasExecuted || IsMinimized ? "height: 100%;" : (_customEditorHeight.HasValue ? $"height: {_customEditorHeight.Value}px;" : "height: 280px;")) width: 100%; display: block; overflow: hidden; min-height: 120px;">
+                    @if (_isReady)
+                    {
+                        <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
+                    }
+                    else
+                    {
+                        <div class="d-flex justify-content-center align-items-center h-100" style="min-height: 120px;">
+                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                            <span class="text-muted small">Loading editor...</span>
+                        </div>
+                    }
                 </div>
             </div>
+            <!-- Resizer Bar (Drag to Resize Query Editor) -->
+            <div id="popout-editor-resizer"
+                 class="sql-compare-splitter flex-shrink-0"
+                 style="@(ActiveTab.HasExecuted && !IsMinimized && !IsFullScreen ? "" : "display: none;")"
+                 title="Drag up or down to resize query editor">
+                <div class="sql-compare-splitter-handle"></div>
+            </div>
         </div>
-    </div>
 
     <!-- Results Area --> 
     @if (ActiveTab.HasExecuted)
     {
-        <div class="@(IsFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-4" : IsMinimized ? "position-sticky bottom-0 w-100 p-0 mt-auto" : "row")" 
-             style="@(IsFullScreen ? "background-color: rgba(15, 15, 20, 0.95); z-index: 9999; padding-top: 60px !important;" : IsMinimized ? "z-index: 1030;" : "")">
-            <div class="@(IsFullScreen || IsMinimized ? "w-100 h-100" : "col-12")">
-                <div class="card glass-card text-white d-flex flex-column" style="@(IsFullScreen ? "height: 100%;" : IsMinimized ? "border-bottom-left-radius: 0; border-bottom-right-radius: 0;" : "min-height: 400px;")">
-                    <div class="card-header border-secondary p-0 d-flex justify-content-between align-items-center">
-                        <ul class="nav nav-tabs border-secondary flex-grow-1 border-bottom-0">
+        <div class="@(IsFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3" : IsMinimized ? "mt-2 flex-shrink-0" : "mt-2 flex-grow-1 d-flex flex-column overflow-hidden")" 
+             style="@(IsFullScreen ? "background-color: rgba(15, 15, 20, 0.95); z-index: 9999;" : IsMinimized ? "" : "min-height: 0;")">
+            <div class="card glass-card text-white d-flex flex-column h-100" style="@(IsFullScreen ? "height: 100%;" : IsMinimized ? "border-bottom-left-radius: 0; border-bottom-right-radius: 0;" : "min-height: 0;") overflow: hidden;">
+                <div class="card-header border-secondary p-0 d-flex justify-content-between align-items-center flex-shrink-0">
+                        <div class="d-flex align-items-center flex-grow-1 overflow-hidden">
+                            <ul class="nav nav-tabs border-secondary border-bottom-0">
                             <li class="nav-item">
                                 <a class="nav-link @(ResultTab == "Results" ? "active bg-dark text-white border-secondary border-bottom-0" : "text-muted border-transparent")"
                                    @onclick='() => { ResultTab = "Results"; IsMinimized = false; }' style="cursor:pointer">Results</a>
@@ -104,10 +128,34 @@
                                 </a>
                             </li>
                         </ul>
-                        <div class="d-flex align-items-center pe-2">
+                        <div class="d-flex align-items-center ms-3 gap-3">
+                            @if (ResultTab == "Results" && ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 0 && !ActiveTab.IsExecuting)
+                            {
+                                var totalRows = GetTotalRowCount(ActiveTab.ResultSets);
+                                <span class="text-muted small fw-medium" style="font-size: 0.82rem; white-space: nowrap;">
+                                    @(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")
+                                </span>
+                            }
                             @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
                             {
-                                <span class="text-muted small me-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+                                <span class="text-muted small" style="white-space: nowrap;"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center pe-2 gap-1">
+                        @if (ResultTab == "Results" && ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 0 && !ActiveTab.IsExecuting)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary border-0 d-flex align-items-center gap-1 me-1 @(_isSearchOpen ? "text-primary active" : "")" 
+                                    style="color: var(--app-text); font-size: 0.8rem; padding: 2px 8px;" 
+                                    @onclick="ToggleSearch" 
+                                    title="Find in results (Ctrl+F)">
+                                <i class="bi bi-search"></i>
+                                <span>Search</span>
+                            </button>
+                        }
+                            @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
+                            {
+
                             }
                             @if (!IsFullScreen)
                             {
@@ -130,14 +178,23 @@
                     
                     @if (!IsMinimized)
                     {
-                        <div class="card-body overflow-auto flex-grow-1">
+                        <div class="card-body p-0 d-flex flex-column flex-grow-1 position-relative overflow-hidden" style="min-height: 0;">
                         @if (ResultTab == "Results")
                         {
                             if (ActiveTab.IsExecuting)
                             {
                                 <div class="text-center mt-5">
-                                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div>
-                                    <div class="mt-3 text-muted fs-5">Executing... (@(TimeSpan.FromSeconds(ActiveTab.ExecElapsedSeconds).ToString(@"mm\:ss")))</div>
+                                    <div class="spinner-border @(ActiveTab.IsCancelling ? "text-warning" : "text-primary")" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div>
+                                    <div class="mt-3 text-muted fs-5">
+                                        @if (ActiveTab.IsCancelling)
+                                        {
+                                            <span class="text-warning"><i class="bi bi-exclamation-circle me-1"></i>Cancelling query...</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Executing... (@(TimeSpan.FromSeconds(ActiveTab.ExecElapsedSeconds).ToString(@"mm\:ss")))</span>
+                                        }
+                                    </div>
                                 </div>
                             }
                             else if (ActiveTab.ResultSets == null || ActiveTab.ResultSets.Count == 0)
@@ -146,6 +203,87 @@
                             }
                             else
                             {
+                                <div id="results-multi-container" class="w-100 h-100 d-flex flex-column position-relative overflow-hidden" style="min-height: 0;">
+                                    @if (_isSearchOpen)
+                                    {
+                                        <div class="position-absolute shadow-lg rounded-pill d-flex align-items-center px-2 py-1 gap-2" 
+                                             style="top: 10px; right: 20px; z-index: 1050; background: var(--app-surface); border: 1px solid var(--app-border); backdrop-filter: blur(8px); box-shadow: 0 4px 20px rgba(0,0,0,0.35);">
+                                            <i class="bi bi-search text-muted small ms-1"></i>
+                                            <input type="text" 
+                                                   class="form-control form-control-sm border-0 bg-transparent py-0 px-1 shadow-none" 
+                                                   placeholder="Find in results (Ctrl+F)..." 
+                                                   style="color: var(--app-text); width: 180px; font-size: 0.82rem;"
+                                                   @bind="_globalSearchTerm" 
+                                                   @bind:event="oninput" 
+                                                   id="global-results-search-input" />
+                                            
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-sm py-0 px-1 @(_searchCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary")" 
+                                                        style="font-size: 0.72rem; border-radius: 4px;" 
+                                                        @onclick="() => _searchCaseSensitive = !_searchCaseSensitive" 
+                                                        title="Match Case (Aa)">
+                                                    Aa
+                                                </button>
+                                                <button class="btn btn-sm py-0 px-1 ms-1 @(_searchMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary")" 
+                                                        style="font-size: 0.72rem; border-radius: 4px;" 
+                                                        @onclick="() => _searchMatchWholeWord = !_searchMatchWholeWord" 
+                                                        title="Match Whole Word ([ab])">
+                                                    [ab]
+                                                </button>
+                                                <button class="btn btn-sm py-0 px-1 ms-1 @(_searchExactMatch ? "btn-primary text-white" : "btn-outline-secondary")" 
+                                                        style="font-size: 0.72rem; border-radius: 4px;" 
+                                                        @onclick="() => _searchExactMatch = !_searchExactMatch" 
+                                                        title="Exact Match (⊚)">
+                                                    ⊚
+                                                </button>
+                                            </div>
+
+                                            @if (!string.IsNullOrEmpty(_globalSearchTerm))
+                                            {
+                                                <button class="btn btn-sm btn-link text-muted p-0 border-0 ms-1" 
+                                                        @onclick="() => _globalSearchTerm = string.Empty" 
+                                                        title="Clear search">
+                                                    <i class="bi bi-x-circle-fill" style="font-size: 0.8rem;"></i>
+                                                </button>
+                                            }
+
+                                            <button class="btn btn-sm btn-link text-muted p-0 border-0 ms-1 me-1" 
+                                                    @onclick="ToggleSearch" 
+                                                    title="Close (Esc)">
+                                                <i class="bi bi-x-lg" style="font-size: 0.8rem;"></i>
+                                            </button>
+                                        </div>
+                                    }
+
+                                    @for (int i = 0; i < ActiveTab.ResultSets.Count; i++)
+                                    {
+                                        var rsItem = ActiveTab.ResultSets[i];
+                                        var capturedIndex = i + 1;
+                                        var totalCount = ActiveTab.ResultSets.Count;
+
+                                        <div id="@($"rs-pane-{capturedIndex}")" 
+                                             class="d-flex flex-column overflow-hidden" 
+                                             style="flex: 1 1 @(100.0 / totalCount)%; min-height: 80px; position: relative;">
+                                            <ExploreDB.Components.Pages.ResultSetGrid Data="rsItem" 
+                                                           ResultSetIndex="capturedIndex" 
+                                                           TotalResultSets="totalCount" 
+                                                           SearchTerm="@_globalSearchTerm" 
+                                                           SearchCaseSensitive="@_searchCaseSensitive" 
+                                                           SearchMatchWholeWord="@_searchMatchWholeWord" 
+                                                           SearchExactMatch="@_searchExactMatch" 
+                                                           OnToggleSearch="ToggleSearch"
+                                                           OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
+                                        </div>
+
+                                        @if (i < ActiveTab.ResultSets.Count - 1)
+                                        {
+                                            <div class="sql-compare-splitter">
+                                                <div class="sql-compare-splitter-handle"></div>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                                if (false) {
                                 int rsIndex = 1;
                                 foreach (var rs in ActiveTab.ResultSets)
                                 {
@@ -160,21 +298,36 @@
                                     <ExploreDB.Components.Pages.ResultSetGrid Data="rs" OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
                                     rsIndex++;
                                 }
+                                }
+                                if (false) {
+                                }
                             }
                         }
                         else if (ResultTab == "Messages")
                         {
-                            <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap;">
+                            <div class="p-3 overflow-auto flex-grow-1 custom-scrollbar-light" style="min-height: 0;">
+                            <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap; font-family: Consolas, 'Courier New', monospace;">
 @if (ActiveTab.Messages.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
-@foreach (var msg in ActiveTab.Messages) { @msg<br/> }
+@foreach (var msg in ActiveTab.Messages)
+{
+    @if (msg.IsError)
+    {
+        <span class="text-danger fw-semibold">@msg.Text</span><br/>
+    }
+    else
+    {
+        <span>@msg.Text</span><br/>
+    }
+}
                             </pre>
+                            </div>
                         }
                         </div>
                     }
                 </div>
             </div>
-        </div>
-    }
+        }
+    </div> <!-- /query-runner-workspace -->
 </div>
 
 @if (ShowClearConfirmation)
@@ -204,15 +357,57 @@
     private string ResultTab = "Results";
     private StandaloneCodeEditor _editor = default!;
     private DotNetObjectReference<PopoutRunner>? _objRef;
+    private int? _customEditorHeight = null;
+
+    [JSInvokable]
+    public void SetQueryEditorHeight(int height)
+    {
+        _customEditorHeight = height;
+    }
     private System.Timers.Timer? _execTimer;
     private System.Timers.Timer? _saveDebounceTimer;
 
     private bool _isReady = false;
+    private bool _isEditorReady = false;
     private bool ShowClearConfirmation = false;
     private string? FormatError;
 
     private bool IsFullScreen = false;
     private bool IsMinimized = false;
+
+    // Results Search State
+    private bool _isSearchOpen = false;
+    private string _globalSearchTerm = "";
+    private bool _searchCaseSensitive = false;
+    private bool _searchMatchWholeWord = false;
+    private bool _searchExactMatch = false;
+
+    private async Task ToggleSearch()
+    {
+        _isSearchOpen = !_isSearchOpen;
+        if (_isSearchOpen)
+        {
+            await Task.Delay(50);
+            try
+            {
+                await JS.InvokeVoidAsync("eval", "var el = document.getElementById('global-results-search-input'); if(el) el.focus();");
+            }
+            catch { }
+        }
+    }
+
+    private int GetTotalRowCount(List<object> resultSets)
+    {
+        if (resultSets == null || resultSets.Count == 0) return 0;
+        int sum = 0;
+        foreach (var rs in resultSets)
+        {
+            if (rs is QueryResultTable qrt) sum += qrt.RowCount;
+            else if (rs is IEnumerable<dynamic> d) sum += d.Count();
+            else if (rs is System.Collections.ICollection c) sum += c.Count;
+        }
+        return sum;
+    }
 
     private void ToggleFullScreen()
     {
@@ -226,29 +421,49 @@
         if (IsMinimized) IsFullScreen = false;
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         QueryStateService.OnTabUpdated += HandleTabUpdated;
         SchemaService.OnTablesLoaded += OnSchemaLoadedHandler;
         SchemaService.OnViewsLoaded += OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded += OnSchemaLoadedHandler;
         ThemeService.OnThemeChanged += HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged += HandleSettingsChanged;
         _objRef = DotNetObjectReference.Create(this);
-        
-        // Small delay to ensure MAUI WebView is fully initialized and DOM is ready for Monaco
-        await Task.Delay(100);
-        _isReady = true;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _objRef != null)
+        if (firstRender)
         {
             try
             {
-                await JS.InvokeVoidAsync("window.globalShortcuts.registerQueryRunner", _objRef);
+                await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
             }
             catch { }
+
+            if (_objRef != null)
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("window.globalShortcuts.registerQueryRunner", _objRef);
+                    await JS.InvokeVoidAsync("initQueryEditorSplitter", _objRef, "popout-editor-resizer", "popout-editor-wrapper");
+                }
+                catch { }
+            }
+
+            try
+            {
+                await JS.InvokeAsync<bool>("waitForMonaco", 5000);
+            }
+            catch { }
+
+            _isReady = true;
+            if (ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 1 && ResultTab == "Results")
+            {
+                try { await JS.InvokeVoidAsync("initResultSetSplitters", "results-multi-container"); } catch { }
+            }
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -262,9 +477,20 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private async void HandleSettingsChanged()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+        }
+        catch { }
+    }
+
     public void Dispose()
     {
+        _isEditorReady = false;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
         SchemaService.OnTablesLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnViewsLoaded -= OnSchemaLoadedHandler;
@@ -284,6 +510,14 @@
     }
 
     [JSInvokable]
+    public async Task SaveAsQueryFromShortcut()
+    {
+        await SaveAsQueryAsync();
+        UpdateMauiWindowTitle();
+        StateHasChanged();
+    }
+
+    [JSInvokable]
     public async Task ExecuteQueryFromShortcut()
     {
         await ExecuteAsync();
@@ -292,6 +526,7 @@
 
     private async void OnSchemaLoadedHandler()
     {
+        if (!_isEditorReady) return;
         await InvokeAsync(RegisterAutocompleteItemsAsync);
     }
 
@@ -326,6 +561,13 @@
 
     private async Task EditorOnDidInit()
     {
+        _isEditorReady = true;
+        try
+        {
+            await JS.InvokeVoidAsync("configureQueryEditor", "query-editor");
+            await JS.InvokeVoidAsync("initQueryEditorSplitter", _objRef, "popout-editor-resizer", "popout-editor-wrapper");
+        }
+        catch { }
         await RegisterAutocompleteItemsAsync();
     }
 
@@ -369,15 +611,12 @@
 
     private void UpdateMauiWindowTitle()
     {
-        var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => w.Page is PopoutPage pp && pp.TabId == TabId);
-        if (mauiWindow != null)
-        {
-            mauiWindow.Title = GetTabDisplayName(ActiveTab);
-        }
+        WindowManager.SetPopoutTitle(TabId, GetTabDisplayName(ActiveTab));
     }
 
     private async Task RegisterAutocompleteItemsAsync()
     {
+        if (!_isEditorReady) return;
         var schema = SchemaService.GetCachedSchema(ActiveTab.ConnectionString);
         
         var tables = schema.Tables.Select(t => new { name = t.Split('.').Last().Trim('[', ']'), fullName = t }).ToList();
@@ -480,6 +719,7 @@
         }
 
         ActiveTab.IsExecuting = true;
+        ActiveTab.IsCancelling = false;
         ActiveTab.HasExecuted = true;
         ActiveTab.ResultSets.Clear();
         ActiveTab.Messages.Clear();
@@ -533,20 +773,28 @@
             cmd.CommandText = queryToRun;
             cmd.CommandTimeout = 0;
             
+            ActiveTab.CancelAction = () =>
+            {
+                try { cmd.Cancel(); } catch { }
+                try { conn.Close(); } catch { }
+            };
+
             using var ctr = ActiveTab.QueryCts.Token.Register(() => {
                 try { cmd.Cancel(); } catch { }
+                try { conn.Close(); } catch { }
             });
             
             ActiveTab.IsCurrentQuerySelect = IsReadOnlyQuery(queryToRun);
 
             using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
             int totalRows = 0;
+            int affectedStatementCount = 0;
             
             do
             {
                 try
                 {
-                    var rs = new List<dynamic>();
+                    // High-performance streaming rowstore
                     int fieldCount = reader.FieldCount;
                     
                     if (fieldCount > 0)
@@ -558,49 +806,106 @@
                             if (string.IsNullOrEmpty(columnNames[i])) columnNames[i] = $"Column{i}";
                         }
 
+                        var table = new QueryResultTable(columnNames);
+                        var batch = new List<object?[]>(1000);
                         int yieldCount = 0;
                         while (await reader.ReadAsync(ActiveTab.QueryCts.Token))
                         {
-                            var row = new System.Dynamic.ExpandoObject() as IDictionary<string, object>;
+                            if (ActiveTab.QueryCts.IsCancellationRequested || ActiveTab.IsCancelling)
+                            {
+                                throw new OperationCanceledException(ActiveTab.QueryCts.Token);
+                            }
+
+                            var rowValues = new object?[fieldCount];
+                            reader.GetValues(rowValues);
+                            for (int colIdx = 0; colIdx < fieldCount; colIdx++)
+                            {
+                                if (rowValues[colIdx] is DBNull) rowValues[colIdx] = null;
+                            }
+                            batch.Add(rowValues);
+                            if (batch.Count >= 1000)
+                            {
+                                table.AddRows(batch);
+                                batch.Clear();
+                                if (++yieldCount % 5 == 0)
+                                {
+                                    await Task.Delay(1);
+                                    await InvokeAsync(StateHasChanged);
+                                }
+                            }
                             for (int i = 0; i < fieldCount; i++)
                             {
-                                row[columnNames[i]] = await reader.IsDBNullAsync(i, ActiveTab.QueryCts.Token) ? null! : reader.GetValue(i);
+                                // Value populated above via reader.GetValues
                             }
-                            rs.Add(row);
+                            // Row added to batch above
                             
-                            if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                            if (++yieldCount % 1000 == 0) await Task.Delay(1);
                         }
                         
-                        ActiveTab.ResultSets.Add(rs);
-                        totalRows += rs.Count;
+                        if (batch.Count > 0)
+                        {
+                            table.AddRows(batch);
+                        }
+                        table.IsComplete = true;
+                        ActiveTab.ResultSets.Add(table);
+                        totalRows += table.RowCount;
                     }
                     else
                     {
                         if (reader.RecordsAffected >= 0)
                         {
-                            ActiveTab.Messages.Add($"({reader.RecordsAffected} row(s) affected)");
+                            var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
+                            ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
+                            affectedStatementCount++;
                         }
                     }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException && !(ActiveTab.QueryCts?.IsCancellationRequested ?? false) && !ActiveTab.IsCancelling)
                 {
-                    ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Error reading result set: {ex.Message}");
+                    ActiveTab.Messages.Add(new QueryOutputMessage($"Error reading result set: {ex.Message}", isError: true));
+                    break;
                 }
             } while (await reader.NextResultAsync(ActiveTab.QueryCts.Token));
 
-            if (ActiveTab.ResultSets.Count == 0 && ResultTab == "Results")
+            if (affectedStatementCount == 0 && reader.RecordsAffected >= 0)
             {
-                ResultTab = "Messages";
+                var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
+                ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
             }
+
+            ActiveTab.Messages.Add("");
+            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
+
+            ResultTab = ActiveTab.ResultSets.Count == 0 ? "Messages" : "Results";
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (ex is OperationCanceledException || (ActiveTab.QueryCts != null && ActiveTab.QueryCts.IsCancellationRequested) || ActiveTab.IsCancelling)
         {
-            ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Query execution was canceled by the user.");
+            ActiveTab.Messages.Add("Query execution was canceled by the user.");
+            ActiveTab.Messages.Add("");
+            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
             ResultTab = "Messages";
+        }
+        catch (SqlException sqlEx)
+        {
+            ResultTab = "Messages";
+            foreach (SqlError err in sqlEx.Errors)
+            {
+                ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {err.Number}, Level {err.Class}, State {err.State}, Line {err.LineNumber}", isError: true));
+                ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true));
+            }
+            if (sqlEx.Errors.Count == 0)
+            {
+                ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {sqlEx.Number}, Level {sqlEx.Class}, State {sqlEx.State}, Line {sqlEx.LineNumber}", isError: true));
+                ActiveTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true));
+            }
+            ActiveTab.Messages.Add("");
+            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
         }
         catch (Exception ex)
         {
-            ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] Error: {ex.Message}");
+            ActiveTab.Messages.Add(new QueryOutputMessage($"Error: {ex.Message}", isError: true));
+            ActiveTab.Messages.Add("");
+            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
             ResultTab = "Messages";
         }
         finally
@@ -608,24 +913,26 @@
             watch.Stop();
             _execTimer?.Stop();
             ActiveTab.IsExecuting = false;
+            ActiveTab.IsCancelling = false;
+            ActiveTab.CancelAction = null;
             ActiveTab.LastExecutionTimeMs = watch.ElapsedMilliseconds;
+            ActiveTab.QueryCts?.Dispose();
+            ActiveTab.QueryCts = null;
             StateHasChanged();
         }
     }
 
-    private void DockTab()
+    private async Task DockTab()
     {
-        var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => 
-            w.Page is PopoutPage pp && pp.TabId == TabId);
-            
-        if (mauiWindow != null)
+        if (_editor != null)
         {
-            if (mauiWindow.Page is PopoutPage pp)
+            try
             {
-                pp.IsDocking = true;
+                ActiveTab.Content = await _editor.GetValue();
             }
-            Microsoft.Maui.Controls.Application.Current?.CloseWindow(mauiWindow);
+            catch { }
         }
+        WindowManager.DockQueryTab(TabId);
     }
 
     private async Task ClearQueryAsync()
@@ -654,6 +961,15 @@
         }
     }
 
+    private async Task ToggleCommentAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("toggleQueryEditorComment", "query-editor");
+        }
+        catch { }
+    }
+
     private async Task SaveActiveQueryAsync() => await SaveQueryAsync(null);
 
     private async Task<bool> SaveQueryAsync(Guid? targetTabId = null)
@@ -677,33 +993,21 @@
 
             if (!string.IsNullOrEmpty(tabToSave.FilePath))
             {
-                await Windows.Storage.FileIO.WriteTextAsync(await Windows.Storage.StorageFile.GetFileFromPathAsync(tabToSave.FilePath), queryText);
+                await System.IO.File.WriteAllTextAsync(tabToSave.FilePath, queryText);
                 tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
                 return true;
             }
 
-            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
-            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
-            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
-            savePicker.SuggestedFileName = tabToSave.Name;
-
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => w.Page is PopoutPage pp && pp.TabId == TabId);
-            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            var chosenPath = WindowManager.ShowSaveFileDialog(tabToSave.Name);
+            if (!string.IsNullOrEmpty(chosenPath))
             {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
-            }
-
-            var file = await savePicker.PickSaveFileAsync();
-            if (file != null)
-            {
-                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
-                tabToSave.FilePath = file.Path;
-                tabToSave.Name = file.Name;
+                await System.IO.File.WriteAllTextAsync(chosenPath, queryText);
+                tabToSave.FilePath = chosenPath;
+                tabToSave.Name = System.IO.Path.GetFileName(chosenPath);
                 tabToSave.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
+                UpdateMauiWindowTitle();
                 StateHasChanged();
                 return true;
             }
@@ -724,27 +1028,15 @@
             if (ActiveTab == null) return;
             ActiveTab.Content = queryText;
 
-            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
-            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            savePicker.FileTypeChoices.Add("SQL Script", new List<string>() { ".sql" });
-            savePicker.FileTypeChoices.Add("Plain Text", new List<string>() { ".txt" });
-            savePicker.SuggestedFileName = ActiveTab.Name;
-
-            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault(w => w.Page is PopoutPage pp && pp.TabId == TabId);
-            if (mauiWindow?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winuiWindow)
+            var chosenPath = WindowManager.ShowSaveFileDialog(ActiveTab.Name);
+            if (!string.IsNullOrEmpty(chosenPath))
             {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(winuiWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
-            }
-
-            var file = await savePicker.PickSaveFileAsync();
-            if (file != null)
-            {
-                await Windows.Storage.FileIO.WriteTextAsync(file, queryText);
-                ActiveTab.FilePath = file.Path;
-                ActiveTab.Name = file.Name;
+                await System.IO.File.WriteAllTextAsync(chosenPath, queryText);
+                ActiveTab.FilePath = chosenPath;
+                ActiveTab.Name = System.IO.Path.GetFileName(chosenPath);
                 ActiveTab.OriginalContent = queryText;
                 await QueryStateService.SaveTabsAsync();
+                UpdateMauiWindowTitle();
                 StateHasChanged();
             }
         }
@@ -756,9 +1048,16 @@
 
     private void CancelExecution()
     {
-        if (ActiveTab.IsExecuting && ActiveTab.QueryCts != null)
+        if (ActiveTab.IsExecuting && !ActiveTab.IsCancelling)
         {
-            ActiveTab.QueryCts.Cancel();
+            ActiveTab.IsCancelling = true;
+            StateHasChanged();
+
+            Task.Run(() =>
+            {
+                try { ActiveTab.CancelAction?.Invoke(); } catch { }
+                try { ActiveTab.QueryCts?.Cancel(); } catch { }
+            });
         }
     }
 

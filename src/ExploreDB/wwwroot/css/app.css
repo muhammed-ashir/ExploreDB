@@ -26,6 +26,11 @@
     --app-table-header-text: #0dcaf0;
     --app-table-index-bg: #181a1d;
     --app-table-border: rgba(255, 255, 255, 0.12);
+
+    /* Editor Syntax Preview Tokens */
+    --app-editor-preview-bg: #141619;
+    --app-editor-preview-text: #d4d4d4;
+    --app-editor-keyword: #569cd6;
 }
 
 [data-bs-theme="light"] {
@@ -55,6 +60,11 @@
     --app-table-header-text: #0284c7;
     --app-table-index-bg: #f1f5f9;
     --app-table-border: rgba(0, 0, 0, 0.1);
+
+    /* Editor Syntax Preview Tokens */
+    --app-editor-preview-bg: #ffffff;
+    --app-editor-preview-text: #212529;
+    --app-editor-keyword: #0000ff;
 }
 
 html,
@@ -252,6 +262,79 @@ body {
     color: var(--app-sidebar-active-text) !important;
     font-weight: 600;
     border-left: 3px solid var(--primary-color) !important;
+}
+
+.sidebar-subitem {
+    padding: 9px 15px 9px 28px;
+    cursor: pointer;
+    color: var(--app-text) !important;
+    font-size: 0.88rem;
+    transition: background-color 0.2s, color 0.2s;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+}
+
+.sidebar-subitem:hover {
+    background-color: var(--app-sidebar-hover);
+    color: var(--app-text) !important;
+}
+
+.sidebar-subitem.active {
+    background-color: var(--app-sidebar-active) !important;
+    color: var(--app-sidebar-active-text) !important;
+    font-weight: 600;
+    border-left: 3px solid var(--primary-color) !important;
+}
+
+.sidebar-divider {
+    height: 1px;
+    margin: 8px 16px;
+    background-color: var(--app-border);
+    opacity: 0.6;
+}
+
+/* Editor Syntax Preview & Inline Code */
+.editor-syntax-preview {
+    background-color: var(--app-editor-preview-bg) !important;
+    color: var(--app-editor-preview-text) !important;
+    border: 1px solid var(--app-border) !important;
+    font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.editor-syntax-preview code {
+    color: var(--app-editor-preview-text) !important;
+    background: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+.editor-syntax-preview .keyword {
+    color: var(--app-editor-keyword) !important;
+    font-weight: 600;
+}
+
+code:not(.editor-syntax-preview code) {
+    color: var(--app-text) !important;
+    background-color: var(--app-border);
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+.sidebar-settings-btn {
+    color: var(--app-text-muted) !important;
+    border-radius: 4px;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.sidebar-settings-btn:hover {
+    color: var(--app-text) !important;
+    background-color: var(--app-sidebar-hover);
 }
 
 .node-card {
@@ -658,10 +741,81 @@ body {
     cursor: pointer;
 }
 
-/* Allow Bootstrap tooltips to dynamically stretch but cap at 450px so long text wraps globally */
+/* Global Bootstrap Tooltip Enhancements - 100% Opaque, High z-index & Sleek Theme Adaptive */
+.tooltip {
+    --bs-tooltip-opacity: 1 !important;
+    opacity: 1 !important;
+    z-index: 100000 !important;
+    pointer-events: none;
+}
+
+.tooltip.show {
+    opacity: 1 !important;
+}
+
 .tooltip-inner {
     max-width: 450px !important;
     text-align: left !important;
+    padding: 8px 12px !important;
+    font-size: 0.82rem !important;
+    line-height: 1.45 !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+}
+
+[data-bs-theme="dark"] .tooltip-inner {
+    background-color: #24292e !important;
+    color: #f0f6fc !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+[data-bs-theme="dark"] .bs-tooltip-top .tooltip-arrow::before,
+[data-bs-theme="dark"] .bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before {
+    border-top-color: #24292e !important;
+}
+[data-bs-theme="dark"] .bs-tooltip-bottom .tooltip-arrow::before,
+[data-bs-theme="dark"] .bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before {
+    border-bottom-color: #24292e !important;
+}
+[data-bs-theme="dark"] .bs-tooltip-start .tooltip-arrow::before,
+[data-bs-theme="dark"] .bs-tooltip-auto[data-popper-placement^="left"] .tooltip-arrow::before {
+    border-left-color: #24292e !important;
+}
+[data-bs-theme="dark"] .bs-tooltip-end .tooltip-arrow::before,
+[data-bs-theme="dark"] .bs-tooltip-auto[data-popper-placement^="right"] .tooltip-arrow::before {
+    border-right-color: #24292e !important;
+}
+
+.tooltip-inner code {
+    color: #e2e8f0 !important;
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    padding: 2px 5px !important;
+    border-radius: 4px !important;
+    font-family: var(--bs-font-monospace) !important;
+    font-size: 0.85em !important;
+}
+
+[data-bs-theme="light"] .tooltip-inner {
+    background-color: #1f2937 !important;
+    color: #f9fafb !important;
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
+}
+
+[data-bs-theme="light"] .bs-tooltip-top .tooltip-arrow::before,
+[data-bs-theme="light"] .bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before {
+    border-top-color: #1f2937 !important;
+}
+[data-bs-theme="light"] .bs-tooltip-bottom .tooltip-arrow::before,
+[data-bs-theme="light"] .bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before {
+    border-bottom-color: #1f2937 !important;
+}
+[data-bs-theme="light"] .bs-tooltip-start .tooltip-arrow::before,
+[data-bs-theme="light"] .bs-tooltip-auto[data-popper-placement^="left"] .tooltip-arrow::before {
+    border-left-color: #1f2937 !important;
+}
+[data-bs-theme="light"] .bs-tooltip-end .tooltip-arrow::before,
+[data-bs-theme="light"] .bs-tooltip-auto[data-popper-placement^="right"] .tooltip-arrow::before {
+    border-right-color: #1f2937 !important;
 }
 
 /* Result Set Table Theme Adaptive Styling */
@@ -711,6 +865,60 @@ body {
 
 .result-set-table tbody tr:hover {
     background-color: var(--app-table-hover) !important;
+}
+
+/* Result Set Grid Column Resizing */
+.result-set-table th.col-resizable {
+    position: relative;
+    user-select: none;
+}
+
+.result-set-table .grid-col-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 5;
+}
+
+.result-set-table .grid-col-resizer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 2px;
+    height: 100%;
+    background-color: transparent;
+    transition: background-color 0.12s ease;
+}
+
+.result-set-table .grid-col-resizer:hover::after,
+.result-set-table .grid-col-resizer.is-resizing::after {
+    background-color: var(--primary-color);
+}
+
+.grid-col-guide {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    background-color: var(--primary-color);
+    box-shadow: 0 0 6px rgba(13, 110, 253, 0.7);
+    z-index: 100;
+    pointer-events: none;
+}
+
+.table-responsive.grid-col-hover,
+.table-responsive.grid-col-hover * {
+    cursor: col-resize !important;
+}
+
+body.grid-col-resizing,
+body.grid-col-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
 }
 
 /* Light Mode Scrollbars */
@@ -1148,5 +1356,173 @@ a.card.glow-highlight:hover,
     border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
     color: #f8f9fa !important;
 }
+
+/* SQL Compare Vertical Splitter */
+.sql-compare-splitter {
+    height: 10px;
+    cursor: row-resize;
+    user-select: none;
+    margin: -3px 0;
+    z-index: 25;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.15s ease;
+}
+
+.sql-compare-splitter:hover,
+.sql-compare-splitter.dragging {
+    background-color: rgba(13, 110, 253, 0.12);
+}
+
+.sql-compare-splitter-handle {
+    width: 48px;
+    height: 4px;
+    border-radius: 2px;
+    background-color: var(--app-border);
+    transition: background-color 0.15s ease, width 0.15s ease;
+}
+
+.sql-compare-splitter:hover .sql-compare-splitter-handle,
+.sql-compare-splitter.dragging .sql-compare-splitter-handle {
+    background-color: var(--primary-color) !important;
+    width: 68px !important;
+}
+
+/* ==========================================================
+   SSMS-Style Query Tabs
+   ========================================================== */
+.ssms-tab-strip {
+    background-color: var(--app-surface-secondary);
+    border-bottom: 1px solid var(--app-border);
+    position: relative;
+    user-select: none;
+    min-height: 36px;
+    height: 36px;
+    border-top-left-radius: 0.375rem;
+    border-top-right-radius: 0.375rem;
+}
+
+.ssms-tab-scroll {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    min-width: 0;
+}
+
+.ssms-tab-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.ssms-tab {
+    position: relative;
+    padding: 0 12px;
+    height: 36px;
+    font-size: 0.83rem;
+    font-weight: 500;
+    color: var(--app-text-muted);
+    border-right: 1px solid var(--app-border);
+    background-color: transparent;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    cursor: pointer;
+    white-space: nowrap;
+    border-top: 2px solid transparent;
+}
+
+.ssms-tab:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--app-text);
+}
+
+[data-bs-theme="light"] .ssms-tab:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+}
+
+.ssms-tab.active {
+    background-color: var(--app-surface) !important;
+    color: var(--app-text) !important;
+    font-weight: 600;
+    border-top: 2px solid var(--primary-color);
+    border-bottom: 1px solid var(--app-surface);
+    margin-bottom: -1px;
+    z-index: 1;
+}
+
+.ssms-tab-name {
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ssms-tab-close-btn {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    color: var(--app-text-muted);
+    text-decoration: none;
+    opacity: 0.55;
+    transition: all 0.15s ease;
+    border: none;
+    background: transparent;
+}
+
+.ssms-tab-close-btn i {
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.ssms-tab:hover .ssms-tab-close-btn,
+.ssms-tab.active .ssms-tab-close-btn {
+    opacity: 0.85;
+}
+
+.ssms-tab-close-btn:hover {
+    opacity: 1 !important;
+    background-color: rgba(220, 53, 69, 0.2) !important;
+    color: #dc3545 !important;
+}
+
+.ssms-new-tab-btn {
+    color: var(--app-text-muted);
+    text-decoration: none;
+    transition: color 0.15s ease, background-color 0.15s ease;
+    height: 36px;
+    border: none;
+    background: transparent;
+}
+
+.ssms-new-tab-btn:hover {
+    color: var(--app-text);
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-bs-theme="light"] .ssms-new-tab-btn:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* ==========================================================
+   Query Runner IDE Split-Pane Layout
+   ========================================================== */
+.query-runner-container {
+    height: 100%;
+    min-height: 0;
+    position: relative;
+}
+
+.query-runner-toolbar {
+    position: relative;
+    z-index: 10;
+    min-height: 38px;
+}
+
+.query-runner-workspace {
+    min-height: 0;
+    position: relative;
+}
+
+
 
 

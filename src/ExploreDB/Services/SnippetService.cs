@@ -6,8 +6,6 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage;
-
 namespace ExploreDB.Services
 {
     public class SqlSnippet
@@ -30,7 +28,7 @@ namespace ExploreDB.Services
         public SnippetService(ILogger<SnippetService>? logger = null)
         {
             _logger = logger;
-            _snippetFilePath = Path.Combine(FileSystem.AppDataDirectory, "snippets.json");
+            _snippetFilePath = Path.Combine(AppEnvironmentService.AppDataDirectory, "snippets.json");
         }
 
         public async Task<List<SqlSnippet>> GetSnippetsAsync()

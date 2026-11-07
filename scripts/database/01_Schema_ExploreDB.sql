@@ -242,8 +242,27 @@ CREATE TABLE dbo.Products (
     IsPublished BIT DEFAULT 1,
     AttributesJson NVARCHAR(MAX) NULL,
     RowVersion ROWVERSION,
+    Overlay_Image VARBINARY(MAX) NULL,
     CONSTRAINT FK_Products_Categories FOREIGN KEY (CategoryID) REFERENCES dbo.Categories(CategoryID),
     CONSTRAINT FK_Products_Brands FOREIGN KEY (BrandID) REFERENCES dbo.Brands(BrandID)
+);
+GO
+
+-- =======================================================================================
+-- Media Assets & Binary Test Samples (for testing Hex/Image/PDF/Binary in ResultSetGrid)
+-- =======================================================================================
+CREATE TABLE dbo.MediaAssets (
+    AssetID INT IDENTITY(1,1) PRIMARY KEY,
+    AssetName NVARCHAR(100) NOT NULL,
+    Category NVARCHAR(50) NOT NULL,
+    VersionTag ROWVERSION,
+    ShortHash16 BINARY(16) NULL,
+    ShortHash32 VARBINARY(32) NULL,
+    ShortBinary64 VARBINARY(64) NULL,
+    Overlay_Image VARBINARY(MAX) NULL,
+    DocumentFile VARBINARY(MAX) NULL,
+    BinaryPayload VARBINARY(MAX) NULL,
+    CreatedAt DATETIME2 DEFAULT GETDATE()
 );
 GO
 

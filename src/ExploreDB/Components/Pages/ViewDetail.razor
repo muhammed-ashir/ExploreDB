@@ -9,6 +9,8 @@
 @inject ConnectionService ConnectionService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject ThemeService ThemeService
+@inject WindowManagerService WindowManager
+@implements IDisposable
 <div class="container-fluid">
     @if (IsLoading)
     {
@@ -106,10 +108,16 @@
                         <div class="mb-4">
                             <div class="input-group shadow-sm w-100 flex-nowrap">
                                 <input type="text"
-                                       class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
+                                       class="form-control bg-dark text-white border-secondary shadow-none @(!string.IsNullOrEmpty(ColumnSearchTerm) ? "border-end-0" : "")" style="min-width: 200px;"
                                        placeholder="Search columns..."
                                        @bind="ColumnSearchTerm"
                                        @bind:event="oninput" />
+                                @if (!string.IsNullOrEmpty(ColumnSearchTerm))
+                                {
+                                    <button class="btn btn-outline-secondary bg-dark text-muted border-secondary border-start-0" title="Clear filter" @onclick="() => ColumnSearchTerm = string.Empty">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                }
                                 <button class="btn @(ColumnSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => ColumnSearchCaseSensitive = !ColumnSearchCaseSensitive">
                                     <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                 </button>
@@ -180,10 +188,16 @@
                         <div class="flex-grow-1" style="min-width: 300px; max-width: 500px;">
                             <div class="input-group shadow-sm flex-nowrap">
                             <input type="text"
-                                   class="form-control bg-dark text-white border-secondary shadow-none" style="min-width: 200px;"
+                                   class="form-control bg-dark text-white border-secondary shadow-none @(!string.IsNullOrEmpty(DependencySearchTerm) ? "border-end-0" : "")" style="min-width: 200px;"
                                    placeholder="Search dependencies..."
                                    @bind="DependencySearchTerm"
                                    @bind:event="oninput" />
+                            @if (!string.IsNullOrEmpty(DependencySearchTerm))
+                            {
+                                <button class="btn btn-outline-secondary bg-dark text-muted border-secondary border-start-0" title="Clear filter" @onclick="() => DependencySearchTerm = string.Empty">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            }
                             <button class="btn @(DependencySearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => DependencySearchCaseSensitive = !DependencySearchCaseSensitive">
                                 <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                             </button>
@@ -251,11 +265,12 @@
                                         <div class="row g-3">
                                             @foreach (var dep in FilteredDependsOn)
                                             {
+                                                var isGlow = _glowTarget != null && _glowTarget.Equals(dep.FullName, StringComparison.OrdinalIgnoreCase);
                                                 var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                                 var isFunc = dep.Type == "Function";
                                                 var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (dep.Type == "Table" ? "text-primary" : "text-success"));
                                                 <div class="col-md-6 col-12">
-                                                    <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                    <a id="@($"item-{dep.FullName.Replace("[", "").Replace("]", "")}")" href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform @(isGlow ? "glow-highlight" : "")" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                                         <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
                                                             <div class="@iconClass fw-bold fs-4 flex-shrink-0">
@@ -314,11 +329,12 @@
                                         <div class="row g-3">
                                             @foreach (var dep in FilteredUsedBy)
                                             {
+                                                var isGlow = _glowTarget != null && _glowTarget.Equals(dep.FullName, StringComparison.OrdinalIgnoreCase);
                                                 var isProc = dep.Type.Contains("Procedure", StringComparison.OrdinalIgnoreCase) || dep.Type == "SP";
                                                 var isFunc = dep.Type == "Function";
                                                 var iconClass = isProc ? "text-warning font-monospace" : (isFunc ? "text-primary" : (dep.Type == "Table" ? "text-primary" : "text-success"));
                                                 <div class="col-md-6 col-12">
-                                                    <a href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
+                                                    <a id="@($"item-{dep.FullName.Replace("[", "").Replace("]", "")}")" href="@BuildDependencyLink(dep)" class="card text-decoration-none h-100 hover-scale transition-transform @(isGlow ? "glow-highlight" : "")" style="background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);"
                                                        data-bs-tooltip="true" data-bs-html="true" data-bs-title="<b>Type:</b> @(dep.Type)<br/><b>Name:</b> @dep.Name<br/><b>Schema:</b> @dep.Schema.ToLower()" data-bs-placement="bottom">
                                                         <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
                                                             <div class="@iconClass fw-bold fs-4 flex-shrink-0">
@@ -384,18 +400,29 @@
             }
             else if (ActiveTab == "Definition")
             {
-                <div class="card glass-card mb-4" style="border: 1px solid var(--app-border); color: var(--app-text);">
-                    <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center detail-card-header">
-                        <span class="fw-bold" style="font-size: 0.95rem;">View Definition</span>
-                        @if (!IsDefinitionLoading && !string.IsNullOrEmpty(View?.Definition))
-                        {
-                            <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 @(DefinitionCopied ? "btn-success text-white" : "")"
-                                    @onclick="CopyDefinition" title="Copy to clipboard">
-                                <i class="bi @(DefinitionCopied ? "bi-check2" : "bi-clipboard")"></i> @(DefinitionCopied ? "Copied" : "Copy")
-                            </button>
-                        }
+                <div class="card glass-card @(IsDefinitionExpanded ? "position-fixed top-0 start-0 w-100 h-100 m-0 rounded-0" : "mb-4")" 
+                     style="@(IsDefinitionExpanded ? "z-index: 2100; height: 100vh; background-color: var(--app-bg);" : "border: 1px solid var(--app-border); color: var(--app-text);")"
+                     @onkeydown="HandleDefinitionKeyDown" tabindex="@(IsDefinitionExpanded ? "0" : "-1")">
+                    <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center detail-card-header" style="border-bottom: 1px solid var(--app-border);">
+                        <span class="fw-bold" style="font-size: 0.95rem;">
+                            @(IsDefinitionExpanded ? $"{View.Schema}.{View.Name} — View Definition" : "View Definition")
+                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            @if (!IsDefinitionLoading && !string.IsNullOrEmpty(View?.Definition))
+                            {
+                                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 @(DefinitionCopied ? "btn-success text-white" : "")"
+                                        @onclick="CopyDefinition" title="Copy to clipboard">
+                                    <i class="bi @(DefinitionCopied ? "bi-check2" : "bi-clipboard")"></i> @(DefinitionCopied ? "Copied" : "Copy")
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center"
+                                        @onclick="ToggleExpandDefinition" 
+                                        title="@(IsDefinitionExpanded ? "Restore down (Esc)" : "Expand to full screen")">
+                                    <i class="bi @(IsDefinitionExpanded ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                                </button>
+                            }
+                        </div>
                     </div>
-                    <div class="card-body p-0 position-relative">
+                    <div class="card-body p-0 position-relative" style="@(IsDefinitionExpanded ? "height: calc(100vh - 49px);" : "")">
                         @if (IsDefinitionLoading)
                         {
                             <div class="d-flex justify-content-center align-items-center" style="padding: 4rem 1rem;">
@@ -413,7 +440,7 @@
                         }
                         else
                         {
-                            <div style="height: 500px; min-height: 300px; resize: vertical; overflow: hidden;">
+                            <div style="@(IsDefinitionExpanded ? "height: 100%;" : "height: 500px; min-height: 300px; resize: vertical;") overflow: hidden;">
                                 <StandaloneCodeEditor @ref="_definitionEditor" Id="view-definition-editor" CssClass="w-100 h-100" ConstructionOptions="DefinitionEditorOptions" />
                             </div>
                         }
@@ -426,7 +453,7 @@
 
 @if (ShowLimitAlert)
 {
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 2000;">
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 2000;">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
@@ -445,6 +472,27 @@
     </div>
 }
 
+@if (ShowPopoutLimitAlert)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
+                    <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Popout Limit Reached</h5>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowPopoutLimitAlert = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">You have reached the maximum limit of <strong>@(Config.GetValue<int>("MaxSchemaPopouts", 5))</strong> open popout windows.</p>
+                    <p class="text-muted small mt-2 mb-0">Please close some existing popout windows before opening new ones.</p>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--app-border);">
+                    <button type="button" class="btn btn-primary px-4" @onclick="() => ShowPopoutLimitAlert = false">Got it</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter]
     public string FullName { get; set; } = string.Empty;
@@ -453,10 +501,12 @@
     public string? ReturnUrl { get; set; }
 
     private bool ShowLimitAlert = false;
+    private bool ShowPopoutLimitAlert = false;
     private bool IsLoading = true;
     private ViewInfo? View;
     private bool IsDefinitionLoading = false;
     private bool DefinitionCopied = false;
+    private bool IsDefinitionExpanded = false;
     private StandaloneCodeEditor? _definitionEditor;
     private string ActiveTab = "Columns";
 
@@ -563,6 +613,16 @@
 
         ColumnSearchTerm = string.Empty;
         
+        if (_schemaTabCache.TryGetValue(decoded, out var savedTab))
+            ActiveTab = savedTab;
+        else
+            ActiveTab = "Columns";
+
+        if (_schemaLastClickedCache.TryGetValue(decoded, out _glowTarget))
+            _hasScrolledToGlow = false;
+        else
+            _glowTarget = null;
+
         IsLoading = false;
     }
 
@@ -572,11 +632,31 @@
         {
             try { await JS.InvokeVoidAsync("scrollToMainTop"); } catch { }
         }
+
+        if (!IsLoading && !_hasScrolledToGlow && !string.IsNullOrEmpty(_glowTarget))
+        {
+            _hasScrolledToGlow = true;
+            var targetId = $"item-{_glowTarget.Replace("[", "").Replace("]", "")}";
+            try { 
+                await JS.InvokeVoidAsync("eval", $@"
+                    setTimeout(function() {{
+                        var el = document.getElementById('{targetId}');
+                        if (el) {{
+                            el.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                        }}
+                    }}, 150);
+                ");
+            } catch { }
+        }
     }
 
     private async Task SetActiveTab(string tab)
     {
         ActiveTab = tab;
+        if (tab != "Definition")
+        {
+            IsDefinitionExpanded = false;
+        }
         if (tab == "Definition" && View != null && !View.IsDefinitionLoaded && !IsDefinitionLoading)
         {
             IsDefinitionLoading = true;
@@ -586,6 +666,25 @@
         if (tab == "Definition" && _definitionEditor != null && View?.Definition != null)
         {
             await _definitionEditor.SetValue(View.Definition);
+        }
+    }
+
+    private async Task ToggleExpandDefinition()
+    {
+        IsDefinitionExpanded = !IsDefinitionExpanded;
+        StateHasChanged();
+        await Task.Delay(50);
+        if (_definitionEditor != null)
+        {
+            await _definitionEditor.Layout();
+        }
+    }
+
+    private async Task HandleDefinitionKeyDown(KeyboardEventArgs e)
+    {
+        if (IsDefinitionExpanded && e.Key == "Escape")
+        {
+            await ToggleExpandDefinition();
         }
     }
 
@@ -639,7 +738,14 @@
         QueryStateService.ActiveTabId = newTab.Id;
         await QueryStateService.SaveTabsAsync();
         
-        Navigation.NavigateTo("/runner");
+        if (IsPopout)
+        {
+            WindowManager.NavigateMainWindow("/runner");
+        }
+        else
+        {
+            Navigation.NavigateTo("/runner");
+        }
     }
 
     [CascadingParameter(Name = "IsPopout")] 
@@ -647,23 +753,53 @@
 
     [CascadingParameter(Name = "IsPopoutRoot")] public bool IsPopoutRoot { get; set; }
 
+    private static readonly Dictionary<string, string> _schemaTabCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, string> _schemaLastClickedCache = new(StringComparer.OrdinalIgnoreCase);
+    private string? _glowTarget;
+    private bool _hasScrolledToGlow = false;
+    private IDisposable? _locationChangingRegistration;
+
+    protected override void OnInitialized()
+    {
+        _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    private ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        IsDefinitionExpanded = false;
+        if (!string.IsNullOrEmpty(FullName))
+        {
+            var decoded = Uri.UnescapeDataString(FullName);
+            _schemaTabCache[decoded] = ActiveTab;
+            
+            try 
+            {
+                var targetUri = Navigation.ToAbsoluteUri(context.TargetLocation);
+                var targetSegment = targetUri.Segments.LastOrDefault()?.TrimEnd('/');
+                if (!string.IsNullOrEmpty(targetSegment) && targetSegment != "explorer" && targetSegment != "runner" && targetSegment != "history")
+                {
+                    _schemaLastClickedCache[decoded] = Uri.UnescapeDataString(targetSegment);
+                }
+            } 
+            catch { }
+        }
+        return ValueTask.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _locationChangingRegistration?.Dispose();
+    }
+
     private void PopOutSchema()
     {
-        var maxSchemaPopouts = Config.GetValue<int>("MaxSchemaPopouts", 5);
-        var popouts = Microsoft.Maui.Controls.Application.Current?.Windows.OfType<Microsoft.Maui.Controls.Window>().Where(w => w.Page is SchemaPopoutPage).Count() ?? 0;
-        if (popouts >= maxSchemaPopouts)
-        {
-            JS.InvokeVoidAsync("alert", $"Maximum schema popouts ({maxSchemaPopouts}) reached.");
-            return;
-        }
-
         var startPath = $"/view/{Uri.EscapeDataString(FullName)}";
         var windowTitle = $"{View.Schema}.{View.Name} (View)";
-        var popoutWindow = new Microsoft.Maui.Controls.Window(new SchemaPopoutPage(startPath, windowTitle, ConnectionService))
+        bool opened = WindowManager.OpenSchemaPopout(startPath, windowTitle);
+        if (!opened)
         {
-            Title = windowTitle
-        };
-        Microsoft.Maui.Controls.Application.Current?.OpenWindow(popoutWindow);
+            ShowPopoutLimitAlert = true;
+        }
     }
 
     private async Task NavigateBack()

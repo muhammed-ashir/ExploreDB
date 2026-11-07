@@ -1,0 +1,1581 @@
+@page "/tools/sql-profiler"
+@using ExploreDB.Services
+@using ExploreDB.Services.Profiler
+@using ExploreDB.Services.Profiler.Engine
+@using ExploreDB.Services.Profiler.Models
+@using BlazorMonaco.Editor
+@using BlazorMonaco
+@using System.IO
+@inject ProfilerService Profiler
+@inject ConnectionService ConnectionService
+@inject SchemaService SchemaService
+@inject QueryStateService QueryStateService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ThemeService ThemeService
+@inject ToolRegistryService ToolService
+@inject WindowManagerService WindowManager
+@implements IDisposable
+
+<div class="container-fluid d-flex flex-column pb-2 overflow-hidden profiler-container" style="@(IsPopout ? "height: calc(100vh - 45px); max-height: calc(100vh - 45px);" : "")">
+    <!-- TOP BAR -->
+    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2 pt-2">
+        <div>
+            <h3 class="fw-bold mb-0" style="color: var(--app-text);">SQL Profiler</h3>
+            <span class="text-muted small">Database: <strong style="color: var(--app-text);">@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)</strong></span>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if (!Profiler.IsStreaming)
+            {
+                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
+                        @onclick="StartTraceAsync"
+                        disabled="@(!CanStartLiveTrace)">
+                    <i class="bi bi-play-fill fs-6"></i>
+                    <span>Start Trace</span>
+                </button>
+            }
+            else
+            {
+                if (Profiler.IsPaused)
+                {
+                    <button class="btn btn-sm btn-warning d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="ResumeTrace">
+                        <i class="bi bi-play-fill fs-6"></i>
+                        <span>Resume</span>
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-outline-warning d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="PauseTrace">
+                        <i class="bi bi-pause-fill fs-6"></i>
+                        <span>Pause</span>
+                    </button>
+                }
+
+                <button class="btn btn-sm btn-danger d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="StopTraceAsync">
+                    <i class="bi bi-stop-fill fs-6"></i>
+                    <span>Stop Trace</span>
+                </button>
+            }
+
+            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                    @onclick="ClearEvents"
+                    title="Clear current event buffer and query aggregates">
+                <i class="bi bi-trash3"></i>
+                <span>Clear</span>
+            </button>
+
+            <!-- Settings Button -->
+            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                    @onclick="() => _showSettingsModal = true"
+                    title="Configure Trace Session & Filters">
+                <i class="bi bi-gear"></i>
+            </button>
+
+            @if (!IsPopout)
+            {
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="ToggleFullScreen"
+                        title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")">
+                    <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                </button>
+
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="PopoutWindow"
+                        title="Open SQL Profiler in dedicated window">
+                    <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+
+                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Tools Hub</span>
+                </a>
+            }
+        </div>
+    </div>
+
+    <!-- STATUS / ERROR CALLOUT -->
+    @if (!string.IsNullOrEmpty(_statusMessage))
+    {
+        <div class="alert alert-info alert-dismissible fade show py-2 px-3 small d-flex align-items-center gap-2 mb-2 shadow-sm" role="alert">
+            <i class="bi bi-info-circle-fill fs-6 text-info"></i>
+            <span>@_statusMessage</span>
+            <button type="button" class="btn-close py-2" @onclick="() => _statusMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show py-2 px-3 small d-flex align-items-center gap-2 mb-2 shadow-sm" role="alert">
+            <i class="bi bi-exclamation-triangle-fill fs-6 text-danger"></i>
+            <div class="flex-grow-1">
+                <strong>Trace Error:</strong> @_errorMessage
+            </div>
+            <button type="button" class="btn-close py-2" @onclick="() => _errorMessage = null"></button>
+        </div>
+    }
+
+    @if (!SchemaService.IsDatabaseConnected)
+    {
+        <NoDatabaseBanner Height="calc(100vh - 150px)" />
+    }
+    else
+    {
+        <!-- METRICS STRIP -->
+    <div class="row g-2 mb-2">
+        <div class="col-6 col-md-3 col-xl-2">
+            <div class="metric-card p-2 rounded border shadow-sm">
+                <div class="d-flex align-items-center justify-content-between text-muted small mb-1">
+                    <span class="text-truncate">Total Events</span>
+                    <i class="bi bi-info-circle text-muted flex-shrink-0 ms-1"
+                       data-bs-tooltip="true"
+                       data-bs-placement="top"
+                       data-bs-title="Total Extended Events captured from SQL Server during this session, and the count currently visible under active filters."
+                       style="cursor: help; font-size: 0.75rem;"></i>
+                </div>
+                <div class="d-flex align-items-baseline gap-1">
+                    <span class="fs-5 fw-bold text-app">@_metrics.TotalEventsCaptured.ToString("N0")</span>
+                    <span class="small text-muted">(@_events.Count in view)</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 col-xl-2">
+            <div class="metric-card p-2 rounded border shadow-sm">
+                <div class="d-flex align-items-center justify-content-between text-muted small mb-1">
+                    <span class="text-truncate">Throughput</span>
+                    <i class="bi bi-info-circle text-muted flex-shrink-0 ms-1"
+                       data-bs-tooltip="true"
+                       data-bs-placement="top"
+                       data-bs-title="Real-time event throughput (events captured per second) across the active trace session."
+                       style="cursor: help; font-size: 0.75rem;"></i>
+                </div>
+                <div class="d-flex align-items-baseline gap-1">
+                    <span class="fs-5 fw-bold text-app">@_metrics.Qps.ToString("F1")</span>
+                    <span class="small text-muted">evt/s</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 col-xl-2">
+            <div class="metric-card p-2 rounded border shadow-sm">
+                <div class="d-flex align-items-center justify-content-between text-muted small mb-1">
+                    <span class="text-truncate">Avg Duration</span>
+                    <i class="bi bi-info-circle text-muted flex-shrink-0 ms-1"
+                       data-bs-tooltip="true"
+                       data-bs-placement="top"
+                       data-bs-title="Average execution duration in milliseconds of completed queries and stored procedures."
+                       style="cursor: help; font-size: 0.75rem;"></i>
+                </div>
+                <div class="d-flex align-items-baseline gap-1">
+                    <span class="fs-5 fw-bold @GetDurationColorClass(_metrics.AvgDurationMs)">@_metrics.AvgDurationMs.ToString("F1")</span>
+                    <span class="small text-muted">ms</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 col-xl-2">
+            <div class="metric-card p-2 rounded border shadow-sm">
+                <div class="d-flex align-items-center justify-content-between text-muted small mb-1">
+                    <span class="text-truncate">Logical Reads</span>
+                    <i class="bi bi-info-circle text-muted flex-shrink-0 ms-1"
+                       data-bs-tooltip="true"
+                       data-bs-placement="top"
+                       data-bs-title="Logical 8 KB buffer cache page reads per second. Spikes indicate memory-intensive scans or missing indexes."
+                       style="cursor: help; font-size: 0.75rem;"></i>
+                </div>
+                <div class="d-flex align-items-baseline gap-1">
+                    <span class="fs-5 fw-bold text-app">@_metrics.LogicalReadsPerSecond.ToString("N0")</span>
+                    <span class="small text-muted">/s</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 col-xl-2">
+            <div class="metric-card p-2 rounded border shadow-sm">
+                <div class="d-flex align-items-center justify-content-between text-muted small mb-1">
+                    <span class="text-truncate">Errors / Deadlocks</span>
+                    <i class="bi bi-info-circle text-muted flex-shrink-0 ms-1"
+                       data-bs-tooltip="true"
+                       data-bs-placement="top"
+                       data-bs-title="Count of SQL execution errors (severity &gt;= 11) and lock deadlock graph events detected in this session."
+                       style="cursor: help; font-size: 0.75rem;"></i>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge @(_metrics.TotalErrors > 0 ? "bg-danger" : "bg-secondary opacity-75")">@_metrics.TotalErrors Err</span>
+                    <span class="badge @(_metrics.TotalDeadlocks > 0 ? "bg-warning text-dark" : "bg-secondary opacity-75")">@_metrics.TotalDeadlocks Deadlock</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 col-xl-2">
+            <div class="metric-card p-2 rounded border shadow-sm">
+                <div class="d-flex align-items-center justify-content-between text-muted small mb-1">
+                    <span class="text-truncate">Ring Buffer</span>
+                    <i class="bi bi-info-circle text-muted flex-shrink-0 ms-1"
+                       data-bs-tooltip="true"
+                       data-bs-placement="top"
+                       data-bs-title="ExploreDB circular memory buffer usage. When capacity is reached, oldest events are recycled (FIFO) to keep RAM bounded."
+                       style="cursor: help; font-size: 0.75rem;"></i>
+                </div>
+                <div class="d-flex align-items-baseline justify-content-between">
+                    <span class="fs-5 fw-bold text-app">@((Profiler.TotalBufferedEvents * 100.0 / Math.Max(1, Profiler.BufferCapacity)).ToString("F0"))%</span>
+                    <span class="small text-muted">@Profiler.TotalBufferedEvents.ToString("N0") / @Profiler.BufferCapacity.ToString("N0")</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PROFILER WORKSPACE (GRID + INSPECTOR + FILTER CONTROLS) -->
+    <div id="profiler-results-container"
+         class="@(_isFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3 d-flex flex-column gap-2 overflow-hidden" : "d-flex flex-column flex-grow-1 overflow-hidden")"
+         style="@(_isFullScreen ? "background-color: var(--app-bg); z-index: 9999;" : "")">
+
+        <!-- FILTER BAR -->
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 filter-bar p-2 rounded border flex-shrink-0 @(_isFullScreen ? "" : "mb-2")">
+        <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 550px;">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text"
+                       class="form-control border-start-0"
+                       placeholder="Filter by SQL, SPID, app, host..."
+                       @bind="_filterText"
+                       @bind:event="oninput"
+                       @bind:after="ApplyFilter" />
+                @if (!string.IsNullOrEmpty(_filterText))
+                {
+                    <button class="btn btn-outline-secondary" @onclick="() => { _filterText = string.Empty; ApplyFilter(); }">
+                        <i class="bi bi-x"></i>
+                    </button>
+                }
+            </div>
+
+            <!-- Filter Dropdown Button -->
+            <div class="position-relative">
+                <button class="btn btn-sm @(_activePreset != PresetType.All ? "btn-primary" : "btn-outline-secondary") d-inline-flex align-items-center gap-1 shadow-sm text-nowrap"
+                        type="button"
+                        @onclick="() => _isFilterDropdownOpen = !_isFilterDropdownOpen"
+                        title="Filter by event type and performance criteria">
+                    <i class="bi bi-funnel"></i>
+                    <span>Filter: @GetActivePresetLabel()</span>
+                    <i class="bi bi-chevron-down ms-1" style="font-size: 0.75rem;"></i>
+                </button>
+
+                @if (_isFilterDropdownOpen)
+                {
+                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => _isFilterDropdownOpen = false"></div>
+                    <div class="dropdown-menu dropdown-menu-start show shadow-lg p-1 mt-1"
+                         style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border);">
+                        <div class="dropdown-header text-uppercase small px-3 py-1" style="font-size: 0.68rem; letter-spacing: 0.5px; color: var(--app-text-muted);">
+                            Event Filter Presets
+                        </div>
+                        <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between rounded @(_activePreset == PresetType.All ? "active" : "")"
+                                type="button"
+                                @onclick="() => SelectPresetFromDropdown(PresetType.All)">
+                            <span>All Events</span>
+                            @if (_activePreset == PresetType.All) { <i class="bi bi-check2"></i> }
+                        </button>
+                        <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between rounded @(_activePreset == PresetType.Slow ? "active" : "")"
+                                type="button"
+                                @onclick="() => SelectPresetFromDropdown(PresetType.Slow)">
+                            <span>Slow (&gt;200ms)</span>
+                            @if (_activePreset == PresetType.Slow) { <i class="bi bi-check2"></i> }
+                        </button>
+                        <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between rounded @(_activePreset == PresetType.ErrorsDeadlocks ? "active" : "")"
+                                type="button"
+                                @onclick="() => SelectPresetFromDropdown(PresetType.ErrorsDeadlocks)">
+                            <span>Errors &amp; Deadlocks</span>
+                            @if (_activePreset == PresetType.ErrorsDeadlocks) { <i class="bi bi-check2"></i> }
+                        </button>
+                        <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between rounded @(_activePreset == PresetType.HighReads ? "active" : "")"
+                                type="button"
+                                @onclick="() => SelectPresetFromDropdown(PresetType.HighReads)">
+                            <span>High I/O (&gt;5k Reads)</span>
+                            @if (_activePreset == PresetType.HighReads) { <i class="bi bi-check2"></i> }
+                        </button>
+                        <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between rounded @(_activePreset == PresetType.RpcOnly ? "active" : "")"
+                                type="button"
+                                @onclick="() => SelectPresetFromDropdown(PresetType.RpcOnly)">
+                            <span>Stored Procedures</span>
+                            @if (_activePreset == PresetType.RpcOnly) { <i class="bi bi-check2"></i> }
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- View Controls (Sort & Auto-Scroll) -->
+        <div class="d-flex align-items-center gap-1 flex-wrap">
+            @if (_isFullScreen)
+            {
+                <div class="d-flex align-items-center gap-1 me-2 pe-2 border-end" style="border-color: var(--app-border) !important;">
+                    @if (!Profiler.IsStreaming)
+                    {
+                        <button class="btn btn-xs btn-success d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                                @onclick="StartTraceAsync"
+                                disabled="@(!CanStartLiveTrace)">
+                            <i class="bi bi-play-fill"></i>
+                            <span>Start</span>
+                        </button>
+                    }
+                    else
+                    {
+                        if (Profiler.IsPaused)
+                        {
+                            <button class="btn btn-xs btn-warning d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                                    @onclick="ResumeTrace">
+                                <i class="bi bi-play-fill"></i>
+                                <span>Resume</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-xs btn-outline-warning d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                                    @onclick="PauseTrace">
+                                <i class="bi bi-pause-fill"></i>
+                                <span>Pause</span>
+                            </button>
+                        }
+
+                        <button class="btn btn-xs btn-danger d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                                @onclick="StopTraceAsync">
+                            <i class="bi bi-stop-fill"></i>
+                            <span>Stop</span>
+                        </button>
+                    }
+                    <button class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm py-1 px-2"
+                            @onclick="ClearEvents"
+                            title="Clear current event buffer and query aggregates">
+                        <i class="bi bi-trash3"></i>
+                        <span>Clear</span>
+                    </button>
+                </div>
+            }
+
+            <!-- Sort direction -->
+            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 btn-chip"
+                    @onclick="ToggleSortOrder"
+                    title="@(_newestFirst ? "Showing newest events first" : "Showing oldest events first (chronological)")">
+                <i class="bi @(_newestFirst ? "bi-sort-down" : "bi-sort-up")"></i>
+                <span>@(_newestFirst ? "Newest First" : "Oldest First")</span>
+            </button>
+
+            <!-- Auto-scroll toggle -->
+            <button class="btn btn-sm @(_autoScroll ? "btn-outline-primary active" : "btn-outline-secondary") btn-chip"
+                    @onclick="ToggleAutoScroll"
+                    title="Auto-scroll to latest event">
+                <i class="bi bi-arrow-down-circle"></i>
+                <span>Auto-Scroll</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN VIEW AREA: TABS (Live Stream vs Query Aggregates) -->
+    <div class="d-flex flex-column flex-grow-1 overflow-hidden border rounded shadow-sm profiler-main-box">
+        <!-- TAB BAR -->
+        <div class="d-flex align-items-center justify-content-between ps-0 pe-3 border-bottom profiler-tab-header">
+            <ul class="nav nav-tabs border-bottom-0 ms-0 ps-0">
+                <li class="nav-item">
+                    <button class="nav-link @(_activeMainTab == MainTab.Stream ? "active" : "") d-flex align-items-center gap-2 py-2 px-3"
+                            @onclick="() => SwitchMainTab(MainTab.Stream)">
+                        <span class="d-inline-flex align-items-center gap-1">
+                            <span>Live Event Stream</span>
+                            <i class="bi bi-info-circle opacity-75"
+                               data-bs-tooltip="true"
+                               data-bs-placement="top"
+                               data-bs-title="Real-time chronological stream of captured SQL Server Extended Events (queries, stored procedures, errors, and deadlocks)."
+                               style="font-size: 0.75rem; cursor: help;"></i>
+                        </span>
+                        <span class="badge bg-secondary rounded-pill">@_filteredEvents.Count.ToString("N0")</span>
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link @(_activeMainTab == MainTab.Aggregates ? "active" : "") d-flex align-items-center gap-2 py-2 px-3"
+                            @onclick="() => SwitchMainTab(MainTab.Aggregates)">
+                        <span class="d-inline-flex align-items-center gap-1">
+                            <span>Query Aggregates</span>
+                            <i class="bi bi-info-circle opacity-75"
+                               data-bs-tooltip="true"
+                               data-bs-placement="top"
+                               data-bs-title="Aggregated performance metrics grouped by query signature. Identifies high-impact queries by total duration, CPU, and logical reads."
+                               style="font-size: 0.75rem; cursor: help;"></i>
+                        </span>
+                        <span class="badge bg-secondary rounded-pill">@_aggregatesList.Count.ToString("N0")</span>
+                    </button>
+                </li>
+            </ul>
+
+            <div class="d-flex align-items-center gap-2">
+                @if (_selectedEvent != null)
+                {
+                    <span class="small text-muted d-none d-md-inline">Selected Event ID: <strong>#@_selectedEvent.Id</strong></span>
+                }
+                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                        title="@(_isGridCollapsed ? "Expand stream grid" : "Collapse stream grid for larger inspector view")"
+                        @onclick="ToggleGridCollapse">
+                    <i class="bi @(_isGridCollapsed ? "bi-chevron-down" : "bi-chevron-up")"></i>
+                    <span>@(_isGridCollapsed ? "Expand" : "Collapse")</span>
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                        title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")"
+                        @onclick="ToggleFullScreen">
+                    <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- UPPER GRID AREA -->
+        @if (!_isGridCollapsed)
+        {
+            <div class="overflow-auto" id="profiler-grid-container" style="@GetGridStyle()">
+            @if (_activeMainTab == MainTab.Stream)
+            {
+                <!-- LIVE EVENT STREAM TABLE -->
+                @if (_filteredEvents.Count == 0)
+                {
+                    <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted p-5">
+                        <i class="bi bi-activity fs-1 opacity-50 mb-2"></i>
+                        <h5>No Events Captured</h5>
+                        <p class="small mb-3">
+                            @(Profiler.IsStreaming ? "Waiting for matching SQL Server events..." : "Click 'Start Trace' to start capturing SQL queries.")
+                        </p>
+                        @if (!Profiler.IsStreaming)
+                        {
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-success px-3" @onclick="StartTraceAsync" disabled="@(!CanStartLiveTrace)">Start Trace</button>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <table class="table table-sm table-hover mb-0 profiler-table text-nowrap">
+                        <thead class="sticky-top">
+                            <tr>
+                                <th style="width: 100px;">Time</th>
+                                <th style="width: 130px;">Event</th>
+                                <th>Statement / Preview</th>
+                                <th style="width: 90px;" class="text-end">Duration</th>
+                                <th style="width: 80px;" class="text-end">CPU</th>
+                                <th style="width: 90px;" class="text-end">Reads</th>
+                                <th style="width: 70px;" class="text-end">Writes</th>
+                                <th style="width: 60px;">SPID</th>
+                                <th style="width: 130px;">App Name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <Virtualize Items="@_filteredEvents" Context="evt" OverscanCount="20">
+                                <tr class="@(_selectedEvent?.Id == evt.Id ? "table-active selected-row" : "") @(evt.EventType == TraceEventType.ErrorReported ? "table-danger-subtle" : evt.EventType == TraceEventType.Deadlock ? "table-warning-subtle" : "")"
+                                    style="cursor: pointer;"
+                                    @onclick="() => SelectEvent(evt)">
+                                    <td class="font-monospace text-muted small">@evt.Timestamp.ToString("HH:mm:ss.fff")</td>
+                                    <td>
+                                        <span class="badge @GetEventBadgeClass(evt.EventType) fw-normal">
+                                            @GetEventShortName(evt.EventType)
+                                        </span>
+                                    </td>
+                                    <td class="text-truncate font-monospace small" style="max-width: 550px;" title="@evt.SummaryText">
+                                        @evt.SummaryText
+                                    </td>
+                                    <td class="text-end font-monospace small @GetDurationColorClass(evt.DurationMilliseconds)">
+                                        @(evt.DurationMilliseconds.ToString("F1")) ms
+                                    </td>
+                                    <td class="text-end font-monospace small text-muted">
+                                        @(evt.CpuMilliseconds.ToString("F1")) ms
+                                    </td>
+                                    <td class="text-end font-monospace small">
+                                        @(evt.LogicalReads.ToString("N0"))
+                                    </td>
+                                    <td class="text-end font-monospace small text-muted">
+                                        @(evt.Writes.ToString("N0"))
+                                    </td>
+                                    <td class="font-monospace small text-muted">@evt.Spid</td>
+                                    <td class="text-truncate small text-muted" style="max-width: 130px;" title="@evt.ClientAppName">
+                                        @(evt.ClientAppName ?? "-")
+                                    </td>
+                                </tr>
+                            </Virtualize>
+                        </tbody>
+                    </table>
+                }
+            }
+            else
+            {
+                <!-- QUERY AGGREGATES TABLE -->
+                @if (_aggregatesList.Count == 0)
+                {
+                    <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted p-5">
+                        <i class="bi bi-pie-chart fs-1 opacity-50 mb-2"></i>
+                        <h5>No Query Aggregates Yet</h5>
+                        <p class="small">Parameterized query bottlenecks will appear here as queries are captured.</p>
+                    </div>
+                }
+                else
+                {
+                    <table class="table table-sm table-hover mb-0 profiler-table text-nowrap">
+                        <thead class="sticky-top">
+                            <tr>
+                                <th>Normalized Query Pattern</th>
+                                <th style="width: 90px;" class="text-end cursor-pointer" @onclick="() => SortAggregates(AggregateSortColumn.Count)">
+                                    Count @GetSortIndicator(AggregateSortColumn.Count)
+                                </th>
+                                <th style="width: 100px;" class="text-end cursor-pointer" @onclick="() => SortAggregates(AggregateSortColumn.AvgDuration)">
+                                    Avg Dur @GetSortIndicator(AggregateSortColumn.AvgDuration)
+                                </th>
+                                <th style="width: 100px;" class="text-end cursor-pointer" @onclick="() => SortAggregates(AggregateSortColumn.MaxDuration)">
+                                    Max Dur @GetSortIndicator(AggregateSortColumn.MaxDuration)
+                                </th>
+                                <th style="width: 100px;" class="text-end cursor-pointer" @onclick="() => SortAggregates(AggregateSortColumn.TotalDuration)">
+                                    Total Time @GetSortIndicator(AggregateSortColumn.TotalDuration)
+                                </th>
+                                <th style="width: 110px;" class="text-end cursor-pointer" @onclick="() => SortAggregates(AggregateSortColumn.TotalReads)">
+                                    Total Reads @GetSortIndicator(AggregateSortColumn.TotalReads)
+                                </th>
+                                <th style="width: 80px;" class="text-end">Writes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var agg in _sortedAggregates)
+                            {
+                                <tr class="@(_selectedAggregate?.QueryHash == agg.QueryHash ? "table-active selected-row" : "")"
+                                    style="cursor: pointer;"
+                                    @onclick="() => SelectAggregate(agg)">
+                                    <td class="text-truncate font-monospace small" style="max-width: 600px;" title="@agg.NormalizedText">
+                                        @agg.NormalizedText
+                                    </td>
+                                    <td class="text-end font-monospace fw-bold small">
+                                        @agg.ExecutionCount.ToString("N0")
+                                    </td>
+                                    <td class="text-end font-monospace small @GetDurationColorClass(agg.AvgDurationMs)">
+                                        @(agg.AvgDurationMs.ToString("F1")) ms
+                                    </td>
+                                    <td class="text-end font-monospace small @GetDurationColorClass(agg.MaxDurationMs)">
+                                        @(agg.MaxDurationMs.ToString("F1")) ms
+                                    </td>
+                                    <td class="text-end font-monospace small">
+                                        @((agg.TotalDurationMs / 1000.0).ToString("F2")) s
+                                    </td>
+                                    <td class="text-end font-monospace small">
+                                        @agg.TotalLogicalReads.ToString("N0")
+                                    </td>
+                                    <td class="text-end font-monospace small text-muted">
+                                        @agg.TotalWrites.ToString("N0")
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            }
+        </div>
+        }
+
+        @if (!_isInspectorCollapsed && !_isGridCollapsed)
+        {
+            <!-- Splitter Bar (Drag to Resize Grid vs Inspector) -->
+            <div id="profiler-inspector-splitter"
+                 class="sql-compare-splitter"
+                 title="Drag up or down to resize inspector">
+                <div class="sql-compare-splitter-handle"></div>
+            </div>
+        }
+
+        <!-- INSPECTOR HEADER BAR -->
+        <div class="profiler-inspector-header d-flex align-items-center justify-content-between px-3 py-1 border-top border-bottom user-select-none"
+             style="height: 32px; background: var(--app-surface-secondary);">
+            <div class="d-flex align-items-center gap-2">
+                <span class="small fw-semibold text-app">
+                    @(_selectedEvent != null ? $"Inspector: Event #{_selectedEvent.Id} ({_selectedEvent.Name})" : "Event Inspector")
+                </span>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-xs btn-outline-secondary py-0 px-2"
+                        style="font-size: 0.75rem;"
+                        @onclick="ToggleInspectorCollapse">
+                    <i class="bi @(_isInspectorCollapsed ? "bi-chevron-up" : "bi-chevron-down")"></i>
+                    <span>@(_isInspectorCollapsed ? "Expand" : "Collapse")</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- BOTTOM INSPECTOR PANE -->
+        @if (!_isInspectorCollapsed)
+        {
+            <div id="profiler-inspector-panel" class="profiler-inspector d-flex flex-column overflow-hidden" style="@GetInspectorStyle()">
+                <!-- Inspector Tabs & Actions -->
+                <div class="d-flex align-items-center justify-content-between ps-0 pe-3 border-bottom profiler-tab-header">
+                    <ul class="nav nav-tabs border-bottom-0 ms-0 ps-0">
+                        <li class="nav-item">
+                            <button class="nav-link py-2 px-3 small @(_activeInspectorTab == InspectorTab.Sql ? "active" : "")"
+                                    @onclick="() => _activeInspectorTab = InspectorTab.Sql">
+                                SQL Text
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link py-2 px-3 small @(_activeInspectorTab == InspectorTab.Details ? "active" : "")"
+                                    @onclick="() => _activeInspectorTab = InspectorTab.Details">
+                                Execution Details
+                            </button>
+                        </li>
+                        @if (_selectedEvent?.EventType == TraceEventType.Deadlock || _selectedEvent?.EventType == TraceEventType.ErrorReported)
+                        {
+                            <li class="nav-item">
+                                <button class="nav-link py-2 px-3 small @(_activeInspectorTab == InspectorTab.ErrorOrDeadlock ? "active" : "") @(_selectedEvent.EventType == TraceEventType.ErrorReported ? "text-danger" : "text-warning")"
+                                        @onclick="() => _activeInspectorTab = InspectorTab.ErrorOrDeadlock">
+                                    @(_selectedEvent.EventType == TraceEventType.ErrorReported ? "Error Details" : "Deadlock Graph")
+                                </button>
+                            </li>
+                        }
+                    </ul>
+
+                    <!-- SQL Actions -->
+                    <div class="d-flex align-items-center gap-1 my-1">
+                        @if (_activeInspectorTab == InspectorTab.Sql)
+                        {
+                            <button class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1 py-1"
+                                    @onclick="CopySelectedSqlAsync"
+                                    disabled="@(string.IsNullOrEmpty(CurrentInspectorSql))">
+                                <i class="bi @(_isSqlCopied ? "bi-check-lg text-success" : "bi-clipboard")"></i>
+                                <span>@(_isSqlCopied ? "Copied" : "Copy SQL")</span>
+                            </button>
+
+                            <button class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1 py-1"
+                                    @onclick="FormatSelectedSqlAsync"
+                                    disabled="@(string.IsNullOrEmpty(CurrentInspectorSql))">
+                                <i class="bi bi-magic"></i>
+                                <span>Format</span>
+                            </button>
+
+                            <button class="btn btn-xs btn-outline-primary d-inline-flex align-items-center gap-1 py-1"
+                                    @onclick="OpenInQueryEditor"
+                                    disabled="@(string.IsNullOrEmpty(CurrentInspectorSql))">
+                                <i class="bi bi-play-circle"></i>
+                                <span>Open in Query Editor</span>
+                            </button>
+                        }
+                        else if (_activeInspectorTab == InspectorTab.ErrorOrDeadlock && _selectedEvent?.DeadlockXml != null)
+                        {
+                            <button class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1 py-1"
+                                    @onclick="CopyDeadlockXmlAsync">
+                                <i class="bi @(_isXmlCopied ? "bi-check-lg text-success" : "bi-clipboard")"></i>
+                                <span>@(_isXmlCopied ? "XML Copied" : "Copy Deadlock XML")</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <!-- Inspector Content -->
+                <div class="flex-grow-1 overflow-auto position-relative p-2" style="min-height: 0;">
+                    @if (_activeInspectorTab == InspectorTab.Sql)
+                    {
+                        @if (string.IsNullOrWhiteSpace(CurrentInspectorSql))
+                        {
+                            <div class="h-100 d-flex align-items-center justify-content-center text-muted small">
+                                Select an event or query aggregate above to inspect its SQL statement.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="w-100 h-100 position-relative">
+                                <StandaloneCodeEditor @ref="_monacoEditor"
+                                                      Id="profiler-monaco-inspector"
+                                                      CssClass="w-100 h-100 border rounded"
+                                                      ConstructionOptions="EditorConstructionOptions"
+                                                      OnDidInit="EditorOnDidInit" />
+                            </div>
+                        }
+                    }
+                    else if (_activeInspectorTab == InspectorTab.Details)
+                    {
+                        @if (_selectedEvent == null)
+                        {
+                            <div class="h-100 d-flex align-items-center justify-content-center text-muted small">
+                                Select an event above to view full execution metadata.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="row g-2 p-2">
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">Event Name</div>
+                                        <div class="fw-bold font-monospace small">@_selectedEvent.Name</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">SPID / Session ID</div>
+                                        <div class="fw-bold font-monospace small">@(_selectedEvent.Spid?.ToString() ?? "-")</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">Database</div>
+                                        <div class="fw-bold small">@(_selectedEvent.DatabaseName ?? "-")</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">Duration</div>
+                                        <div class="fw-bold font-monospace small @GetDurationColorClass(_selectedEvent.DurationMilliseconds)">
+                                            @(_selectedEvent.DurationMilliseconds.ToString("F2")) ms (@_selectedEvent.DurationMicroseconds.ToString("N0") µs)
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">CPU Time</div>
+                                        <div class="fw-bold font-monospace small">
+                                            @(_selectedEvent.CpuMilliseconds.ToString("F2")) ms (@_selectedEvent.CpuMicroseconds.ToString("N0") µs)
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">Logical Reads</div>
+                                        <div class="fw-bold font-monospace small">@_selectedEvent.LogicalReads.ToString("N0")</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">Physical Reads</div>
+                                        <div class="fw-bold font-monospace small">@_selectedEvent.PhysicalReads.ToString("N0")</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">Writes</div>
+                                        <div class="fw-bold font-monospace small">@_selectedEvent.Writes.ToString("N0")</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">Row Count</div>
+                                        <div class="fw-bold font-monospace small">@_selectedEvent.RowCount.ToString("N0")</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">Client Host</div>
+                                        <div class="fw-bold small">@(_selectedEvent.ClientHostName ?? "-")</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">Client Application</div>
+                                        <div class="fw-bold small">@(_selectedEvent.ClientAppName ?? "-")</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="detail-tile p-2 rounded border">
+                                        <div class="text-muted small">NT Username</div>
+                                        <div class="fw-bold small">@(_selectedEvent.NtUserName ?? "-")</div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else if (_activeInspectorTab == InspectorTab.ErrorOrDeadlock)
+                    {
+                        @if (_selectedEvent?.EventType == TraceEventType.ErrorReported)
+                        {
+                            <div class="alert alert-danger mb-0">
+                                <h6 class="alert-heading d-flex align-items-center gap-2">
+                                    <i class="bi bi-x-circle-fill"></i>
+                                    SQL Server Error: Msg @_selectedEvent.ErrorNumber, Level @_selectedEvent.Severity, State @_selectedEvent.State
+                                </h6>
+                                <p class="mb-0 font-monospace">@_selectedEvent.ErrorMessage</p>
+                            </div>
+                        }
+                        else if (_selectedEvent?.EventType == TraceEventType.Deadlock)
+                        {
+                            <div class="d-flex flex-column h-100">
+                                <div class="alert alert-warning py-2 mb-2">
+                                    <strong>Deadlock Graph Detected:</strong> Review the XML report below to identify the victim process and lock resources.
+                                </div>
+                                <pre class="p-3 rounded border font-monospace small flex-grow-1 overflow-auto bg-dark text-light mb-0">@_selectedEvent.DeadlockXml</pre>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+    </div>
+    }
+</div>
+
+<!-- SETTINGS MODAL -->
+@if (_showSettingsModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow border" style="background: var(--app-surface); color: var(--app-text);">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2">
+                        <i class="bi bi-sliders"></i>
+                        <span>Trace Session Configuration</span>
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="() => _showSettingsModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold d-inline-flex align-items-center gap-1">
+                            <span>Session Name</span>
+                            <i class="bi bi-info-circle text-info"
+                               data-bs-tooltip="true"
+                               data-bs-placement="top"
+                               data-bs-title="Auto-generated with your process ID to ensure a unique, conflict-free session on SQL Server."
+                               style="cursor: help; font-size: 0.8rem;"></i>
+                        </label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control form-control-sm font-monospace border-end-0" value="@_sessionConfig.SessionName" readonly style="background-color: var(--app-input-bg); color: var(--app-text-muted);" />
+                            <span class="input-group-text border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted);"
+                                  data-bs-tooltip="true"
+                                  data-bs-placement="top"
+                                  data-bs-title="Managed automatically by ExploreDB to avoid server conflicts">
+                                <i class="bi bi-lock-fill text-muted"></i>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold d-inline-flex align-items-center gap-1">
+                            <span>Minimum Server-Side Duration (ms)</span>
+                            <i class="bi bi-info-circle text-info"
+                               data-bs-tooltip="true"
+                               data-bs-placement="top"
+                               data-bs-title="Queries faster than this threshold will be dropped by SQL Server engine to reduce load."
+                               style="cursor: help; font-size: 0.8rem;"></i>
+                        </label>
+                        <input type="number" class="form-control form-control-sm" @bind="_sessionConfig.Filters.MinDurationMs" placeholder="0 (Capture all queries)" disabled="@Profiler.IsStreaming" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold d-inline-flex align-items-center gap-1">
+                            <span>Ring Buffer Capacity</span>
+                            <i class="bi bi-info-circle text-info"
+                               data-bs-tooltip="true"
+                               data-bs-placement="top"
+                               data-bs-title="Maximum in-memory events retained in ExploreDB. When full, oldest events are automatically recycled (FIFO) to keep RAM usage bounded."
+                               style="cursor: help; font-size: 0.8rem;"></i>
+                        </label>
+                        <select class="form-select form-select-sm" @bind="_bufferCapacityChoice">
+                            <option value="25000">25,000 events (~15 MB RAM)</option>
+                            <option value="50000">50,000 events (~30 MB RAM)</option>
+                            <option value="100000">100,000 events (~60 MB RAM)</option>
+                            <option value="250000">250,000 events (~150 MB RAM)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="excludeSelfCheck" @bind="_sessionConfig.Filters.ExcludeSelf" disabled="@Profiler.IsStreaming" />
+                        <label class="form-check-label small" for="excludeSelfCheck">
+                            <strong>Filter out ExploreDB internal queries</strong> (prevents self-trace loops)
+                        </label>
+                    </div>
+
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="includeBatchCheck" @bind="_sessionConfig.Filters.IncludeSqlBatch" disabled="@Profiler.IsStreaming" />
+                        <label class="form-check-label small" for="includeBatchCheck">Capture SQL Batches (sql_batch_completed)</label>
+                    </div>
+
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="includeRpcCheck" @bind="_sessionConfig.Filters.IncludeRpc" disabled="@Profiler.IsStreaming" />
+                        <label class="form-check-label small" for="includeRpcCheck">Capture Stored Procedures (rpc_completed)</label>
+                    </div>
+
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="includeErrCheck" @bind="_sessionConfig.Filters.IncludeErrors" disabled="@Profiler.IsStreaming" />
+                        <label class="form-check-label small" for="includeErrCheck">Capture Server Errors (error_reported)</label>
+                    </div>
+
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="includeDeadlockCheck" @bind="_sessionConfig.Filters.IncludeDeadlocks" disabled="@Profiler.IsStreaming" />
+                        <label class="form-check-label small" for="includeDeadlockCheck">Capture Deadlocks (xml_deadlock_report)</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-primary" @onclick="SaveSettings">Apply Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    #profiler-grid-container {
+        overflow-anchor: none;
+    }
+    .profiler-container {
+        height: calc(100vh - 90px);
+        max-height: calc(100vh - 90px);
+        background: var(--app-bg);
+    }
+    .metric-card {
+        background: var(--app-surface);
+        border-color: var(--app-border) !important;
+    }
+    .filter-bar {
+        background: var(--app-surface);
+        border-color: var(--app-border) !important;
+    }
+    .btn-chip {
+        font-size: 0.8rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 14px;
+    }
+    .profiler-main-box {
+        background: var(--app-surface);
+        border-color: var(--app-border) !important;
+    }
+    .profiler-tab-header {
+        background: var(--app-surface-secondary);
+        border-color: var(--app-border) !important;
+    }
+    .profiler-table thead th {
+        background: var(--app-table-header-bg);
+        color: var(--app-table-header-text);
+        border-bottom: 2px solid var(--app-border);
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 6px 10px;
+    }
+    .profiler-table tbody td {
+        border-color: var(--app-border);
+        padding: 4px 10px;
+        vertical-align: middle;
+    }
+    .selected-row {
+        background-color: rgba(13, 110, 253, 0.15) !important;
+        outline: 1px solid rgba(13, 110, 253, 0.4);
+    }
+    .profiler-splitter {
+        user-select: none;
+    }
+    .splitter-handle {
+        width: 32px;
+        height: 4px;
+        background: var(--app-border);
+        border-radius: 2px;
+    }
+    .detail-tile {
+        background: var(--app-surface-secondary);
+        border-color: var(--app-border) !important;
+    }
+</style>
+
+@code {
+    private enum MainTab { Stream, Aggregates }
+    private enum InspectorTab { Sql, Details, ErrorOrDeadlock }
+    private enum PresetType { All, Slow, ErrorsDeadlocks, HighReads, RpcOnly }
+    private enum AggregateSortColumn { Count, AvgDuration, MaxDuration, TotalDuration, TotalReads }
+
+    [CascadingParameter(Name = "IsPopout")]
+    public bool IsPopout { get; set; } = false;
+
+    private bool _isFullScreen = false;
+
+    private MainTab _activeMainTab = MainTab.Stream;
+    private InspectorTab _activeInspectorTab = InspectorTab.Sql;
+    private PresetType _activePreset = PresetType.All;
+    private AggregateSortColumn _aggregateSortCol = AggregateSortColumn.Count;
+    private bool _aggregateSortAsc = false;
+    private bool _isFilterDropdownOpen = false;
+
+    private string _filterText = string.Empty;
+    private bool _newestFirst = true;
+    private bool _autoScroll = true;
+    private bool _needsAutoScroll = false;
+
+    private List<TraceEvent> _events = new();
+    private List<TraceEvent> _filteredEvents = new();
+    private List<QueryAggregate> _aggregatesList = new();
+    private List<QueryAggregate> _sortedAggregates = new();
+
+    private TraceEvent? _selectedEvent;
+    private QueryAggregate? _selectedAggregate;
+
+    private MetricsSnapshot _metrics = new();
+    private string? _statusMessage;
+    private string? _errorMessage;
+
+    private bool _showSettingsModal = false;
+    private TraceSessionConfig _sessionConfig = new();
+    private int _bufferCapacityChoice = 100000;
+
+    private bool _isInspectorCollapsed = false;
+    private bool _isGridCollapsed = false;
+    private int _gridHeight = 220;
+
+    private StandaloneCodeEditor? _monacoEditor;
+    private bool _isMonacoReady = false;
+    private bool _isSqlCopied = false;
+    private bool _isXmlCopied = false;
+
+    private bool CanStartLiveTrace => SchemaService.IsDatabaseConnected && !Profiler.IsStreaming;
+
+    private string CurrentInspectorSql => _selectedEvent?.TextData ?? _selectedAggregate?.NormalizedText ?? string.Empty;
+
+    protected override void OnInitialized()
+    {
+        // Sync with currently running Profiler session (if user navigated away and returned)
+        _events = Profiler.GetAllBufferedEvents().ToList();
+        _metrics = Profiler.CurrentMetrics;
+        _aggregatesList = Profiler.GetAggregates().ToList();
+        _bufferCapacityChoice = Profiler.BufferCapacity;
+
+        ApplyFilter();
+        SortAggregatesList();
+
+        // Bind Profiler Coordinator Events & Connection Events
+        Profiler.EventsBatchAvailable += HandleNewEventsBatch;
+        Profiler.MetricsUpdated += HandleMetricsUpdated;
+        Profiler.StatusChanged += HandleStatusChanged;
+        Profiler.ErrorOccurred += HandleErrorOccurred;
+        ConnectionService.OnDatabaseSwitched += HandleDatabaseSwitched;
+        ConnectionService.OnConnectionChanged += HandleConnectionChanged;
+    }
+
+    private DotNetObjectReference<ProfilerTool>? _dotNetRef;
+
+    [JSInvokable]
+    public void SetGridHeight(int height)
+    {
+        _gridHeight = height;
+    }
+
+    private string GetGridStyle()
+    {
+        if (_isInspectorCollapsed)
+        {
+            return "flex: 1 1 auto; height: 100%; min-height: 80px;";
+        }
+        return $"height: {_gridHeight}px; flex: 0 0 {_gridHeight}px; min-height: 80px; max-height: calc(100% - 110px);";
+    }
+
+    private string GetInspectorStyle()
+    {
+        if (_isGridCollapsed)
+        {
+            return "flex: 1 1 auto; height: 100%; min-height: 80px; background: var(--app-surface);";
+        }
+        return "flex: 1 1 0; min-height: 80px; background: var(--app-surface);";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_isInspectorCollapsed && !_isGridCollapsed)
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("initProfilerSplitter", _dotNetRef);
+            }
+            catch
+            {
+                // Ignore JS interop errors if unmounted
+            }
+        }
+
+        if (_needsAutoScroll && _autoScroll && _activeMainTab == MainTab.Stream)
+        {
+            _needsAutoScroll = false;
+            try
+            {
+                await JS.InvokeVoidAsync("profilerScrollToLatest", "profiler-grid-container", _newestFirst);
+            }
+            catch
+            {
+                // Ignore JS interop errors if disposed or unmounted
+            }
+        }
+    }
+
+    private void HandleConnectionChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleNewEventsBatch(IReadOnlyList<TraceEvent> batch)
+    {
+        InvokeAsync(() =>
+        {
+            if (batch.Count == 0)
+            {
+                // Buffer cleared
+                _events.Clear();
+                _filteredEvents.Clear();
+                _selectedEvent = null;
+                _selectedAggregate = null;
+                _aggregatesList.Clear();
+                _sortedAggregates.Clear();
+            }
+            else
+            {
+                if (_newestFirst)
+                {
+                    _events.InsertRange(0, batch.Reverse());
+                }
+                else
+                {
+                    _events.AddRange(batch);
+                }
+
+                // Keep UI collection bounded
+                if (_events.Count > Profiler.BufferCapacity)
+                {
+                    int excess = _events.Count - Profiler.BufferCapacity;
+                    if (_newestFirst)
+                    {
+                        _events.RemoveRange(_events.Count - excess, excess);
+                    }
+                    else
+                    {
+                        _events.RemoveRange(0, excess);
+                    }
+                }
+
+                // Update aggregates
+                _aggregatesList = Profiler.GetAggregates().ToList();
+                SortAggregatesList();
+
+                ApplyFilter();
+
+                if (_autoScroll && _activeMainTab == MainTab.Stream)
+                {
+                    _needsAutoScroll = true;
+                }
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private void HandleMetricsUpdated(MetricsSnapshot snapshot)
+    {
+        InvokeAsync(() =>
+        {
+            _metrics = snapshot;
+            StateHasChanged();
+        });
+    }
+
+    private void HandleStatusChanged(string status)
+    {
+        InvokeAsync(() =>
+        {
+            _statusMessage = status;
+            StateHasChanged();
+        });
+    }
+
+    private void HandleErrorOccurred(string error)
+    {
+        InvokeAsync(() =>
+        {
+            _errorMessage = error;
+            StateHasChanged();
+        });
+    }
+
+    private async Task StartTraceAsync()
+    {
+        if (!CanStartLiveTrace) return;
+
+        _errorMessage = null;
+        _sessionConfig.ConnectionString = ConnectionService.ConnectionString;
+        _sessionConfig.Filters.DatabaseName = SchemaService.ActiveDatabase;
+        _sessionConfig.MaxEventBufferSize = _bufferCapacityChoice;
+
+        var (success, error) = await Profiler.StartAsync(_sessionConfig);
+        if (!success)
+        {
+            _errorMessage = error;
+        }
+    }
+
+    private void PauseTrace() => Profiler.Pause();
+
+    private void ResumeTrace() => Profiler.Resume();
+
+    private async Task StopTraceAsync() => await Profiler.StopAsync();
+
+    private void ClearEvents()
+    {
+        Profiler.Clear();
+        _events.Clear();
+        _filteredEvents.Clear();
+        _selectedEvent = null;
+        _selectedAggregate = null;
+        _aggregatesList.Clear();
+        _sortedAggregates.Clear();
+    }
+
+    private void SetPreset(PresetType preset)
+    {
+        _activePreset = preset;
+        ApplyFilter();
+    }
+
+    private string GetActivePresetLabel() => _activePreset switch
+    {
+        PresetType.Slow => "Slow (>200ms)",
+        PresetType.ErrorsDeadlocks => "Errors & Deadlocks",
+        PresetType.HighReads => "High I/O (>5k Reads)",
+        PresetType.RpcOnly => "Stored Procs",
+        _ => "All"
+    };
+
+    private void SelectPresetFromDropdown(PresetType preset)
+    {
+        _isFilterDropdownOpen = false;
+        SetPreset(preset);
+    }
+
+    private async Task ToggleSortOrder()
+    {
+        _newestFirst = !_newestFirst;
+        _events.Reverse();
+        ApplyFilter();
+        if (_autoScroll && _activeMainTab == MainTab.Stream)
+        {
+            _needsAutoScroll = true;
+            try
+            {
+                await JS.InvokeVoidAsync("profilerScrollToLatest", "profiler-grid-container", _newestFirst);
+            }
+            catch { }
+        }
+    }
+
+    private async Task ToggleAutoScroll()
+    {
+        _autoScroll = !_autoScroll;
+        if (_autoScroll && _activeMainTab == MainTab.Stream)
+        {
+            _needsAutoScroll = true;
+            try
+            {
+                await JS.InvokeVoidAsync("profilerScrollToLatest", "profiler-grid-container", _newestFirst);
+            }
+            catch { }
+        }
+    }
+
+    private async Task SwitchMainTab(MainTab tab)
+    {
+        _activeMainTab = tab;
+        if (tab == MainTab.Stream && _autoScroll)
+        {
+            _needsAutoScroll = true;
+            try
+            {
+                await JS.InvokeVoidAsync("profilerScrollToLatest", "profiler-grid-container", _newestFirst);
+            }
+            catch { }
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        IEnumerable<TraceEvent> query = _events;
+
+        // Apply preset
+        query = _activePreset switch
+        {
+            PresetType.Slow => query.Where(e => e.DurationMilliseconds >= 200),
+            PresetType.ErrorsDeadlocks => query.Where(e => e.EventType == TraceEventType.ErrorReported || e.EventType == TraceEventType.Deadlock),
+            PresetType.HighReads => query.Where(e => e.LogicalReads >= 5000),
+            PresetType.RpcOnly => query.Where(e => e.EventType == TraceEventType.RpcCompleted),
+            _ => query
+        };
+
+        // Apply text filter
+        if (!string.IsNullOrWhiteSpace(_filterText))
+        {
+            string search = _filterText.Trim();
+            query = query.Where(e =>
+                (e.TextData != null && e.TextData.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+                (e.SummaryText.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+                (e.DatabaseName != null && e.DatabaseName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+                (e.ClientAppName != null && e.ClientAppName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+                (e.ClientHostName != null && e.ClientHostName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+                (e.Spid.HasValue && e.Spid.Value.ToString().Contains(search)));
+        }
+
+        _filteredEvents = query.ToList();
+    }
+
+    private async Task SelectEvent(TraceEvent evt)
+    {
+        _selectedEvent = evt;
+        _selectedAggregate = null;
+
+        if (evt.EventType == TraceEventType.Deadlock || evt.EventType == TraceEventType.ErrorReported)
+        {
+            _activeInspectorTab = InspectorTab.ErrorOrDeadlock;
+        }
+        else
+        {
+            _activeInspectorTab = InspectorTab.Sql;
+        }
+
+        await UpdateMonacoTextAsync(CurrentInspectorSql);
+    }
+
+    private async Task SelectAggregate(QueryAggregate agg)
+    {
+        _selectedAggregate = agg;
+        _selectedEvent = null;
+        _activeInspectorTab = InspectorTab.Sql;
+
+        await UpdateMonacoTextAsync(agg.NormalizedText);
+    }
+
+    private void SortAggregates(AggregateSortColumn column)
+    {
+        if (_aggregateSortCol == column)
+        {
+            _aggregateSortAsc = !_aggregateSortAsc;
+        }
+        else
+        {
+            _aggregateSortCol = column;
+            _aggregateSortAsc = false;
+        }
+
+        SortAggregatesList();
+    }
+
+    private void SortAggregatesList()
+    {
+        _sortedAggregates = _aggregateSortCol switch
+        {
+            AggregateSortColumn.Count => _aggregateSortAsc ? _aggregatesList.OrderBy(a => a.ExecutionCount).ToList() : _aggregatesList.OrderByDescending(a => a.ExecutionCount).ToList(),
+            AggregateSortColumn.AvgDuration => _aggregateSortAsc ? _aggregatesList.OrderBy(a => a.AvgDurationMs).ToList() : _aggregatesList.OrderByDescending(a => a.AvgDurationMs).ToList(),
+            AggregateSortColumn.MaxDuration => _aggregateSortAsc ? _aggregatesList.OrderBy(a => a.MaxDurationMs).ToList() : _aggregatesList.OrderByDescending(a => a.MaxDurationMs).ToList(),
+            AggregateSortColumn.TotalDuration => _aggregateSortAsc ? _aggregatesList.OrderBy(a => a.TotalDurationMs).ToList() : _aggregatesList.OrderByDescending(a => a.TotalDurationMs).ToList(),
+            AggregateSortColumn.TotalReads => _aggregateSortAsc ? _aggregatesList.OrderBy(a => a.TotalLogicalReads).ToList() : _aggregatesList.OrderByDescending(a => a.TotalLogicalReads).ToList(),
+            _ => _aggregatesList.OrderByDescending(a => a.ExecutionCount).ToList()
+        };
+    }
+
+    private string GetSortIndicator(AggregateSortColumn col)
+    {
+        if (_aggregateSortCol != col) return "";
+        return _aggregateSortAsc ? "▲" : "▼";
+    }
+
+    private async Task ToggleGridCollapse()
+    {
+        _isGridCollapsed = !_isGridCollapsed;
+        if (_isGridCollapsed && _isInspectorCollapsed)
+        {
+            _isInspectorCollapsed = false;
+        }
+        await Task.Yield();
+        try
+        {
+            await JS.InvokeVoidAsync("triggerWindowResize");
+        }
+        catch { }
+    }
+
+    private async Task ToggleInspectorCollapse()
+    {
+        _isInspectorCollapsed = !_isInspectorCollapsed;
+        if (_isInspectorCollapsed && _isGridCollapsed)
+        {
+            _isGridCollapsed = false;
+        }
+        await Task.Yield();
+        try
+        {
+            await JS.InvokeVoidAsync("triggerWindowResize");
+        }
+        catch { }
+    }
+
+    private void SaveSettings()
+    {
+        Profiler.SetBufferCapacity(_bufferCapacityChoice);
+        _showSettingsModal = false;
+    }
+
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            AutomaticLayout = true,
+            Language = "sql",
+            Value = CurrentInspectorSql,
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            FontSize = 13,
+            WordWrap = "on",
+            ReadOnly = true,
+            Scrollbar = new EditorScrollbarOptions { UseShadows = false }
+        };
+    }
+
+    private async Task EditorOnDidInit()
+    {
+        _isMonacoReady = true;
+        if (!string.IsNullOrEmpty(CurrentInspectorSql) && _monacoEditor != null)
+        {
+            await _monacoEditor.SetValue(CurrentInspectorSql);
+        }
+    }
+
+    private async Task UpdateMonacoTextAsync(string sql)
+    {
+        if (_monacoEditor != null && _isMonacoReady)
+        {
+            try
+            {
+                await _monacoEditor.SetValue(sql);
+            }
+            catch { }
+        }
+    }
+
+    private async Task CopySelectedSqlAsync()
+    {
+        string sql = CurrentInspectorSql;
+        if (string.IsNullOrEmpty(sql)) return;
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", sql);
+        _isSqlCopied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _isSqlCopied = false;
+        StateHasChanged();
+    }
+
+    private async Task CopyDeadlockXmlAsync()
+    {
+        string? xml = _selectedEvent?.DeadlockXml;
+        if (string.IsNullOrEmpty(xml)) return;
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", xml);
+        _isXmlCopied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _isXmlCopied = false;
+        StateHasChanged();
+    }
+
+    private async Task FormatSelectedSqlAsync()
+    {
+        if (_monacoEditor != null && _isMonacoReady)
+        {
+            try
+            {
+                await _monacoEditor.Trigger("source", "editor.action.formatDocument", null);
+            }
+            catch { }
+        }
+    }
+
+    private async Task OpenInQueryEditor()
+    {
+        string sql = CurrentInspectorSql;
+        if (string.IsNullOrEmpty(sql)) return;
+
+        string tabName = _selectedEvent != null
+            ? $"Trace_Event_{_selectedEvent.Id}_{DateTime.Now:HHmmss}.sql"
+            : $"TraceQuery_{DateTime.Now:HHmmss}.sql";
+
+        var newTab = new QueryTab
+        {
+            Id = Guid.NewGuid(),
+            Name = tabName,
+            Content = sql,
+            OriginalContent = sql,
+            ConnectionString = ConnectionService.ConnectionString
+        };
+
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+        QueryStateService.NotifyTabUpdated(newTab.Id);
+        await QueryStateService.SaveTabsAsync();
+
+        if (IsPopout)
+        {
+            WindowManager.NavigateMainWindow("/runner");
+        }
+        else
+        {
+            Nav.NavigateTo("/runner");
+        }
+    }
+
+    private void PopoutWindow()
+    {
+        WindowManager.OpenToolPopout("sql-profiler", "/tools/sql-profiler", "SQL Profiler - ExploreDB", closeOnConnectionChange: false);
+    }
+
+    private void ToggleFullScreen()
+    {
+        _isFullScreen = !_isFullScreen;
+    }
+
+    private static string GetEventBadgeClass(TraceEventType type) => type switch
+    {
+        TraceEventType.SqlBatchCompleted => "bg-primary-subtle text-primary border border-primary-subtle",
+        TraceEventType.RpcCompleted => "bg-info-subtle text-info border border-info-subtle",
+        TraceEventType.ErrorReported => "bg-danger text-light",
+        TraceEventType.Deadlock => "bg-warning text-dark fw-bold",
+        TraceEventType.Attention => "bg-secondary text-light",
+        _ => "bg-secondary-subtle text-secondary"
+    };
+
+    private static string GetEventShortName(TraceEventType type) => type switch
+    {
+        TraceEventType.SqlBatchCompleted => "sql_batch",
+        TraceEventType.RpcCompleted => "rpc_call",
+        TraceEventType.ErrorReported => "error",
+        TraceEventType.Deadlock => "deadlock",
+        TraceEventType.Attention => "attention",
+        _ => "event"
+    };
+
+    private static string GetDurationColorClass(double ms) => ms switch
+    {
+        >= 500 => "text-danger fw-bold",
+        >= 150 => "text-warning",
+        _ => "text-success"
+    };
+
+    private void HandleDatabaseSwitched()
+    {
+        InvokeAsync(() =>
+        {
+            if (Profiler.IsStreaming)
+            {
+                _statusMessage = $"Sidebar database switched to '{SchemaService.ActiveDatabase}'. (Active trace is profiling '{_sessionConfig.Filters.DatabaseName}').";
+            }
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        _dotNetRef?.Dispose();
+        ConnectionService.OnConnectionChanged -= HandleConnectionChanged;
+        ConnectionService.OnDatabaseSwitched -= HandleDatabaseSwitched;
+        Profiler.EventsBatchAvailable -= HandleNewEventsBatch;
+        Profiler.MetricsUpdated -= HandleMetricsUpdated;
+        Profiler.StatusChanged -= HandleStatusChanged;
+        Profiler.ErrorOccurred -= HandleErrorOccurred;
+
+        if (IsPopout && Profiler.IsStreaming)
+        {
+            _ = Profiler.StopAsync();
+        }
+    }
+}

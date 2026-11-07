@@ -1,3 +1,74 @@
+// Bulletproof BlazorMonaco Interop Guard:
+// Prevents unhandled JS exceptions from crashing the WPF/Blazor dispatcher when
+// setEventListener or getEditorHolder is called during tab switching, route changes,
+// or before Monaco has fully registered.
+(function installBlazorMonacoSafetyGuard() {
+    function applyPatch() {
+        if (!window.blazorMonaco || !window.blazorMonaco.editor) {
+            setTimeout(applyPatch, 10);
+            return;
+        }
+
+        const editorObj = window.blazorMonaco.editor;
+        if (editorObj._safetyGuardInstalled) return;
+        editorObj._safetyGuardInstalled = true;
+
+        const origSetEventListener = editorObj.setEventListener;
+        if (typeof origSetEventListener === 'function') {
+            editorObj.setEventListener = function (id, eventName) {
+                try {
+                    const holder = (window.blazorMonaco.editors || []).find(h => h.id === id);
+                    if (!holder || !holder.editor) {
+                        console.warn(`[BlazorMonaco Guard] Skipping setEventListener('${eventName}') for unready editor '${id}' (registered count: ${(window.blazorMonaco.editors || []).length})`);
+                        return;
+                    }
+                    return origSetEventListener.apply(this, arguments);
+                } catch (err) {
+                    console.warn(`[BlazorMonaco Guard] Suppressed error in setEventListener('${eventName}') for '${id}':`, err);
+                }
+            };
+        }
+
+        const origGetEditorHolder = editorObj.getEditorHolder;
+        if (typeof origGetEditorHolder === 'function') {
+            editorObj.getEditorHolder = function (id, silent = false) {
+                const holder = (window.blazorMonaco.editors || []).find(h => h.id === id);
+                if (!holder) {
+                    if (silent) return null;
+                    console.warn(`[BlazorMonaco Guard] getEditorHolder requested missing editor '${id}'. Suppressing throw to prevent Dispatcher crash.`);
+                    return { id: id, editor: null, dotnetRef: null };
+                }
+                return holder;
+            };
+        }
+    }
+
+    applyPatch();
+})();
+
+window.isMonacoLoaded = function () {
+    return typeof monaco !== 'undefined' && typeof monaco.editor !== 'undefined';
+};
+
+window.waitForMonaco = function (timeoutMs) {
+    return new Promise(function (resolve) {
+        if (typeof monaco !== 'undefined' && typeof monaco.editor !== 'undefined') {
+            resolve(true);
+            return;
+        }
+        var start = Date.now();
+        var timer = setInterval(function () {
+            if (typeof monaco !== 'undefined' && typeof monaco.editor !== 'undefined') {
+                clearInterval(timer);
+                resolve(true);
+            } else if (Date.now() - start > (timeoutMs || 5000)) {
+                clearInterval(timer);
+                resolve(false);
+            }
+        }, 30);
+    });
+};
+
 window.formatSql = (code) => {
     if (!window.sqlFormatter) {
         throw new Error("SQL Formatter is not loaded correctly.");
@@ -78,6 +149,11 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
     window.sqlDotNetHelper = dotNetHelper || window.sqlDotNetHelper;
     window.updateSqlAutocompleteData(tables, views, columns, sps, functions);
     if (window.sqlAutocompleteRegistered) return;
+
+    if (typeof monaco === 'undefined' || typeof monaco.languages === 'undefined') {
+        return;
+    }
+
     window.sqlAutocompleteRegistered = true;
 
     var systemProcedures = [
@@ -198,6 +274,197 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         }
     }
 
+    function getActiveStatementContext(model, position) {
+        var lineCount = model.getLineCount();
+        var curLine = position.lineNumber;
+        var curCol = position.column;
+
+        var stmtStarters = /^\s*(?:--.*)?(?:;?\s*WITH|SELECT|INSERT|UPDATE|DELETE|MERGE|EXEC|EXECUTE|CREATE|ALTER|DROP|TRUNCATE|DECLARE|SET|USE)\b/i;
+        var setOps = /^\s*(?:UNION(?:\s+ALL)?|EXCEPT|INTERSECT)\b/i;
+        var batchSep = /^\s*GO\s*(?:--.*)?$/i;
+
+        function stripCommentsAndStrings(text) {
+            return (text || "").replace(/'(?:''|[^'])*'/g, "''").replace(/--.*$/, "");
+        }
+
+        function countParens(str) {
+            var clean = stripCommentsAndStrings(str);
+            var open = 0, close = 0;
+            for (var i = 0; i < clean.length; i++) {
+                if (clean[i] === '(') open++;
+                else if (clean[i] === ')') close++;
+            }
+            return { open: open, close: close };
+        }
+
+        var curLineText = model.getLineContent(curLine) || "";
+
+        // If current line is completely blank and next non-empty line starts a new statement,
+        // this blank line is an independent statement insertion point
+        if (!curLineText.trim()) {
+            var nextNonEmptyIdx = -1;
+            for (var n = curLine + 1; n <= lineCount; n++) {
+                var nText = stripCommentsAndStrings(model.getLineContent(n)).trim();
+                if (nText) { nextNonEmptyIdx = n; break; }
+            }
+            if (nextNonEmptyIdx > 0 && stmtStarters.test(stripCommentsAndStrings(model.getLineContent(nextNonEmptyIdx)))) {
+                return {
+                    startLineNumber: curLine,
+                    startColumn: 1,
+                    endLineNumber: curLine,
+                    endColumn: 1,
+                    statementText: "",
+                    textUntilCursor: ""
+                };
+            }
+        }
+
+        // 1. Scan upwards to find start
+        var startLine = 1;
+        var startCol = 1;
+
+        var curLineBeforeCursor = curLineText.substring(0, curCol - 1);
+        var cleanBefore = stripCommentsAndStrings(curLineBeforeCursor);
+        var lastSemiOnCurLine = cleanBefore.lastIndexOf(';');
+        if (lastSemiOnCurLine >= 0) {
+            startLine = curLine;
+            startCol = lastSemiOnCurLine + 2;
+        } else {
+            var parenDepth = 0;
+            for (var i = curLine; i >= 1; i--) {
+                var line = model.getLineContent(i) || "";
+                var clean = stripCommentsAndStrings(line);
+                var p = countParens(line);
+                
+                parenDepth += (p.close - p.open);
+
+                if (i < curLine) {
+                    if (batchSep.test(clean)) {
+                        startLine = i + 1;
+                        startCol = 1;
+                        break;
+                    }
+
+                    var semiIdx = clean.lastIndexOf(';');
+                    if (semiIdx >= 0) {
+                        var afterSemi = clean.substring(semiIdx + 1).trim();
+                        if (afterSemi.length > 0) {
+                            startLine = i;
+                            startCol = semiIdx + 2;
+                        } else {
+                            startLine = i + 1;
+                            startCol = 1;
+                        }
+                        break;
+                    }
+
+                    var nextLineClean = stripCommentsAndStrings(model.getLineContent(i + 1) || "");
+                    if (parenDepth <= 0 && stmtStarters.test(nextLineClean)) {
+                        if (!clean.trim() || stmtStarters.test(clean)) {
+                            startLine = i + 1;
+                            startCol = 1;
+                            break;
+                        }
+                    }
+
+                    if (parenDepth <= 0 && stmtStarters.test(clean)) {
+                        var prevClean = i > 1 ? stripCommentsAndStrings(model.getLineContent(i - 1)).trim() : "";
+                        if (i === 1 || !prevClean || prevClean.endsWith(';') || batchSep.test(prevClean) || stmtStarters.test(prevClean)) {
+                            startLine = i;
+                            startCol = 1;
+                            break;
+                        }
+                    }
+                } else if (i === curLine) {
+                    if (parenDepth <= 0 && stmtStarters.test(clean)) {
+                        var prevClean = i > 1 ? stripCommentsAndStrings(model.getLineContent(i - 1)).trim() : "";
+                        if (i === 1 || !prevClean || prevClean.endsWith(';') || batchSep.test(prevClean) || stmtStarters.test(prevClean)) {
+                            startLine = i;
+                            startCol = 1;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Scan downwards to find end
+        var endLine = lineCount;
+        var lastLineText = model.getLineContent(lineCount) || "";
+        var endCol = lastLineText.length + 1;
+
+        var curLineAfterCursor = curLineText.substring(curCol - 1);
+        var cleanAfter = stripCommentsAndStrings(curLineAfterCursor);
+        var firstSemiAfter = cleanAfter.indexOf(';');
+        if (firstSemiAfter >= 0) {
+            endLine = curLine;
+            endCol = curCol + firstSemiAfter + 1;
+        } else {
+            var downParenDepth = 0;
+            for (var j = curLine; j <= lineCount; j++) {
+                var line = model.getLineContent(j) || "";
+                var clean = stripCommentsAndStrings(line);
+                var p = countParens(line);
+                downParenDepth += (p.open - p.close);
+
+                if (j > curLine) {
+                    if (batchSep.test(clean)) {
+                        endLine = j - 1;
+                        endCol = (model.getLineContent(j - 1) || "").length + 1;
+                        break;
+                    }
+
+                    if (downParenDepth <= 0 && stmtStarters.test(clean)) {
+                        var prevLineClean = stripCommentsAndStrings(model.getLineContent(j - 1) || "").trim();
+                        if (!setOps.test(clean) && !setOps.test(prevLineClean)) {
+                            var actualEndLine = j - 1;
+                            while (actualEndLine > curLine && !stripCommentsAndStrings(model.getLineContent(actualEndLine) || "").trim()) {
+                                actualEndLine--;
+                            }
+                            endLine = actualEndLine;
+                            endCol = (model.getLineContent(actualEndLine) || "").length + 1;
+                            break;
+                        }
+                    }
+
+                    var semiIdx = clean.indexOf(';');
+                    if (semiIdx >= 0) {
+                        endLine = j;
+                        endCol = semiIdx + 2;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (startLine < 1) startLine = 1;
+        if (startCol < 1) startCol = 1;
+        if (endLine > lineCount) endLine = lineCount;
+        if (endLine < startLine) endLine = startLine;
+
+        var statementText = model.getValueInRange({
+            startLineNumber: startLine,
+            startColumn: startCol,
+            endLineNumber: endLine,
+            endColumn: endCol
+        });
+
+        var textUntilCursor = model.getValueInRange({
+            startLineNumber: startLine,
+            startColumn: startCol,
+            endLineNumber: curLine,
+            endColumn: curCol
+        });
+
+        return {
+            startLineNumber: startLine,
+            startColumn: startCol,
+            endLineNumber: endLine,
+            endColumn: endCol,
+            statementText: statementText,
+            textUntilCursor: textUntilCursor
+        };
+    }
     monaco.languages.registerCompletionItemProvider('sql', {
         triggerCharacters: ['.', "'", '['],
         provideCompletionItems: function(model, position) {
@@ -323,13 +590,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 });
             }
 
-            // Intelligent context detection
-            var fullTextUntilPosition = model.getValueInRange({
-                startLineNumber: 1,
-                startColumn: 1,
-                endLineNumber: position.lineNumber,
-                endColumn: position.column
-            });
+            // Intelligent context detection scoped to active statement
+            var stmtContext = getActiveStatementContext(model, position);
+            var fullTextUntilPosition = stmtContext.textUntilCursor;
 
             // PRIORITY CHECK: Suppress suggestions when typing a table alias on the same line.
             // Must run BEFORE the keyword scan because an alias like 'or', 'and', 'on', 'as' etc.
@@ -352,6 +615,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             var suggestSps = false;
             var suggestKeywords = true;
 
+            var lastTableKeyword = null;
             if (matches && matches.length > 0) {
                 var tableKeywords = new Set(['from', 'join', 'into', 'update', 'table']);
                 var columnKeywords = new Set(['select', 'where', 'on', 'by', 'having', 'set', 'and', 'or']);
@@ -366,6 +630,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         if (i >= matches.length - 2) suggestKeywords = false;
                         break;
                     } else if (tableKeywords.has(token)) {
+                        lastTableKeyword = token;
                         // Find the text from this table keyword up to the cursor
                         var lastTableKwIndex = fullTextUntilPosition.toLowerCase().lastIndexOf(token);
                         var textAfterTableKw = lastTableKwIndex >= 0 ? fullTextUntilPosition.substring(lastTableKwIndex) : fullTextUntilPosition;
@@ -416,36 +681,76 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
             }
 
+            var autoAlias = (window.userSettings ? window.userSettings.autoGenerateAliases !== false : true) &&
+                            (lastTableKeyword === 'from' || lastTableKeyword === 'join' || lastTableKeyword === 'update');
+            var useAs = window.userSettings ? window.userSettings.useAsKeyword !== false : true;
+
+            var existingAliases = new Set();
+            if (autoAlias) {
+                var allDocText = stmtContext.statementText;
+                var aliasRegex = /(?:from|join|update)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?([a-zA-Z0-9_]+)/gi;
+                var aMatch;
+                var reservedKw = new Set(['WHERE', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'OUTER', 'ON', 'GROUP', 'ORDER', 'HAVING', 'SET', 'AS']);
+                while ((aMatch = aliasRegex.exec(allDocText)) !== null) {
+                    if (aMatch[1]) {
+                        var u = aMatch[1].trim().toUpperCase();
+                        if (!reservedKw.has(u)) {
+                            existingAliases.add(u);
+                        }
+                    }
+                }
+            }
+
             if (suggestTables && window.sqlTables) {
                 window.sqlTables.forEach(t => {
+                    var insText = t.fullName;
+                    var detailText = 'Table';
+                    var alias = null;
+
+                    if (autoAlias) {
+                        alias = window.generateTableAlias(t.name || t.fullName, existingAliases);
+                        insText = t.fullName + (useAs ? " AS " : " ") + alias;
+                        detailText = 'Table (' + (useAs ? 'AS ' : '') + alias + ')';
+                    }
+
                     suggestions.push({
                         label: t.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
-                        insertText: t.fullName,
-                        filterText: t.name + " " + t.fullName,
+                        insertText: insText,
+                        filterText: t.name + " " + t.fullName + (autoAlias && alias ? (" " + alias) : ""),
                         sortText: String(t.name.length).padStart(4, '0') + '_' + t.name + '_' + t.fullName,
                         range: replaceRange,
-                        detail: 'Table'
+                        detail: detailText
                     });
                 });
             }
 
             if (suggestTables && window.sqlViews) {
                 window.sqlViews.forEach(v => {
+                    var insText = v.fullName;
+                    var detailText = 'View';
+                    var alias = null;
+
+                    if (autoAlias) {
+                        alias = window.generateTableAlias(v.name || v.fullName, existingAliases);
+                        insText = v.fullName + (useAs ? " AS " : " ") + alias;
+                        detailText = 'View (' + (useAs ? 'AS ' : '') + alias + ')';
+                    }
+
                     suggestions.push({
                         label: v.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
-                        insertText: v.fullName,
-                        filterText: v.name + " " + v.fullName,
+                        insertText: insText,
+                        filterText: v.name + " " + v.fullName + (autoAlias && alias ? (" " + alias) : ""),
                         sortText: String(v.name.length).padStart(4, '0') + '_' + v.name + '_' + v.fullName,
                         range: replaceRange,
-                        detail: 'View'
+                        detail: detailText
                     });
                 });
             }
 
             if (suggestColumns || suggestTables) {
-                var allText = model.getValue();
+                var allText = stmtContext.statementText;
 
                 function normalizeTableName(tbl) {
                     if (!tbl) return "";
@@ -474,10 +779,10 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 var tableRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)([a-zA-Z0-9_]+)/gi;
                 var match;
                 while ((match = tableRegex.exec(allText)) !== null) {
-                    var tableName = match[1];
-                    var possibleAlias = match[2].toLowerCase().trim();
-                    if (!sqlKw.has(possibleAlias)) {
-                        aliasMap[possibleAlias] = tableName.toLowerCase().trim();
+                    var tableName = match[1].trim();
+                    var rawAlias = match[2].trim();
+                    if (!sqlKw.has(rawAlias.toLowerCase())) {
+                        aliasMap[rawAlias] = tableName;
                     }
                 }
                 
@@ -493,8 +798,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 var rawPrefix = "";
                 if (dotMatch) {
                     rawPrefix = dotMatch[1];
-                    var prefix = rawPrefix.toLowerCase();
-                    explicitTableName = aliasMap[prefix] || prefix;
+                    var prefixLower = rawPrefix.toLowerCase();
+                    var foundAliasKey = Object.keys(aliasMap).find(k => k.toLowerCase() === prefixLower);
+                    explicitTableName = foundAliasKey ? aliasMap[foundAliasKey] : rawPrefix;
                 }
 
                 if (suggestColumns) {
@@ -580,7 +886,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         var onMatch = joinSegment.match(/^join\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)?([a-zA-Z0-9_]+)?\s+on\s*([a-zA-Z0-9_\.]*)$/i);
                         if (onMatch) {
                             var joinTableRaw = onMatch[1];
-                            var joinAlias = (onMatch[2] || "").toLowerCase();
+                            var joinAlias = (onMatch[2] || "").trim();
                             var typedRel = onMatch[3] || "";
 
                             var matchedTable = window.sqlTables.find(x => tablesMatch(x.fullName, joinTableRaw));
@@ -842,7 +1148,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     acceptSuggestionOnEnter: 'on',
                     wordBasedSuggestions: 'off',
                     suggest: {
-                        showWords: false
+                        showWords: false,
+                        snippetsPreventQuickSuggestions: false
                     }
                 });
             } catch (e) { }
@@ -886,6 +1193,25 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
                                 window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('OpenSaveSnippetModal');
                             }
+                        }
+                    });
+                } catch (e) { }
+            }
+
+            // Toggle Comment in context menu & keyboard chords
+            if (!editor.getAction('toggle-comment-action')) {
+                try {
+                    editor.addAction({
+                        id: 'toggle-comment-action',
+                        label: 'Toggle Comment (Ctrl+/)',
+                        keybindings: [
+                            monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash,
+                            monaco.KeyMod.chord(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC)
+                        ],
+                        contextMenuGroupId: '1_modification',
+                        contextMenuOrder: 2,
+                        run: function(ed) {
+                            ed.trigger('keyboard', 'editor.action.commentLine', null);
                         }
                     });
                 } catch (e) { }
@@ -995,3 +1321,873 @@ window.configureQueryEditor = function(editorId) {
 
 
 
+
+
+window.createBlobUrlFromStream = async function(contentStreamReference, mimeType) {
+    const arrayBuffer = await contentStreamReference.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: mimeType || 'application/pdf' });
+    return URL.createObjectURL(blob);
+};
+
+window.revokeBlobUrl = function(url) {
+    if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+    }
+};
+
+window.sqlDiffNavigator = null;
+
+function getDiffEditorInstance(editorId) {
+    editorId = editorId || "sql-diff-editor";
+
+    // 1. Check window.blazorMonaco registry
+    if (window.blazorMonaco && typeof window.blazorMonaco.getEditor === 'function') {
+        var ed = window.blazorMonaco.getEditor(editorId, true);
+        if (ed && typeof ed.getLineChanges === 'function') {
+            return ed;
+        }
+        var edNormal = window.blazorMonaco.getEditor(editorId);
+        if (edNormal && typeof edNormal.getLineChanges === 'function') {
+            return edNormal;
+        }
+    }
+
+    // 2. Check window.blazorMonaco.editors array directly
+    if (window.blazorMonaco && Array.isArray(window.blazorMonaco.editors)) {
+        var holder = window.blazorMonaco.editors.find(function (h) {
+            return h.id === editorId;
+        });
+        if (holder && holder.editor && typeof holder.editor.getLineChanges === 'function') {
+            return holder.editor;
+        }
+    }
+
+    return null;
+}
+
+window.initSqlDiffNavigator = function (editorId) {
+    return true;
+};
+
+window.sqlDiffNavigateBlock = function (editorId, direction) {
+    editorId = editorId || "sql-diff-editor";
+    var diffEditor = getDiffEditorInstance(editorId);
+    if (!diffEditor) return false;
+
+    var changes = diffEditor.getLineChanges();
+    if (!changes || changes.length === 0) return false;
+
+    var origEditor = diffEditor.getOriginalEditor();
+    var modEditor = diffEditor.getModifiedEditor();
+    var isOrigFocused = origEditor && typeof origEditor.hasTextFocus === 'function' && origEditor.hasTextFocus();
+    var activeEditor = isOrigFocused ? origEditor : modEditor;
+    if (!activeEditor) return false;
+
+    var currentPos = (typeof activeEditor.getPosition === 'function' && activeEditor.getPosition()) || { lineNumber: 1, column: 1 };
+    var currentLine = currentPos.lineNumber;
+
+    // Helper to get line bounds for a change on the relevant side (DiffMate pattern)
+    function getChangeRange(c) {
+        if (isOrigFocused) {
+            var start = c.originalStartLineNumber > 0 ? c.originalStartLineNumber : (c.originalEndLineNumber > 0 ? c.originalEndLineNumber : 1);
+            var end = c.originalEndLineNumber > 0 ? c.originalEndLineNumber : start;
+            return { start: start, end: end };
+        } else {
+            var start = c.modifiedStartLineNumber > 0 ? c.modifiedStartLineNumber : (c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : 1);
+            var end = c.modifiedEndLineNumber > 0 ? c.modifiedEndLineNumber : start;
+            return { start: start, end: end };
+        }
+    }
+
+    // Check if cursor is currently within any diff chunk
+    var currentDiffIdx = -1;
+    for (var i = 0; i < changes.length; i++) {
+        var range = getChangeRange(changes[i]);
+        if (currentLine >= range.start && currentLine <= range.end) {
+            currentDiffIdx = i;
+            break;
+        }
+    }
+
+    var targetChange = null;
+
+    if (direction === 'next' || direction === 1) {
+        if (currentDiffIdx !== -1) {
+            targetChange = changes[(currentDiffIdx + 1) % changes.length];
+        } else {
+            for (var i = 0; i < changes.length; i++) {
+                var range = getChangeRange(changes[i]);
+                if (range.start > currentLine) {
+                    targetChange = changes[i];
+                    break;
+                }
+            }
+            if (!targetChange) targetChange = changes[0]; // Wrap around
+        }
+    } else {
+        if (currentDiffIdx !== -1) {
+            targetChange = changes[(currentDiffIdx - 1 + changes.length) % changes.length];
+        } else {
+            for (var i = changes.length - 1; i >= 0; i--) {
+                var range = getChangeRange(changes[i]);
+                if (range.end < currentLine) {
+                    targetChange = changes[i];
+                    break;
+                }
+            }
+            if (!targetChange) targetChange = changes[changes.length - 1]; // Wrap around
+        }
+    }
+
+    if (!targetChange) return false;
+
+    // Prefer jumping to modified side's line. If pure deletion on modified, jump to original side.
+    var targetEditor = targetChange.modifiedStartLineNumber > 0 ? modEditor : origEditor;
+    var targetLine = targetChange.modifiedStartLineNumber > 0 ? targetChange.modifiedStartLineNumber : targetChange.originalStartLineNumber;
+
+    if (targetEditor) {
+        var line = targetLine > 0 ? targetLine : 1;
+        targetEditor.revealLineInCenter(line);
+        targetEditor.setPosition({ lineNumber: line, column: 1 });
+        targetEditor.focus();
+        return true;
+    }
+    return false;
+};
+
+window.sqlDiffNext = function (editorId) {
+    return window.sqlDiffNavigateBlock(editorId, 'next');
+};
+
+window.sqlDiffPrev = function (editorId) {
+    return window.sqlDiffNavigateBlock(editorId, 'prev');
+};
+
+window.sqlDiffSetSideBySide = function (editorId, sideBySide) {
+    var diffEditor = getDiffEditorInstance(editorId);
+    if (!diffEditor) return false;
+    diffEditor.updateOptions({ renderSideBySide: sideBySide });
+    return true;
+};
+
+window.initSqlCompareSplitter = function (dotNetRef) {
+    // 1. Top Panel Resizer (between Object List and Diff Viewer)
+    var topSplitter = document.getElementById('sql-compare-splitter');
+    var topPanel = document.getElementById('sql-compare-top-panel');
+    
+    if (topSplitter && topPanel && !topSplitter._hasSplitterHandler) {
+        topSplitter._hasSplitterHandler = true;
+        topSplitter.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            try { topSplitter.setPointerCapture(e.pointerId); } catch (err) {}
+
+            var startY = e.clientY;
+            var startHeight = topPanel.offsetHeight;
+            var minHeight = 120;
+            var lastHeight = startHeight;
+
+            topSplitter.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+
+            function onPointerMove(moveEvent) {
+                var deltaY = moveEvent.clientY - startY;
+                var newHeight = Math.round(Math.max(minHeight, startHeight + deltaY));
+                lastHeight = newHeight;
+                topPanel.style.height = newHeight + 'px';
+                topPanel.style.maxHeight = 'none';
+                window.dispatchEvent(new Event('resize'));
+            }
+
+            function onPointerUp(upEvent) {
+                try { topSplitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+                topSplitter.removeEventListener('pointermove', onPointerMove);
+                topSplitter.removeEventListener('pointerup', onPointerUp);
+                topSplitter.removeEventListener('pointercancel', onPointerUp);
+                topSplitter.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                window.dispatchEvent(new Event('resize'));
+
+                if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                    dotNetRef.invokeMethodAsync('SetTopPanelHeight', lastHeight);
+                }
+            }
+
+            topSplitter.addEventListener('pointermove', onPointerMove);
+            topSplitter.addEventListener('pointerup', onPointerUp);
+            topSplitter.addEventListener('pointercancel', onPointerUp);
+        });
+    }
+
+    // 2. Diff Panel Resizer (at bottom of Diff Viewer)
+    var diffSplitter = document.getElementById('sql-compare-diff-resizer');
+    var diffPanel = document.getElementById('sql-compare-diff-panel');
+
+    if (diffSplitter && diffPanel && !diffSplitter._hasSplitterHandler) {
+        diffSplitter._hasSplitterHandler = true;
+        diffSplitter.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            try { diffSplitter.setPointerCapture(e.pointerId); } catch (err) {}
+
+            var startY = e.clientY;
+            var startHeight = diffPanel.offsetHeight;
+            var minHeight = 220;
+            var lastHeight = startHeight;
+
+            diffSplitter.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+
+            function onPointerMove(moveEvent) {
+                var deltaY = moveEvent.clientY - startY;
+                var newHeight = Math.round(Math.max(minHeight, startHeight + deltaY));
+                lastHeight = newHeight;
+                diffPanel.style.height = newHeight + 'px';
+                window.dispatchEvent(new Event('resize'));
+            }
+
+            function onPointerUp(upEvent) {
+                try { diffSplitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+                diffSplitter.removeEventListener('pointermove', onPointerMove);
+                diffSplitter.removeEventListener('pointerup', onPointerUp);
+                diffSplitter.removeEventListener('pointercancel', onPointerUp);
+                diffSplitter.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                window.dispatchEvent(new Event('resize'));
+
+                if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                    dotNetRef.invokeMethodAsync('SetDiffPanelHeight', lastHeight);
+                }
+            }
+
+            diffSplitter.addEventListener('pointermove', onPointerMove);
+            diffSplitter.addEventListener('pointerup', onPointerUp);
+            diffSplitter.addEventListener('pointercancel', onPointerUp);
+        });
+    }
+
+    return true;
+};
+
+window.initQueryEditorSplitter = function (dotNetRef, splitterId, wrapperId) {
+    splitterId = splitterId || 'query-editor-resizer';
+    wrapperId = wrapperId || 'query-editor-wrapper';
+    var splitter = document.getElementById(splitterId);
+    var wrapper = document.getElementById(wrapperId);
+    if (!splitter || !wrapper) return false;
+
+    if (splitter._hasSplitterHandler) return true;
+    splitter._hasSplitterHandler = true;
+
+    splitter.addEventListener('pointerdown', function (e) {
+        e.preventDefault();
+        try { splitter.setPointerCapture(e.pointerId); } catch (err) {}
+
+        var startY = e.clientY;
+        var startHeight = wrapper.offsetHeight;
+        var minHeight = 120;
+        var lastHeight = startHeight;
+
+        splitter.classList.add('dragging');
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+
+        var workspace = wrapper.closest('.query-runner-workspace') || document.querySelector('.query-runner-workspace');
+        var maxAllowed = workspace ? Math.max(minHeight, workspace.offsetHeight - 120) : (window.innerHeight - 250);
+
+        function onPointerMove(moveEvent) {
+            var deltaY = moveEvent.clientY - startY;
+            var newHeight = Math.round(Math.min(maxAllowed, Math.max(minHeight, startHeight + deltaY)));
+            lastHeight = newHeight;
+            wrapper.style.height = newHeight + 'px';
+            wrapper.style.flexGrow = '0';
+            window.dispatchEvent(new Event('resize'));
+        }
+
+        function onPointerUp(upEvent) {
+            try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+            splitter.removeEventListener('pointermove', onPointerMove);
+            splitter.removeEventListener('pointerup', onPointerUp);
+            splitter.removeEventListener('pointercancel', onPointerUp);
+            splitter.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            window.dispatchEvent(new Event('resize'));
+
+            if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                dotNetRef.invokeMethodAsync('SetQueryEditorHeight', lastHeight);
+            }
+        }
+
+        splitter.addEventListener('pointermove', onPointerMove);
+        splitter.addEventListener('pointerup', onPointerUp);
+        splitter.addEventListener('pointercancel', onPointerUp);
+    });
+
+    return true;
+};
+
+window.initGridColumnResizers = function (containerId, dotNetRef) {
+    var container = document.getElementById(containerId);
+    if (!container) return false;
+
+    if (container._hasGridResizer) {
+        container._dotNetRef = dotNetRef;
+        return true;
+    }
+    container._hasGridResizer = true;
+    container._dotNetRef = dotNetRef;
+
+    var table = container.querySelector('.result-set-table');
+    var guide = container.querySelector('.grid-col-guide');
+    if (!table) return false;
+
+    var isDragging = false;
+    var hasMoved = false;
+    var startX = 0;
+    var startWidth = 0;
+    var currentTh = null;
+    var currentColName = null;
+    var currentPointerId = null;
+
+    function getColumnFromEvent(e) {
+        // 1. Direct handle in <th>
+        if (e.target && e.target.classList && e.target.classList.contains('grid-col-resizer')) {
+            var th = e.target.closest('th');
+            if (!th) return null;
+            return {
+                th: th,
+                colIndex: parseInt(th.getAttribute('data-col-index'), 10),
+                colName: th.getAttribute('data-col-name'),
+                fromHandle: true
+            };
+        }
+
+        // 2. Cell edge detection (works on any <th> or <td> across both header and data rows)
+        var cell = e.target ? e.target.closest('th, td') : null;
+        if (!cell) return null;
+
+        var rect = cell.getBoundingClientRect();
+        var edgeThreshold = 6;
+        var isRightEdge = (e.clientX >= rect.right - edgeThreshold && e.clientX <= rect.right + 3);
+        var isLeftEdge = (e.clientX >= rect.left - 3 && e.clientX <= rect.left + edgeThreshold);
+
+        if (!isRightEdge && !isLeftEdge) return null;
+
+        var targetCell = isRightEdge ? cell : cell.previousElementSibling;
+        if (!targetCell) return null;
+        if (targetCell.classList.contains('col-index')) return null;
+
+        var cellIdx = targetCell.cellIndex;
+        if (cellIdx < 1) return null;
+
+        var thead = table.querySelector('thead');
+        if (!thead) return null;
+        var allThs = thead.querySelectorAll('th');
+        var th = allThs[cellIdx];
+        if (!th || th.classList.contains('col-index')) return null;
+
+        return {
+            th: th,
+            colIndex: parseInt(th.getAttribute('data-col-index'), 10),
+            colName: th.getAttribute('data-col-name'),
+            fromHandle: false,
+            cell: targetCell
+        };
+    }
+
+    function onPointerMove(e) {
+        if (!isDragging) {
+            var colInfo = getColumnFromEvent(e);
+            if (colInfo) {
+                container.classList.add('grid-col-hover');
+            } else {
+                container.classList.remove('grid-col-hover');
+            }
+            return;
+        }
+
+        // Live dragging
+        if (Math.abs(e.clientX - startX) > 2) {
+            hasMoved = true;
+        }
+
+        var deltaX = e.clientX - startX;
+        var minWidth = 50;
+        var newWidth = Math.max(minWidth, Math.round(startWidth + deltaX));
+
+        currentTh.style.width = newWidth + 'px';
+        currentTh.style.minWidth = newWidth + 'px';
+
+        // Auto-scroll near container edges if table has horizontal overflow
+        var cRect = container.getBoundingClientRect();
+        if (e.clientX > cRect.right - 35) {
+            container.scrollLeft += 8;
+        } else if (e.clientX < cRect.left + 35) {
+            container.scrollLeft -= 8;
+        }
+
+        // Keep vertical guide line aligned with the column boundary
+        if (guide) {
+            var thRect = currentTh.getBoundingClientRect();
+            var guideX = thRect.right - cRect.left + container.scrollLeft;
+            guide.style.left = Math.round(guideX) + 'px';
+        }
+    }
+
+    function onPointerDown(e) {
+        if (e.button !== 0) return; // Left mouse button only
+
+        var colInfo = getColumnFromEvent(e);
+        if (!colInfo || !colInfo.th) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        isDragging = true;
+        hasMoved = false;
+        startX = e.clientX;
+        currentTh = colInfo.th;
+        currentColName = colInfo.colName;
+        startWidth = currentTh.getBoundingClientRect().width;
+        currentPointerId = e.pointerId;
+
+        try { container.setPointerCapture(e.pointerId); } catch (err) {}
+
+        document.body.classList.add('grid-col-resizing');
+
+        if (guide) {
+            var cRect = container.getBoundingClientRect();
+            var thRect = currentTh.getBoundingClientRect();
+            var guideX = thRect.right - cRect.left + container.scrollLeft;
+            guide.style.left = Math.round(guideX) + 'px';
+            guide.style.top = '0px';
+            guide.style.height = table.offsetHeight + 'px';
+            guide.style.display = 'block';
+        }
+    }
+
+    function onPointerUp(e) {
+        if (!isDragging) return;
+
+        try { container.releasePointerCapture(e.pointerId); } catch (err) {}
+
+        if (guide) {
+            guide.style.display = 'none';
+        }
+
+        document.body.classList.remove('grid-col-resizing');
+        container.classList.remove('grid-col-hover');
+        isDragging = false;
+
+        if (hasMoved) {
+            // Block any click that might be fired by the browser on the cell/header
+            var blockClick = function (evt) {
+                evt.stopPropagation();
+                evt.preventDefault();
+                window.removeEventListener('click', blockClick, true);
+            };
+            window.addEventListener('click', blockClick, true);
+            setTimeout(function () {
+                window.removeEventListener('click', blockClick, true);
+            }, 120);
+
+            var finalWidth = Math.round(currentTh.getBoundingClientRect().width);
+            var ref = container._dotNetRef;
+            if (ref && typeof ref.invokeMethodAsync === 'function' && currentColName) {
+                ref.invokeMethodAsync('SetColumnWidth', currentColName, finalWidth);
+            }
+        }
+    }
+
+    function onDblClick(e) {
+        var colInfo = getColumnFromEvent(e);
+        if (!colInfo || !colInfo.th) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        autoFitColumn(colInfo);
+    }
+
+    function autoFitColumn(colInfo) {
+        var th = colInfo.th;
+        var colIdx = th.cellIndex;
+        if (colIdx < 1) return;
+
+        var headerSpan = th.querySelector('.text-truncate');
+        var maxContentWidth = headerSpan ? (headerSpan.scrollWidth + 52) : (th.scrollWidth + 28);
+
+        var rows = table.querySelectorAll('tbody tr');
+        var sampleCount = Math.min(rows.length, 120);
+        for (var i = 0; i < sampleCount; i++) {
+            var cell = rows[i].cells[colIdx];
+            if (cell) {
+                var cellWidth = cell.scrollWidth + 24;
+                if (cellWidth > maxContentWidth) {
+                    maxContentWidth = cellWidth;
+                }
+            }
+        }
+
+        var finalWidth = Math.max(60, Math.min(850, Math.round(maxContentWidth)));
+        th.style.width = finalWidth + 'px';
+        th.style.minWidth = finalWidth + 'px';
+
+        var ref = container._dotNetRef;
+        if (ref && typeof ref.invokeMethodAsync === 'function' && colInfo.colName) {
+            ref.invokeMethodAsync('SetColumnWidth', colInfo.colName, finalWidth);
+        }
+    }
+
+    function onPointerLeave() {
+        if (!isDragging) {
+            container.classList.remove('grid-col-hover');
+        }
+    }
+
+    container.addEventListener('pointermove', onPointerMove);
+    container.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('pointerup', onPointerUp);
+    container.addEventListener('pointercancel', onPointerUp);
+    container.addEventListener('pointerleave', onPointerLeave);
+    container.addEventListener('dblclick', onDblClick);
+
+    container._cleanupResizers = function () {
+        container.removeEventListener('pointermove', onPointerMove);
+        container.removeEventListener('pointerdown', onPointerDown);
+        container.removeEventListener('pointerup', onPointerUp);
+        container.removeEventListener('pointercancel', onPointerUp);
+        container.removeEventListener('pointerleave', onPointerLeave);
+        container.removeEventListener('dblclick', onDblClick);
+        container._hasGridResizer = false;
+        container._dotNetRef = null;
+    };
+
+    return true;
+};
+
+window.destroyGridColumnResizers = function (containerId) {
+    var container = document.getElementById(containerId);
+    if (container && typeof container._cleanupResizers === 'function') {
+        container._cleanupResizers();
+    }
+};
+
+window.initTabStripWheelScroll = function (containerId) {
+    var container = document.getElementById(containerId);
+    if (!container || container._wheelInit) return;
+    container._wheelInit = true;
+    container.addEventListener('wheel', function (e) {
+        if (e.deltaY !== 0) {
+            e.preventDefault();
+            container.scrollLeft += e.deltaY;
+        }
+    }, { passive: false });
+};
+
+window.scrollActiveTabIntoView = function (containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var activeTab = container.querySelector('.ssms-tab.active');
+    if (activeTab && typeof activeTab.scrollIntoView === 'function') {
+        activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+};
+
+window.toggleQueryEditorComment = function (editorId) {
+    if (typeof monaco === 'undefined' || !monaco.editor) return false;
+    var editors = monaco.editor.getEditors();
+    var editor = null;
+    
+    for (var i = 0; i < editors.length; i++) {
+        var e = editors[i];
+        var container = e.getContainerDomNode();
+        if (container && (container.id === editorId || (container.parentElement && container.parentElement.id === editorId) || (container.closest && container.closest('#' + editorId)))) {
+            editor = e;
+            break;
+        }
+    }
+    
+    if (!editor && editors.length > 0) {
+        editor = editors[0];
+    }
+    
+    if (!editor) return false;
+    
+    editor.focus();
+    editor.trigger('toolbar', 'editor.action.commentLine', null);
+    return true;
+};
+
+window.userSettings = {
+    autoGenerateAliases: true,
+    useAsKeyword: true
+};
+
+window.setUserSettings = function (settings) {
+    if (settings) {
+        window.userSettings = settings;
+    }
+};
+
+window.generateTableAlias = function (tableName, existingAliases) {
+    if (!tableName) return "T";
+    var cleanName = tableName.replace(/[\[\]]/g, "").trim();
+    if (cleanName.indexOf('.') !== -1) {
+        cleanName = cleanName.split('.').pop().trim();
+    }
+    cleanName = cleanName.replace(/^(?:tbl_|vw_|tbl|vw)(?=[a-zA-Z])/i, "");
+    
+    var alias = "";
+    if (cleanName.indexOf('_') !== -1) {
+        var parts = cleanName.split('_').filter(Boolean);
+        for (var i = 0; i < parts.length; i++) {
+            if (parts[i].length > 0) {
+                alias += parts[i][0];
+            }
+        }
+    } else {
+        var capitals = cleanName.match(/[A-Z]/g);
+        if (capitals && capitals.length > 1) {
+            alias = capitals.join('');
+        } else {
+            alias = cleanName[0];
+        }
+    }
+    
+    alias = alias.toUpperCase();
+    if (!alias) alias = "T";
+    
+    var reserved = new Set(['ON', 'IN', 'OR', 'BY', 'AS', 'TO', 'IS', 'AT', 'DO', 'IF', 'GO', 'NO', 'ADD', 'ALL', 'AND', 'SET', 'FOR', 'NOT', 'OUT', 'TOP', 'USE', 'KEY', 'ROW']);
+    var finalAlias = reserved.has(alias) ? (alias + "1") : alias;
+    var suffix = 2;
+    var upperExisting = new Set();
+    if (existingAliases) {
+        existingAliases.forEach(function (a) {
+            if (a) upperExisting.add(String(a).toUpperCase());
+        });
+    }
+    
+    while (upperExisting.has(finalAlias)) {
+        finalAlias = alias + suffix;
+        suffix++;
+    }
+    
+    return finalAlias;
+};
+
+// SQL Profiler: Scroll to latest event
+window.profilerScrollToLatest = function (containerId, newestFirst) {
+    requestAnimationFrame(function () {
+        var el = document.getElementById(containerId);
+        if (!el) return;
+        if (newestFirst) {
+            el.scrollTop = 0;
+        } else {
+            el.scrollTop = el.scrollHeight;
+        }
+    });
+};
+
+
+
+
+
+// SQL Profiler: Resizable Splitter (resizes top grid panel, matching SQL Compare)
+window.initProfilerSplitter = function (dotNetRef) {
+    var splitter = document.getElementById('profiler-inspector-splitter');
+    var grid = document.getElementById('profiler-grid-container');
+    var mainBox = document.querySelector('.profiler-main-box');
+
+    if (splitter && grid && !splitter._hasSplitterHandler) {
+        splitter._hasSplitterHandler = true;
+        splitter.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            try { splitter.setPointerCapture(e.pointerId); } catch (err) {}
+
+            var startY = e.clientY;
+            var startHeight = grid.offsetHeight;
+            var minHeight = 80;
+            var maxContainerHeight = mainBox ? mainBox.offsetHeight : (window.innerHeight - 200);
+            var maxHeight = Math.max(minHeight + 40, maxContainerHeight - 110);
+            var lastHeight = startHeight;
+            var rafId = null;
+
+            splitter.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+
+            function onPointerMove(moveEvent) {
+                var deltaY = moveEvent.clientY - startY;
+                var newHeight = Math.round(Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY)));
+                lastHeight = newHeight;
+                grid.style.height = newHeight + 'px';
+                grid.style.flex = '0 0 ' + newHeight + 'px';
+
+                if (!rafId) {
+                    rafId = requestAnimationFrame(function () {
+                        rafId = null;
+                        window.dispatchEvent(new Event('resize'));
+                    });
+                }
+            }
+
+            function onPointerUp(upEvent) {
+                try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+                splitter.removeEventListener('pointermove', onPointerMove);
+                splitter.removeEventListener('pointerup', onPointerUp);
+                splitter.removeEventListener('pointercancel', onPointerUp);
+                splitter.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                window.dispatchEvent(new Event('resize'));
+
+                if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                    dotNetRef.invokeMethodAsync('SetGridHeight', lastHeight);
+                }
+            }
+
+            splitter.addEventListener('pointermove', onPointerMove);
+            splitter.addEventListener('pointerup', onPointerUp);
+            splitter.addEventListener('pointercancel', onPointerUp);
+        });
+    }
+
+    return true;
+};
+
+window.resetGridScrollTop = function (containerId) { var el = document.getElementById(containerId); if (el) el.scrollTop = 0; };
+window.triggerWindowResize = function () {
+    window.dispatchEvent(new Event('resize'));
+};
+
+
+window.initGridVirtualScroll = function (containerId, dotNetRef, totalRowCount) {
+    var container = document.getElementById(containerId);
+    if (!container) return false;
+
+    if (totalRowCount !== undefined) {
+        container._totalRowCount = totalRowCount;
+    }
+
+    if (container._hasVirtualScroll) {
+        container._dotNetRef = dotNetRef;
+        return true;
+    }
+    container._hasVirtualScroll = true;
+    container._dotNetRef = dotNetRef;
+
+    var ticking = false;
+
+    function handleScroll() {
+        if (!ticking) {
+            ticking = true;
+            window.requestAnimationFrame(function () {
+                if (container && container._dotNetRef) {
+                    try {
+                        container._dotNetRef.invokeMethodAsync('OnVirtualScroll', container.scrollTop, container.clientHeight);
+                    } catch (e) {}
+                }
+                ticking = false;
+            });
+        }
+    }
+
+    function handleWheel(e) {
+        if (e.shiftKey) return;
+        if (container._totalRowCount && container._totalRowCount > 300000) {
+            e.preventDefault();
+            var maxScroll = Math.max(1, container.scrollHeight - container.clientHeight);
+            var pxPerRow = maxScroll / container._totalRowCount;
+            var step = Math.max(1, Math.round(Math.abs(e.deltaY) / 33));
+            var rowsToScroll = Math.sign(e.deltaY) * Math.min(30, step);
+            var newTop = container.scrollTop + (rowsToScroll * pxPerRow);
+            container.scrollTop = Math.max(0, Math.min(maxScroll, newTop));
+        }
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    var resizeTimer = null;
+    function handleResize() {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+            if (container && container._dotNetRef) {
+                try {
+                    container._dotNetRef.invokeMethodAsync('OnVirtualScroll', container.scrollTop, container.clientHeight);
+                } catch (e) {}
+            }
+        }, 150);
+    }
+    window.addEventListener('resize', handleResize, { passive: true });
+
+    setTimeout(function () {
+        if (container && container._dotNetRef) {
+            try {
+                container._dotNetRef.invokeMethodAsync('OnVirtualScroll', container.scrollTop, container.clientHeight);
+            } catch (e) {}
+        }
+    }, 20);
+
+    return true;
+};
+
+window.initResultSetSplitters = function (containerId) {
+    var container = document.getElementById(containerId || 'results-multi-container');
+    if (!container) return false;
+
+    var splitters = container.querySelectorAll('.sql-compare-splitter');
+    splitters.forEach(function (splitter) {
+        if (splitter._hasMultiSplitterHandler) return;
+        splitter._hasMultiSplitterHandler = true;
+
+        splitter.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            try { splitter.setPointerCapture(e.pointerId); } catch (err) {}
+
+            var prevPane = splitter.previousElementSibling;
+            if (!prevPane) return;
+
+            var startY = e.clientY;
+            var startHeight = prevPane.offsetHeight;
+            var minHeight = 60;
+            var maxHeight = Math.max(minHeight, container.offsetHeight - 100);
+
+            splitter.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+
+            function onPointerMove(moveEvent) {
+                var deltaY = moveEvent.clientY - startY;
+                var newHeight = Math.round(Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY)));
+                prevPane.style.flex = '0 0 ' + newHeight + 'px';
+                prevPane.style.height = newHeight + 'px';
+            }
+
+            function onPointerUp(upEvent) {
+                try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
+                splitter.removeEventListener('pointermove', onPointerMove);
+                splitter.removeEventListener('pointerup', onPointerUp);
+                splitter.removeEventListener('pointercancel', onPointerUp);
+                splitter.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                window.dispatchEvent(new Event('resize'));
+            }
+
+            splitter.addEventListener('pointermove', onPointerMove);
+            splitter.addEventListener('pointerup', onPointerUp);
+            splitter.addEventListener('pointercancel', onPointerUp);
+        });
+    });
+
+    return true;
+};

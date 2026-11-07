@@ -10,7 +10,7 @@
 @inject ThemeService ThemeService
 @implements IDisposable
 
-<div class="position-relative">
+<div class="position-relative w-100 h-100 d-flex flex-column overflow-hidden" style="min-height: 0;">
 @if (Columns.Count > 0)
 {
     @if (IsTextDefinition)
@@ -48,63 +48,8 @@
     }
     else
     {
-    <div class="mb-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center">
-            <label class="text-muted small mb-0 me-2">Show</label>
-            <div class="position-relative">
-                <div class="form-control form-control-sm shadow-sm cursor-pointer d-flex justify-content-between align-items-center" style="width: 75px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @onclick="() => IsPageSizeDropdownOpen = !IsPageSizeDropdownOpen">
-                    <span>@(PageSize == -1 ? "All" : PageSize.ToString())</span>
-                    <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem;"></i>
-                </div>
-                @if (IsPageSizeDropdownOpen)
-                {
-                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsPageSizeDropdownOpen = false"></div>
-                    <div class="dropdown-menu show shadow-lg p-1 mt-1" style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 75px; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
-                        @foreach (var size in new[] { 12, 24, 48, 96, -1 })
-                        {
-                            <button class="dropdown-item py-1 @(PageSize == size ? "bg-primary text-white" : "")" style="@(PageSize == size ? "" : "color: var(--app-text);")" type="button" @onclick="() => { PageSize = size; IsPageSizeDropdownOpen = false; }">
-                                @(size == -1 ? "All" : size.ToString())
-                            </button>
-                        }
-                    </div>
-                }
-            </div>
-            <label class="text-muted small mb-0 ms-2">per page</label>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <div class="input-group input-group-sm flex-grow-1" style="width: 350px;">
-                <input type="text"
-                       class="form-control shadow-none"
-                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
-                       placeholder="Search in results..."
-                       @bind="SearchTerm"
-                       @bind:event="oninput" />
-                <button class="btn @(SearchCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Case" @onclick="() => SearchCaseSensitive = !SearchCaseSensitive">
-                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
-                </button>
-                <button class="btn @(SearchMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchMatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Whole Word" @onclick="() => { SearchMatchWholeWord = !SearchMatchWholeWord; if (SearchMatchWholeWord) SearchExactMatch = false; }">
-                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
-                </button>
-                <button class="btn @(SearchExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Exact Match" @onclick="() => { SearchExactMatch = !SearchExactMatch; if (SearchExactMatch) SearchMatchWholeWord = false; }">
-                    <i class="bi bi-bullseye fs-6"></i>
-                </button>
-            </div>
-            <button class="btn btn-sm btn-outline-success px-3 d-flex align-items-center gap-2 flex-shrink-0" @onclick="ExportToExcelAsync" disabled="@IsExporting">
-                @if (IsExporting)
-                {
-                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                    <span>Exporting...</span>
-                }
-                else
-                {
-                    <i class="bi bi-file-earmark-excel"></i>
-                    <span>Export</span>
-                }
-            </button>
-        </div>
-    </div>
 
-    <div class="table-responsive rounded position-relative" tabindex="0" style="border: 1px solid var(--app-border); outline: none;" @onkeydown="HandleKeyDown">
+    <div id="@_tableContainerId" class="table-responsive rounded position-relative flex-grow-1 custom-scrollbar-light" tabindex="0" style="border: 1px solid var(--app-border); outline: none; overflow: auto; min-height: 0; height: 100%; overflow-anchor: none !important;" @onkeydown="HandleKeyDown">
         <table class="result-set-table" style="min-width: 100%; width: max-content;">
             <thead>
                 <tr>
@@ -113,10 +58,10 @@
                         @onclick="ToggleSelectAll" 
                         @oncontextmenu="e => ShowRowHeaderContextMenu(e, -1)" 
                         @oncontextmenu:preventDefault="true"
-                        title="@(PagedRows.Count > 0 && Columns.Count > 0 && SelectedCells.Count == PagedRows.Count * Columns.Count ? "Click to deselect all" : "Click to select all")">
+                        title="@(_isAllSelected ? "Click to deselect all" : "Click to select all")">
                         <div class="px-2 py-2 d-flex align-items-center justify-content-center gap-1" style="font-size: 0.8rem;">
                             <span>#</span>
-                            @if (PagedRows.Count > 0 && Columns.Count > 0 && SelectedCells.Count == PagedRows.Count * Columns.Count)
+                            @if (_isAllSelected)
                             {
                                 <i class="bi bi-check-square-fill text-primary" style="font-size: 0.75rem;"></i>
                             }
@@ -127,16 +72,18 @@
                         var col = Columns[cIdx];
                         int localCol = cIdx;
                         bool isColSelected = IsColumnFullySelected(localCol);
-                        <th class="p-0 align-middle @(isColSelected ? "selected-col-header" : "")" 
-                            style="resize: horizontal; overflow: hidden; min-width: 120px; max-width: 800px;">
-                            <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2" 
+                        <th class="p-0 align-middle @(isColSelected ? "selected-col-header" : "") col-resizable position-relative" 
+                            data-col-index="@localCol"
+                            data-col-name="@col"
+                            style="@GetColumnWidthStyle(col)">
+                            <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2 gap-2" 
                                  style="cursor: pointer; user-select: none;" 
                                  title="Click to select column (Ctrl+Click to toggle, Shift+Click for range)"
                                  @onclick="e => HandleColumnHeaderClick(e, localCol)" 
                                  @oncontextmenu="e => ShowColumnHeaderContextMenu(e, localCol, col)" 
                                  @oncontextmenu:preventDefault="true">
                                 <span class="text-truncate flex-grow-1">@col</span>
-                                <button class="btn btn-link p-0 px-1 ms-1 d-inline-flex align-items-center justify-content-center sort-btn text-decoration-none border-0 shadow-none" 
+                                <button class="btn btn-link p-0 px-1 ms-2 me-1 d-inline-flex align-items-center justify-content-center sort-btn text-decoration-none border-0 shadow-none flex-shrink-0" 
                                         type="button"
                                         title="Sort by @col"
                                         @onclick="() => SortBy(col)" 
@@ -151,59 +98,106 @@
                                     }
                                 </button>
                             </div>
+                            <div class="grid-col-resizer" 
+                                 data-col-index="@localCol" 
+                                 data-col-name="@col"
+                                 title="Drag to resize column (Double-click to auto-fit)">
+                            </div>
                         </th>
                     }
                 </tr>
             </thead>
             <tbody>
                 @{
-                    var paged = PagedRows;
-                    int offset = PageSize == -1 ? 0 : (CurrentPage - 1) * PageSize;
+                    ComputeVirtualSlice(out int startIndex, out int endIndex, out int topSpacerHeight, out int bottomSpacerHeight);
                 }
-                @for (int i = 0; i < paged.Count; i++)
+                @if (topSpacerHeight > 0)
                 {
-                    var row = paged[i];
-                    int localIndex = i;
-                    bool isFullRowSelected = IsRowFullySelected(localIndex);
-                    <tr>
+                    <tr style="height: @(topSpacerHeight)px; pointer-events: none;">
+                        <td colspan="@(Columns.Count + 1)" style="padding: 0; border: none; height: @(topSpacerHeight)px;"></td>
+                    </tr>
+                }
+                @for (int i = startIndex; i < endIndex; i++)
+                {
+                    int displayIndex = i;
+                    int actualIndex = GetActualRowIndex(displayIndex);
+                    bool isFullRowSelected = IsRowFullySelected(actualIndex);
+                    <tr style="height: @(RowHeight)px;">
                         <td class="col-index text-center align-middle @(isFullRowSelected ? "selected-row-header" : "")" 
                             style="font-size: 0.8rem; cursor: pointer; user-select: none;"
                             title="Click to select row (Ctrl+Click to toggle, Shift+Click for range)"
-                            @onclick="e => HandleRowHeaderClick(e, localIndex)"
-                            @oncontextmenu="e => ShowRowHeaderContextMenu(e, localIndex)"
+                            @onclick="e => HandleRowHeaderClick(e, actualIndex)"
+                            @oncontextmenu="e => ShowRowHeaderContextMenu(e, actualIndex)"
                             @oncontextmenu:preventDefault="true">
                             @if (isFullRowSelected)
                             {
                                 <span class="d-inline-flex align-items-center justify-content-center gap-1">
                                     <i class="bi bi-caret-right-fill text-primary" style="font-size: 0.65rem;"></i>
-                                    @(offset + localIndex + 1)
+                                    @(displayIndex + 1)
                                 </span>
                             }
                             else
                             {
-                                @(offset + localIndex + 1)
+                                @(displayIndex + 1)
                             }
                         </td>
                         @for (int colIdx = 0; colIdx < Columns.Count; colIdx++)
                         {
                             var col = Columns[colIdx];
                             int localCol = colIdx;
-                            var val = GetColumnValue(row, col);
-                            bool isCellSelected = SelectedCells.Contains((localIndex, localCol));
+                            var rawCellVal = GetRawCellValue(actualIndex, localCol, col);
+                            var val = FormatCellValue(rawCellVal);
+                            bool isCellSelected = IsCellSelected(actualIndex, localCol);
                             <td class="@(isCellSelected ? "selected-cell" : "")"
-                                style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis; cursor: default;" 
+                                style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis;" 
                                 title="@val"
-                                @onclick="e => HandleCellClick(e, localIndex, localCol)"
-                                @oncontextmenu="e => ShowCellContextMenu(e, localIndex, localCol)"
+                                @onclick="e => HandleCellClick(e, actualIndex, localCol)"
+                                @oncontextmenu="e => ShowCellContextMenu(e, actualIndex, localCol)"
                                 @oncontextmenu:preventDefault="true">
-                                @if (val == null) { <span class="text-muted fst-italic">NULL</span> } else if (IsJsonOrXml(val)) { <span style="color: var(--app-table-header-text); cursor: pointer; text-decoration: underline;" @onclick="() => OpenCodeViewer(val)" @onclick:stopPropagation>@val</span> } else {
+                                @if (val == null) {
+                                    <span class="text-muted fst-italic">NULL</span>
+                                } else if (rawCellVal is byte[] rawBytes && rawBytes.Length > BinaryDataHelper.ShortBinaryThreshold) {
+                                    @if (BinaryDataHelper.IsImage(rawBytes, out var imgFormat, out _)) {
+                                        <span class="badge rounded-pill text-info border border-info bg-dark-subtle cursor-pointer d-inline-flex align-items-center gap-1"
+                                              style="cursor: pointer; font-size: 0.72rem; padding: 1px 7px; line-height: 1.25;"
+                                              @onclick="() => OpenBinaryViewer(rawBytes, col)"
+                                              @onclick:stopPropagation
+                                              title="Click to view image">
+                                            <i class="bi bi-image" style="font-size: 0.7rem;"></i> Image: @imgFormat, @BinaryDataHelper.FormatFileSize(rawBytes.Length)
+                                        </span>
+                                    } else if (BinaryDataHelper.IsPdf(rawBytes)) {
+                                        <span class="badge rounded-pill text-danger border border-danger bg-dark-subtle cursor-pointer d-inline-flex align-items-center gap-1"
+                                              style="cursor: pointer; font-size: 0.72rem; padding: 1px 7px; line-height: 1.25;"
+                                              @onclick="() => OpenBinaryViewer(rawBytes, col)"
+                                              @onclick:stopPropagation
+                                              title="Click to view PDF document">
+                                            <i class="bi bi-file-earmark-pdf" style="font-size: 0.7rem;"></i> PDF: @BinaryDataHelper.FormatFileSize(rawBytes.Length)
+                                        </span>
+                                    } else {
+                                        <span class="badge rounded-pill text-secondary border border-secondary bg-dark-subtle cursor-pointer d-inline-flex align-items-center gap-1"
+                                              style="cursor: pointer; font-size: 0.72rem; padding: 1px 7px; line-height: 1.25;"
+                                              @onclick="() => OpenBinaryViewer(rawBytes, col)"
+                                              @onclick:stopPropagation
+                                              title="Click to view binary data">
+                                            <i class="bi bi-file-earmark-binary" style="font-size: 0.7rem;"></i> Binary: @BinaryDataHelper.FormatFileSize(rawBytes.Length)
+                                        </span>
+                                    }
+                                } else if (IsJsonOrXml(val)) {
+                                    <span style="color: var(--app-table-header-text); cursor: pointer; text-decoration: underline;" @onclick="() => OpenCodeViewer(val)" @onclick:stopPropagation>@val</span>
+                                } else {
                                     @val
                                 }
                             </td>
                         }
                     </tr>
                 }
-                @if (paged.Count == 0)
+                @if (bottomSpacerHeight > 0)
+                {
+                    <tr style="height: @(bottomSpacerHeight)px; pointer-events: none;">
+                        <td colspan="@(Columns.Count + 1)" style="padding: 0; border: none; height: @(bottomSpacerHeight)px;"></td>
+                    </tr>
+                }
+                @if (ActiveRowCount == 0)
                 {
                     <tr>
                         <td colspan="@(Columns.Count + 1)" class="text-center text-muted py-4">
@@ -213,6 +207,7 @@
                 }
             </tbody>
         </table>
+        <div class="grid-col-guide" style="display: none;"></div>
     </div>
 
     @if (!string.IsNullOrEmpty(ActiveAggregateColumn))
@@ -249,56 +244,7 @@
         </div>
     }
 
-    <div class="d-flex justify-content-between align-items-center mt-3">
-        <div class="text-muted small">
-            @if (FilteredRows.Count == 0)
-            {
-                <span>Showing 0 entries</span>
-            }
-            else
-            {
-                <span>
-                    Showing @((CurrentPage - 1) * (PageSize == -1 ? FilteredRows.Count : PageSize) + 1) to @Math.Min(PageSize == -1 ? FilteredRows.Count : CurrentPage * PageSize, FilteredRows.Count) of @FilteredRows.Count entries
-                    @(FilteredRows.Count < Rows.Count ? $"(filtered from {Rows.Count} total entries)" : "")
-                </span>
-            }
-        </div>
-        <div class="d-flex align-items-center">
-            @if (ExecutionTimeMs.HasValue)
-            {
-                <span class="text-muted small @(TotalPages > 1 ? "me-3" : "")"><i class="bi bi-stopwatch me-1"></i>@(ExecutionTimeMs.Value)ms</span>
-            }
-            @if (TotalPages > 1)
-            {
-                <nav>
-                <ul class="pagination pagination-sm mb-0">
-                    <li class="page-item @(CurrentPage == 1 ? "disabled" : "")">
-                        <button class="page-link" style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SetPage(CurrentPage - 1)">Previous</button>
-                    </li>
-                    @for (int i = 1; i <= TotalPages; i++)
-                    {
-                        var pageNum = i;
-                        if (TotalPages > 7 && (pageNum > 2 && pageNum < TotalPages - 1 && Math.Abs(pageNum - CurrentPage) > 1))
-                        {
-                            if (pageNum == CurrentPage - 2 || pageNum == CurrentPage + 2)
-                            {
-                                <li class="page-item disabled"><span class="page-link" style="background-color: var(--app-surface); color: var(--app-text-muted); border-color: var(--app-border);">...</span></li>
-                            }
-                            continue;
-                        }
-                        
-                        <li class="page-item @(pageNum == CurrentPage ? "active" : "")">
-                            <button class="page-link @(pageNum == CurrentPage ? "bg-primary border-primary text-white" : "")" style="@(pageNum == CurrentPage ? "" : "background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);")" @onclick="() => SetPage(pageNum)">@pageNum</button>
-                        </li>
-                    }
-                    <li class="page-item @(CurrentPage == TotalPages ? "disabled" : "")">
-                        <button class="page-link" style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SetPage(CurrentPage + 1)">Next</button>
-                    </li>
-                </ul>
-            </nav>
-            }
-        </div>
-    </div>
+
     }
 }
 else
@@ -316,6 +262,22 @@ else
          style="top: min(@(RowContextMenuY)px, calc(100vh - 230px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); overflow: hidden;" 
          @onclick:stopPropagation>
         <div class="py-1">
+            @if (SelectedSingleCellByteValue is byte[] selectedBytes)
+            {
+                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = OpenBinaryViewer(selectedBytes, ContextMenuColumn); }">
+                    <i class="bi @(BinaryDataHelper.IsImage(selectedBytes, out _, out _) ? "bi-image text-info" : (BinaryDataHelper.IsPdf(selectedBytes) ? "bi-file-earmark-pdf text-danger" : "bi-file-earmark-binary text-warning")) text-muted"></i>
+                    <span>@(BinaryDataHelper.IsImage(selectedBytes, out _, out _) ? "View Image" : (BinaryDataHelper.IsPdf(selectedBytes) ? "View PDF Document" : "View Binary / Hex"))</span>
+                </button>
+                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = CopyBinaryHexAsync(selectedBytes); }">
+                    <i class="bi bi-file-earmark-code text-muted"></i>
+                    <span>Copy Hex (0x...)</span>
+                </button>
+                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = DownloadBinaryBytesAsync(selectedBytes, ContextMenuColumn); }">
+                    <i class="bi bi-download text-muted"></i>
+                    <span>Save to File</span>
+                </button>
+                <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
+            }
             <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedAsync">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-copy text-muted"></i>
@@ -350,6 +312,15 @@ else
                     <span>Show aggregate result</span>
                 </button>
             }
+            <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
+            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToExcelAsync(); }">
+                <i class="bi bi-file-earmark-excel text-success fs-6"></i>
+                <span>Export to Excel (.xlsx)</span>
+            </button>
+            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToCsvAsync(); }">
+                <i class="bi bi-file-earmark-text text-primary fs-6"></i>
+                <span>Export to CSV (.csv)</span>
+            </button>
         </div>
     </div>
 }
@@ -364,11 +335,41 @@ else
 }
 
 <style>
+    .table-responsive,
+    .result-set-table,
+    .result-set-table tbody,
+    .result-set-table tr {
+        overflow-anchor: none !important;
+    }
     .result-set-table,
     .result-set-table th,
     .result-set-table td {
         user-select: none !important;
         -webkit-user-select: none !important;
+    }
+    .result-set-table thead {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    .result-set-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: var(--app-surface-secondary);
+    }
+    .result-set-table thead th.col-index {
+        position: sticky;
+        top: 0;
+        left: 0;
+        z-index: 15;
+        background-color: var(--app-surface-secondary);
+    }
+    .result-set-table tbody td.col-index {
+        position: sticky;
+        left: 0;
+        z-index: 4;
+        background-color: var(--app-surface-secondary);
     }
     .grid-ctx-btn {
         color: var(--app-text) !important;
@@ -442,11 +443,129 @@ else
         </div>
     </div>
 }
+
+@if (IsBinaryViewerOpen && _activeBinaryBytes != null)
+{
+    <style>.glass-card { backdrop-filter: none !important; }</style>
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); z-index: 999999;">
+        <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 90vh;">
+            <div class="modal-content shadow-lg h-100 flex-column d-flex" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <!-- Header -->
+                <div class="modal-header py-2 flex-shrink-0 d-flex align-items-center justify-content-between" style="border-bottom: 1px solid var(--app-border);">
+                    <div class="d-flex align-items-center gap-2">
+                        @if (_activeBinaryIsImage)
+                        {
+                            <i class="bi bi-image text-info fs-5"></i>
+                        }
+                        else if (_activeBinaryIsPdf)
+                        {
+                            <i class="bi bi-file-earmark-pdf text-danger fs-5"></i>
+                        }
+                        else
+                        {
+                            <i class="bi bi-file-earmark-binary text-warning fs-5"></i>
+                        }
+                        <h5 class="modal-title mb-0 d-flex align-items-center gap-2" style="color: var(--app-table-header-text); font-size: 1.05rem;">
+                            <span>@(_activeBinaryIsImage ? "Image Viewer" : (_activeBinaryIsPdf ? "PDF Viewer" : "Binary Viewer"))</span>
+                            <span class="text-muted fw-normal">&mdash;</span>
+                            <span class="fw-bold font-monospace" style="color: var(--app-text);">@_activeBinaryColumnName</span>
+                        </h5>
+                    </div>
+                    
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") m-0 ms-2" aria-label="Close" @onclick="CloseBinaryViewer"></button>
+                </div>
+
+                <!-- Action Toolbar (Replaces tabs) -->
+                <div class="px-3 py-2 flex-shrink-0 d-flex align-items-center justify-content-between gap-2" style="border-bottom: 1px solid var(--app-border); background-color: var(--app-surface-secondary);">
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 shadow-sm" @onclick="() => DownloadBinaryBytesAsync(_activeBinaryBytes, _activeBinaryColumnName)" title="Save to disk">
+                            <i class="bi bi-download"></i>
+                            <span>Save File</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" @onclick="() => CopyBinaryHexAsync(_activeBinaryBytes)" title="Copy full 0x hex string">
+                            <i class="bi @(_isBinaryHexCopied ? "bi-check-lg text-success" : "bi-clipboard")"></i>
+                            <span>@(_isBinaryHexCopied ? "Hex Copied!" : "Copy Hex")</span>
+                        </button>
+                        @if (_activeBinaryIsImage)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" @onclick="CopyBinaryBase64Async" title="Copy base64 data URI">
+                                <i class="bi @(_isBinaryBase64Copied ? "bi-check-lg text-success" : "bi-code-square")"></i>
+                                <span>@(_isBinaryBase64Copied ? "Base64 Copied!" : "Copy Base64")</span>
+                            </button>
+                        }
+                    </div>
+
+                    @if (_activeBinaryIsImage || _activeBinaryIsPdf)
+                    {
+                        <div>
+                            @if (_activeBinaryTab == "preview")
+                            {
+                                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" 
+                                        @onclick='() => _activeBinaryTab = "hex"' 
+                                        title="Inspect underlying byte structure and headers">
+                                    <i class="bi bi-file-earmark-code"></i>
+                                    <span>View Raw Hex</span>
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-info d-inline-flex align-items-center gap-1 shadow-sm" 
+                                        @onclick='() => _activeBinaryTab = "preview"' 
+                                        title="@(_activeBinaryIsPdf ? "Return to document preview" : "Return to image preview")">
+                                    <i class="bi @(_activeBinaryIsPdf ? "bi-file-earmark-pdf" : "bi-image")"></i>
+                                    <span>@(_activeBinaryIsPdf ? "View Document" : "View Image")</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <!-- Body -->
+                <div class="modal-body p-3 flex-grow-1 position-relative overflow-auto d-flex flex-column" style="background-color: var(--app-surface); min-height: 200px;">
+                    @if ((_activeBinaryIsImage || _activeBinaryIsPdf) && _activeBinaryTab == "preview")
+                    {
+                        @if (_activeBinaryIsImage)
+                        {
+                            <div class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-3" 
+                                 style="background-image: repeating-conic-gradient(#80808020 0% 25%, transparent 0% 50%) 50% / 20px 20px; border-radius: 6px; overflow: auto; min-height: 300px;">
+                                <img src="data:@(_activeBinaryMimeType);base64,@(_activeBinaryBase64)" 
+                                     alt="Preview" 
+                                     style="max-width: 100%; max-height: calc(90vh - 180px); object-fit: contain; box-shadow: 0 4px 20px rgba(0,0,0,0.4); border-radius: 4px;" />
+                            </div>
+                        }
+                        else if (_activeBinaryIsPdf)
+                        {
+                            <div class="w-100 h-100 flex-grow-1 position-relative rounded overflow-hidden" style="min-height: calc(90vh - 150px); background-color: #525659;">
+                                @if (!string.IsNullOrEmpty(_activePdfBlobUrl))
+                                {
+                                    <iframe src="@($"{_activePdfBlobUrl}#toolbar=0&navpanes=0")" class="w-100 h-100 border-0" style="min-height: calc(90vh - 150px); display: block;" title="PDF Preview"></iframe>
+                                }
+                                else
+                                {
+                                    <div class="d-flex align-items-center justify-content-center h-100 text-white" style="min-height: 300px;">
+                                        <span class="spinner-border spinner-border-sm me-2"></span> Loading PDF...
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="w-100 h-100 position-relative">
+                            <div class="m-0 p-3 h-100 w-100 rounded overflow-auto" 
+                                 style="font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace; font-size: 0.85rem; line-height: 1.6; background-color: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); word-break: break-all; white-space: pre-wrap; max-height: calc(90vh - 150px); user-select: text;">@_activeBinaryRawHex</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
 </div>
 
 @code {
     [Parameter]
-    public IEnumerable<dynamic> Data { get; set; } = Array.Empty<dynamic>();
+    public object? Data { get; set; }
 
     [Parameter]
     public long? ExecutionTimeMs { get; set; }
@@ -456,6 +575,9 @@ else
 
     [Parameter]
     public EventCallback<string> OnOpenCodeInNewTab { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggleSearch { get; set; }
 
     private bool IsTextDefinition =>
         Columns.Count == 1 &&
@@ -533,12 +655,14 @@ else
         }
     }
 
-    public record ExportStatus(bool IsExporting, bool IsSuccess, Action CancelAction);
+    public record ExportStatus(bool IsExporting, bool IsSuccess, Action CancelAction, string Format = "Excel");
 
+    private QueryResultTable? _tableStore;
     private List<IDictionary<string, object>> Rows = new();
     
     // Export State
     private bool IsExporting = false;
+    private bool IsExportDropdownOpen = false;
     private bool ShowExportSuccess = false;
     private CancellationTokenSource? _exportCts;
 
@@ -553,11 +677,7 @@ else
     private string? _copyFeedbackMessage = null;
     private CancellationTokenSource? _copyFeedbackCts;
 
-    private void ClearCellSelection()
-    {
-        SelectedCells.Clear();
-        _lastSelectedCell = (-1, -1);
-    }
+
     
     // Aggregates State
     private string? ActiveAggregateColumn = null;
@@ -569,70 +689,101 @@ else
     private object? AggMax = null;
     private List<string> Columns = new();
 
-    private string _searchTerm = "";
-    private string SearchTerm
+    [Parameter]
+    public int ResultSetIndex { get; set; } = 1;
+
+    [Parameter]
+    public int TotalResultSets { get; set; } = 1;
+
+    [Parameter]
+    public string SearchTerm { get; set; } = "";
+
+    [Parameter]
+    public bool SearchCaseSensitive { get; set; } = false;
+
+    [Parameter]
+    public bool SearchMatchWholeWord { get; set; } = false;
+
+    [Parameter]
+    public bool SearchExactMatch { get; set; } = false;
+
+    private string _tableContainerId = "gridTable_" + Guid.NewGuid().ToString("N");
+    private Dictionary<string, double> _columnWidths = new();
+    private DotNetObjectReference<ResultSetGrid>? _dotNetRef;
+
+    private string GetColumnWidthStyle(string col)
     {
-        get => _searchTerm;
-        set
+        if (_columnWidths.TryGetValue(col, out var w))
         {
-            _searchTerm = value;
-            ClearCellSelection();
-            CurrentPage = 1;
+            return $"width: {w}px; min-width: {w}px; max-width: {Math.Max(w, 1200)}px; overflow: hidden;";
+        }
+        return "min-width: 80px; max-width: 800px; overflow: hidden;";
+    }
+
+    [JSInvokable]
+    public void SetColumnWidth(string columnName, double width)
+    {
+        if (!string.IsNullOrEmpty(columnName))
+        {
+            _columnWidths[columnName] = width;
         }
     }
 
-    private bool _searchCaseSensitive = false;
-    private bool SearchCaseSensitive
-    {
-        get => _searchCaseSensitive;
-        set { _searchCaseSensitive = value; ClearCellSelection(); CurrentPage = 1; }
-    }
-    
-    private bool _searchMatchWholeWord = false;
-    private bool SearchMatchWholeWord
-    {
-        get => _searchMatchWholeWord;
-        set { _searchMatchWholeWord = value; ClearCellSelection(); CurrentPage = 1; }
-    }
-    
-    private bool _searchExactMatch = false;
-    private bool SearchExactMatch
-    {
-        get => _searchExactMatch;
-        set { _searchExactMatch = value; ClearCellSelection(); CurrentPage = 1; }
-    }
-
-    private int _pageSize = 24;
-    private bool IsPageSizeDropdownOpen = false;
-    private int PageSize
-    {
-        get => _pageSize;
-        set
-        {
-            _pageSize = value;
-            ClearCellSelection();
-            CurrentPage = 1;
-        }
-    }
-
-    private int CurrentPage = 1;
+    private object? _lastDataRef;
+    private bool _shouldResetScroll = false;
 
     protected override void OnParametersSet()
     {
         ClearCellSelection();
-        Rows = Data.Select(d => (IDictionary<string, object>)d).ToList();
-        if (Rows.Any())
+
+        if (!ReferenceEquals(Data, _lastDataRef))
         {
-            Columns = Rows.First().Keys.ToList();
+            _lastDataRef = Data;
+            _currentScrollTop = 0;
+            _renderedFirstVisible = -1;
+            _shouldResetScroll = true;
+        }
+
+        if (Data is QueryResultTable qrt)
+        {
+            _tableStore = qrt;
+            Columns = qrt.Columns.ToList();
+            Rows.Clear();
+        }
+        else if (Data is IEnumerable<object> en)
+        {
+            _tableStore = null;
+            Rows = en.Select(d => (IDictionary<string, object>)d).ToList();
+            if (Rows.Any())
+            {
+                Columns = Rows.First().Keys.ToList();
+            }
         }
         else
         {
+            _tableStore = null;
             Columns.Clear();
+            Rows.Clear();
+            _columnWidths.Clear();
         }
+
+        ApplyFilter();
+        ApplySorting();
+        _renderedFirstVisible = -1;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_shouldResetScroll)
+        {
+            _shouldResetScroll = false;
+            try
+            {
+                await JS.InvokeVoidAsync("resetGridScrollTop", _tableContainerId);
+            }
+            catch { }
+        }
+
         if (IsTextDefinition && _definitionEditor != null)
         {
             try
@@ -646,94 +797,226 @@ else
             }
             catch { }
         }
+        else if (!IsTextDefinition && Columns.Count > 0)
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("initGridColumnResizers", _tableContainerId, _dotNetRef);
+                await JS.InvokeVoidAsync("initGridVirtualScroll", _tableContainerId, _dotNetRef, ActiveRowCount);
+            }
+            catch { }
+        }
+    }
+
+    private int TotalDataCount => _tableStore?.RowCount ?? Rows.Count;
+    private int ActiveRowCount => _filteredIndices != null ? _filteredIndices.Length : TotalDataCount;
+
+    private int GetActualRowIndex(int displayIndex)
+    {
+        int idx = _filteredIndices != null ? _filteredIndices[displayIndex] : displayIndex;
+        return _sortedIndices != null ? _sortedIndices[idx] : idx;
+    }
+
+    private object? GetRawCellValue(int actualRowIndex, int colIndex, string colName)
+    {
+        if (_tableStore != null)
+        {
+            return _tableStore.GetValue(actualRowIndex, colIndex);
+        }
+        if (actualRowIndex >= 0 && actualRowIndex < Rows.Count)
+        {
+            Rows[actualRowIndex].TryGetValue(colName, out var v);
+            return v;
+        }
+        return null;
+    }
+
+    private string? FormatCellValue(object? rawVal)
+    {
+        if (rawVal == null) return null;
+        if (rawVal is DateTime dt) return dt.ToString("M/d/yyyy h:mm:ss.fff tt");
+        if (rawVal is DateTimeOffset dto) return dto.ToString("M/d/yyyy h:mm:ss.fff tt zzz");
+        if (rawVal is byte[] b) return BinaryDataHelper.FormatBinaryForDisplay(b);
+        return rawVal.ToString();
     }
 
     private string? GetColumnValue(IDictionary<string, object> row, string column)
     {
         if (row.TryGetValue(column, out var val))
         {
-            if (val is DateTime dt)
-            {
-                return dt.ToString("M/d/yyyy h:mm:ss.fff tt");
-            }
-            if (val is DateTimeOffset dto)
-            {
-                return dto.ToString("M/d/yyyy h:mm:ss.fff tt zzz");
-            }
-            return val?.ToString();
+            return FormatCellValue(val);
         }
         return null;
     }
 
-    private List<IDictionary<string, object>> FilteredRows
-    {
-        get
-        {
-            if (string.IsNullOrWhiteSpace(SearchTerm))
-                return Rows;
+    private const int RowHeight = 31;
+    private const double MaxVirtualHeight = 10_000_000.0;
+    private double _currentScrollTop = 0;
+    private double _viewportHeight = 450;
+    private int _renderedFirstVisible = -1;
+    private int _lastStartIndex = 0;
+    private int _lastEndIndex = 0;
+    private int _lastTopSpacerHeight = 0;
+    private int _lastBottomSpacerHeight = 0;
 
-            var searchStr = SearchCaseSensitive ? SearchTerm : SearchTerm.ToLowerInvariant();
-            
-            return Rows.Where(r => 
-                r.Values.Any(v => 
-                {
-                    if (v == null) return false;
-                    var valStr = SearchCaseSensitive ? v.ToString()! : v.ToString()!.ToLowerInvariant();
-                    
-                    if (SearchExactMatch)
-                    {
-                        return valStr == searchStr;
-                    }
-                    if (SearchMatchWholeWord)
-                    {
-                        return valStr.Split(' ', '.', '_', '-', ',', ';', ':', '/', '\\').Contains(searchStr);
-                    }
-                    return valStr.Contains(searchStr);
-                })
-            ).ToList();
-        }
-    }
-
-    private int TotalPages => PageSize == -1 ? 1 : (int)Math.Ceiling(FilteredRows.Count / (double)PageSize);
-
-    private List<IDictionary<string, object>> SortedRows
-    {
-        get
-        {
-            var filtered = FilteredRows;
-            if (string.IsNullOrEmpty(SortColumn)) return filtered;
-
-            try 
-            {
-                if (SortAscending)
-                    return filtered.OrderBy(r => GetSortValue(r, SortColumn)).ToList();
-                else
-                    return filtered.OrderByDescending(r => GetSortValue(r, SortColumn)).ToList();
-            }
-            catch
-            {
-                // Fallback to string sort if types are mixed
-                if (SortAscending)
-                    return filtered.OrderBy(r => GetColumnValue(r, SortColumn)).ToList();
-                else
-                    return filtered.OrderByDescending(r => GetColumnValue(r, SortColumn)).ToList();
-            }
-        }
-    }
-
-    private object? GetSortValue(IDictionary<string, object> row, string column)
-    {
-        if (row.TryGetValue(column, out var val) && val != null)
-        {
-            if (val is string s) return s;
-            if (val is IComparable) return val;
-            return val.ToString();
-        }
-        return null;
-    }
-
+    private int[]? _sortedIndices = null;
+    private int[]? _filteredIndices = null;
     private string? SortColumn = null;
     private bool SortAscending = true;
+
+    private bool _isAllSelected = false;
+    private HashSet<int> SelectedEntireRows = new();
+    private HashSet<int> SelectedEntireCols = new();
+
+    private int GetViewportRows()
+    {
+        return Math.Max(1, (int)((_viewportHeight - 45) / RowHeight));
+    }
+
+    private int CalculateFirstVisible(int count, int viewportRows, out bool isScaled)
+    {
+        isScaled = count * (double)RowHeight > MaxVirtualHeight;
+        if (!isScaled)
+        {
+            return Math.Clamp((int)(_currentScrollTop / RowHeight), 0, Math.Max(0, count - viewportRows));
+        }
+        else
+        {
+            double maxScroll = Math.Max(1.0, MaxVirtualHeight - _viewportHeight);
+            double scrollFraction = Math.Clamp(_currentScrollTop / maxScroll, 0.0, 1.0);
+            return Math.Clamp((int)(scrollFraction * (count - viewportRows)), 0, Math.Max(0, count - viewportRows));
+        }
+    }
+
+    private void ComputeVirtualSlice(out int startIndex, out int endIndex, out int topSpacerHeight, out int bottomSpacerHeight)
+    {
+        int count = ActiveRowCount;
+        if (count == 0)
+        {
+            startIndex = 0;
+            endIndex = 0;
+            topSpacerHeight = 0;
+            bottomSpacerHeight = 0;
+            return;
+        }
+
+        int viewportRows = GetViewportRows();
+        int buffer = 25;
+
+        int firstVisible = CalculateFirstVisible(count, viewportRows, out bool isScaled);
+
+        if (_renderedFirstVisible < 0 || Math.Abs(firstVisible - _renderedFirstVisible) >= 4 || firstVisible <= 5 || firstVisible >= count - viewportRows - 5)
+        {
+            _renderedFirstVisible = firstVisible;
+            _lastStartIndex = Math.Max(0, firstVisible - buffer);
+            _lastEndIndex = Math.Min(count, firstVisible + viewportRows + buffer);
+
+            double totalVirtualHeight = isScaled ? MaxVirtualHeight : count * (double)RowHeight;
+            int renderedRowsHeight = (_lastEndIndex - _lastStartIndex) * RowHeight;
+
+            if (_lastStartIndex <= 0)
+            {
+                _lastTopSpacerHeight = 0;
+                _lastBottomSpacerHeight = Math.Max(0, (int)(totalVirtualHeight - renderedRowsHeight));
+            }
+            else if (_lastEndIndex >= count)
+            {
+                _lastBottomSpacerHeight = 0;
+                _lastTopSpacerHeight = Math.Max(0, (int)(totalVirtualHeight - renderedRowsHeight));
+            }
+            else
+            {
+                if (!isScaled)
+                {
+                    _lastTopSpacerHeight = _lastStartIndex * RowHeight;
+                    _lastBottomSpacerHeight = (count - _lastEndIndex) * RowHeight;
+                }
+                else
+                {
+                    int bufferBefore = firstVisible - _lastStartIndex;
+                    int bufferPixelHeight = bufferBefore * RowHeight;
+                    _lastTopSpacerHeight = Math.Max(0, (int)_currentScrollTop - bufferPixelHeight);
+                    _lastBottomSpacerHeight = Math.Max(0, (int)(totalVirtualHeight - _lastTopSpacerHeight - renderedRowsHeight));
+                }
+            }
+        }
+
+        startIndex = _lastStartIndex;
+        endIndex = _lastEndIndex;
+        topSpacerHeight = _lastTopSpacerHeight;
+        bottomSpacerHeight = _lastBottomSpacerHeight;
+    }
+
+    [JSInvokable]
+    public void OnVirtualScroll(double scrollTop, double clientHeight)
+    {
+        _currentScrollTop = Math.Max(0, scrollTop);
+        if (clientHeight > 50) _viewportHeight = clientHeight;
+
+        int count = ActiveRowCount;
+        if (count == 0) return;
+
+        int viewportRows = GetViewportRows();
+        int firstVisible = CalculateFirstVisible(count, viewportRows, out _);
+
+        if (_renderedFirstVisible < 0 || Math.Abs(firstVisible - _renderedFirstVisible) >= 4 || firstVisible <= 5 || firstVisible >= count - viewportRows - 5)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            _filteredIndices = null;
+            return;
+        }
+
+        int total = TotalDataCount;
+        if (total == 0)
+        {
+            _filteredIndices = Array.Empty<int>();
+            return;
+        }
+
+        var matches = new List<int>();
+        var search = SearchCaseSensitive ? SearchTerm : SearchTerm.ToLowerInvariant();
+        int colCount = Columns.Count;
+
+        for (int i = 0; i < total; i++)
+        {
+            bool matched = false;
+            for (int c = 0; c < colCount; c++)
+            {
+                var val = GetRawCellValue(i, c, Columns[c]);
+                if (val == null) continue;
+                var str = FormatCellValue(val);
+                if (string.IsNullOrEmpty(str)) continue;
+
+                var compStr = SearchCaseSensitive ? str : str.ToLowerInvariant();
+                if (SearchExactMatch)
+                {
+                    if (compStr == search) { matched = true; break; }
+                }
+                else if (SearchMatchWholeWord)
+                {
+                    if (compStr.Split(' ', '.', '_', '-', ',', ';', ':', '/', '\\').Contains(search))
+                    {
+                        matched = true; break;
+                    }
+                }
+                else
+                {
+                    if (compStr.Contains(search)) { matched = true; break; }
+                }
+            }
+            if (matched) matches.Add(i);
+        }
+
+        _filteredIndices = matches.ToArray();
+    }
 
     private void SortBy(string column)
     {
@@ -741,34 +1024,107 @@ else
         if (SortColumn == column)
         {
             if (SortAscending)
+            {
                 SortAscending = false;
+            }
             else
+            {
                 SortColumn = null;
+                _sortedIndices = null;
+                return;
+            }
         }
         else
         {
             SortColumn = column;
             SortAscending = true;
         }
-        CurrentPage = 1;
+
+        ApplySorting();
+        _renderedFirstVisible = -1;
     }
 
-    private List<IDictionary<string, object>> PagedRows
+    private void ApplySorting()
     {
-        get
+        if (string.IsNullOrEmpty(SortColumn))
         {
-            var sorted = SortedRows;
-            if (PageSize == -1) return sorted;
-            
-            return sorted.Skip((CurrentPage - 1) * PageSize).Take(PageSize).ToList();
+            _sortedIndices = null;
+            return;
         }
+
+        int total = TotalDataCount;
+        if (total == 0) return;
+
+        int colIdx = _tableStore != null ? _tableStore.GetColumnIndex(SortColumn) : Columns.IndexOf(SortColumn);
+        if (colIdx < 0) return;
+
+        var indices = new int[total];
+        for (int i = 0; i < total; i++) indices[i] = i;
+
+        Array.Sort(indices, (a, b) =>
+        {
+            var valA = GetRawCellValue(a, colIdx, SortColumn);
+            var valB = GetRawCellValue(b, colIdx, SortColumn);
+            int cmp = CompareCellValues(valA, valB);
+            return SortAscending ? cmp : -cmp;
+        });
+
+        _sortedIndices = indices;
     }
 
-    private void SetPage(int page)
+    private int CompareCellValues(object? a, object? b)
     {
-        if (page < 1 || page > TotalPages) return;
-        ClearCellSelection();
-        CurrentPage = page;
+        if (a == null && b == null) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+
+        if (a is IComparable compA && a.GetType() == b.GetType())
+        {
+            return compA.CompareTo(b);
+        }
+
+        if (a is byte[] bytesA && b is byte[] bytesB)
+        {
+            return bytesA.Length.CompareTo(bytesB.Length);
+        }
+
+        return string.Compare(a.ToString(), b.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void SetPage(int page) { }
+
+    private void ClearCellSelection()
+    {
+        _isAllSelected = false;
+        SelectedEntireRows.Clear();
+        SelectedEntireCols.Clear();
+        SelectedCells.Clear();
+        _lastSelectedCell = (-1, -1);
+    }
+
+    private bool IsCellSelected(int actualRowIndex, int localCol)
+    {
+        return _isAllSelected || 
+               SelectedEntireRows.Contains(actualRowIndex) || 
+               SelectedEntireCols.Contains(localCol) || 
+               SelectedCells.Contains((actualRowIndex, localCol));
+    }
+
+    private bool IsRowFullySelected(int actualRowIndex)
+    {
+        if (_isAllSelected || SelectedEntireRows.Contains(actualRowIndex)) return true;
+        if (Columns.Count == 0) return false;
+        for (int c = 0; c < Columns.Count; c++)
+        {
+            if (!IsCellSelected(actualRowIndex, c)) return false;
+        }
+        return true;
+    }
+
+    private bool IsColumnFullySelected(int colIndex)
+    {
+        if (_isAllSelected || SelectedEntireCols.Contains(colIndex)) return true;
+        return false;
     }
 
     private void HideContextMenu()
@@ -777,78 +1133,42 @@ else
         IsColumnContextMenu = false;
     }
 
-    private bool IsRowFullySelected(int rowIndex)
-    {
-        if (Columns.Count == 0) return false;
-        for (int c = 0; c < Columns.Count; c++)
-        {
-            if (!SelectedCells.Contains((rowIndex, c))) return false;
-        }
-        return true;
-    }
-
-    private void HandleRowHeaderClick(MouseEventArgs e, int rowIndex)
+    private void HandleRowHeaderClick(MouseEventArgs e, int actualRowIndex)
     {
         HideContextMenu();
-
         if (Columns.Count == 0) return;
 
         if (e.CtrlKey || e.MetaKey)
         {
-            bool allSelected = IsRowFullySelected(rowIndex);
-            for (int c = 0; c < Columns.Count; c++)
-            {
-                if (allSelected)
-                {
-                    SelectedCells.Remove((rowIndex, c));
-                }
-                else
-                {
-                    SelectedCells.Add((rowIndex, c));
-                }
-            }
-            if (!allSelected)
-            {
-                _lastSelectedCell = (rowIndex, 0);
-            }
+            if (SelectedEntireRows.Contains(actualRowIndex))
+                SelectedEntireRows.Remove(actualRowIndex);
+            else
+                SelectedEntireRows.Add(actualRowIndex);
         }
         else if (e.ShiftKey && _lastSelectedCell.Row >= 0)
         {
-            SelectedCells.Clear();
-            int startR = Math.Min(_lastSelectedCell.Row, rowIndex);
-            int endR = Math.Max(_lastSelectedCell.Row, rowIndex);
-
-            for (int r = startR; r <= endR; r++)
-            {
-                for (int c = 0; c < Columns.Count; c++)
-                {
-                    SelectedCells.Add((r, c));
-                }
-            }
+            ClearCellSelection();
+            int startR = Math.Min(_lastSelectedCell.Row, actualRowIndex);
+            int endR = Math.Max(_lastSelectedCell.Row, actualRowIndex);
+            for (int r = startR; r <= endR; r++) SelectedEntireRows.Add(r);
         }
         else
         {
-            SelectedCells.Clear();
-            for (int c = 0; c < Columns.Count; c++)
-            {
-                SelectedCells.Add((rowIndex, c));
-            }
-            _lastSelectedCell = (rowIndex, 0);
+            ClearCellSelection();
+            SelectedEntireRows.Add(actualRowIndex);
+            _lastSelectedCell = (actualRowIndex, 0);
         }
     }
 
-    private void HandleCellClick(MouseEventArgs e, int rowIndex, int colIndex)
+    private void HandleCellClick(MouseEventArgs e, int actualRowIndex, int colIndex)
     {
         HideContextMenu();
-
-        var coord = (rowIndex, colIndex);
+        var coord = (actualRowIndex, colIndex);
 
         if (e.CtrlKey || e.MetaKey)
         {
             if (SelectedCells.Contains(coord))
-            {
                 SelectedCells.Remove(coord);
-            }
             else
             {
                 SelectedCells.Add(coord);
@@ -857,9 +1177,9 @@ else
         }
         else if (e.ShiftKey && _lastSelectedCell.Row >= 0 && _lastSelectedCell.Col >= 0)
         {
-            SelectedCells.Clear();
-            int startR = Math.Min(_lastSelectedCell.Row, rowIndex);
-            int endR = Math.Max(_lastSelectedCell.Row, rowIndex);
+            ClearCellSelection();
+            int startR = Math.Min(_lastSelectedCell.Row, actualRowIndex);
+            int endR = Math.Max(_lastSelectedCell.Row, actualRowIndex);
             int startC = Math.Min(_lastSelectedCell.Col, colIndex);
             int endC = Math.Max(_lastSelectedCell.Col, colIndex);
 
@@ -873,116 +1193,44 @@ else
         }
         else
         {
-            SelectedCells.Clear();
+            ClearCellSelection();
             SelectedCells.Add(coord);
             _lastSelectedCell = coord;
+        }
+    }
+
+    private void HandleColumnHeaderClick(MouseEventArgs e, int colIndex)
+    {
+        HideContextMenu();
+        if (e.CtrlKey || e.MetaKey)
+        {
+            if (SelectedEntireCols.Contains(colIndex))
+                SelectedEntireCols.Remove(colIndex);
+            else
+                SelectedEntireCols.Add(colIndex);
+        }
+        else
+        {
+            ClearCellSelection();
+            SelectedEntireCols.Add(colIndex);
+            _lastSelectedCell = (0, colIndex);
         }
     }
 
     private void ToggleSelectAll()
     {
         HideContextMenu();
-        var pagedCount = PagedRows.Count;
-        var colCount = Columns.Count;
-        if (pagedCount == 0 || colCount == 0) return;
-
-        int totalCells = pagedCount * colCount;
-        if (SelectedCells.Count == totalCells)
-        {
-            ClearCellSelection();
-        }
-        else
-        {
-            SelectedCells.Clear();
-            for (int r = 0; r < pagedCount; r++)
-            {
-                for (int c = 0; c < colCount; c++)
-                {
-                    SelectedCells.Add((r, c));
-                }
-            }
-            _lastSelectedCell = (0, 0);
-        }
+        _isAllSelected = !_isAllSelected;
+        SelectedCells.Clear();
+        SelectedEntireRows.Clear();
+        SelectedEntireCols.Clear();
+        _lastSelectedCell = (0, 0);
         StateHasChanged();
     }
 
     private void SelectAllCurrentPage()
     {
-        HideContextMenu();
-        SelectedCells.Clear();
-        var pagedCount = PagedRows.Count;
-        var colCount = Columns.Count;
-        for (int r = 0; r < pagedCount; r++)
-        {
-            for (int c = 0; c < colCount; c++)
-            {
-                SelectedCells.Add((r, c));
-            }
-        }
-        _lastSelectedCell = (0, 0);
-        StateHasChanged();
-    }
-
-    private bool IsColumnFullySelected(int colIndex)
-    {
-        var pagedCount = PagedRows.Count;
-        if (pagedCount == 0) return false;
-        for (int r = 0; r < pagedCount; r++)
-        {
-            if (!SelectedCells.Contains((r, colIndex))) return false;
-        }
-        return true;
-    }
-
-    private void HandleColumnHeaderClick(MouseEventArgs e, int colIndex)
-    {
-        HideContextMenu();
-
-        var pagedCount = PagedRows.Count;
-        if (pagedCount == 0) return;
-
-        if (e.CtrlKey || e.MetaKey)
-        {
-            bool allSelected = IsColumnFullySelected(colIndex);
-            for (int r = 0; r < pagedCount; r++)
-            {
-                if (allSelected)
-                {
-                    SelectedCells.Remove((r, colIndex));
-                }
-                else
-                {
-                    SelectedCells.Add((r, colIndex));
-                }
-            }
-            if (!allSelected)
-            {
-                _lastSelectedCell = (0, colIndex);
-            }
-        }
-        else if (e.ShiftKey && _lastSelectedCell.Col >= 0)
-        {
-            SelectedCells.Clear();
-            int startC = Math.Min(_lastSelectedCell.Col, colIndex);
-            int endC = Math.Max(_lastSelectedCell.Col, colIndex);
-
-            for (int r = 0; r < pagedCount; r++)
-            {
-                for (int c = startC; c <= endC; c++)
-                {
-                    SelectedCells.Add((r, c));
-                }
-            }
-        }
-        else
-        {
-            SelectedCells.Clear();
-            for (int r = 0; r < pagedCount; r++)
-            {
-                SelectedCells.Add((r, colIndex));
-            }
-            _lastSelectedCell = (0, colIndex);
-        }
+        ToggleSelectAll();
     }
 
     private void ShowColumnHeaderContextMenu(MouseEventArgs e, int colIndex, string colName)
@@ -990,25 +1238,18 @@ else
         HideContextMenu();
         ContextMenuColumn = colName;
         IsColumnContextMenu = true;
-
-        bool allSelected = IsColumnFullySelected(colIndex);
-        if (!allSelected)
+        if (!SelectedEntireCols.Contains(colIndex) && !_isAllSelected)
         {
-            SelectedCells.Clear();
-            var pagedCount = PagedRows.Count;
-            for (int r = 0; r < pagedCount; r++)
-            {
-                SelectedCells.Add((r, colIndex));
-            }
+            ClearCellSelection();
+            SelectedEntireCols.Add(colIndex);
             _lastSelectedCell = (0, colIndex);
         }
-
         RowContextMenuX = e.ClientX;
         RowContextMenuY = e.ClientY;
         ShowContextMenuState = true;
     }
 
-    private void ShowCellContextMenu(MouseEventArgs e, int rowIndex, int colIndex)
+    private void ShowCellContextMenu(MouseEventArgs e, int actualRowIndex, int colIndex)
     {
         HideContextMenu();
         IsColumnContextMenu = false;
@@ -1016,110 +1257,143 @@ else
         {
             ContextMenuColumn = Columns[colIndex];
         }
-
-        var coord = (rowIndex, colIndex);
-        if (!SelectedCells.Contains(coord))
+        var coord = (actualRowIndex, colIndex);
+        if (!IsCellSelected(actualRowIndex, colIndex))
         {
-            SelectedCells.Clear();
+            ClearCellSelection();
             SelectedCells.Add(coord);
             _lastSelectedCell = coord;
         }
-
         RowContextMenuX = e.ClientX;
         RowContextMenuY = e.ClientY;
         ShowContextMenuState = true;
     }
 
-    private void ShowRowHeaderContextMenu(MouseEventArgs e, int rowIndex)
+    private void ShowRowHeaderContextMenu(MouseEventArgs e, int actualRowIndex)
     {
         HideContextMenu();
         IsColumnContextMenu = false;
         ContextMenuColumn = "";
-
-        if (rowIndex >= 0)
+        if (actualRowIndex >= 0)
         {
-            bool allSelected = IsRowFullySelected(rowIndex);
-            if (!allSelected)
+            if (!SelectedEntireRows.Contains(actualRowIndex) && !_isAllSelected)
             {
-                SelectedCells.Clear();
-                for (int c = 0; c < Columns.Count; c++)
-                {
-                    SelectedCells.Add((rowIndex, c));
-                }
-                _lastSelectedCell = (rowIndex, 0);
+                ClearCellSelection();
+                SelectedEntireRows.Add(actualRowIndex);
+                _lastSelectedCell = (actualRowIndex, 0);
             }
         }
         else
         {
-            // Right-clicked the # header: if no selection, select all
-            if (SelectedCells.Count == 0)
+            if (!_isAllSelected && SelectedCells.Count == 0 && SelectedEntireRows.Count == 0)
             {
-                SelectAllCurrentPage();
+                _isAllSelected = true;
             }
         }
-
         RowContextMenuX = e.ClientX;
         RowContextMenuY = e.ClientY;
         ShowContextMenuState = true;
     }
 
+    private byte[]? SelectedSingleCellByteValue
+    {
+        get
+        {
+            if (SelectedCells.Count == 1 && !_isAllSelected && SelectedEntireRows.Count == 0 && SelectedEntireCols.Count == 0)
+            {
+                var (r, c) = SelectedCells.First();
+                if (r >= 0 && r < TotalDataCount && c >= 0 && c < Columns.Count)
+                {
+                    var raw = GetRawCellValue(r, c, Columns[c]);
+                    if (raw is byte[] bytes) return bytes;
+                }
+            }
+            return null;
+        }
+    }
+
     private string BuildClipboardText(bool includeHeaders)
     {
-        var paged = PagedRows;
-        if (paged.Count == 0 || Columns.Count == 0 || SelectedCells.Count == 0) return string.Empty;
+        int totalRows = TotalDataCount;
+        int colCount = Columns.Count;
+        if (totalRows == 0 || colCount == 0) return string.Empty;
 
-        // Single cell special case: clean raw copy
-        if (SelectedCells.Count == 1)
+        if (SelectedCells.Count == 1 && !_isAllSelected && SelectedEntireRows.Count == 0 && SelectedEntireCols.Count == 0)
         {
             var (r, c) = SelectedCells.First();
-            if (r >= 0 && r < paged.Count && c >= 0 && c < Columns.Count)
+            if (r >= 0 && r < totalRows && c >= 0 && c < colCount)
             {
-                var val = GetColumnValue(paged[r], Columns[c]) ?? "NULL";
-                if (includeHeaders)
+                var raw = GetRawCellValue(r, c, Columns[c]);
+                if (raw is byte[] bytes)
                 {
-                    return $"{Columns[c]}\r\n{val}";
+                    var hex = BinaryDataHelper.ToHexString(bytes, prefix: true);
+                    return includeHeaders ? $"{Columns[c]}\r\n{hex}" : hex;
                 }
-                return val;
+                var val = FormatCellValue(raw) ?? "NULL";
+                return includeHeaders ? $"{Columns[c]}\r\n{val}" : val;
             }
         }
 
-        var targetRows = SelectedCells.Select(x => x.Row).Where(r => r >= 0 && r < paged.Count).Distinct().OrderBy(r => r).ToList();
-        var targetCols = SelectedCells.Select(x => x.Col).Where(c => c >= 0 && c < Columns.Count).Distinct().OrderBy(c => c).ToList();
+        var targetRows = new List<int>();
+        var targetCols = new List<int>();
 
-        if (targetRows.Count == 0 || targetCols.Count == 0) return string.Empty;
+        if (_isAllSelected)
+        {
+            int maxExport = Math.Min(totalRows, 10000);
+            for (int r = 0; r < maxExport; r++) targetRows.Add(r);
+            for (int c = 0; c < colCount; c++) targetCols.Add(c);
+        }
+        else
+        {
+            if (SelectedEntireRows.Count > 0)
+                targetRows.AddRange(SelectedEntireRows.OrderBy(r => r));
+            if (SelectedEntireCols.Count > 0)
+                targetCols.AddRange(SelectedEntireCols.OrderBy(c => c));
+
+            foreach (var cell in SelectedCells)
+            {
+                if (!targetRows.Contains(cell.Row)) targetRows.Add(cell.Row);
+                if (!targetCols.Contains(cell.Col)) targetCols.Add(cell.Col);
+            }
+
+            targetRows.Sort();
+            targetCols.Sort();
+        }
+
+        if (targetRows.Count == 0)
+        {
+            for (int r = 0; r < Math.Min(totalRows, 50); r++) targetRows.Add(r);
+        }
+        if (targetCols.Count == 0)
+        {
+            for (int c = 0; c < colCount; c++) targetCols.Add(c);
+        }
 
         var sb = new System.Text.StringBuilder();
-
         if (includeHeaders)
         {
-            var headerNames = targetCols.Select(c => Columns[c]);
-            sb.Append(string.Join("\t", headerNames));
+            sb.Append(string.Join("\t", targetCols.Select(c => Columns[c])));
             sb.Append("\r\n");
         }
 
         for (int rIdx = 0; rIdx < targetRows.Count; rIdx++)
         {
-            var row = paged[targetRows[rIdx]];
-            var rowValues = new List<string>(targetCols.Count);
-
+            int r = targetRows[rIdx];
+            var rowVals = new List<string>(targetCols.Count);
             foreach (var c in targetCols)
             {
-                if (SelectedCells.Contains((targetRows[rIdx], c)))
+                var raw = GetRawCellValue(r, c, Columns[c]);
+                if (raw is byte[] b)
                 {
-                    var val = GetColumnValue(row, Columns[c]);
-                    rowValues.Add(val ?? "NULL");
+                    rowVals.Add(b.Length <= BinaryDataHelper.ShortBinaryThreshold ? BinaryDataHelper.ToHexString(b, prefix: true) : BinaryDataHelper.FormatBinaryForDisplay(b));
                 }
                 else
                 {
-                    rowValues.Add("");
+                    rowVals.Add(FormatCellValue(raw) ?? "NULL");
                 }
             }
-
-            sb.Append(string.Join("\t", rowValues));
-            if (rIdx < targetRows.Count - 1)
-            {
-                sb.Append("\r\n");
-            }
+            sb.Append(string.Join("\t", rowVals));
+            if (rIdx < targetRows.Count - 1) sb.Append("\r\n");
         }
 
         return sb.ToString();
@@ -1193,6 +1467,13 @@ else
             {
                 SelectAllCurrentPage();
             }
+            else if (e.Key.Equals("f", StringComparison.OrdinalIgnoreCase))
+            {
+                if (OnToggleSearch.HasDelegate)
+                {
+                    await OnToggleSearch.InvokeAsync();
+                }
+            }
         }
         else if (e.Key == "Escape")
         {
@@ -1224,33 +1505,55 @@ else
     private async Task CopyColumnAsInClause()
     {
         HideContextMenu();
-
         List<string?> rawList;
 
         if (IsColumnContextMenu && !string.IsNullOrEmpty(ContextMenuColumn))
         {
-            // Right-clicked column header: all filtered rows in this column
-            rawList = FilteredRows
-                .Select(r => GetColumnValue(r, ContextMenuColumn))
-                .Where(v => v != null)
-                .ToList();
+            int colIdx = _tableStore != null ? _tableStore.GetColumnIndex(ContextMenuColumn) : Columns.IndexOf(ContextMenuColumn);
+            int rowCount = ActiveRowCount;
+            rawList = new List<string?>(Math.Min(rowCount, 10000));
+            for (int i = 0; i < Math.Min(rowCount, 10000); i++)
+            {
+                int actualIdx = GetActualRowIndex(i);
+                var val = FormatCellValue(GetRawCellValue(actualIdx, colIdx, ContextMenuColumn));
+                if (val != null) rawList.Add(val);
+            }
         }
-        else if (SelectedCells.Count > 0)
+        else if (SelectedCells.Count > 0 || SelectedEntireRows.Count > 0 || _isAllSelected)
         {
-            // Right-clicked cell area: take values of the selected cells
-            var paged = PagedRows;
-            rawList = SelectedCells
-                .Where(coord => coord.Row >= 0 && coord.Row < paged.Count && coord.Col >= 0 && coord.Col < Columns.Count)
-                .Select(coord => GetColumnValue(paged[coord.Row], Columns[coord.Col]))
-                .Where(v => v != null)
-                .ToList();
-        }
-        else if (!string.IsNullOrEmpty(ContextMenuColumn))
-        {
-            rawList = FilteredRows
-                .Select(r => GetColumnValue(r, ContextMenuColumn))
-                .Where(v => v != null)
-                .ToList();
+            rawList = new List<string?>();
+            int colIdx = !string.IsNullOrEmpty(ContextMenuColumn) ? (_tableStore != null ? _tableStore.GetColumnIndex(ContextMenuColumn) : Columns.IndexOf(ContextMenuColumn)) : 0;
+            if (colIdx < 0) colIdx = 0;
+
+            if (_isAllSelected)
+            {
+                int rowCount = Math.Min(ActiveRowCount, 5000);
+                for (int i = 0; i < rowCount; i++)
+                {
+                    int actualIdx = GetActualRowIndex(i);
+                    var val = FormatCellValue(GetRawCellValue(actualIdx, colIdx, Columns[colIdx]));
+                    if (val != null) rawList.Add(val);
+                }
+            }
+            else if (SelectedEntireRows.Count > 0)
+            {
+                foreach (var r in SelectedEntireRows.OrderBy(x => x).Take(5000))
+                {
+                    var val = FormatCellValue(GetRawCellValue(r, colIdx, Columns[colIdx]));
+                    if (val != null) rawList.Add(val);
+                }
+            }
+            else
+            {
+                foreach (var coord in SelectedCells.OrderBy(x => x.Row).Take(5000))
+                {
+                    if (coord.Col >= 0 && coord.Col < Columns.Count)
+                    {
+                        var val = FormatCellValue(GetRawCellValue(coord.Row, coord.Col, Columns[coord.Col]));
+                        if (val != null) rawList.Add(val);
+                    }
+                }
+            }
         }
         else
         {
@@ -1265,16 +1568,17 @@ else
 
         if (values.Count > 0)
         {
-            // Simple heuristic to check if we need quotes
-            bool useQuotes = !decimal.TryParse(values.First(), out _);
-            
             var formattedValues = values.Select(v => {
-                if (useQuotes)
+                if (v!.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                 {
-                    string escaped = v!.Replace("'", "''");
-                    return string.Format("N'{0}'", escaped);
+                    return v!;
                 }
-                return v!;
+                if (decimal.TryParse(v, out _))
+                {
+                    return v!;
+                }
+                string escaped = v!.Replace("'", "''");
+                return string.Format("N'{0}'", escaped);
             });
             var inClause = $"IN ({string.Join(", ", formattedValues)})";
 
@@ -1285,7 +1589,6 @@ else
             }
             catch
             {
-                // Clipboard API might fail if not in secure context, silently handle for now
             }
         }
     }
@@ -1293,14 +1596,20 @@ else
     private void CalculateAggregates()
     {
         if (string.IsNullOrEmpty(ContextMenuColumn)) return;
+        int colIdx = _tableStore != null ? _tableStore.GetColumnIndex(ContextMenuColumn) : Columns.IndexOf(ContextMenuColumn);
+        if (colIdx < 0) return;
 
-        var values = FilteredRows
-            .Select(r => r.TryGetValue(ContextMenuColumn, out var val) ? val : null)
-            .Where(v => v != null)
-            .ToList();
+        int rowCount = ActiveRowCount;
+        var values = new List<object?>(Math.Min(rowCount, 100000));
+        for (int i = 0; i < rowCount; i++)
+        {
+            int actualIdx = GetActualRowIndex(i);
+            var v = GetRawCellValue(actualIdx, colIdx, ContextMenuColumn);
+            if (v != null) values.Add(v);
+        }
 
         AggCount = values.Count;
-        AggDistinct = values.Select(v => v?.ToString()).Distinct().Count();
+        AggDistinct = values.Select(v => v is byte[] b ? Convert.ToHexString(b) : v?.ToString()).Distinct().Count();
         
         AggSum = null;
         AggAverage = null;
@@ -1324,11 +1633,6 @@ else
                 AggMin = dates.Min().ToString("g");
                 AggMax = dates.Max().ToString("g");
             }
-            else
-            {
-                // For strings/GUIDs, we only care about Count and Distinct.
-                // Alphabetical Min/Max is rarely useful and clutters the UI.
-            }
         }
 
         ActiveAggregateColumn = ContextMenuColumn;
@@ -1342,21 +1646,18 @@ else
 
     private async Task ExportToExcelAsync()
     {
-        if (FilteredRows == null || FilteredRows.Count == 0) return;
+        int rowCount = ActiveRowCount;
+        if (rowCount == 0 || Columns.Count == 0) return;
 
-        // Take snapshot for thread safety in case the user runs another query
-        var rowsSnapshot = FilteredRows.ToList();
         var colsSnapshot = Columns.ToList();
 
         IsExporting = true;
         _exportCts = new CancellationTokenSource();
         if (OnExportStateChanged.HasDelegate)
         {
-            await OnExportStateChanged.InvokeAsync(new ExportStatus(true, false, CancelExport));
+            await OnExportStateChanged.InvokeAsync(new ExportStatus(true, false, CancelExport, "Excel"));
         }
         StateHasChanged();
-        
-        // Small delay to ensure the UI renders the loading spinner before the CPU-bound task blocks the thread
         await Task.Delay(50);
 
         try
@@ -1367,41 +1668,47 @@ else
                 using var workbook = new XLWorkbook();
                 var worksheet = workbook.Worksheets.Add("Result Set");
 
-                // Add Headers
                 for (int i = 0; i < colsSnapshot.Count; i++)
                 {
                     worksheet.Cell(1, i + 1).Value = colsSnapshot[i];
                     worksheet.Cell(1, i + 1).Style.Font.Bold = true;
                 }
 
-                // Add Data
-                for (int rowIdx = 0; rowIdx < rowsSnapshot.Count; rowIdx++)
+                int maxRows = Math.Min(rowCount, 1048500);
+                for (int rowIdx = 0; rowIdx < maxRows; rowIdx++)
                 {
                     if (token.IsCancellationRequested) return Array.Empty<byte>();
-                    
-                    var row = rowsSnapshot[rowIdx];
+                    int actualIndex = GetActualRowIndex(rowIdx);
+
                     for (int colIdx = 0; colIdx < colsSnapshot.Count; colIdx++)
                     {
-                        if (row.TryGetValue(colsSnapshot[colIdx], out var val) && val != null)
+                        var val = GetRawCellValue(actualIndex, colIdx, colsSnapshot[colIdx]);
+                        if (val != null)
                         {
                             if (val is string s) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = s;
-                            else if (val is int i) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = i;
-                            else if (val is long l) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = l;
-                            else if (val is short sh) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = sh;
-                            else if (val is byte b) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = b;
-                            else if (val is decimal d) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = d;
+                            else if (val is int iv) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = iv;
+                            else if (val is long lv) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = lv;
+                            else if (val is short sv) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = sv;
+                            else if (val is decimal dv) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = dv;
                             else if (val is double dub) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = dub;
                             else if (val is float f) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = f;
-                            else if (val is bool bl) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = bl;
+                            else if (val is bool b) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = b;
                             else if (val is DateTime dt) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = dt;
                             else if (val is TimeSpan ts) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = ts;
+                            else if (val is byte[] bytes)
+                            {
+                                if (bytes.Length <= 16000)
+                                    worksheet.Cell(rowIdx + 2, colIdx + 1).Value = BinaryDataHelper.ToHexString(bytes, prefix: true);
+                                else
+                                    worksheet.Cell(rowIdx + 2, colIdx + 1).Value = BinaryDataHelper.FormatBinaryForDisplay(bytes);
+                            }
                             else worksheet.Cell(rowIdx + 2, colIdx + 1).Value = val.ToString();
                         }
                     }
                 }
 
                 if (token.IsCancellationRequested) return Array.Empty<byte>();
-                worksheet.Columns().AdjustToContents();
+                worksheet.Columns().AdjustToContents(1, Math.Min(maxRows + 1, 100));
 
                 if (token.IsCancellationRequested) return Array.Empty<byte>();
 
@@ -1422,7 +1729,7 @@ else
             ShowExportSuccess = true;
             if (OnExportStateChanged.HasDelegate)
             {
-                await OnExportStateChanged.InvokeAsync(new ExportStatus(false, true, null!));
+                await OnExportStateChanged.InvokeAsync(new ExportStatus(false, true, null!, "Excel"));
             }
         }
         catch (OperationCanceledException)
@@ -1438,12 +1745,135 @@ else
             IsExporting = false;
             if (OnExportStateChanged.HasDelegate && !ShowExportSuccess)
             {
-                _ = OnExportStateChanged.InvokeAsync(new ExportStatus(false, false, null!));
+                _ = OnExportStateChanged.InvokeAsync(new ExportStatus(false, false, null!, "Excel"));
             }
             _exportCts?.Dispose();
             _exportCts = null;
             StateHasChanged();
         }
+    }
+
+    private async Task ExportToCsvAsync()
+    {
+        int rowCount = ActiveRowCount;
+        if (rowCount == 0 || Columns.Count == 0) return;
+
+        var colsSnapshot = Columns.ToList();
+
+        IsExporting = true;
+        _exportCts = new CancellationTokenSource();
+        if (OnExportStateChanged.HasDelegate)
+        {
+            await OnExportStateChanged.InvokeAsync(new ExportStatus(true, false, CancelExport, "CSV"));
+        }
+        StateHasChanged();
+        await Task.Delay(50);
+
+        try
+        {
+            var token = _exportCts.Token;
+            byte[] fileBytes = await Task.Run(() =>
+            {
+                using var memoryStream = new MemoryStream();
+                using (var writer = new StreamWriter(memoryStream, new System.Text.UTF8Encoding(true)))
+                {
+                    for (int i = 0; i < colsSnapshot.Count; i++)
+                    {
+                        if (i > 0) writer.Write(",");
+                        writer.Write(EscapeCsvCell(colsSnapshot[i]));
+                    }
+                    writer.Write("\r\n");
+
+                    for (int rowIdx = 0; rowIdx < rowCount; rowIdx++)
+                    {
+                        if (token.IsCancellationRequested) return Array.Empty<byte>();
+                        int actualIndex = GetActualRowIndex(rowIdx);
+
+                        for (int colIdx = 0; colIdx < colsSnapshot.Count; colIdx++)
+                        {
+                            if (colIdx > 0) writer.Write(",");
+
+                            var val = GetRawCellValue(actualIndex, colIdx, colsSnapshot[colIdx]);
+                            if (val != null)
+                            {
+                                if (val is byte[] bytes)
+                                {
+                                    // Full database saved value as raw 0x... hex string (untruncated)
+                                    writer.Write(BinaryDataHelper.ToHexString(bytes, prefix: true));
+                                }
+                                else if (val is DateTime dt)
+                                {
+                                    writer.Write(EscapeCsvCell(dt.ToString("M/d/yyyy h:mm:ss.fff tt")));
+                                }
+                                else if (val is DateTimeOffset dto)
+                                {
+                                    writer.Write(EscapeCsvCell(dto.ToString("M/d/yyyy h:mm:ss.fff tt zzz")));
+                                }
+                                else if (val is bool b)
+                                {
+                                    writer.Write(b ? "True" : "False");
+                                }
+                                else
+                                {
+                                    writer.Write(EscapeCsvCell(val.ToString() ?? ""));
+                                }
+                            }
+                        }
+                        writer.Write("\r\n");
+                    }
+
+                    writer.Flush();
+                }
+
+                if (token.IsCancellationRequested) return Array.Empty<byte>();
+                return memoryStream.ToArray();
+            }, token);
+
+            if (token.IsCancellationRequested || fileBytes == null || fileBytes.Length == 0)
+            {
+                return;
+            }
+
+            using var stream = new MemoryStream(fileBytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", $"Export_{DateTime.Now:yyyyMMdd_HHmmss}.csv", streamRef);
+            
+            ShowExportSuccess = true;
+            if (OnExportStateChanged.HasDelegate)
+            {
+                await OnExportStateChanged.InvokeAsync(new ExportStatus(false, true, null!, "CSV"));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Export was cancelled by the user, do nothing
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting to CSV: {ex.Message}");
+        }
+        finally
+        {
+            IsExporting = false;
+            if (OnExportStateChanged.HasDelegate && !ShowExportSuccess)
+            {
+                _ = OnExportStateChanged.InvokeAsync(new ExportStatus(false, false, null!, "CSV"));
+            }
+            _exportCts?.Dispose();
+            _exportCts = null;
+            StateHasChanged();
+        }
+    }
+
+    private static string EscapeCsvCell(string? str)
+    {
+        if (string.IsNullOrEmpty(str)) return "";
+        bool needsQuotes = str.Contains(',') || str.Contains('"') || str.Contains('\n') || str.Contains('\r');
+        if (needsQuotes)
+        {
+            return "\"" + str.Replace("\"", "\"\"") + "\"";
+        }
+        return str;
     }
 
     private bool IsJsonOrXml(string? val)
@@ -1514,6 +1944,145 @@ else
         IsCodeViewerOpen = false;
     }
 
+    // Binary / Image Viewer State
+    private bool IsBinaryViewerOpen = false;
+    private byte[]? _activeBinaryBytes;
+    private string _activeBinaryColumnName = "";
+    private bool _activeBinaryIsImage = false;
+    private bool _activeBinaryIsPdf = false;
+    private string _activePdfBlobUrl = "";
+    private string _activeBinaryFormat = "";
+    private string _activeBinaryMimeType = "";
+    private string _activeBinaryBase64 = "";
+    private string _activeBinaryRawHex = "";
+    private string _activeBinaryTab = "preview";
+    private bool _isBinaryHexCopied = false;
+    private bool _isBinaryBase64Copied = false;
+
+    private async Task OpenBinaryViewer(byte[] bytes, string columnName)
+    {
+        _activeBinaryBytes = bytes;
+        _activeBinaryColumnName = columnName;
+        _activeBinaryIsImage = BinaryDataHelper.IsImage(bytes, out var fmt, out var mime);
+        _activeBinaryIsPdf = BinaryDataHelper.IsPdf(bytes);
+        _activeBinaryFormat = fmt;
+        _activeBinaryMimeType = mime;
+        _activeBinaryBase64 = _activeBinaryIsImage ? Convert.ToBase64String(bytes) : "";
+        _activeBinaryRawHex = BinaryDataHelper.GetRawHexForDisplay(bytes);
+        _activeBinaryTab = (_activeBinaryIsImage || _activeBinaryIsPdf) ? "preview" : "hex";
+        _isBinaryHexCopied = false;
+        _isBinaryBase64Copied = false;
+        _activePdfBlobUrl = "";
+        IsBinaryViewerOpen = true;
+        StateHasChanged();
+
+        if (_activeBinaryIsPdf)
+        {
+            try
+            {
+                using var stream = new MemoryStream(bytes);
+                using var streamRef = new DotNetStreamReference(stream);
+                _activePdfBlobUrl = await JS.InvokeAsync<string>("createBlobUrlFromStream", streamRef, "application/pdf");
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating PDF blob URL: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task CloseBinaryViewer()
+    {
+        if (!string.IsNullOrEmpty(_activePdfBlobUrl))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("revokeBlobUrl", _activePdfBlobUrl);
+            }
+            catch { }
+            _activePdfBlobUrl = "";
+        }
+        IsBinaryViewerOpen = false;
+        _activeBinaryBytes = null;
+        _activeBinaryBase64 = "";
+        _activeBinaryRawHex = "";
+        _activeBinaryIsPdf = false;
+        StateHasChanged();
+    }
+
+    private async Task CopyBinaryHexAsync(byte[] bytes)
+    {
+        if (bytes == null || bytes.Length == 0) return;
+        try
+        {
+            var hex = BinaryDataHelper.ToHexString(bytes, prefix: true);
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", hex);
+            _isBinaryHexCopied = true;
+            ShowCopyFeedback("Hex copied");
+            StateHasChanged();
+            _ = Task.Delay(2000).ContinueWith(_ =>
+            {
+                _isBinaryHexCopied = false;
+                InvokeAsync(StateHasChanged);
+            });
+        }
+        catch { }
+    }
+
+    private async Task CopyBinaryBase64Async()
+    {
+        if (_activeBinaryBytes == null || _activeBinaryBytes.Length == 0) return;
+        try
+        {
+            var b64 = $"data:{_activeBinaryMimeType};base64,{_activeBinaryBase64}";
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", b64);
+            _isBinaryBase64Copied = true;
+            ShowCopyFeedback("Base64 copied");
+            StateHasChanged();
+            _ = Task.Delay(2000).ContinueWith(_ =>
+            {
+                _isBinaryBase64Copied = false;
+                InvokeAsync(StateHasChanged);
+            });
+        }
+        catch { }
+    }
+
+    private async Task DownloadBinaryBytesAsync(byte[] bytes, string colName)
+    {
+        if (bytes == null || bytes.Length == 0) return;
+        try
+        {
+            string ext;
+            if (BinaryDataHelper.IsImage(bytes, out var imgFormat, out _))
+            {
+                ext = imgFormat.ToLowerInvariant();
+                if (ext == "jpeg") ext = "jpg";
+            }
+            else if (BinaryDataHelper.IsPdf(bytes))
+            {
+                ext = "pdf";
+            }
+            else
+            {
+                ext = "bin";
+            }
+
+            var cleanCol = string.IsNullOrWhiteSpace(colName) ? "data" : colName.Replace(" ", "_");
+            var fileName = $"{cleanCol}_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+
+            using var stream = new MemoryStream(bytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+            ShowCopyFeedback($"Downloaded {fileName}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error downloading binary data: {ex.Message}");
+        }
+    }
+
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
@@ -1526,6 +2095,13 @@ else
 
     public void Dispose()
     {
+        if (!string.IsNullOrEmpty(_activePdfBlobUrl))
+        {
+            try { _ = JS.InvokeVoidAsync("revokeBlobUrl", _activePdfBlobUrl); } catch { }
+        }
+        try { _ = JS.InvokeVoidAsync("destroyGridColumnResizers", _tableContainerId); } catch { }
+        _dotNetRef?.Dispose();
+        _dotNetRef = null;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         _copyFeedbackCts?.Cancel();
         _copyFeedbackCts?.Dispose();

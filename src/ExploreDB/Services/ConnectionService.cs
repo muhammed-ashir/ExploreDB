@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 
@@ -216,14 +217,14 @@ public class ConnectionService
             SavedConnections = SavedConnections
         };
         var json = JsonSerializer.Serialize(data);
-        var path = Path.Combine(FileSystem.AppDataDirectory, SettingsFile);
-        Directory.CreateDirectory(FileSystem.AppDataDirectory);
+        var path = Path.Combine(AppEnvironmentService.AppDataDirectory, SettingsFile);
+        Directory.CreateDirectory(AppEnvironmentService.AppDataDirectory);
         File.WriteAllText(path, json);
     }
 
     private void LoadSettings()
     {
-        var path = Path.Combine(FileSystem.AppDataDirectory, SettingsFile);
+        var path = Path.Combine(AppEnvironmentService.AppDataDirectory, SettingsFile);
         if (File.Exists(path))
         {
             try

@@ -8,6 +8,8 @@
 @inject ExploreDB.Services.GitHubUpdateService UpdateService
 @inject ExploreDB.Services.StoreUpdateService StoreUpdateService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject WindowManagerService WindowManager
+@inject UserSettingsService UserSettingsService
 
 <div class="container-fluid p-0">
     @if (IsSwitchingDatabaseGlobal)
@@ -143,10 +145,35 @@
             <NavMenu />
         </aside>
 
-        <main class="app-shell-main d-flex flex-column" style="height: 100vh; overflow-y: auto;">
-            <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top" style="background-color: var(--app-header-bg); border-color: var(--app-border) !important; backdrop-filter: blur(5px); z-index: 1020;">
-                <button class="btn btn-sm border-0 me-3" style="color: var(--app-text);" @onclick="() => SidebarCollapsed = !SidebarCollapsed" title="Toggle Sidebar">
-                    <span style="font-size: 1.2rem; line-height: 1;">☰</span>
+        @{
+            bool isDatabaseSelected = false;
+            string relativePath = Nav.ToBaseRelativePath(Nav.Uri);
+            bool isLearningHub = relativePath.Contains("learning", StringComparison.OrdinalIgnoreCase);
+            bool isQueryRunner = string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("runner", StringComparison.OrdinalIgnoreCase);
+            bool isHistory = relativePath.StartsWith("history", StringComparison.OrdinalIgnoreCase);
+            bool isSnippets = relativePath.StartsWith("snippets", StringComparison.OrdinalIgnoreCase);
+            bool isTools = relativePath.StartsWith("tools", StringComparison.OrdinalIgnoreCase);
+            bool isAppCenter = relativePath.Contains("app-center", StringComparison.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
+            {
+                try
+                {
+                    var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                    isDatabaseSelected = !string.IsNullOrEmpty(builder.InitialCatalog);
+                }
+                catch { }
+            }
+        }
+        <main class="app-shell-main d-flex flex-column" style="height: 100vh; @(isQueryRunner ? "overflow: hidden;" : "overflow-y: auto;")">
+            <div class="border-bottom border-secondary p-2 d-flex align-items-center sticky-top flex-shrink-0" style="background-color: var(--app-header-bg); border-color: var(--app-border) !important; backdrop-filter: blur(5px); z-index: 1020;">
+                <button class="btn btn-sm toolbar-icon-btn me-2" 
+                        style="width: 28px; height: 28px; min-width: 28px; min-height: 28px; max-width: 28px; max-height: 28px; border-radius: 6px;" 
+                        @onclick="() => SidebarCollapsed = !SidebarCollapsed" 
+                        title="@(SidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar")"
+                        data-bs-tooltip="true"
+                        data-bs-placement="bottom">
+                    <i class="bi @(SidebarCollapsed ? "bi-chevron-right" : "bi-chevron-left")" style="font-size: 0.85rem; line-height: 1;"></i>
                 </button>
                 @{
                     string connDisplay = "";
@@ -166,8 +193,9 @@
                 @if (!string.IsNullOrEmpty(connDisplay))
                 {
                     <div class="d-flex align-items-center gap-2">
-                        <div class="small fw-bold text-truncate" style="color: var(--app-text-muted); max-width: 500px;" title="@connDisplay">
-                            @connDisplay
+                        <div class="d-flex align-items-center px-2 py-1 rounded text-truncate border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; font-size: 0.85rem;" title="@connDisplay">
+                            <i class="bi bi-database me-2 text-info"></i>
+                            <span class="fw-medium text-truncate" style="color: var(--app-text); max-width: 500px;">@connDisplay</span>
                         </div>
                         <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="Refresh Schema" data-bs-tooltip="true" data-bs-placement="bottom" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
                             @if (IsRefreshingSchema)
@@ -198,26 +226,8 @@
                     </button>
                 </div>
             </div>
-            <div class="app-shell-content flex-grow-1">
-                @{
-                    bool isDatabaseSelected = false;
-                    string relativePath = Nav.ToBaseRelativePath(Nav.Uri);
-                    bool isLearningHub = relativePath.Contains("learning", StringComparison.OrdinalIgnoreCase);
-                    bool isQueryRunner = string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("runner", StringComparison.OrdinalIgnoreCase);
-                    bool isHistory = relativePath.StartsWith("history", StringComparison.OrdinalIgnoreCase);
-                    bool isSnippets = relativePath.StartsWith("snippets", StringComparison.OrdinalIgnoreCase);
-
-                    if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
-                    {
-                        try
-                        {
-                            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
-                            isDatabaseSelected = !string.IsNullOrEmpty(builder.InitialCatalog);
-                        }
-                        catch { }
-                    }
-                }
-                @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner && !isHistory && !isSnippets)
+            <div class="app-shell-content flex-grow-1 @(isQueryRunner ? "p-3 d-flex flex-column overflow-hidden" : "")" style="@(isQueryRunner ? "min-height: 0;" : "")">
+                @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner && !isHistory && !isSnippets && !isTools && !isAppCenter)
                 {
                     <div class="w-100 h-100 d-flex justify-content-center align-items-center" style="min-height: 80vh;">
                         <ExploreDB.Components.Shared.NoDatabaseBanner Height="100%" />
@@ -244,7 +254,13 @@
                         <div class="d-flex flex-column" style="height: 450px;">
                             <div class="p-3 border-bottom border-secondary d-flex gap-2">
                                 <div class="input-group input-group-sm flex-grow-1 shadow-sm">
-                                    <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
+                                    <input type="text" class="form-control border-secondary @(!string.IsNullOrEmpty(SearchConn) ? "border-end-0" : "")" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" placeholder="Search connections..." @bind="SearchConn" @bind:event="oninput" />
+                                    @if (!string.IsNullOrEmpty(SearchConn))
+                                    {
+                                        <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" title="Clear filter" @onclick="() => SearchConn = string.Empty">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    }
                                     <button class="btn @(FilterCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-2" style="z-index: 0; border-color: var(--app-input-border); @(FilterCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Case" @onclick="() => FilterCaseSensitive = !FilterCaseSensitive">
                                         <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
                                     </button>
@@ -574,7 +590,7 @@
     protected override async Task OnInitializedAsync()
     {
         ShowConnectionManager = !IsConnected;
-        MauiProgram.RequestAppExit += HandleRequestAppExit;
+        App.RequestAppExit += HandleRequestAppExit;
         Nav.LocationChanged += OnLocationChanged;
 
         ConnString = ConnectionService.ConnectionString;
@@ -593,6 +609,7 @@
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
         SchemaService.OnError += HandleSchemaError;
         ThemeService.OnThemeChanged += HandleThemeChanged;
+        WindowManager.OnNavigateMainWindowRequested += HandleNavigateMainWindowRequested;
 
         if (!Config.GetValue<bool>("DisableAutoUpdates", false))
         {
@@ -626,8 +643,9 @@
             try
             {
                 await ThemeService.InitializeAsync(JS);
+                await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
                 // Signal to MAUI that the Blazor UI is ready
-                MauiProgram.InvokeAppReady(null);
+                // App ready
             }
             catch { }
         }
@@ -653,20 +671,31 @@
 
     private void ConfirmExit()
     {
+        MainWindow.IsExitingConfirmed = true;
         Microsoft.Data.SqlClient.SqlConnection.ClearAllPools();
         Environment.Exit(0);
     }
 
     public void Dispose()
     {
+        WindowManager.OnNavigateMainWindowRequested -= HandleNavigateMainWindowRequested;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
-        MauiProgram.RequestAppExit -= HandleRequestAppExit;
+        App.RequestAppExit -= HandleRequestAppExit;
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
         ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
         SchemaService.OnError -= HandleSchemaError;
         Nav.LocationChanged -= OnLocationChanged;
         _updateTimer?.Dispose();
+    }
+
+    private void HandleNavigateMainWindowRequested(string route)
+    {
+        _ = InvokeAsync(() =>
+        {
+            Nav.NavigateTo(route);
+            StateHasChanged();
+        });
     }
 
     private async Task PollForUpdatesAsync()
@@ -742,7 +771,11 @@
 
     private async Task FallbackUpdate()
     {
-        await Microsoft.Maui.ApplicationModel.Launcher.OpenAsync("https://zerinapps.web.app/app/dbexplorer");
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://zerinapps.web.app/app/dbexplorer") { UseShellExecute = true });
+        }
+        catch { }
     }
 
     private void SetAuthType(string type)

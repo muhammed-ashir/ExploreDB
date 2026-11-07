@@ -1,0 +1,2427 @@
+@page "/tools/sql-compare"
+@using ExploreDB.Services
+@using ExploreDB.Services.SqlCompare
+@using ExploreDB.Services.SqlCompare.Models
+@using BlazorMonaco.Editor
+@using BlazorMonaco
+@using System.IO
+@using System.Threading
+@inject ISchemaComparisonService ComparisonService
+@inject IHtmlReportGenerator HtmlGenerator
+@inject SchemaService SchemaService
+@inject ConnectionService ConnectionService
+@inject QueryStateService QueryStateService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ThemeService ThemeService
+@inject ToolRegistryService ToolService
+@inject WindowManagerService WindowManager
+@implements IDisposable
+
+<div class="container-fluid h-100 d-flex flex-column pb-4">
+    <!-- Header (Hidden during comparison loading screen) -->
+    @if (!_isComparing)
+    {
+        <!-- Title Row: SQL Compare (Left) + New Comparison / Back to Tools (Right) -->
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <h3 class="fw-bold mb-0" style="color: var(--app-text);">SQL Compare</h3>
+            @if (_result != null)
+            {
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        style="color: var(--app-text); border-color: var(--app-border);"
+                        @onclick="ResetComparison"
+                        title="Configure a new comparison">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>New Comparison</span>
+                </button>
+            }
+            else if (!IsPopout)
+            {
+                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" style="color: var(--app-text); border-color: var(--app-border);">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Back to Tools Hub</span>
+                </a>
+            }
+        </div>
+
+        @if (_result != null)
+        {
+            <!-- Subtitle / Action Row: Source & Target Endpoints (Left) + Action Buttons (Right) -->
+            <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                <span class="text-muted small d-inline-flex align-items-center flex-wrap gap-1">
+                    <span>Source:</span>
+                    <strong style="color: var(--app-text); cursor: pointer;"
+                            data-bs-tooltip="true"
+                            data-bs-placement="bottom"
+                            data-bs-html="true"
+                            data-bs-title="@GetEndpointTooltipHtml(_result.SourceEndpoint)">
+                        @GetEndpointDisplayName(_result.SourceEndpoint)
+                    </strong>
+
+                    <i class="bi bi-arrow-right mx-1 text-primary"></i>
+
+                    <span>Target:</span>
+                    <strong style="color: var(--app-text); cursor: pointer;"
+                            data-bs-tooltip="true"
+                            data-bs-placement="bottom"
+                            data-bs-html="true"
+                            data-bs-title="@GetEndpointTooltipHtml(_result.TargetEndpoint)">
+                        @GetEndpointDisplayName(_result.TargetEndpoint)
+                    </strong>
+                </span>
+
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="CopySyncScriptAsync"
+                            title="Copy generated synchronization script">
+                        <i class="bi @(_isScriptCopied ? "bi-check-lg text-success" : "bi-clipboard")"></i>
+                        <span>@(_isScriptCopied ? "Script Copied!" : "Copy Script")</span>
+                    </button>
+
+                    <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="ExportHtmlReportAsync"
+                            title="Export standalone offline HTML diff report">
+                        <i class="bi bi-filetype-html"></i>
+                        <span>Export HTML</span>
+                    </button>
+
+                    <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
+                            @onclick="OpenInQueryRunnerAsync"
+                            title="Open synchronization script in Query Runner">
+                        <i class="bi bi-play-circle"></i>
+                        <span>Open in Query Runner</span>
+                    </button>
+                </div>
+            </div>
+        }
+    }
+
+    @if (_isComparing)
+    {
+        <!-- Comparison Progress Screen -->
+        <div class="flex-grow-1 d-flex flex-column align-items-center justify-content-center p-4">
+            <div class="card p-4 rounded-3 shadow text-center" style="background-color: var(--app-surface); border: 1px solid var(--app-border); max-width: 520px; width: 100%;">
+                <h5 class="fw-bold mb-4" style="color: var(--app-text);">Comparing Database Schemas</h5>
+
+                <!-- Animated Progress Bar -->
+                <div class="progress mb-3" style="height: 8px; background-color: var(--app-surface-secondary); border-radius: 4px; overflow: hidden;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         role="progressbar"
+                         style="width: @(_comparisonProgressPercent)%; transition: width 0.3s ease-out;">
+                    </div>
+                </div>
+
+                <!-- Timer & Estimation Row -->
+                <div class="d-flex align-items-center justify-content-between text-muted small mb-4 px-1" style="font-size: 0.82rem;">
+                    <span>
+                        Elapsed: <strong style="color: var(--app-text);">@_elapsedTimeFormatted</strong>
+                    </span>
+                    @if (_estimate != null)
+                    {
+                        <span>
+                            Est: <strong style="color: var(--app-text);">~@_estimate.FormattedEstimate</strong>
+                        </span>
+                    }
+                </div>
+
+                <button class="btn btn-sm btn-outline-danger align-self-center px-4" @onclick="CancelComparison">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    }
+    else if (_result == null)
+    {
+        <!-- Setup & Connection Screen -->
+        <div class="row g-4 align-content-start">
+            <!-- Left: Source Endpoint -->
+            <div class="col-12 col-lg-6">
+                <div class="card p-4 rounded-3 shadow-sm h-100" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                    <div class="mb-3 border-bottom pb-2" style="border-color: var(--app-border) !important;">
+                        <h6 class="fw-bold mb-0 text-primary">Source</h6>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="btn-group btn-group-sm shadow-sm">
+                            <button type="button" class="btn @(_source.Type == EndpointType.LiveDatabase ? "btn-primary" : "btn-outline-secondary") btn-sm"
+                                    @onclick="() => _source.Type = EndpointType.LiveDatabase">
+                                Database
+                            </button>
+                            <button type="button" class="btn @(_source.Type == EndpointType.DacpacFile ? "btn-primary" : "btn-outline-secondary") btn-sm"
+                                    @onclick="() => _source.Type = EndpointType.DacpacFile">
+                                .dacpac File
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (_source.Type == EndpointType.LiveDatabase)
+                    {
+                        <div class="position-relative mb-3">
+                            <label class="form-label small fw-bold mb-1" style="color: var(--app-text);">Connection Profile</label>
+                            <div class="form-control form-control-sm d-flex align-items-center justify-content-between cursor-pointer shadow-sm"
+                                 style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); cursor: pointer;"
+                                 @onclick="ToggleSourceDropdown">
+                                <span class="text-truncate me-2">@GetSelectedProfileDisplayName(_sourceProfileId, _source)</span>
+                                <i class="bi @(_isSourceProfileDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") flex-shrink-0 text-muted" style="font-size: 0.75rem;"></i>
+                            </div>
+
+                            @if (_isSourceProfileDropdownOpen)
+                            {
+                                <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseSourceDropdown"></div>
+                                <div class="dropdown-menu show shadow-lg p-2 mt-1 rounded-3"
+                                     style="position: absolute; top: 100%; left: 0; z-index: 1050; width: 100%; min-width: 320px; background-color: var(--app-dropdown-bg); color: var(--app-text); border: 1px solid var(--app-border);">
+                                    <div class="mb-2">
+                                        <input type="text"
+                                               class="form-control form-control-sm"
+                                               style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                               placeholder="Search connections..."
+                                               @bind="_sourceSearchTerm"
+                                               @bind:event="oninput"
+                                               @onclick:stopPropagation />
+                                    </div>
+                                    <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 250px; overflow-y: auto;">
+                                        @if (string.IsNullOrEmpty(_sourceSearchTerm) || "active session".Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase) || GetActiveServerDisplayName().Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            var isActiveSelected = _sourceProfileId == "active";
+                                            <div class="dropdown-item p-2 mb-1 rounded-2 @(isActiveSelected ? "bg-primary text-white" : "") @(!SchemaService.IsDatabaseConnected ? "opacity-50" : "")"
+                                                 style="cursor: @(!SchemaService.IsDatabaseConnected ? "not-allowed" : "pointer");"
+                                                 @onclick='async () => { if (SchemaService.IsDatabaseConnected) await SelectSourceProfile("active"); }'>
+                                                <div class="d-flex flex-column text-truncate" style="min-width: 0;">
+                                                    <span class="fw-semibold text-truncate" style="font-size: 0.85rem;">Active Session</span>
+                                                    <span class="small @(isActiveSelected ? "text-white-50" : "text-muted") text-truncate" style="font-size: 0.72rem;">@GetActiveServerDisplayName()</span>
+                                                </div>
+                                            </div>
+                                        }
+
+                                        @{
+                                            var filteredSourceSaved = ConnectionService.SavedConnections
+                                                .Where(c => string.IsNullOrEmpty(_sourceSearchTerm) ||
+                                                            (!string.IsNullOrEmpty(c.Name) && c.Name.Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                                                            (!string.IsNullOrEmpty(c.Server) && c.Server.Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                                                            (!string.IsNullOrEmpty(c.Database) && c.Database.Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase)))
+                                                .ToList();
+                                        }
+
+                                        @if (filteredSourceSaved.Any())
+                                        {
+                                            <div class="px-2 py-1 small fw-bold text-muted text-uppercase mt-1" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                                                Saved Connections
+                                            </div>
+
+                                            @foreach (var c in filteredSourceSaved)
+                                            {
+                                                var isSelected = _sourceProfileId == c.Id;
+                                                var capturedId = c.Id;
+                                                <div class="dropdown-item p-2 mb-1 rounded-2 @(isSelected ? "bg-primary text-white" : "")"
+                                                     style="cursor: pointer;"
+                                                     @onclick="async () => await SelectSourceProfile(capturedId)">
+                                                    <div class="d-flex flex-column text-truncate" style="min-width: 0;">
+                                                        <span class="fw-semibold text-truncate" style="font-size: 0.85rem;">@(string.IsNullOrWhiteSpace(c.Name) ? c.Server : c.Name)</span>
+                                                        <span class="small @(isSelected ? "text-white-50" : "text-muted") text-truncate" style="font-size: 0.72rem;">@c.Server</span>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                    <hr class="dropdown-divider border-secondary my-2">
+                                    <button type="button" class="dropdown-item text-info text-center py-2 rounded-2 fw-medium"
+                                            style="border: 1px dashed var(--bs-info); width: calc(100% - 8px); margin: 0 4px;"
+                                            @onclick='async () => await SelectSourceProfile("custom")'>
+                                        <i class="bi bi-plus-lg me-1"></i> New Connection
+                                    </button>
+                                </div>
+                            }
+                        </div>
+
+                        @if (_sourceProfileId == "custom")
+                        {
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--app-text);">Server</label>
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_source.Server" placeholder="localhost or server\instance" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--app-text);">Authentication</label>
+                                <select class="form-select form-select-sm"
+                                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                        @bind="_source.AuthType">
+                                    <option value="Windows">Windows Authentication</option>
+                                    <option value="SqlServer">SQL Server Authentication</option>
+                                    <option value="EntraMfa">Microsoft Entra MFA</option>
+                                </select>
+                            </div>
+
+                            @if (_source.AuthType != "Windows")
+                            {
+                                <div class="row g-2 mb-3">
+                                    <div class="@(_source.AuthType == "SqlServer" ? "col-6" : "col-12")">
+                                        <label class="form-label small fw-bold" style="color: var(--app-text);">@(_source.AuthType == "EntraMfa" ? "Username / Email" : "Username")</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                               placeholder="@(_source.AuthType == "EntraMfa" ? "user@domain.com" : "sa")"
+                                               @bind="_source.Username" />
+                                    </div>
+                                    @if (_source.AuthType == "SqlServer")
+                                    {
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold" style="color: var(--app-text);">Password</label>
+                                            <input type="password" class="form-control form-control-sm"
+                                                   style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                                   @bind="_source.Password" />
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="mb-3 p-2 px-3 rounded-2" style="background-color: var(--app-input-bg); border: 1px solid var(--app-border);">
+                                <div class="d-flex align-items-center justify-content-between gap-3 mb-1">
+                                    <div class="d-flex align-items-center gap-2 overflow-hidden text-truncate me-3" style="min-width: 0;">
+                                        <i class="bi bi-hdd-network text-primary flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                        <span class="fw-semibold text-truncate" style="font-size: 0.85rem; color: var(--app-text);" title="@_source.Server">@_source.Server</span>
+                                    </div>
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none flex-shrink-0 text-nowrap d-inline-flex align-items-center gap-1" style="font-size: 0.75rem;" @onclick='() => _sourceProfileId = "custom"'>
+                                        <i class="bi bi-pencil"></i><span>Edit</span>
+                                    </button>
+                                </div>
+                                <div class="text-muted small" style="font-size: 0.75rem; line-height: 1.4;">
+                                    <div class="d-flex align-items-center gap-2 text-truncate me-3" style="min-width: 0;">
+                                        <i class="bi bi-shield-check opacity-75 flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                        <span class="text-truncate">@GetAuthDisplayName(_source.AuthType)</span>
+                                    </div>
+                                    @if (_source.AuthType != "Windows" && !string.IsNullOrWhiteSpace(_source.Username))
+                                    {
+                                        <div class="d-flex align-items-center gap-2 mt-1 text-truncate me-3" style="min-width: 0;">
+                                            <i class="bi bi-person opacity-75 flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                            <span class="text-truncate" title="@_source.Username">@_source.Username</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <div class="mb-3 position-relative">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label small fw-bold mb-0" style="color: var(--app-text);">Database</label>
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.75rem;" @onclick="LoadSourceDatabasesAsync" disabled="@_isSourceDbLoading">
+                                    <i class="bi @(_isSourceDbLoading ? "bi-arrow-clockwise spinner-border spinner-border-sm border-0" : "bi-arrow-clockwise")"></i> Refresh DBs
+                                </button>
+                            </div>
+                            @if (_sourceDatabases.Count > 0)
+                            {
+                                <div class="position-relative">
+                                    <input class="form-control form-control-sm pe-4 text-truncate"
+                                           @bind="_sourceDbSearch"
+                                           @bind:event="oninput"
+                                           placeholder="@(!string.IsNullOrWhiteSpace(_source.Database) ? _source.Database : "Search database...")"
+                                           @onfocus="OpenSourceDbDropdown"
+                                           @onclick="OpenSourceDbDropdown"
+                                           @onkeydown="OnSourceDbSearchKeyDown"
+                                           style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                                    @if (_isSourceDbDropdownOpen)
+                                    {
+                                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseSourceDbDropdown"></div>
+                                        <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track"
+                                             style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                            @if (_isSourceDbLoading)
+                                            {
+                                                <div class="p-3 text-center text-info">
+                                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                                    <small>Loading databases...</small>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                var filtered = _sourceDatabases.Where(d => string.IsNullOrWhiteSpace(_sourceDbSearch) || d.Contains(_sourceDbSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+                                                if (filtered.Any())
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var db in filtered)
+                                                        {
+                                                            var isSelected = string.Equals(_source.Database, db, StringComparison.OrdinalIgnoreCase);
+                                                            <button type="button"
+                                                                    class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate d-flex align-items-center justify-content-between @(isSelected ? "bg-primary-subtle text-primary fw-semibold" : "")"
+                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; @(isSelected ? "" : "background-color: transparent; color: var(--app-text);")"
+                                                                    title="@db"
+                                                                    @onclick="() => SelectSourceDatabase(db)">
+                                                                <span class="text-truncate">@db</span>
+                                                                @if (isSelected)
+                                                                {
+                                                                    <i class="bi bi-check2 text-primary flex-shrink-0 ms-2"></i>
+                                                                }
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">No matches found.</div>
+                                                }
+                                            }
+                                        </div>
+                                    }
+
+                                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 10px; top: 0; pointer-events: none;">
+                                        <i class="bi @(_isSourceDbDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") text-muted" style="font-size: 0.8rem;"></i>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_source.Database" placeholder="e.g. AdventureWorks" />
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Dacpac File Picker -->
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" style="color: var(--app-text);">Data-Tier Application Package (.dacpac)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_source.DacpacPath" placeholder="Path to source .dacpac..." />
+                                <button class="btn btn-outline-secondary" type="button" @onclick="BrowseSourceDacpac">
+                                    <i class="bi bi-folder2-open"></i> Browse...
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Right: Target Endpoint -->
+            <div class="col-12 col-lg-6">
+                <div class="card p-4 rounded-3 shadow-sm h-100" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                    <div class="mb-3 border-bottom pb-2" style="border-color: var(--app-border) !important;">
+                        <h6 class="fw-bold mb-0 text-success">Target</h6>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="btn-group btn-group-sm shadow-sm">
+                            <button type="button" class="btn @(_target.Type == EndpointType.LiveDatabase ? "btn-success" : "btn-outline-secondary") btn-sm"
+                                    @onclick="() => _target.Type = EndpointType.LiveDatabase">
+                                Database
+                            </button>
+                            <button type="button" class="btn @(_target.Type == EndpointType.DacpacFile ? "btn-success" : "btn-outline-secondary") btn-sm"
+                                    @onclick="() => _target.Type = EndpointType.DacpacFile">
+                                .dacpac File
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (_target.Type == EndpointType.LiveDatabase)
+                    {
+                        <div class="position-relative mb-3">
+                            <label class="form-label small fw-bold mb-1" style="color: var(--app-text);">Connection Profile</label>
+                            <div class="form-control form-control-sm d-flex align-items-center justify-content-between cursor-pointer shadow-sm"
+                                 style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); cursor: pointer;"
+                                 @onclick="ToggleTargetDropdown">
+                                <span class="text-truncate me-2">@GetSelectedProfileDisplayName(_targetProfileId, _target)</span>
+                                <i class="bi @(_isTargetProfileDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") flex-shrink-0 text-muted" style="font-size: 0.75rem;"></i>
+                            </div>
+
+                            @if (_isTargetProfileDropdownOpen)
+                            {
+                                <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseTargetDropdown"></div>
+                                <div class="dropdown-menu show shadow-lg p-2 mt-1 rounded-3"
+                                     style="position: absolute; top: 100%; left: 0; z-index: 1050; width: 100%; min-width: 320px; background-color: var(--app-dropdown-bg); color: var(--app-text); border: 1px solid var(--app-border);">
+                                    <div class="mb-2">
+                                        <input type="text"
+                                               class="form-control form-control-sm"
+                                               style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                               placeholder="Search connections..."
+                                               @bind="_targetSearchTerm"
+                                               @bind:event="oninput"
+                                               @onclick:stopPropagation />
+                                    </div>
+                                    <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 250px; overflow-y: auto;">
+                                        @if (string.IsNullOrEmpty(_targetSearchTerm) || "active session".Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase) || GetActiveServerDisplayName().Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            var isActiveSelected = _targetProfileId == "active";
+                                            <div class="dropdown-item p-2 mb-1 rounded-2 @(isActiveSelected ? "bg-primary text-white" : "") @(!SchemaService.IsDatabaseConnected ? "opacity-50" : "")"
+                                                 style="cursor: @(!SchemaService.IsDatabaseConnected ? "not-allowed" : "pointer");"
+                                                 @onclick='async () => { if (SchemaService.IsDatabaseConnected) await SelectTargetProfile("active"); }'>
+                                                <div class="d-flex flex-column text-truncate" style="min-width: 0;">
+                                                    <span class="fw-semibold text-truncate" style="font-size: 0.85rem;">Active Session</span>
+                                                    <span class="small @(isActiveSelected ? "text-white-50" : "text-muted") text-truncate" style="font-size: 0.72rem;">@GetActiveServerDisplayName()</span>
+                                                </div>
+                                            </div>
+                                        }
+
+                                        @{
+                                            var filteredTargetSaved = ConnectionService.SavedConnections
+                                                .Where(c => string.IsNullOrEmpty(_targetSearchTerm) ||
+                                                            (!string.IsNullOrEmpty(c.Name) && c.Name.Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                                                            (!string.IsNullOrEmpty(c.Server) && c.Server.Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                                                            (!string.IsNullOrEmpty(c.Database) && c.Database.Contains(_targetSearchTerm, StringComparison.OrdinalIgnoreCase)))
+                                                .ToList();
+                                        }
+
+                                        @if (filteredTargetSaved.Any())
+                                        {
+                                            <div class="px-2 py-1 small fw-bold text-muted text-uppercase mt-1" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                                                Saved Connections
+                                            </div>
+
+                                            @foreach (var c in filteredTargetSaved)
+                                            {
+                                                var isSelected = _targetProfileId == c.Id;
+                                                var capturedId = c.Id;
+                                                <div class="dropdown-item p-2 mb-1 rounded-2 @(isSelected ? "bg-primary text-white" : "")"
+                                                     style="cursor: pointer;"
+                                                     @onclick="async () => await SelectTargetProfile(capturedId)">
+                                                    <div class="d-flex flex-column text-truncate" style="min-width: 0;">
+                                                        <span class="fw-semibold text-truncate" style="font-size: 0.85rem;">@(string.IsNullOrWhiteSpace(c.Name) ? c.Server : c.Name)</span>
+                                                        <span class="small @(isSelected ? "text-white-50" : "text-muted") text-truncate" style="font-size: 0.72rem;">@c.Server</span>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                    <hr class="dropdown-divider border-secondary my-2">
+                                    <button type="button" class="dropdown-item text-info text-center py-2 rounded-2 fw-medium"
+                                            style="border: 1px dashed var(--bs-info); width: calc(100% - 8px); margin: 0 4px;"
+                                            @onclick='async () => await SelectTargetProfile("custom")'>
+                                        <i class="bi bi-plus-lg me-1"></i> New Connection
+                                    </button>
+                                </div>
+                            }
+                        </div>
+
+                        @if (_targetProfileId == "custom")
+                        {
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--app-text);">Server</label>
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_target.Server" placeholder="localhost or server\instance" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--app-text);">Authentication</label>
+                                <select class="form-select form-select-sm"
+                                        style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                        @bind="_target.AuthType">
+                                    <option value="Windows">Windows Authentication</option>
+                                    <option value="SqlServer">SQL Server Authentication</option>
+                                    <option value="EntraMfa">Microsoft Entra MFA</option>
+                                </select>
+                            </div>
+
+                            @if (_target.AuthType != "Windows")
+                            {
+                                <div class="row g-2 mb-3">
+                                    <div class="@(_target.AuthType == "SqlServer" ? "col-6" : "col-12")">
+                                        <label class="form-label small fw-bold" style="color: var(--app-text);">@(_target.AuthType == "EntraMfa" ? "Username / Email" : "Username")</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                               placeholder="@(_target.AuthType == "EntraMfa" ? "user@domain.com" : "sa")"
+                                               @bind="_target.Username" />
+                                    </div>
+                                    @if (_target.AuthType == "SqlServer")
+                                    {
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold" style="color: var(--app-text);">Password</label>
+                                            <input type="password" class="form-control form-control-sm"
+                                                   style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                                   @bind="_target.Password" />
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="mb-3 p-2 px-3 rounded-2" style="background-color: var(--app-input-bg); border: 1px solid var(--app-border);">
+                                <div class="d-flex align-items-center justify-content-between gap-3 mb-1">
+                                    <div class="d-flex align-items-center gap-2 overflow-hidden text-truncate me-3" style="min-width: 0;">
+                                        <i class="bi bi-hdd-network text-success flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                        <span class="fw-semibold text-truncate" style="font-size: 0.85rem; color: var(--app-text);" title="@_target.Server">@_target.Server</span>
+                                    </div>
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none flex-shrink-0 text-nowrap d-inline-flex align-items-center gap-1" style="font-size: 0.75rem;" @onclick='() => _targetProfileId = "custom"'>
+                                        <i class="bi bi-pencil"></i><span>Edit</span>
+                                    </button>
+                                </div>
+                                <div class="text-muted small" style="font-size: 0.75rem; line-height: 1.4;">
+                                    <div class="d-flex align-items-center gap-2 text-truncate me-3" style="min-width: 0;">
+                                        <i class="bi bi-shield-check opacity-75 flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                        <span class="text-truncate">@GetAuthDisplayName(_target.AuthType)</span>
+                                    </div>
+                                    @if (_target.AuthType != "Windows" && !string.IsNullOrWhiteSpace(_target.Username))
+                                    {
+                                        <div class="d-flex align-items-center gap-2 mt-1 text-truncate me-3" style="min-width: 0;">
+                                            <i class="bi bi-person opacity-75 flex-shrink-0" style="width: 16px; text-align: center;"></i>
+                                            <span class="text-truncate" title="@_target.Username">@_target.Username</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <div class="mb-3 position-relative">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label small fw-bold mb-0" style="color: var(--app-text);">Database</label>
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.75rem;" @onclick="LoadTargetDatabasesAsync" disabled="@_isTargetDbLoading">
+                                    <i class="bi @(_isTargetDbLoading ? "bi-arrow-clockwise spinner-border spinner-border-sm border-0" : "bi-arrow-clockwise")"></i> Refresh DBs
+                                </button>
+                            </div>
+                            @if (_targetDatabases.Count > 0)
+                            {
+                                <div class="position-relative">
+                                    <input class="form-control form-control-sm pe-4 text-truncate"
+                                           @bind="_targetDbSearch"
+                                           @bind:event="oninput"
+                                           placeholder="@(!string.IsNullOrWhiteSpace(_target.Database) ? _target.Database : "Search database...")"
+                                           @onfocus="OpenTargetDbDropdown"
+                                           @onclick="OpenTargetDbDropdown"
+                                           @onkeydown="OnTargetDbSearchKeyDown"
+                                           style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                                    @if (_isTargetDbDropdownOpen)
+                                    {
+                                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseTargetDbDropdown"></div>
+                                        <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track"
+                                             style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                            @if (_isTargetDbLoading)
+                                            {
+                                                <div class="p-3 text-center text-info">
+                                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                                    <small>Loading databases...</small>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                var filtered = _targetDatabases.Where(d => string.IsNullOrWhiteSpace(_targetDbSearch) || d.Contains(_targetDbSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+                                                if (filtered.Any())
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var db in filtered)
+                                                        {
+                                                            var isSelected = string.Equals(_target.Database, db, StringComparison.OrdinalIgnoreCase);
+                                                            <button type="button"
+                                                                    class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate d-flex align-items-center justify-content-between @(isSelected ? "bg-primary-subtle text-primary fw-semibold" : "")"
+                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; @(isSelected ? "" : "background-color: transparent; color: var(--app-text);")"
+                                                                    title="@db"
+                                                                    @onclick="() => SelectTargetDatabase(db)">
+                                                                <span class="text-truncate">@db</span>
+                                                                @if (isSelected)
+                                                                {
+                                                                    <i class="bi bi-check2 text-primary flex-shrink-0 ms-2"></i>
+                                                                }
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">No matches found.</div>
+                                                }
+                                            }
+                                        </div>
+                                    }
+
+                                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 10px; top: 0; pointer-events: none;">
+                                        <i class="bi @(_isTargetDbDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") text-muted" style="font-size: 0.8rem;"></i>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_target.Database" placeholder="e.g. AdventureWorks_Prod" />
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Dacpac File Picker -->
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" style="color: var(--app-text);">Data-Tier Application Package (.dacpac)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-control-sm"
+                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                       @bind="_target.DacpacPath" placeholder="Path to target .dacpac..." />
+                                <button class="btn btn-outline-secondary" type="button" @onclick="BrowseTargetDacpac">
+                                    <i class="bi bi-folder2-open"></i> Browse...
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Comparison Options Panel (Collapsible) -->
+            <div class="col-12">
+                <div class="card p-3 rounded-3 shadow-sm" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                    <div class="d-flex align-items-center justify-content-between cursor-pointer" @onclick="() => _optionsExpanded = !_optionsExpanded" style="cursor: pointer;">
+                        <h6 class="fw-bold mb-0" style="color: var(--app-text); font-size: 0.95rem;">
+                            <i class="bi bi-sliders text-primary me-2"></i>Comparison Options
+                        </h6>
+                        <i class="bi @(_optionsExpanded ? "bi-chevron-up" : "bi-chevron-down") text-muted"></i>
+                    </div>
+
+                    @if (_optionsExpanded)
+                    {
+                        <div class="row g-3 pt-3 mt-1 border-top" style="border-color: var(--app-border) !important;">
+                            <!-- Category: General & Syntax -->
+                            <div class="col-12 pb-1">
+                                <div class="text-uppercase fw-semibold" style="font-size: 0.72rem; color: var(--app-accent, #38bdf8); letter-spacing: 0.5px;">
+                                    <i class="bi bi-fonts me-1"></i>General &amp; Syntax
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Whitespace</b><br/>Ignores differences in spaces, tabs, line breaks, and indentation within object definitions.">
+                                    <input class="form-check-input" type="checkbox" id="optWhitespace" @bind="_options.IgnoreWhitespace" />
+                                    <label class="form-check-label small" for="optWhitespace" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Whitespace
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Comments</b><br/>Ignores SQL comment blocks (<code>/* ... */</code>) and single-line comments (<code>--</code>) within object definitions.">
+                                    <input class="form-check-input" type="checkbox" id="optComments" @bind="_options.IgnoreComments" />
+                                    <label class="form-check-label small" for="optComments" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Comments
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Keyword Casing</b><br/>Ignores casing differences in SQL keywords (e.g. <code>SELECT</code> vs <code>select</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optKeywordCasing" @bind="_options.IgnoreKeywordCasing" />
+                                    <label class="form-check-label small" for="optKeywordCasing" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Keyword Casing
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Semicolons</b><br/>Ignores statement terminator semicolons (<code>;</code>) between T-SQL statements.">
+                                    <input class="form-check-input" type="checkbox" id="optSemicolons" @bind="_options.IgnoreSemicolonBetweenStatements" />
+                                    <label class="form-check-label small" for="optSemicolons" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Semicolons
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Collation Differences</b><br/>Ignores differences in database, table, and column collations (e.g. <code>Latin1_General_CI_AS</code> vs <code>SQL_Latin1_General_CP1_CI_AS</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optCollation" @bind="_options.IgnoreCollation" />
+                                    <label class="form-check-label small" for="optCollation" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Collation Differences
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore System Constraint Names</b><br/>Ignores system-generated constraint names (e.g. <code>DF__tbl__col__12345</code>) to avoid false differences when constraints lack explicit names.">
+                                    <input class="form-check-input" type="checkbox" id="optConstraintNames" @bind="_options.IgnoreSystemConstraintNames" />
+                                    <label class="form-check-label small" for="optConstraintNames" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore System Constraint Names
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Category: Indexes & Constraints -->
+                            <div class="col-12 pt-2 pb-1 border-top" style="border-color: var(--app-border) !important;">
+                                <div class="text-uppercase fw-semibold" style="font-size: 0.72rem; color: var(--app-accent, #38bdf8); letter-spacing: 0.5px;">
+                                    <i class="bi bi-sort-numeric-down me-1"></i>Indexes &amp; Constraints
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Indexes</b><br/>Ignores clustered, non-clustered, and columnstore index differences on tables and views entirely.">
+                                    <input class="form-check-input" type="checkbox" id="optIndexes" @bind="_options.IgnoreIndexes" />
+                                    <label class="form-check-label small" for="optIndexes" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Indexes
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Constraints</b><br/>Ignores foreign keys, check constraints, and default constraints on tables entirely.">
+                                    <input class="form-check-input" type="checkbox" id="optConstraints" @bind="_options.IgnoreConstraints" />
+                                    <label class="form-check-label small" for="optConstraints" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Constraints
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Index Options</b><br/>Ignores physical index storage options (such as <code>STATISTICS_NORECOMPUTE</code>, <code>SORT_IN_TEMPDB</code>, <code>DROP_EXISTING</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optIndexOptions" @bind="_options.IgnoreIndexOptions" />
+                                    <label class="form-check-label small" for="optIndexOptions" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Index Options
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Fill Factor</b><br/>Ignores index fill factor percentage settings (e.g. <code>FILLFACTOR = 80</code> vs <code>FILLFACTOR = 90</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optFillFactor" @bind="_options.IgnoreFillFactor" />
+                                    <label class="form-check-label small" for="optFillFactor" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Fill Factor
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Index Padding</b><br/>Ignores index space padding settings (<code>PAD_INDEX = ON</code> vs <code>PAD_INDEX = OFF</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optIndexPadding" @bind="_options.IgnoreIndexPadding" />
+                                    <label class="form-check-label small" for="optIndexPadding" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Index Padding
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Index Lock Hints</b><br/>Ignores row/page locking granularities on indexes (<code>ALLOW_ROW_LOCKS</code>, <code>ALLOW_PAGE_LOCKS</code>).">
+                                    <input class="form-check-input" type="checkbox" id="optLockHints" @bind="_options.IgnoreLockHintsOnIndexes" />
+                                    <label class="form-check-label small" for="optLockHints" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Index Lock Hints
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Category: Schema & Table Rules -->
+                            <div class="col-12 pt-2 pb-1 border-top" style="border-color: var(--app-border) !important;">
+                                <div class="text-uppercase fw-semibold" style="font-size: 0.72rem; color: var(--app-accent, #38bdf8); letter-spacing: 0.5px;">
+                                    <i class="bi bi-table me-1"></i>Schema &amp; Table Rules
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Identity (Seed &amp; Increment)</b><br/>Ignores differences in identity column starting seed and step increment values (e.g. <code>IDENTITY(1,1)</code> vs <code>IDENTITY(1000,10)</code>). Structural identity column mismatches are still compared.">
+                                    <input class="form-check-input" type="checkbox" id="optIdentity" @bind="_options.IgnoreIdentitySeed" />
+                                    <label class="form-check-label small" for="optIdentity" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Identity (Seed &amp; Increment)
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Table Options</b><br/>Ignores storage and operational table options (such as <code>LOCK_ESCALATION</code>, <code>DATA_COMPRESSION</code>, <code>FILESTREAM_ON</code>) to prevent false differences on identical schemas.">
+                                    <input class="form-check-input" type="checkbox" id="optTableOptions" @bind="_options.IgnoreTableOptions" />
+                                    <label class="form-check-label small" for="optTableOptions" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Table Options
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Permissions &amp; Roles</b><br/>Ignores user permissions (<code>GRANT</code>, <code>DENY</code>, <code>REVOKE</code>), database roles, and role membership assignments.">
+                                    <input class="form-check-input" type="checkbox" id="optPermissions" @bind="_options.IgnorePermissions" />
+                                    <label class="form-check-label small" for="optPermissions" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Permissions &amp; Roles
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Extended Properties</b><br/>Ignores object descriptions, documentation metadata, and <code>MS_Description</code> properties.">
+                                    <input class="form-check-input" type="checkbox" id="optExtProps" @bind="_options.IgnoreExtendedProperties" />
+                                    <label class="form-check-label small" for="optExtProps" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Extended Properties
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore Filegroups &amp; Partitions</b><br/>Ignores filegroup placement (e.g. <code>ON [PRIMARY]</code>) and table/index partition schemes.">
+                                    <input class="form-check-input" type="checkbox" id="optFilegroups" @bind="_options.IgnoreFilegroups" />
+                                    <label class="form-check-label small" for="optFilegroups" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore Filegroups &amp; Partitions
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore NOT FOR REPLICATION</b><br/>Ignores <code>NOT FOR REPLICATION</code> settings on identity columns, foreign keys, and check constraints.">
+                                    <input class="form-check-input" type="checkbox" id="optReplication" @bind="_options.IgnoreNotForReplication" />
+                                    <label class="form-check-label small" for="optReplication" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore NOT FOR REPLICATION
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Category: Environment & Session Settings -->
+                            <div class="col-12 pt-2 pb-1 border-top" style="border-color: var(--app-border) !important;">
+                                <div class="text-uppercase fw-semibold" style="font-size: 0.72rem; color: var(--app-accent, #38bdf8); letter-spacing: 0.5px;">
+                                    <i class="bi bi-gear-wide-connected me-1"></i>Environment &amp; Session Settings
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore ANSI_NULLS</b><br/>Ignores the <code>SET ANSI_NULLS</code> setting saved when views, procedures, and tables were created.">
+                                    <input class="form-check-input" type="checkbox" id="optAnsiNulls" @bind="_options.IgnoreAnsiNulls" />
+                                    <label class="form-check-label small" for="optAnsiNulls" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore ANSI_NULLS
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="form-check"
+                                     data-bs-tooltip="true"
+                                     data-bs-html="true"
+                                     data-bs-placement="top"
+                                     data-bs-title="<b>Ignore QUOTED_IDENTIFIER</b><br/>Ignores the <code>SET QUOTED_IDENTIFIER</code> setting saved when views, procedures, and tables were created.">
+                                    <input class="form-check-input" type="checkbox" id="optQuotedIdentifiers" @bind="_options.IgnoreQuotedIdentifiers" />
+                                    <label class="form-check-label small" for="optQuotedIdentifiers" style="color: var(--app-text); cursor: pointer;">
+                                        Ignore QUOTED_IDENTIFIER
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Start Comparison Button -->
+            <div class="col-12 text-center pt-2">
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="alert alert-danger py-2 mb-3 d-inline-block text-start" style="font-size: 0.85rem;">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>@_errorMessage
+                    </div>
+                    <br />
+                }
+                <button class="btn btn-primary btn-lg px-5 shadow-sm fw-bold" @onclick="StartComparisonAsync">
+                    <i class="bi bi-arrow-left-right me-2"></i> Compare Schemas
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Comparison Results View (Redgate Style) -->
+        <div class="d-flex flex-column flex-grow-1 gap-3" style="min-height: 0;">
+            <!-- Summary KPI Cards -->
+            <div class="row g-2">
+                <div class="col-6 col-md-3">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Different" ? "border-primary" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "Different"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">ALL DIFFERENCES</span>
+                        <span class="fs-4 fw-bold text-primary">@_result.Summary.TotalDifferences</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Added" ? "border-success" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "Added"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">ONLY IN SOURCE</span>
+                        <span class="fs-4 fw-bold text-success">@_result.Summary.AddedCount</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Modified" ? "border-warning" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "Modified"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">DIFFERENT</span>
+                        <span class="fs-4 fw-bold text-warning">@_result.Summary.ModifiedCount</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card p-2 text-center rounded-3 shadow-sm cursor-pointer @(_selectedChangeFilter == "Deleted" ? "border-danger" : "")"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: pointer;"
+                         @onclick='() => _selectedChangeFilter = "Deleted"'>
+                        <span class="text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">ONLY IN TARGET</span>
+                        <span class="fs-4 fw-bold text-danger">@_result.Summary.DeletedCount</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Redgate Top/Bottom Layout: Differences Table (Top) + Visual Diff Viewer (Bottom) -->
+            <div id="sql-compare-results-container"
+                 class="@(_isFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-3 d-flex flex-column gap-2 overflow-auto" : "d-flex flex-column gap-2")"
+                 style="@(_isFullScreen ? "background-color: var(--app-bg); z-index: 9999; overflow-y: auto;" : "min-height: 0;")">
+                <!-- Top Panel: Differences Grid (Full Width) -->
+                <div id="sql-compare-top-panel"
+                     class="card rounded-3 shadow-sm d-flex flex-column overflow-hidden flex-shrink-0"
+                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); @(_isGridCollapsed ? "height: 48px;" : $"height: {_topPanelHeight}px; min-height: 120px;") transition: height 0.15s ease;">
+                    
+                    <!-- Filter & Action Bar (100% width) -->
+                    <div class="p-2 px-3 @(!_isGridCollapsed ? "border-bottom" : "") d-flex flex-column gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
+                        <!-- Row 1: Search Box (if expanded) or Object List Title (if collapsed) + Right Controls -->
+                        <div class="d-flex align-items-center justify-content-between gap-3">
+                            @if (!_isGridCollapsed)
+                            {
+                                <!-- Left: Search Box (with Match Case, Whole Word & Exact Match) -->
+                                <div class="input-group input-group-sm" style="width: 50%; max-width: 520px; min-width: 280px;">
+                                    <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text" class="form-control form-control-sm border-start-0 ps-0 @(!string.IsNullOrEmpty(_filterQuery) ? "border-end-0" : "")"
+                                           style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                           placeholder="Filter objects..."
+                                           @bind="_filterQuery"
+                                           @bind:event="oninput" />
+                                    @if (!string.IsNullOrEmpty(_filterQuery))
+                                    {
+                                        <button class="btn btn-outline-secondary border-start-0"
+                                                style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
+                                                title="Clear filter"
+                                                @onclick="() => _filterQuery = string.Empty">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    }
+                                    <button type="button" class="btn @(_filterCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                            style="z-index: 0; border-color: var(--app-input-border); @(_filterCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                            title="Match Case"
+                                            @onclick="() => _filterCaseSensitive = !_filterCaseSensitive">
+                                        <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.85em; letter-spacing: 0.5px;">Aa</span>
+                                    </button>
+                                    <button type="button" class="btn @(_filterMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                            style="z-index: 0; border-color: var(--app-input-border); @(_filterMatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                            title="Match Whole Word"
+                                            @onclick="() => { _filterMatchWholeWord = !_filterMatchWholeWord; if (_filterMatchWholeWord) _filterExactMatch = false; }">
+                                        <span style="font-family: monospace; font-weight: bold; font-size: 0.85em;">[ab]</span>
+                                    </button>
+                                    <button type="button" class="btn @(_filterExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-2"
+                                            style="z-index: 0; border-color: var(--app-input-border); @(_filterExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                                            title="Exact Match"
+                                            @onclick="() => { _filterExactMatch = !_filterExactMatch; if (_filterExactMatch) _filterMatchWholeWord = false; }">
+                                        <i class="bi bi-bullseye" style="font-size: 0.85rem;"></i>
+                                    </button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="fw-semibold small" style="color: var(--app-text);">Object List</span>
+                                </div>
+                            }
+
+                            <!-- Right: Diff Navigation, Collapse/Expand & Full Screen Toggles -->
+                            <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-auto">
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                                        title="Jump to previous difference in object list"
+                                        @onclick="GoToPrevDiffAsync"
+                                        disabled="@(_selectedItem == null || !FilteredDifferences.Any())">
+                                    <i class="bi bi-arrow-up"></i>
+                                    <span>Prev Diff</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                                        title="Jump to next difference in object list"
+                                        @onclick="GoToNextDiffAsync"
+                                        disabled="@(_selectedItem == null || !FilteredDifferences.Any())">
+                                    <i class="bi bi-arrow-down"></i>
+                                    <span>Next Diff</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                                        title="@(_isGridCollapsed ? "Expand object list" : "Collapse object list for larger diff view")"
+                                        @onclick="() => _isGridCollapsed = !_isGridCollapsed">
+                                    <i class="bi @(_isGridCollapsed ? "bi-chevron-down" : "bi-chevron-up")"></i>
+                                    <span>@(_isGridCollapsed ? "Expand" : "Collapse")</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0 d-inline-flex align-items-center gap-1"
+                                        style="font-size: 0.72rem; border-color: var(--app-border); height: 26px;"
+                                        title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")"
+                                        @onclick="ToggleFullScreen">
+                                    <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                    <!-- Row 2: Category Filter Pills (Left) + Showing Count (Right) -->
+                    @if (!_isGridCollapsed)
+                    {
+                        <div class="d-flex align-items-center justify-content-between gap-2" style="font-size: 0.75rem; white-space: nowrap;">
+                            <div class="d-flex align-items-center gap-1 overflow-auto">
+                                @foreach (var cat in _availableCategories)
+                                {
+                                    <button class="badge rounded-pill border-0 @(_selectedCategoryFilter == cat ? "bg-primary text-white" : "bg-secondary-subtle text-muted")"
+                                            style="cursor: pointer; padding: 5px 10px; font-weight: 500;"
+                                            @onclick="() => _selectedCategoryFilter = cat">
+                                        @cat
+                                    </button>
+                                }
+                            </div>
+                            <span class="text-muted small flex-shrink-0 ms-auto" style="font-size: 0.75rem;">
+                                Showing <strong>@FilteredDifferences.Count()</strong> of @_result.Differences.Count
+                            </span>
+                        </div>
+                    }
+                </div>
+
+                    <!-- Object List Table (Full Width) -->
+                    @if (!_isGridCollapsed)
+                    {
+                        <div class="flex-grow-1 overflow-auto">
+                            <table class="table table-hover table-sm mb-0 align-middle" style="color: var(--app-text); font-size: 0.8rem;">
+                                <thead style="background-color: var(--app-surface-secondary); position: sticky; top: 0; z-index: 10;">
+                                    <tr>
+                                        <th style="width: 38px;" class="text-center">
+                                            <input type="checkbox" class="form-check-input"
+                                                   checked="@IsAllSelected"
+                                                   @onchange="ToggleSelectAll"
+                                                   title="Include/Exclude all filtered objects" />
+                                        </th>
+                                        <th style="width: 160px;">Category</th>
+                                        <th>Object Name</th>
+                                        <th style="width: 145px;" class="text-center">
+                                            <span>Status</span>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!FilteredDifferences.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="4" class="text-center py-4 text-muted">
+                                                No objects match the current filter.
+                                            </td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var diff in FilteredDifferences)
+                                        {
+                                            <tr class="cursor-pointer @(_selectedItem?.Id == diff.Id ? "table-active" : "")"
+                                                style="cursor: pointer;"
+                                                @onclick="() => SelectDiffItem(diff)">
+                                                <td class="text-center" @onclick:stopPropagation="true">
+                                                    <input type="checkbox" class="form-check-input"
+                                                           checked="@diff.IsSelected"
+                                                           @onchange="(e) => diff.IsSelected = (bool)(e.Value ?? false)" />
+                                                </td>
+                                                <td>
+                                                    <span class="text-muted" style="font-size: 0.75rem;">@diff.CategoryDisplayName</span>
+                                                </td>
+                                                <td>
+                                                    <span class="fw-semibold">@diff.Name</span>
+                                                </td>
+                                                <td class="text-center">
+                                                    <span class="badge @GetChangeBadgeClass(diff.ChangeType) d-inline-flex align-items-center justify-content-center gap-1"
+                                                          style="font-size: 0.68rem; padding: 4px 8px; cursor: help;"
+                                                          data-bs-tooltip="true"
+                                                          data-bs-html="true"
+                                                          data-bs-placement="top"
+                                                          data-bs-title="@GetChangeTooltip(diff.ChangeType)">
+                                                        <span>@GetChangeBadgeText(diff.ChangeType)</span>
+                                                        <i class="bi bi-info-circle opacity-75" style="font-size: 0.62rem;"></i>
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+
+                @if (!_isGridCollapsed)
+                {
+                    <!-- Splitter Bar (Drag to Resize Top vs Bottom) -->
+                    <div id="sql-compare-splitter"
+                         class="sql-compare-splitter"
+                         title="Drag up or down to resize panels">
+                        <div class="sql-compare-splitter-handle"></div>
+                    </div>
+                }
+
+                <!-- Bottom Panel: Monaco Visual Diff Viewer (Full Width) -->
+                <div id="sql-compare-diff-panel"
+                     class="card rounded-3 shadow-sm d-flex flex-column flex-shrink-0 overflow-hidden"
+                     style="background-color: var(--app-surface); border: 1px solid var(--app-border); height: @(_isGridCollapsed && _isFullScreen ? "calc(100vh - 120px)" : $"{_diffPanelHeight}px"); min-height: 220px;">
+                    <!-- Diff Viewer Top Toolbar -->
+                    <div class="p-2 px-3 border-bottom d-flex align-items-center justify-content-between gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface);">
+                        <div class="d-flex align-items-center gap-2 overflow-hidden">
+                            @if (_selectedItem != null)
+                            {
+                                <span class="fw-bold text-truncate" style="color: var(--app-text); font-size: 0.95rem;">@_selectedItem.Name</span>
+                                <span class="badge @GetChangeBadgeClass(_selectedItem.ChangeType) d-inline-flex align-items-center gap-1"
+                                      style="font-size: 0.68rem; cursor: help;"
+                                      data-bs-tooltip="true"
+                                      data-bs-html="true"
+                                      data-bs-placement="top"
+                                      data-bs-title="@GetChangeTooltip(_selectedItem.ChangeType)">
+                                    <span>@GetChangeBadgeText(_selectedItem.ChangeType)</span>
+                                    <i class="bi bi-info-circle opacity-75" style="font-size: 0.62rem;"></i>
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Select an object from the list above to inspect differences</span>
+                            }
+                        </div>
+
+                        <!-- Diff Controls (Navigate Diff Blocks inside file + Toggle Side-by-Side) -->
+                        <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center justify-content-center shadow-sm"
+                                    style="font-size: 0.75rem; border-color: var(--app-border); min-width: 28px; height: 28px;"
+                                    title="Previous difference block inside file"
+                                    @onclick="GoToPrevBlockAsync"
+                                    disabled="@(_selectedItem == null || !_selectedItem.HasDifference)">
+                                <i class="bi bi-arrow-up"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center justify-content-center shadow-sm"
+                                    style="font-size: 0.75rem; border-color: var(--app-border); min-width: 28px; height: 28px;"
+                                    title="Next difference block inside file"
+                                    @onclick="GoToNextBlockAsync"
+                                    disabled="@(_selectedItem == null || !_selectedItem.HasDifference)">
+                                <i class="bi bi-arrow-down"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1 d-inline-flex align-items-center gap-1 shadow-sm ms-1"
+                                    style="font-size: 0.75rem; border-color: var(--app-border); height: 28px;"
+                                    title="@(_isSideBySide ? "Switch to unified inline diff view" : "Switch to side-by-side split diff view")"
+                                    @onclick="ToggleSideBySideAsync">
+                                <i class="bi @(_isSideBySide ? "bi-layout-split" : "bi-distribute-vertical")"></i>
+                                <span>@(_isSideBySide ? "Side-by-Side" : "Inline")</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Diff Endpoints Sub-Header (50/50 Full Width Split) -->
+                    <div class="row g-0 border-bottom text-muted" style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary, rgba(0,0,0,0.03)); font-size: 0.75rem;">
+                        <!-- Source Header (Left) -->
+                        <div class="col-6 px-3 py-1 border-end d-flex align-items-center justify-content-between overflow-hidden" style="border-color: var(--app-border) !important;">
+                            <div class="d-flex align-items-center gap-2 overflow-hidden">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
+                                    SOURCE
+                                </span>
+                                @if (_result?.SourceEndpoint != null)
+                                {
+                                    <span class="text-truncate fw-semibold"
+                                          style="color: var(--app-text); cursor: pointer;"
+                                          data-bs-tooltip="true"
+                                          data-bs-placement="bottom"
+                                          data-bs-html="true"
+                                          data-bs-title="@GetEndpointTooltipHtml(_result.SourceEndpoint)">
+                                        @GetEndpointDisplayName(_result.SourceEndpoint)
+                                    </span>
+                                }
+                            </div>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-2 flex-shrink-0"
+                                    style="font-size: 0.75rem; text-decoration: none;"
+                                    title="Copy Source DDL script"
+                                    @onclick="CopySourceDdlAsync"
+                                    disabled="@(string.IsNullOrWhiteSpace(_selectedItem?.SourceScript))">
+                                <i class="bi @(_isSourceCopied ? "bi-check-lg text-success" : "bi-clipboard") me-1"></i>
+                                <span class="small">@(_isSourceCopied ? "Copied" : "Copy")</span>
+                            </button>
+                        </div>
+
+                        <!-- Target Header (Right) -->
+                        <div class="col-6 px-3 py-1 d-flex align-items-center justify-content-between overflow-hidden">
+                            <div class="d-flex align-items-center gap-2 overflow-hidden">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.68rem; padding: 2px 7px;">
+                                    TARGET
+                                </span>
+                                @if (_result?.TargetEndpoint != null)
+                                {
+                                    <span class="text-truncate fw-semibold"
+                                          style="color: var(--app-text); cursor: pointer;"
+                                          data-bs-tooltip="true"
+                                          data-bs-placement="bottom"
+                                          data-bs-html="true"
+                                          data-bs-title="@GetEndpointTooltipHtml(_result.TargetEndpoint)">
+                                        @GetEndpointDisplayName(_result.TargetEndpoint)
+                                    </span>
+                                }
+                            </div>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-2 flex-shrink-0"
+                                    style="font-size: 0.75rem; text-decoration: none;"
+                                    title="Copy Target DDL script"
+                                    @onclick="CopyTargetDdlAsync"
+                                    disabled="@(string.IsNullOrWhiteSpace(_selectedItem?.TargetScript))">
+                                <i class="bi @(_isTargetCopied ? "bi-check-lg text-success" : "bi-clipboard") me-1"></i>
+                                <span class="small">@(_isTargetCopied ? "Copied" : "Copy")</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Diff Monaco Editor Container -->
+                    <div class="flex-grow-1 position-relative" style="min-height: 250px; height: 100%;">
+                        @if (_selectedItem == null)
+                        {
+                            <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center"
+                                 style="background-color: var(--app-surface-secondary); z-index: 10;">
+                                <i class="bi bi-file-earmark-diff fs-1 mb-2 opacity-50 text-secondary"></i>
+                                <div class="fw-semibold text-secondary">No Object Selected</div>
+                                <div class="small opacity-75 text-secondary">Select an object from the list above to view its side-by-side DDL diff</div>
+                            </div>
+                        }
+                        <StandaloneDiffEditor @ref="_diffEditor"
+                                              Id="sql-diff-editor"
+                                              ConstructionOptions="DiffEditorConstructionOptions"
+                                              OnDidInit="DiffEditorOnDidInit"
+                                              CssClass="w-100 h-100" />
+                    </div>
+                </div>
+
+                <!-- Splitter Bar: Bottom of Diff Viewer (Drag to Resize Diff Viewer) -->
+                <div id="sql-compare-diff-resizer"
+                     class="sql-compare-splitter"
+                     title="Drag up or down to resize diff viewer">
+                    <div class="sql-compare-splitter-handle"></div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Toast Notification -->
+    @if (!string.IsNullOrEmpty(_toastMessage))
+    {
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
+            <div class="toast show align-items-center border-0 shadow-lg" role="alert" 
+                 style="animation: slideInUp 0.3s ease; background-color: var(--app-surface-secondary); color: var(--app-text); border-left: 4px solid var(--bs-@_toastThemeClass) !important;">
+                <div class="d-flex">
+                    <div class="toast-body d-flex align-items-center flex-grow-1 overflow-hidden" title="@_toastMessage">
+                        <i class="bi @_toastIconClass me-3 fs-5 text-@_toastThemeClass flex-shrink-0"></i>
+                        <span class="text-truncate">@_toastMessage</span>
+                    </div>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") me-3 m-auto flex-shrink-0" @onclick="() => _toastMessage = null"></button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter(Name = "IsPopout")]
+    public bool IsPopout { get; set; }
+
+    private DatabaseEndpoint _source = new();
+    private DatabaseEndpoint _target = new();
+    private ComparisonOptions _options = new();
+    private bool _optionsExpanded = false;
+    private bool _isComparing = false;
+    private string _elapsedTimeFormatted = "00:00";
+    private ComparisonEstimate? _estimate;
+    private int _comparisonProgressPercent = 0;
+    private string _errorMessage = "";
+    private CancellationTokenSource? _cts;
+    private string? _toastMessage = null;
+    private string _toastThemeClass = "info";
+    private string _toastIconClass = "bi-info-circle-fill";
+    private CancellationTokenSource? _toastCts;
+
+    private SchemaComparisonResultModel? _result;
+    private SchemaDifferenceItem? _selectedItem;
+
+    // Monaco Diff Editor State
+    private StandaloneDiffEditor? _diffEditor;
+    private TextModel? _originalModel;
+    private TextModel? _modifiedModel;
+    private bool _isSideBySide = true;
+    private bool _isDiffEditorReady = false;
+    private bool _isTargetCopied = false;
+    private bool _isSourceCopied = false;
+    private bool _isGridCollapsed = false;
+    private bool _isFullScreen = false;
+    private int _topPanelHeight = 260;
+    private int _diffPanelHeight = 440;
+    private DotNetObjectReference<SqlCompareTool>? _dotNetRef;
+
+    [JSInvokable]
+    public void SetTopPanelHeight(int height)
+    {
+        _topPanelHeight = height;
+    }
+
+    [JSInvokable]
+    public void SetDiffPanelHeight(int height)
+    {
+        _diffPanelHeight = height;
+    }
+
+    private string _sourceProfileId = "active";
+    private string _targetProfileId = "active";
+    private bool _isSourceProfileDropdownOpen = false;
+    private bool _isTargetProfileDropdownOpen = false;
+    private string _sourceSearchTerm = "";
+    private string _targetSearchTerm = "";
+
+    private string _filterQuery = "";
+    private bool _filterCaseSensitive = false;
+    private bool _filterMatchWholeWord = false;
+    private bool _filterExactMatch = false;
+    private string _selectedCategoryFilter = "All";
+    private string _selectedChangeFilter = "Different";
+    private bool _isScriptCopied = false;
+
+    private List<string> _sourceDatabases = new();
+    private List<string> _targetDatabases = new();
+    private string _sourceDbSearch = "";
+    private string _targetDbSearch = "";
+    private bool _isSourceDbDropdownOpen = false;
+    private bool _isTargetDbDropdownOpen = false;
+    private bool _isSourceDbLoading = false;
+    private bool _isTargetDbLoading = false;
+    private List<string> _availableCategories = new() { "All" };
+
+    private bool IsAllSelected => FilteredDifferences.Any() && FilteredDifferences.All(d => d.IsSelected);
+
+    private IEnumerable<SchemaDifferenceItem> FilteredDifferences
+    {
+        get
+        {
+            if (_result == null) return Enumerable.Empty<SchemaDifferenceItem>();
+
+            return _result.Differences.Where(d =>
+            {
+                // Filter by change type
+                bool matchesChange = _selectedChangeFilter switch
+                {
+                    "Different" => d.HasDifference,
+                    "Added" => d.ChangeType == ChangeType.Added,
+                    "Modified" => d.ChangeType == ChangeType.Modified,
+                    "Deleted" => d.ChangeType == ChangeType.Deleted,
+                    "Identical" => d.ChangeType == ChangeType.Identical,
+                    _ => true
+                };
+                if (!matchesChange) return false;
+
+                // Filter by category
+                if (_selectedCategoryFilter != "All" && !string.Equals(d.CategoryDisplayName, _selectedCategoryFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                // Filter by search text
+                if (!string.IsNullOrWhiteSpace(_filterQuery))
+                {
+                    var searchTerm = _filterCaseSensitive ? _filterQuery.Trim() : _filterQuery.Trim().ToLowerInvariant();
+                    var objName = _filterCaseSensitive ? (d.ObjectName ?? "") : (d.ObjectName ?? "").ToLowerInvariant();
+                    var schemaName = _filterCaseSensitive ? (d.Schema ?? "") : (d.Schema ?? "").ToLowerInvariant();
+                    var fullName = _filterCaseSensitive ? (d.Name ?? "") : (d.Name ?? "").ToLowerInvariant();
+                    var plainFullName = _filterCaseSensitive ? $"{d.Schema}.{d.ObjectName}" : $"{d.Schema}.{d.ObjectName}".ToLowerInvariant();
+
+                    if (_filterExactMatch)
+                    {
+                        if (!(objName == searchTerm ||
+                              schemaName == searchTerm ||
+                              fullName == searchTerm ||
+                              plainFullName == searchTerm ||
+                              $"[{objName}]" == searchTerm))
+                        {
+                            return false;
+                        }
+                    }
+                    else if (_filterMatchWholeWord)
+                    {
+                        bool matched = objName.Split(' ', '.', '_', '[', ']').Contains(searchTerm) ||
+                                       schemaName.Split(' ', '.', '_', '[', ']').Contains(searchTerm) ||
+                                       fullName.Split(' ', '.', '_', '[', ']').Contains(searchTerm);
+
+                        if (!matched)
+                        {
+                            try
+                            {
+                                string pattern = $@"(^|[\s._\[\]]){System.Text.RegularExpressions.Regex.Escape(searchTerm)}($|[\s._\[\]])";
+                                var regexOpt = _filterCaseSensitive ? System.Text.RegularExpressions.RegexOptions.None : System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+                                matched = System.Text.RegularExpressions.Regex.IsMatch(plainFullName, pattern, regexOpt) ||
+                                          System.Text.RegularExpressions.Regex.IsMatch(fullName, pattern, regexOpt);
+                            }
+                            catch
+                            {
+                                matched = false;
+                            }
+                        }
+
+                        if (!matched) return false;
+                    }
+                    else
+                    {
+                        if (!(objName.Contains(searchTerm) ||
+                              schemaName.Contains(searchTerm) ||
+                              fullName.Contains(searchTerm)))
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            });
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!ToolService.IsToolAvailable("sql-compare"))
+        {
+            Nav.NavigateTo("tools");
+            return;
+        }
+
+        // Pre-warm DacFx engine in the background while the user selects databases
+        _ = ComparisonService.PreWarmEngineAsync();
+
+        ThemeService.OnThemeChanged += HandleThemeChanged;
+        InitializeEndpointsFromActiveConnection();
+        await LoadSourceDatabasesAsync();
+        await LoadTargetDatabasesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_result != null && !_isComparing)
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("initSqlCompareSplitter", _dotNetRef);
+        }
+    }
+
+    private async void HandleThemeChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            await BlazorMonaco.Editor.Global.SetTheme(JS, ThemeService.IsDark ? "vs-dark" : "vs");
+            StateHasChanged();
+        });
+    }
+
+    private string GetActiveServerDisplayName()
+    {
+        if (!SchemaService.IsDatabaseConnected || string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        {
+            return "Not Connected";
+        }
+
+        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
+        if (active != null && !string.IsNullOrWhiteSpace(active.Name))
+            return $"{active.Name} ({active.Server})";
+        if (!string.IsNullOrEmpty(_source.Server))
+            return _source.Server;
+        return "Connected Server";
+    }
+
+    private string GetAuthDisplayName(string authType)
+    {
+        return authType switch
+        {
+            "Windows" => "Windows Authentication",
+            "SqlServer" => "SQL Server Authentication",
+            "EntraMfa" => "Microsoft Entra MFA",
+            _ => string.IsNullOrWhiteSpace(authType) ? "Windows Authentication" : authType
+        };
+    }
+
+    private void ToggleSourceDropdown()
+    {
+        _isSourceProfileDropdownOpen = !_isSourceProfileDropdownOpen;
+        if (_isSourceProfileDropdownOpen)
+        {
+            _isTargetProfileDropdownOpen = false;
+            _sourceSearchTerm = "";
+        }
+    }
+
+    private void CloseSourceDropdown()
+    {
+        _isSourceProfileDropdownOpen = false;
+        _sourceSearchTerm = "";
+    }
+
+    private void ToggleTargetDropdown()
+    {
+        _isTargetProfileDropdownOpen = !_isTargetProfileDropdownOpen;
+        if (_isTargetProfileDropdownOpen)
+        {
+            _isSourceProfileDropdownOpen = false;
+            _targetSearchTerm = "";
+        }
+    }
+
+    private void CloseTargetDropdown()
+    {
+        _isTargetProfileDropdownOpen = false;
+        _targetSearchTerm = "";
+    }
+
+    private static string GetEndpointDisplayName(DatabaseEndpoint endpoint)
+    {
+        if (endpoint.Type == EndpointType.DacpacFile)
+        {
+            return !string.IsNullOrWhiteSpace(endpoint.DacpacPath)
+                ? Path.GetFileName(endpoint.DacpacPath)
+                : "Dacpac Package";
+        }
+
+        return !string.IsNullOrWhiteSpace(endpoint.Database)
+            ? endpoint.Database
+            : (string.IsNullOrWhiteSpace(endpoint.Server) ? "Database" : endpoint.Server);
+    }
+
+    private static string GetEndpointTooltipHtml(DatabaseEndpoint endpoint)
+    {
+        if (endpoint.Type == EndpointType.DacpacFile)
+        {
+            var fileName = !string.IsNullOrWhiteSpace(endpoint.DacpacPath)
+                ? Path.GetFileName(endpoint.DacpacPath)
+                : "Dacpac Package";
+            return $"<b>DACPAC:</b> {System.Net.WebUtility.HtmlEncode(fileName)}<br/><b>File Path:</b> {System.Net.WebUtility.HtmlEncode(endpoint.DacpacPath)}";
+        }
+
+        var db = !string.IsNullOrWhiteSpace(endpoint.Database) ? endpoint.Database : "Database";
+        var server = !string.IsNullOrWhiteSpace(endpoint.Server) ? endpoint.Server : "localhost";
+        return $"<b>Database:</b> {System.Net.WebUtility.HtmlEncode(db)}<br/><b>Server:</b> {System.Net.WebUtility.HtmlEncode(server)}";
+    }
+
+    private string GetSelectedProfileDisplayName(string profileId, DatabaseEndpoint endpoint)
+    {
+        if (profileId == "active")
+        {
+            return $"Active Session ({GetActiveServerDisplayName()})";
+        }
+        if (profileId == "custom")
+        {
+            return string.IsNullOrWhiteSpace(endpoint.Server) ? "New Connection" : $"New Connection ({endpoint.Server})";
+        }
+        var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == profileId);
+        if (saved != null)
+        {
+            return string.IsNullOrWhiteSpace(saved.Name) ? saved.Server : $"{saved.Name} ({saved.Server})";
+        }
+        return "Select Connection...";
+    }
+
+    private async Task SelectSourceProfile(string profileId)
+    {
+        _sourceProfileId = profileId;
+        _isSourceProfileDropdownOpen = false;
+        _sourceSearchTerm = "";
+
+        if (profileId == "active")
+        {
+            InitializeEndpointFromActiveConnection(_source);
+        }
+        else if (profileId != "custom")
+        {
+            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == profileId);
+            if (saved != null)
+            {
+                ApplySavedConnectionToEndpoint(_source, saved);
+            }
+        }
+        await LoadSourceDatabasesAsync();
+    }
+
+    private async Task SelectTargetProfile(string profileId)
+    {
+        _targetProfileId = profileId;
+        _isTargetProfileDropdownOpen = false;
+        _targetSearchTerm = "";
+
+        if (profileId == "active")
+        {
+            InitializeEndpointFromActiveConnection(_target);
+        }
+        else if (profileId != "custom")
+        {
+            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => c.Id == profileId);
+            if (saved != null)
+            {
+                ApplySavedConnectionToEndpoint(_target, saved);
+            }
+        }
+        await LoadTargetDatabasesAsync();
+    }
+
+    private void ApplySavedConnectionToEndpoint(DatabaseEndpoint endpoint, ConnectionService.SavedConnection saved)
+    {
+        endpoint.Server = saved.Server;
+        endpoint.AuthType = saved.AuthType;
+        endpoint.Username = saved.Username;
+        endpoint.Password = saved.Password;
+        if (!string.IsNullOrEmpty(saved.Database))
+        {
+            endpoint.Database = saved.Database;
+        }
+    }
+
+    private void InitializeEndpointFromActiveConnection(DatabaseEndpoint endpoint)
+    {
+        if (SchemaService.IsDatabaseConnected && !string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        {
+            try
+            {
+                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                endpoint.Server = builder.DataSource;
+                endpoint.AuthType = builder.IntegratedSecurity ? "Windows" : (builder.Authentication == Microsoft.Data.SqlClient.SqlAuthenticationMethod.ActiveDirectoryInteractive ? "EntraMfa" : "SqlServer");
+                endpoint.Username = builder.UserID ?? "";
+                endpoint.Password = builder.Password ?? "";
+                if (endpoint == _source && !string.IsNullOrEmpty(SchemaService.ActiveDatabase))
+                {
+                    endpoint.Database = SchemaService.ActiveDatabase;
+                }
+            }
+            catch { }
+        }
+    }
+
+    private void InitializeEndpointsFromActiveConnection()
+    {
+        if (SchemaService.IsDatabaseConnected && !string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        {
+            _sourceProfileId = "active";
+            _targetProfileId = "active";
+            InitializeEndpointFromActiveConnection(_source);
+            InitializeEndpointFromActiveConnection(_target);
+        }
+        else if (ConnectionService.SavedConnections.Any())
+        {
+            var firstSaved = ConnectionService.SavedConnections.First();
+            _sourceProfileId = firstSaved.Id;
+            _targetProfileId = firstSaved.Id;
+            ApplySavedConnectionToEndpoint(_source, firstSaved);
+            ApplySavedConnectionToEndpoint(_target, firstSaved);
+        }
+        else
+        {
+            _sourceProfileId = "custom";
+            _targetProfileId = "custom";
+        }
+    }
+
+    private async Task LoadSourceDatabasesAsync()
+    {
+        if (_source.Type != EndpointType.LiveDatabase || string.IsNullOrWhiteSpace(_source.Server)) return;
+
+        try
+        {
+            _isSourceDbLoading = true;
+            StateHasChanged();
+            _sourceDatabases = await FetchDatabasesForEndpointAsync(_source);
+            if (string.IsNullOrEmpty(_source.Database) && _sourceDatabases.Count > 0)
+            {
+                _source.Database = _sourceDatabases.Contains(SchemaService.ActiveDatabase) ? SchemaService.ActiveDatabase : _sourceDatabases[0];
+            }
+            _sourceDbSearch = _source.Database;
+        }
+        catch { }
+        finally
+        {
+            _isSourceDbLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenSourceDbDropdown()
+    {
+        if (!_isSourceDbDropdownOpen)
+        {
+            _isSourceDbDropdownOpen = true;
+            _sourceDbSearch = "";
+        }
+    }
+
+    private void CloseSourceDbDropdown()
+    {
+        _isSourceDbDropdownOpen = false;
+        _sourceDbSearch = _source.Database;
+    }
+
+    private void SelectSourceDatabase(string db)
+    {
+        _source.Database = db;
+        _sourceDbSearch = db;
+        _isSourceDbDropdownOpen = false;
+    }
+
+    private void OnSourceDbSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var filtered = _sourceDatabases.Where(d => string.IsNullOrWhiteSpace(_sourceDbSearch) || d.Contains(_sourceDbSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (filtered.Any())
+            {
+                SelectSourceDatabase(filtered.First());
+            }
+            else if (!string.IsNullOrWhiteSpace(_sourceDbSearch))
+            {
+                SelectSourceDatabase(_sourceDbSearch);
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            CloseSourceDbDropdown();
+        }
+    }
+
+    private async Task LoadTargetDatabasesAsync()
+    {
+        if (_target.Type != EndpointType.LiveDatabase || string.IsNullOrWhiteSpace(_target.Server)) return;
+
+        try
+        {
+            _isTargetDbLoading = true;
+            StateHasChanged();
+            _targetDatabases = await FetchDatabasesForEndpointAsync(_target);
+            if (string.IsNullOrEmpty(_target.Database) && _targetDatabases.Count > 0)
+            {
+                _target.Database = _targetDatabases[0];
+            }
+            _targetDbSearch = _target.Database;
+        }
+        catch { }
+        finally
+        {
+            _isTargetDbLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenTargetDbDropdown()
+    {
+        if (!_isTargetDbDropdownOpen)
+        {
+            _isTargetDbDropdownOpen = true;
+            _targetDbSearch = "";
+        }
+    }
+
+    private void CloseTargetDbDropdown()
+    {
+        _isTargetDbDropdownOpen = false;
+        _targetDbSearch = _target.Database;
+    }
+
+    private void SelectTargetDatabase(string db)
+    {
+        _target.Database = db;
+        _targetDbSearch = db;
+        _isTargetDbDropdownOpen = false;
+    }
+
+    private void OnTargetDbSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var filtered = _targetDatabases.Where(d => string.IsNullOrWhiteSpace(_targetDbSearch) || d.Contains(_targetDbSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (filtered.Any())
+            {
+                SelectTargetDatabase(filtered.First());
+            }
+            else if (!string.IsNullOrWhiteSpace(_targetDbSearch))
+            {
+                SelectTargetDatabase(_targetDbSearch);
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            CloseTargetDbDropdown();
+        }
+    }
+
+    private async Task<List<string>> FetchDatabasesForEndpointAsync(DatabaseEndpoint endpoint)
+    {
+        var dbs = new List<string>();
+        try
+        {
+            var masterConnString = endpoint.BuildConnectionString();
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(masterConnString) { InitialCatalog = "master" };
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(builder.ConnectionString);
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                dbs.Add(reader.GetString(0));
+            }
+        }
+        catch { }
+        return dbs;
+    }
+
+    private void BrowseSourceDacpac()
+    {
+        try
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Data-tier Application Package (*.dacpac)|*.dacpac|All Files (*.*)|*.*",
+                Title = "Select Source .dacpac File"
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                _source.DacpacPath = dlg.FileName;
+            }
+        }
+        catch { }
+    }
+
+    private void BrowseTargetDacpac()
+    {
+        try
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Data-tier Application Package (*.dacpac)|*.dacpac|All Files (*.*)|*.*",
+                Title = "Select Target .dacpac File"
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                _target.DacpacPath = dlg.FileName;
+            }
+        }
+        catch { }
+    }
+
+    private async Task StartComparisonAsync()
+    {
+        _errorMessage = "";
+
+        // Validate endpoints
+        if (_source.Type == EndpointType.LiveDatabase && string.IsNullOrWhiteSpace(_source.Database))
+        {
+            _errorMessage = "Please specify a Source database name.";
+            return;
+        }
+        if (_source.Type == EndpointType.DacpacFile && (string.IsNullOrWhiteSpace(_source.DacpacPath) || !File.Exists(_source.DacpacPath)))
+        {
+            _errorMessage = "The Source .dacpac file was not found.";
+            return;
+        }
+        if (_target.Type == EndpointType.LiveDatabase && string.IsNullOrWhiteSpace(_target.Database))
+        {
+            _errorMessage = "Please specify a Target database name.";
+            return;
+        }
+        if (_target.Type == EndpointType.DacpacFile && (string.IsNullOrWhiteSpace(_target.DacpacPath) || !File.Exists(_target.DacpacPath)))
+        {
+            _errorMessage = "The Target .dacpac file was not found.";
+            return;
+        }
+
+        _isComparing = true;
+        _elapsedTimeFormatted = "00:00";
+        _comparisonProgressPercent = 0;
+        _cts = new CancellationTokenSource();
+        StateHasChanged();
+
+        // Calculate pre-flight duration estimate
+        try
+        {
+            _estimate = await ComparisonService.EstimateDurationAsync(_source, _target, _cts.Token);
+        }
+        catch
+        {
+            _estimate = new ComparisonEstimate { EstimatedSeconds = ComparisonService.IsEngineWarm ? 35 : 65 };
+        }
+        StateHasChanged();
+
+        using var timerCts = new CancellationTokenSource();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var estimatedSec = Math.Max(10.0, (double)(_estimate?.EstimatedSeconds ?? 35));
+
+        _ = Task.Run(async () =>
+        {
+            while (!timerCts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(200, timerCts.Token);
+                    var ts = stopwatch.Elapsed;
+                    _elapsedTimeFormatted = $"{(int)ts.TotalMinutes:D2}:{ts.Seconds:D2}";
+
+                    // Smooth Ease-Out Continuous Curve:
+                    // Progresses continuously from 0% toward ~85% by estimated time,
+                    // smoothly decelerating toward 95% if taking longer.
+                    double ratio = ts.TotalSeconds / estimatedSec;
+                    double curve = 1.0 - Math.Exp(-2.0 * ratio);
+                    int calculatedPercent = Math.Clamp((int)Math.Round(curve * 94.0), 0, 95);
+                    if (calculatedPercent > _comparisonProgressPercent)
+                    {
+                        _comparisonProgressPercent = calculatedPercent;
+                    }
+
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch { break; }
+            }
+        }, timerCts.Token);
+
+        try
+        {
+            var result = await ComparisonService.CompareAsync(_source, _target, _options, null, _cts.Token);
+
+            if (_cts?.IsCancellationRequested == true || result == null || result.IsCancelled)
+            {
+                _errorMessage = "";
+                _result = null;
+                if (_cts?.IsCancellationRequested == true || result?.IsCancelled == true)
+                {
+                    ShowToast("Comparison was cancelled.", "info", "bi-info-circle-fill");
+                }
+                return;
+            }
+
+            _comparisonProgressPercent = 100;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(250);
+
+            _result = result;
+
+            // Populate category filter list
+            _availableCategories = new List<string> { "All" };
+            var cats = _result.Differences.Select(d => d.CategoryDisplayName).Distinct().OrderBy(c => c);
+            _availableCategories.AddRange(cats);
+
+            // Pre-select first difference item if any
+            _selectedItem = _result.Differences.FirstOrDefault(d => d.HasDifference) ?? _result.Differences.FirstOrDefault();
+            await UpdateDiffContentAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            _errorMessage = "";
+            _result = null;
+            ShowToast("Comparison was cancelled.", "info", "bi-info-circle-fill");
+        }
+        catch (Exception ex)
+        {
+            if (_cts?.IsCancellationRequested == true)
+            {
+                _errorMessage = "";
+                _result = null;
+                ShowToast("Comparison was cancelled.", "info", "bi-info-circle-fill");
+            }
+            else
+            {
+                _errorMessage = $"Comparison failed: {ex.Message}";
+                _result = null;
+            }
+        }
+        finally
+        {
+            timerCts.Cancel();
+            stopwatch.Stop();
+            _isComparing = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void CancelComparison()
+    {
+        try
+        {
+            _cts?.Cancel();
+        }
+        catch { }
+
+        _isComparing = false;
+        _errorMessage = "";
+        ShowToast("Comparison was cancelled.", "info", "bi-info-circle-fill");
+        StateHasChanged();
+    }
+
+    private void ResetComparison()
+    {
+        _result = null;
+        _selectedItem = null;
+        _errorMessage = "";
+        _isFullScreen = false;
+        _filterQuery = "";
+        _filterCaseSensitive = false;
+        _filterMatchWholeWord = false;
+        _filterExactMatch = false;
+        _ = UpdateDiffContentAsync();
+    }
+
+    private void ToggleFullScreen()
+    {
+        _isFullScreen = !_isFullScreen;
+    }
+
+    private async Task SelectDiffItem(SchemaDifferenceItem item)
+    {
+        _selectedItem = item;
+        await UpdateDiffContentAsync();
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        bool select = (bool)(e.Value ?? false);
+        foreach (var item in FilteredDifferences)
+        {
+            item.IsSelected = select;
+        }
+    }
+
+    private async Task OpenInQueryRunnerAsync()
+    {
+        if (_result == null) return;
+
+        var script = await ComparisonService.GenerateSynchronizationScriptAsync(_result);
+        var targetDb = !string.IsNullOrWhiteSpace(_result.TargetEndpoint.Database) ? _result.TargetEndpoint.Database : "TargetDB";
+        var tabName = $"Sync_{targetDb}_{DateTime.Now:yyyyMMdd_HHmm}.sql";
+
+        var newTab = new QueryTab
+        {
+            Name = tabName,
+            Content = script,
+            OriginalContent = script,
+            ConnectionString = _result.TargetEndpoint.Type == EndpointType.LiveDatabase ? _result.TargetEndpoint.BuildConnectionString() : ConnectionService.ConnectionString
+        };
+
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+        await QueryStateService.SaveTabsAsync();
+
+        if (IsPopout)
+        {
+            WindowManager.NavigateMainWindow("/runner");
+        }
+        else
+        {
+            Nav.NavigateTo("/runner");
+        }
+    }
+
+    private async Task CopySyncScriptAsync()
+    {
+        if (_result == null) return;
+
+        try
+        {
+            var script = await ComparisonService.GenerateSynchronizationScriptAsync(_result);
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", script);
+            _isScriptCopied = true;
+            StateHasChanged();
+
+            _ = Task.Delay(2000).ContinueWith(_ =>
+            {
+                _isScriptCopied = false;
+                InvokeAsync(StateHasChanged);
+            });
+        }
+        catch { }
+    }
+
+    private async Task ExportHtmlReportAsync()
+    {
+        if (_result == null) return;
+
+        try
+        {
+            var html = HtmlGenerator.GenerateReportHtml(_result);
+            var htmlBytes = System.Text.Encoding.UTF8.GetBytes(html);
+            var targetName = string.IsNullOrWhiteSpace(_result.TargetEndpoint.Database) ? "Target" : _result.TargetEndpoint.Database.Replace(" ", "_");
+            var fileName = $"SchemaCompare_{targetName}_{DateTime.Now:yyyyMMdd_HHmmss}.html";
+
+            using var stream = new MemoryStream(htmlBytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting HTML report: {ex.Message}");
+        }
+    }
+
+    private string GetChangeBadgeClass(ChangeType type) => type switch
+    {
+        ChangeType.Added => "bg-success-subtle text-success border border-success-subtle",
+        ChangeType.Modified => "bg-warning-subtle text-warning border border-warning-subtle",
+        ChangeType.Deleted => "bg-danger-subtle text-danger border border-danger-subtle",
+        _ => "bg-secondary-subtle text-muted border border-secondary-subtle"
+    };
+
+    private string GetChangeBadgeText(ChangeType type) => type switch
+    {
+        ChangeType.Added => "Only in Source",
+        ChangeType.Deleted => "Only in Target",
+        ChangeType.Modified => "Different",
+        _ => "Identical"
+    };
+
+    private string GetChangeTooltip(ChangeType type)
+    {
+        var sourceDb = !string.IsNullOrWhiteSpace(_result?.SourceEndpoint.Database) ? System.Net.WebUtility.HtmlEncode(_result.SourceEndpoint.Database) : "Source";
+        var targetDb = !string.IsNullOrWhiteSpace(_result?.TargetEndpoint.Database) ? System.Net.WebUtility.HtmlEncode(_result.TargetEndpoint.Database) : "Target";
+
+        return type switch
+        {
+            ChangeType.Added => $"<div class='fw-bold mb-1'>Only in Source</div>Exists in Source (<b>{sourceDb}</b>), but missing in Target (<b>{targetDb}</b>).<br/>Synchronization will <b style='color: #4ade80;'>CREATE</b> it in Target.",
+            ChangeType.Deleted => $"<div class='fw-bold mb-1'>Only in Target</div>Exists in Target (<b>{targetDb}</b>), but missing in Source (<b>{sourceDb}</b>).<br/>Synchronization will <b style='color: #f87171;'>DROP</b> it from Target.",
+            ChangeType.Modified => $"<div class='fw-bold mb-1'>Different</div>Exists in both databases, but schemas differ.<br/>Synchronization will <b style='color: #fbbf24;'>ALTER</b> Target to match Source.",
+            ChangeType.Identical => $"<div class='fw-bold mb-1'>Identical</div>Schema matches exactly in both databases (<b>{sourceDb}</b> and <b>{targetDb}</b>). No action needed.",
+            _ => "Schema difference status relative to Target"
+        };
+    }
+
+    private void ShowToast(string message, string themeClass = "info", string iconClass = "bi-info-circle-fill", int delayMs = 3000)
+    {
+        _toastCts?.Cancel();
+        _toastCts = new CancellationTokenSource();
+        var token = _toastCts.Token;
+        _toastMessage = message;
+        _toastThemeClass = themeClass;
+        _toastIconClass = iconClass;
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delayMs, token);
+                _toastMessage = null;
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (TaskCanceledException) { }
+        }, token);
+    }
+
+    #region Monaco Diff Editor Methods
+
+    private StandaloneDiffEditorConstructionOptions DiffEditorConstructionOptions(StandaloneDiffEditor editor)
+    {
+        return new StandaloneDiffEditorConstructionOptions
+        {
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
+            ReadOnly = true,
+            OriginalEditable = false,
+            AutomaticLayout = true,
+            RenderSideBySide = _isSideBySide,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            LineNumbers = "on",
+            ScrollBeyondLastLine = false,
+            FontSize = 13,
+            RenderOverviewRuler = false,
+            IgnoreTrimWhitespace = false
+        };
+    }
+
+    private async Task DiffEditorOnDidInit()
+    {
+        _isDiffEditorReady = true;
+        await UpdateDiffContentAsync();
+    }
+
+    private async Task UpdateDiffContentAsync()
+    {
+        if (!_isDiffEditorReady || _diffEditor == null) return;
+
+        var sourceScript = _selectedItem != null && !string.IsNullOrWhiteSpace(_selectedItem.SourceScript)
+            ? _selectedItem.SourceScript
+            : (_selectedItem != null ? "-- Object does not exist in source database." : "");
+
+        var targetScript = _selectedItem != null && !string.IsNullOrWhiteSpace(_selectedItem.TargetScript)
+            ? _selectedItem.TargetScript
+            : (_selectedItem != null ? "-- Object does not exist in target database." : "");
+
+        try
+        {
+            if (_originalModel == null || _modifiedModel == null)
+            {
+                _originalModel = await Global.CreateModel(JS, sourceScript, "sql");
+                _modifiedModel = await Global.CreateModel(JS, targetScript, "sql");
+                await _diffEditor.SetModel(new DiffEditorModel
+                {
+                    Original = _originalModel,
+                    Modified = _modifiedModel
+                });
+            }
+            else
+            {
+                await _originalModel.SetValue(sourceScript);
+                await _modifiedModel.SetValue(targetScript);
+            }
+
+            await JS.InvokeVoidAsync("initSqlDiffNavigator", "sql-diff-editor");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] Error updating diff editor: {ex.Message}");
+        }
+    }
+
+    private async Task GoToPrevDiffAsync()
+    {
+        await NavigateToObjectDeltaAsync(-1);
+    }
+
+    private async Task GoToNextDiffAsync()
+    {
+        await NavigateToObjectDeltaAsync(1);
+    }
+
+    private async Task GoToPrevBlockAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("sqlDiffNavigateBlock", "sql-diff-editor", "prev");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] PrevBlock error: {ex.Message}");
+        }
+    }
+
+    private async Task GoToNextBlockAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("sqlDiffNavigateBlock", "sql-diff-editor", "next");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] NextBlock error: {ex.Message}");
+        }
+    }
+
+    private async Task NavigateToObjectDeltaAsync(int delta)
+    {
+        var list = FilteredDifferences.ToList();
+        if (list.Count == 0) return;
+
+        int currentIndex = _selectedItem != null ? list.FindIndex(d => d.Id == _selectedItem.Id) : -1;
+        var hasDiffs = list.Any(d => d.HasDifference);
+        int targetIndex = currentIndex;
+
+        for (int step = 1; step <= list.Count; step++)
+        {
+            int candidate = (currentIndex + (delta * step)) % list.Count;
+            if (candidate < 0) candidate += list.Count;
+
+            if (!hasDiffs || list[candidate].HasDifference)
+            {
+                targetIndex = candidate;
+                break;
+            }
+        }
+
+        if (targetIndex >= 0 && targetIndex < list.Count && targetIndex != currentIndex)
+        {
+            await SelectDiffItem(list[targetIndex]);
+            await InvokeAsync(StateHasChanged);
+        }
+        else if (currentIndex < 0 && list.Count > 0)
+        {
+            var first = list.FirstOrDefault(d => d.HasDifference) ?? list[0];
+            await SelectDiffItem(first);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ToggleSideBySideAsync()
+    {
+        _isSideBySide = !_isSideBySide;
+        try
+        {
+            if (_diffEditor != null)
+            {
+                await _diffEditor.UpdateOptions(new DiffEditorOptions { RenderSideBySide = _isSideBySide });
+            }
+            await JS.InvokeVoidAsync("sqlDiffSetSideBySide", "sql-diff-editor", _isSideBySide);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SqlCompare] ToggleSideBySide error: {ex.Message}");
+        }
+    }
+
+    private async Task CopyTargetDdlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedItem?.TargetScript)) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selectedItem.TargetScript);
+            _isTargetCopied = true;
+            StateHasChanged();
+            _ = Task.Delay(2000).ContinueWith(_ => InvokeAsync(() => { _isTargetCopied = false; StateHasChanged(); }));
+        }
+        catch { }
+    }
+
+    private async Task CopySourceDdlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedItem?.SourceScript)) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selectedItem.SourceScript);
+            _isSourceCopied = true;
+            StateHasChanged();
+            _ = Task.Delay(2000).ContinueWith(_ => InvokeAsync(() => { _isSourceCopied = false; StateHasChanged(); }));
+        }
+        catch { }
+    }
+
+    #endregion
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _dotNetRef?.Dispose();
+        _originalModel = null;
+        _modifiedModel = null;
+    }
+}

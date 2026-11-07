@@ -1,0 +1,193 @@
+@page "/tools"
+@using ExploreDB.Services
+@inject NavigationManager Nav
+@inject ToolRegistryService ToolService
+@inject WindowManagerService WindowManager
+
+<div class="container-fluid h-100 d-flex flex-column pb-5">
+    <div class="row mb-4 align-items-center">
+        <div class="col">
+            <h2 class="fw-bold mb-0" style="color: var(--app-text);">Tools Hub</h2>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="row mb-4">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="input-group shadow-sm">
+                <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="text"
+                       class="form-control shadow-none border-start-0 ps-0 @(!string.IsNullOrEmpty(SearchTerm) ? "border-end-0" : "")"
+                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                       placeholder="Search tools..."
+                       @bind="SearchTerm"
+                       @bind:event="oninput" />
+                @if (!string.IsNullOrEmpty(SearchTerm))
+                {
+                    <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" title="Clear filter" @onclick="() => SearchTerm = string.Empty">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                }
+                <button type="button" class="btn @(CaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-3"
+                        style="z-index: 0; border-color: var(--app-input-border); @(CaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                        title="Match Case"
+                        @onclick="() => CaseSensitive = !CaseSensitive">
+                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                </button>
+                <button type="button" class="btn @(MatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-3"
+                        style="z-index: 0; border-color: var(--app-input-border); @(MatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                        title="Match Whole Word"
+                        @onclick="() => { MatchWholeWord = !MatchWholeWord; if (MatchWholeWord) ExactMatch = false; }">
+                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                </button>
+                <button type="button" class="btn @(ExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-3"
+                        style="z-index: 0; border-color: var(--app-input-border); @(ExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")"
+                        title="Exact Match"
+                        @onclick="() => { ExactMatch = !ExactMatch; if (ExactMatch) MatchWholeWord = false; }">
+                    <i class="bi bi-bullseye fs-6"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tools Grid -->
+    <div class="row g-4 flex-grow-1 align-content-start">
+        @if (!FilteredTools.Any())
+        {
+            <div class="col-12">
+                <div class="d-flex flex-column align-items-center justify-content-center p-5 rounded" style="border: 1px dashed var(--app-border); background-color: var(--app-surface-secondary);">
+                    <i class="bi bi-tools text-muted fs-1 mb-2"></i>
+                    <h5 class="fw-bold text-muted mb-1">No tools match your search</h5>
+                    <p class="text-muted small mb-3">Try clearing your search term.</p>
+                    <button class="btn btn-sm btn-outline-primary" @onclick="ResetFilters">Clear Search</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            @foreach (var tool in FilteredTools)
+            {
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card h-100 p-4 rounded-3 shadow-sm transition-transform hover-scale"
+                         style="background-color: var(--app-surface); border: 1px solid var(--app-border); cursor: @(tool.IsAvailable ? "pointer" : "default");"
+                         @onclick="() => LaunchTool(tool)">
+                        <div class="d-flex align-items-start justify-content-between mb-3">
+                            <div class="rounded-3 d-flex align-items-center justify-content-center shadow-sm"
+                                 style="width: 48px; height: 48px; background-color: @tool.IconBg; color: @tool.IconColor; font-size: 1.4rem;">
+                                <i class="bi @tool.Icon"></i>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                @if (tool.IsAvailable && !string.IsNullOrEmpty(tool.Route) && ToolService.ShouldOpenInPopout(tool.Id))
+                                {
+                                    <span class="text-muted p-1" data-bs-tooltip="true" data-bs-placement="top" data-bs-title="Opens in a separate window">
+                                        <i class="bi bi-box-arrow-up-right"></i>
+                                    </span>
+                                }
+                                @if (tool.IsBeta)
+                                {
+                                    <span class="badge rounded-pill border"
+                                          style="font-size: 0.72rem; padding: 4px 9px; font-weight: 600; background-color: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3) !important;">
+                                        Beta
+                                    </span>
+                                }
+                                else if (!tool.IsAvailable || tool.IsComingSoon)
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"
+                                          style="font-size: 0.72rem; padding: 4px 8px; font-weight: 600;">
+                                        Coming Soon
+                                    </span>
+                                }
+                            </div>
+                        </div>
+
+                        <h5 class="fw-bold mb-2" style="color: var(--app-text); font-size: 1.1rem;">@tool.Title</h5>
+                        <p class="text-muted small mb-0" style="line-height: 1.5;">@tool.Description</p>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<style>
+    .hover-scale {
+        transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease;
+    }
+    .hover-scale:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+    }
+</style>
+
+@code {
+    private string SearchTerm = "";
+    private bool CaseSensitive = false;
+    private bool MatchWholeWord = false;
+    private bool ExactMatch = false;
+
+    private IEnumerable<ToolItem> FilteredTools => ToolService.GetVisibleTools().Where(t =>
+    {
+        if (string.IsNullOrWhiteSpace(SearchTerm)) return true;
+
+        var term = CaseSensitive ? SearchTerm.Trim() : SearchTerm.Trim().ToLowerInvariant();
+        var title = CaseSensitive ? (t.Title ?? "") : (t.Title ?? "").ToLowerInvariant();
+        var desc = CaseSensitive ? (t.Description ?? "") : (t.Description ?? "").ToLowerInvariant();
+        var id = CaseSensitive ? (t.Id ?? "") : (t.Id ?? "").ToLowerInvariant();
+
+        if (ExactMatch)
+        {
+            return title == term || desc == term || id == term;
+        }
+        else if (MatchWholeWord)
+        {
+            if (title.Split(' ', '.', '_', '-', '/', '\\').Contains(term) ||
+                desc.Split(' ', '.', '_', '-', '/', '\\').Contains(term) ||
+                id.Split(' ', '.', '_', '-').Contains(term))
+            {
+                return true;
+            }
+
+            try
+            {
+                string pattern = $@"(^|[\s._\-\/\\]){System.Text.RegularExpressions.Regex.Escape(term)}($|[\s._\-\/\\])";
+                var regexOpt = CaseSensitive ? System.Text.RegularExpressions.RegexOptions.None : System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+                return System.Text.RegularExpressions.Regex.IsMatch(title, pattern, regexOpt) ||
+                       System.Text.RegularExpressions.Regex.IsMatch(desc, pattern, regexOpt);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return title.Contains(term) || desc.Contains(term) || id.Contains(term);
+        }
+    });
+
+    private void LaunchTool(ToolItem tool)
+    {
+        if (tool.IsAvailable && !string.IsNullOrEmpty(tool.Route))
+        {
+            if (ToolService.ShouldOpenInPopout(tool.Id))
+            {
+                bool closeOnConn = ToolService.ShouldCloseOnConnectionChange(tool.Id);
+                WindowManager.OpenToolPopout(tool.Id, tool.Route, $"{tool.Title} - ExploreDB", closeOnConn);
+            }
+            else
+            {
+                Nav.NavigateTo(tool.Route);
+            }
+        }
+    }
+
+    private void ResetFilters()
+    {
+        SearchTerm = "";
+        CaseSensitive = false;
+        MatchWholeWord = false;
+        ExactMatch = false;
+    }
+}

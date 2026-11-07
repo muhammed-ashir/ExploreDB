@@ -4,8 +4,7 @@
         <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
         <OutputType>WinExe</OutputType>
         <RootNamespace>ExploreDB</RootNamespace>
-        <UseMaui>true</UseMaui>
-        <SingleProject>true</SingleProject>
+        <UseWPF>true</UseWPF>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
@@ -14,18 +13,19 @@
         <WindowsPackageType>MSIX</WindowsPackageType>
         <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <EnableMsixTooling>true</EnableMsixTooling>
         <Platforms>AnyCPU;x64</Platforms>
-        <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
-        <GenerateTestAppPackage>true</GenerateTestAppPackage>
-        <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+        <GenerateAppxPackageOnBuild Condition="'$(GenerateAppxPackageOnBuild)' == ''">false</GenerateAppxPackageOnBuild>
+        <GenerateTestAppPackage Condition="'$(GenerateTestAppPackage)' == ''">false</GenerateTestAppPackage>
+        <AppxPackageSigningEnabled Condition="'$(AppxPackageSigningEnabled)' == ''">false</AppxPackageSigningEnabled>
         <ApplicationManifest Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">Platforms\Windows\app.manifest</ApplicationManifest>
         <ApplicationVersion>7</ApplicationVersion>
-        <ApplicationDisplayVersion>2.1.3.0</ApplicationDisplayVersion>
-        <Version>2.1.3.0</Version>
+        <ApplicationDisplayVersion>2.2.4.0</ApplicationDisplayVersion>
+        <Version>2.2.4.0</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
         <ApplicationIcon>Platforms\Windows\Images\app.ico</ApplicationIcon>
-		
+		<StoreBuild>true</StoreBuild>
 	</PropertyGroup>
 
     <PropertyGroup Condition="'$(StoreBuild)' == 'true'">
@@ -39,21 +39,19 @@
     <ItemGroup>
         <PackageReference Include="BlazorMonaco" Version="3.5.0" />
         <PackageReference Include="ClosedXML" Version="0.105.1" />
-        <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.7" />
-        <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="8.0.7" />
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.7" />
-        <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.0.5.1" />
-        <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.0" />
+        <PackageReference Include="Microsoft.SqlServer.XEvent.XELite" Version="2024.2.5.1" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.251221100" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="8.0.100" />
+        <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.5" />
+        <PackageReference Include="Microsoft.SqlServer.DacFx" Version="170.5.96" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.0" />
         <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
         <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     </ItemGroup>
 
     <ItemGroup>
-      <MauiAsset Include="wwwroot\**" />
-    </ItemGroup>
-
-    <ItemGroup>
+        <AppxManifest Include="Platforms\Windows\Package.appxmanifest" />
         <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
         <Content Include="Platforms\Windows\Images\**">
             <Link>Images\%(RecursiveDir)%(Filename)%(Extension)</Link>
@@ -61,6 +59,22 @@
         </Content>
     </ItemGroup>
 
+    <!-- Fix MSIX package payload for static web assets -->
+    <Target Name="FixAppxPackagePayloadAssets" AfterTargets="_ComputeAppxPackagePayload" BeforeTargets="_GenerateAppxPackageRecipe;_GenerateAppxManifest">
+        <ItemGroup>
+            <!-- 1. Exclude development-only staticwebassets.runtime.json from MSIX package payload -->
+            <AppxPackagePayload Remove="@(AppxPackagePayload)" Condition="'%(Filename)%(Extension)' == '$(AssemblyName).staticwebassets.runtime.json'" />
+            <AppxPackagePayload Remove="@(AppxPackagePayload)" Condition="'%(TargetPath)' == '$(AssemblyName).staticwebassets.runtime.json'" />
+            <AppxPackagePayload Remove="@(AppxPackagePayload)" Condition="$([System.String]::Copy('%(Identity)').Contains('staticwebassets.runtime.json'))" />
 
+            <!-- 2. Include all external static web assets (such as BlazorMonaco) in wwwroot\_content\... and _content\... in the MSIX payload with normalized backslashes -->
+            <AppxPackagePayload Include="@(StaticWebAsset)" Condition="'%(StaticWebAsset.SourceId)' != '$(AssemblyName)' and '%(StaticWebAsset.SourceId)' != ''">
+                <TargetPath>$([System.String]::Copy('wwwroot\%(StaticWebAsset.BasePath)\%(StaticWebAsset.RelativePath)').Replace('/', '\'))</TargetPath>
+            </AppxPackagePayload>
+            <AppxPackagePayload Include="@(StaticWebAsset)" Condition="'%(StaticWebAsset.SourceId)' != '$(AssemblyName)' and '%(StaticWebAsset.SourceId)' != ''">
+                <TargetPath>$([System.String]::Copy('%(StaticWebAsset.BasePath)\%(StaticWebAsset.RelativePath)').Replace('/', '\'))</TargetPath>
+            </AppxPackagePayload>
+        </ItemGroup>
+    </Target>
 
 </Project>

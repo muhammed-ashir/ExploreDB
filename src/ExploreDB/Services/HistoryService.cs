@@ -6,21 +6,20 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage;
 
 namespace ExploreDB.Services
 {
-    public class QueryHistoryItem
+    public class TabHistoryItem
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string Title => $"Query {Id.Substring(0, 5).ToUpper()}";
-        public string QueryText { get; set; } = string.Empty;
+        public Guid TabId { get; set; } = Guid.Empty;
+        public string TabName { get; set; } = string.Empty;
+        public string ScriptText { get; set; } = string.Empty;
         public DateTime ExecutedAt { get; set; } = DateTime.Now;
         public string ServerName { get; set; } = string.Empty;
         public string DatabaseName { get; set; } = string.Empty;
-        public long ExecutionTimeMs { get; set; }
-        public bool IsSuccess { get; set; }
-        public string? ErrorMessage { get; set; }
+        public string ConnectionString { get; set; } = string.Empty;
+        public string ConnectionName { get; set; } = string.Empty;
     }
 
     public class HistoryService
@@ -28,62 +27,82 @@ namespace ExploreDB.Services
         private readonly IConfiguration _config;
         private readonly ILogger<HistoryService> _logger;
         private readonly string _historyFilePath;
-        private List<QueryHistoryItem>? _historyCache;
+        private List<TabHistoryItem>? _historyCache;
 
         public HistoryService(IConfiguration config, ILogger<HistoryService> logger)
         {
             _config = config;
             _logger = logger;
-            _historyFilePath = Path.Combine(FileSystem.AppDataDirectory, "query_history.json");
+            _historyFilePath = Path.Combine(AppEnvironmentService.AppDataDirectory, "query_history.json");
         }
 
-        public async Task<List<QueryHistoryItem>> GetHistoryAsync()
+        public async Task<List<TabHistoryItem>> GetHistoryAsync()
         {
             if (_historyCache != null)
                 return _historyCache;
 
             if (!File.Exists(_historyFilePath))
             {
-                _historyCache = new List<QueryHistoryItem>();
+                _historyCache = new List<TabHistoryItem>();
                 return _historyCache;
             }
 
             try
             {
                 var json = await File.ReadAllTextAsync(_historyFilePath);
-                _historyCache = JsonSerializer.Deserialize<List<QueryHistoryItem>>(json) ?? new List<QueryHistoryItem>();
+                var raw = JsonSerializer.Deserialize<List<TabHistoryItem>>(json) ?? new List<TabHistoryItem>();
+
+                // Purge legacy flat query records: only keep real tab history sessions
+                _historyCache = raw
+                    .Where(x => x.TabId != Guid.Empty && !string.IsNullOrWhiteSpace(x.TabName) && !string.IsNullOrWhiteSpace(x.ScriptText) && !x.TabName.StartsWith("Query_"))
+                    .ToList();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to load query history");
-                _historyCache = new List<QueryHistoryItem>();
+                _logger.LogError(ex, "Failed to load tab history");
+                _historyCache = new List<TabHistoryItem>();
             }
 
             return _historyCache;
         }
 
-        public async Task AddHistoryItemAsync(string query, string server, string database, long executionTimeMs, bool isSuccess, string? errorMessage = null)
+        public async Task SaveTabHistoryAsync(Guid tabId, string tabName, string fullScriptText, string serverName = "", string dbName = "", string connectionString = "", string connectionName = "")
         {
-            if (string.IsNullOrWhiteSpace(query)) return;
+            if (string.IsNullOrWhiteSpace(fullScriptText) || tabId == Guid.Empty) return;
 
             var history = await GetHistoryAsync();
 
-            var item = new QueryHistoryItem
+            var existing = history.FirstOrDefault(h => h.TabId == tabId);
+            if (existing != null)
             {
-                QueryText = query,
-                ServerName = server,
-                DatabaseName = database,
-                ExecutionTimeMs = executionTimeMs,
-                IsSuccess = isSuccess,
-                ErrorMessage = errorMessage,
-                ExecutedAt = DateTime.Now
-            };
+                existing.TabName = !string.IsNullOrWhiteSpace(tabName) ? tabName : existing.TabName;
+                existing.ScriptText = fullScriptText;
+                existing.ExecutedAt = DateTime.Now;
+                if (!string.IsNullOrEmpty(serverName)) existing.ServerName = serverName;
+                if (!string.IsNullOrEmpty(dbName)) existing.DatabaseName = dbName;
+                if (!string.IsNullOrEmpty(connectionString)) existing.ConnectionString = connectionString;
+                if (!string.IsNullOrEmpty(connectionName)) existing.ConnectionName = connectionName;
 
-            // Insert at the top (newest first)
-            history.Insert(0, item);
+                history.Remove(existing);
+                history.Insert(0, existing);
+            }
+            else
+            {
+                var item = new TabHistoryItem
+                {
+                    TabId = tabId,
+                    TabName = !string.IsNullOrWhiteSpace(tabName) ? tabName : "SQLQuery.sql",
+                    ScriptText = fullScriptText,
+                    ExecutedAt = DateTime.Now,
+                    ServerName = serverName,
+                    DatabaseName = dbName,
+                    ConnectionString = connectionString,
+                    ConnectionName = connectionName
+                };
+                history.Insert(0, item);
+            }
 
-            var limit = _config.GetValue<int>("QueryHistoryLimit", 500);
-
+            var limit = _config.GetValue<int>("TabHistoryLimit", 200);
             if (history.Count > limit)
             {
                 history.RemoveRange(limit, history.Count - limit);
@@ -96,7 +115,7 @@ namespace ExploreDB.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to save query history");
+                _logger.LogError(ex, "Failed to save tab history");
             }
         }
     }

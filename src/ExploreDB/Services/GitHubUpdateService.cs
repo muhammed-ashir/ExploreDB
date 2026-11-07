@@ -1,7 +1,10 @@
+using System;
+using System.IO;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Diagnostics;
-using Microsoft.Maui.ApplicationModel;
+using System.Threading.Tasks;
 
 namespace ExploreDB.Services;
 
@@ -47,7 +50,7 @@ public class GitHubUpdateService
 
             if (Version.TryParse(latestVersionStr, out var latestVersion))
             {
-                var currentVersion = AppInfo.Current.Version;
+                var currentVersion = AppEnvironmentService.Version;
 
                 if (latestVersion > currentVersion)
                 {
@@ -97,7 +100,7 @@ public class GitHubUpdateService
         try
         {
             var fileName = "ExploreDB_Update.msix";
-            var filePath = Path.Combine(FileSystem.CacheDirectory, fileName);
+            var filePath = Path.Combine(AppEnvironmentService.CacheDirectory, fileName);
 
             // Download the file
             var response = await _httpClient.GetAsync(downloadUrl);
