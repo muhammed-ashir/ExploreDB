@@ -821,6 +821,7 @@ code:not(.editor-syntax-preview code) {
 /* Result Set Table Theme Adaptive Styling */
 .result-set-table {
     width: 100%;
+    width: max-content !important;
     margin-bottom: 0;
     color: var(--app-text);
     background-color: var(--app-table-bg);
@@ -830,7 +831,7 @@ code:not(.editor-syntax-preview code) {
 .result-set-table th,
 .result-set-table td {
     border: 1px solid var(--app-table-border) !important;
-    padding: 6px 10px;
+    padding: 2px 8px; font-size: 0.78rem !important; line-height: 1.25 !important; height: 24px;
     font-size: 0.85rem;
 }
 
@@ -856,7 +857,7 @@ code:not(.editor-syntax-preview code) {
 
 .result-set-table tbody tr {
     background-color: var(--app-table-bg);
-    transition: background-color 0.15s ease;
+    height: 24px; transition: background-color 0.15s ease;
 }
 
 .result-set-table tbody tr:nth-child(even) {
@@ -1369,7 +1370,7 @@ a.card.glow-highlight:hover,
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    transition: background-color 0.15s ease;
+    height: 24px; transition: background-color 0.15s ease;
 }
 
 .sql-compare-splitter:hover,

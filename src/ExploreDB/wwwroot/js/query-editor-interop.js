@@ -2102,7 +2102,7 @@ window.initGridVirtualScroll = function (containerId, dotNetRef, totalRowCount) 
 
     function handleWheel(e) {
         if (e.shiftKey) return;
-        if (container._totalRowCount && container._totalRowCount > 300000) {
+        if (container.scrollHeight > 9000000 || (container._totalRowCount && container._totalRowCount > 400000)) {
             e.preventDefault();
             var maxScroll = Math.max(1, container.scrollHeight - container.clientHeight);
             var pxPerRow = maxScroll / container._totalRowCount;

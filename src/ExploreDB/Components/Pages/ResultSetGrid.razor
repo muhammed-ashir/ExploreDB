@@ -50,7 +50,7 @@
     {
 
     <div id="@_tableContainerId" class="table-responsive rounded position-relative flex-grow-1 custom-scrollbar-light" tabindex="0" style="border: 1px solid var(--app-border); outline: none; overflow: auto; min-height: 0; height: 100%; overflow-anchor: none !important;" @onkeydown="HandleKeyDown">
-        <table class="result-set-table" style="min-width: 100%; width: max-content;">
+        <table class="result-set-table" style="width: max-content;">
             <thead>
                 <tr>
                     <th class="col-index p-0 align-middle text-center" 
@@ -59,7 +59,7 @@
                         @oncontextmenu="e => ShowRowHeaderContextMenu(e, -1)" 
                         @oncontextmenu:preventDefault="true"
                         title="@(_isAllSelected ? "Click to deselect all" : "Click to select all")">
-                        <div class="px-2 py-2 d-flex align-items-center justify-content-center gap-1" style="font-size: 0.8rem;">
+                        <div class="px-2 py-1 d-flex align-items-center justify-content-center gap-1" style="font-size: 0.75rem;">
                             <span>#</span>
                             @if (_isAllSelected)
                             {
@@ -76,7 +76,7 @@
                             data-col-index="@localCol"
                             data-col-name="@col"
                             style="@GetColumnWidthStyle(col)">
-                            <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-2 gap-2" 
+                            <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-1 gap-2" 
                                  style="cursor: pointer; user-select: none;" 
                                  title="Click to select column (Ctrl+Click to toggle, Shift+Click for range)"
                                  @onclick="e => HandleColumnHeaderClick(e, localCol)" 
@@ -124,7 +124,7 @@
                     bool isFullRowSelected = IsRowFullySelected(actualIndex);
                     <tr style="height: @(RowHeight)px;">
                         <td class="col-index text-center align-middle @(isFullRowSelected ? "selected-row-header" : "")" 
-                            style="font-size: 0.8rem; cursor: pointer; user-select: none;"
+                            style="font-size: 0.75rem; cursor: pointer; user-select: none; padding: 2px 4px; height: @(RowHeight)px;"
                             title="Click to select row (Ctrl+Click to toggle, Shift+Click for range)"
                             @onclick="e => HandleRowHeaderClick(e, actualIndex)"
                             @oncontextmenu="e => ShowRowHeaderContextMenu(e, actualIndex)"
@@ -149,7 +149,7 @@
                             var val = FormatCellValue(rawCellVal);
                             bool isCellSelected = IsCellSelected(actualIndex, localCol);
                             <td class="@(isCellSelected ? "selected-cell" : "")"
-                                style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis;" 
+                                style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis; padding: 2px 8px; font-size: 0.78rem; line-height: 1.25; height: @(RowHeight)px;" 
                                 title="@val"
                                 @onclick="e => HandleCellClick(e, actualIndex, localCol)"
                                 @oncontextmenu="e => ShowCellContextMenu(e, actualIndex, localCol)"
@@ -732,16 +732,46 @@ else
     private object? _lastDataRef;
     private bool _shouldResetScroll = false;
 
+    private void InitializeSmartColumnWidths()
+    {
+        if (Columns.Count == 0) return;
+        int sampleCount = Math.Min(15, TotalDataCount);
+
+        for (int c = 0; c < Columns.Count; c++)
+        {
+            var col = Columns[c];
+            int headerChars = col.Length;
+            int maxDataChars = 0;
+
+            for (int r = 0; r < sampleCount; r++)
+            {
+                var raw = GetRawCellValue(r, c, col);
+                var formatted = FormatCellValue(raw);
+                if (!string.IsNullOrEmpty(formatted))
+                {
+                    maxDataChars = Math.Max(maxDataChars, formatted.Length);
+                }
+            }
+
+            double headerWidth = headerChars * 6.5 + 34;
+            double dataWidth = maxDataChars > 0 ? (maxDataChars * 6.2 + 16) : 0;
+            double estimatedWidth = Math.Clamp(Math.Max(headerWidth, dataWidth), 52, 420);
+            _columnWidths[col] = Math.Round(estimatedWidth);
+        }
+    }
+
     protected override void OnParametersSet()
     {
         ClearCellSelection();
 
-        if (!ReferenceEquals(Data, _lastDataRef))
+        bool isNewData = !ReferenceEquals(Data, _lastDataRef);
+        if (isNewData)
         {
             _lastDataRef = Data;
             _currentScrollTop = 0;
             _renderedFirstVisible = -1;
             _shouldResetScroll = true;
+            _columnWidths.Clear();
         }
 
         if (Data is QueryResultTable qrt)
@@ -765,6 +795,11 @@ else
             Columns.Clear();
             Rows.Clear();
             _columnWidths.Clear();
+        }
+
+        if (isNewData && Columns.Count > 0)
+        {
+            InitializeSmartColumnWidths();
         }
 
         ApplyFilter();
@@ -850,7 +885,7 @@ else
         return null;
     }
 
-    private const int RowHeight = 31;
+    private const int RowHeight = 24;
     private const double MaxVirtualHeight = 10_000_000.0;
     private double _currentScrollTop = 0;
     private double _viewportHeight = 450;
@@ -871,7 +906,7 @@ else
 
     private int GetViewportRows()
     {
-        return Math.Max(1, (int)((_viewportHeight - 45) / RowHeight));
+        return Math.Max(1, (int)((_viewportHeight - 36) / RowHeight));
     }
 
     private int CalculateFirstVisible(int count, int viewportRows, out bool isScaled)
