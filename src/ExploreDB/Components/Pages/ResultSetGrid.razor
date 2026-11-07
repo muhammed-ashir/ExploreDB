@@ -10,7 +10,7 @@
 @inject ThemeService ThemeService
 @implements IDisposable
 
-<div class="position-relative h-100 d-flex flex-column" style="min-height: 0;">
+<div class="position-relative">
 @if (Columns.Count > 0)
 {
     @if (IsTextDefinition)
@@ -48,7 +48,88 @@
     }
     else
     {
-    <div id="@_tableContainerId" class="table-responsive rounded position-relative flex-grow-1" tabindex="0" style="border: 1px solid var(--app-border); outline: none; height: 100%; min-height: 0; overflow: auto;" @onkeydown="HandleKeyDown">
+    <div class="mb-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center">
+            <label class="text-muted small mb-0 me-2">Show</label>
+            <div class="position-relative">
+                <div class="form-control form-control-sm shadow-sm cursor-pointer d-flex justify-content-between align-items-center" style="width: 75px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @onclick="() => IsPageSizeDropdownOpen = !IsPageSizeDropdownOpen">
+                    <span>@(PageSize == -1 ? "All" : PageSize.ToString())</span>
+                    <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem;"></i>
+                </div>
+                @if (IsPageSizeDropdownOpen)
+                {
+                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsPageSizeDropdownOpen = false"></div>
+                    <div class="dropdown-menu show shadow-lg p-1 mt-1" style="position: absolute; top: 100%; left: 0; z-index: 1050; min-width: 75px; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                        @foreach (var size in new[] { 12, 24, 48, 96, -1 })
+                        {
+                            <button class="dropdown-item py-1 @(PageSize == size ? "bg-primary text-white" : "")" style="@(PageSize == size ? "" : "color: var(--app-text);")" type="button" @onclick="() => { PageSize = size; IsPageSizeDropdownOpen = false; }">
+                                @(size == -1 ? "All" : size.ToString())
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+            <label class="text-muted small mb-0 ms-2">per page</label>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <div class="input-group input-group-sm flex-grow-1" style="width: 350px;">
+                <input type="text"
+                       class="form-control shadow-none"
+                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                       placeholder="Search in results..."
+                       @bind="SearchTerm"
+                       @bind:event="oninput" />
+                <button class="btn @(SearchCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchCaseSensitive ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Case" @onclick="() => SearchCaseSensitive = !SearchCaseSensitive">
+                    <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                </button>
+                <button class="btn @(SearchMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchMatchWholeWord ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Match Whole Word" @onclick="() => { SearchMatchWholeWord = !SearchMatchWholeWord; if (SearchMatchWholeWord) SearchExactMatch = false; }">
+                    <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                </button>
+                <button class="btn @(SearchExactMatch ? "btn-primary text-white" : "btn-outline-secondary") px-3" style="z-index: 0; border-color: var(--app-input-border); @(SearchExactMatch ? "" : "background-color: var(--app-input-bg); color: var(--app-text-muted);")" title="Exact Match" @onclick="() => { SearchExactMatch = !SearchExactMatch; if (SearchExactMatch) SearchMatchWholeWord = false; }">
+                    <i class="bi bi-bullseye fs-6"></i>
+                </button>
+            </div>
+            <div class="position-relative">
+                <button class="btn btn-sm btn-outline-success px-3 d-flex align-items-center gap-2 flex-shrink-0" 
+                        @onclick="() => IsExportDropdownOpen = !IsExportDropdownOpen" 
+                        disabled="@IsExporting"
+                        title="Export results">
+                    @if (IsExporting)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>Exporting...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-download"></i>
+                        <span>Export</span>
+                        <i class="bi bi-chevron-down ms-1" style="font-size: 0.75rem;"></i>
+                    }
+                </button>
+                @if (IsExportDropdownOpen)
+                {
+                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsExportDropdownOpen = false"></div>
+                    <div class="dropdown-menu dropdown-menu-end show shadow-lg p-1 mt-1" 
+                         style="position: absolute; top: 100%; right: 0; z-index: 1050; min-width: 170px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border);">
+                        <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" 
+                                type="button" 
+                                @onclick="async () => { IsExportDropdownOpen = false; await ExportToExcelAsync(); }">
+                            <i class="bi bi-file-earmark-excel text-success fs-6"></i>
+                            <span>Excel (.xlsx)</span>
+                        </button>
+                        <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" 
+                                type="button" 
+                                @onclick="async () => { IsExportDropdownOpen = false; await ExportToCsvAsync(); }">
+                            <i class="bi bi-file-earmark-text text-primary fs-6"></i>
+                            <span>CSV (.csv)</span>
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div id="@_tableContainerId" class="table-responsive rounded position-relative" tabindex="0" style="border: 1px solid var(--app-border); outline: none;" @onkeydown="HandleKeyDown">
         <table class="result-set-table" style="min-width: 100%; width: max-content;">
             <thead>
                 <tr>
@@ -57,10 +138,10 @@
                         @onclick="ToggleSelectAll" 
                         @oncontextmenu="e => ShowRowHeaderContextMenu(e, -1)" 
                         @oncontextmenu:preventDefault="true"
-                        title="@(SortedRows.Count > 0 && Columns.Count > 0 && SelectedCells.Count == SortedRows.Count * Columns.Count ? "Click to deselect all" : "Click to select all")">
+                        title="@(PagedRows.Count > 0 && Columns.Count > 0 && SelectedCells.Count == PagedRows.Count * Columns.Count ? "Click to deselect all" : "Click to select all")">
                         <div class="px-2 py-2 d-flex align-items-center justify-content-center gap-1" style="font-size: 0.8rem;">
                             <span>#</span>
-                            @if (SortedRows.Count > 0 && Columns.Count > 0 && SelectedCells.Count == SortedRows.Count * Columns.Count)
+                            @if (PagedRows.Count > 0 && Columns.Count > 0 && SelectedCells.Count == PagedRows.Count * Columns.Count)
                             {
                                 <i class="bi bi-check-square-fill text-primary" style="font-size: 0.75rem;"></i>
                             }
@@ -107,13 +188,16 @@
                 </tr>
             </thead>
             <tbody>
-                <Virtualize Items="DisplayRows" Context="item" SpacerElement="tr" ItemSize="34">
-                    @{
-                        var row = item.Data;
-                        int localIndex = item.Index;
-                        bool isFullRowSelected = IsRowFullySelected(localIndex);
-                    }
-                    <tr style="height: 34px;">
+                @{
+                    var paged = PagedRows;
+                    int offset = PageSize == -1 ? 0 : (CurrentPage - 1) * PageSize;
+                }
+                @for (int i = 0; i < paged.Count; i++)
+                {
+                    var row = paged[i];
+                    int localIndex = i;
+                    bool isFullRowSelected = IsRowFullySelected(localIndex);
+                    <tr>
                         <td class="col-index text-center align-middle @(isFullRowSelected ? "selected-row-header" : "")" 
                             style="font-size: 0.8rem; cursor: pointer; user-select: none;"
                             title="Click to select row (Ctrl+Click to toggle, Shift+Click for range)"
@@ -124,12 +208,12 @@
                             {
                                 <span class="d-inline-flex align-items-center justify-content-center gap-1">
                                     <i class="bi bi-caret-right-fill text-primary" style="font-size: 0.65rem;"></i>
-                                    @(localIndex + 1)
+                                    @(offset + localIndex + 1)
                                 </span>
                             }
                             else
                             {
-                                @(localIndex + 1)
+                                @(offset + localIndex + 1)
                             }
                         </td>
                         @for (int colIdx = 0; colIdx < Columns.Count; colIdx++)
@@ -181,12 +265,12 @@
                             </td>
                         }
                     </tr>
-                </Virtualize>
-                @if (DisplayRows.Count == 0)
+                }
+                @if (paged.Count == 0)
                 {
                     <tr>
                         <td colspan="@(Columns.Count + 1)" class="text-center text-muted py-4">
-                            @(string.IsNullOrWhiteSpace(SearchTerm) ? "This result set is empty." : "No matching records found.")
+                            No matching records found.
                         </td>
                     </tr>
                 }
@@ -228,6 +312,57 @@
             <i class="bi bi-x-lg text-muted ms-3" style="cursor: pointer; font-size: 0.8rem;" @onclick="() => ActiveAggregateColumn = null" onmouseover="this.classList.replace('text-muted', 'text-white')" onmouseout="this.classList.replace('text-white', 'text-muted')"></i>
         </div>
     }
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div class="text-muted small">
+            @if (FilteredRows.Count == 0)
+            {
+                <span>Showing 0 entries</span>
+            }
+            else
+            {
+                <span>
+                    Showing @((CurrentPage - 1) * (PageSize == -1 ? FilteredRows.Count : PageSize) + 1) to @Math.Min(PageSize == -1 ? FilteredRows.Count : CurrentPage * PageSize, FilteredRows.Count) of @FilteredRows.Count entries
+                    @(FilteredRows.Count < Rows.Count ? $"(filtered from {Rows.Count} total entries)" : "")
+                </span>
+            }
+        </div>
+        <div class="d-flex align-items-center">
+            @if (ExecutionTimeMs.HasValue)
+            {
+                <span class="text-muted small @(TotalPages > 1 ? "me-3" : "")"><i class="bi bi-stopwatch me-1"></i>@(ExecutionTimeMs.Value)ms</span>
+            }
+            @if (TotalPages > 1)
+            {
+                <nav>
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(CurrentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SetPage(CurrentPage - 1)">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= TotalPages; i++)
+                    {
+                        var pageNum = i;
+                        if (TotalPages > 7 && (pageNum > 2 && pageNum < TotalPages - 1 && Math.Abs(pageNum - CurrentPage) > 1))
+                        {
+                            if (pageNum == CurrentPage - 2 || pageNum == CurrentPage + 2)
+                            {
+                                <li class="page-item disabled"><span class="page-link" style="background-color: var(--app-surface); color: var(--app-text-muted); border-color: var(--app-border);">...</span></li>
+                            }
+                            continue;
+                        }
+                        
+                        <li class="page-item @(pageNum == CurrentPage ? "active" : "")">
+                            <button class="page-link @(pageNum == CurrentPage ? "bg-primary border-primary text-white" : "")" style="@(pageNum == CurrentPage ? "" : "background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);")" @onclick="() => SetPage(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class="page-item @(CurrentPage == TotalPages ? "disabled" : "")">
+                        <button class="page-link" style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SetPage(CurrentPage + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+            }
+        </div>
+    </div>
     }
 }
 else
@@ -275,22 +410,12 @@ else
                 </div>
                 <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+Shift+C</span>
             </button>
-            <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="SelectAllRows">
+            <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="SelectAllCurrentPage">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-check2-all text-muted"></i>
                     <span>Select All</span>
                 </div>
                 <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+A</span>
-            </button>
-
-            <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
-            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="ExportToExcelAsync">
-                <i class="bi bi-file-earmark-excel text-success"></i>
-                <span>Export to Excel (.xlsx)</span>
-            </button>
-            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="ExportToCsvAsync">
-                <i class="bi bi-file-earmark-text text-primary"></i>
-                <span>Export to CSV (.csv)</span>
             </button>
 
             <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
@@ -643,38 +768,53 @@ else
     private object? AggMax = null;
     private List<string> Columns = new();
 
-    [Parameter]
-    public string SearchTerm { get; set; } = "";
-
-    [Parameter]
-    public bool SearchCaseSensitive { get; set; } = false;
-
-    [Parameter]
-    public bool SearchMatchWholeWord { get; set; } = false;
-
-    [Parameter]
-    public bool SearchExactMatch { get; set; } = false;
-
-    public readonly record struct IndexedRow(int Index, IDictionary<string, object> Data);
-
-    private List<IndexedRow> DisplayRows
+    private string _searchTerm = "";
+    private string SearchTerm
     {
-        get
+        get => _searchTerm;
+        set
         {
-            var sorted = SortedRows;
-            var list = new List<IndexedRow>(sorted.Count);
-            for (int i = 0; i < sorted.Count; i++)
-            {
-                list.Add(new IndexedRow(i, sorted[i]));
-            }
-            return list;
+            _searchTerm = value;
+            ClearCellSelection();
+            CurrentPage = 1;
         }
     }
 
-    private string _prevSearch = "";
-    private bool _prevCase = false;
-    private bool _prevWhole = false;
-    private bool _prevExact = false;
+    private bool _searchCaseSensitive = false;
+    private bool SearchCaseSensitive
+    {
+        get => _searchCaseSensitive;
+        set { _searchCaseSensitive = value; ClearCellSelection(); CurrentPage = 1; }
+    }
+    
+    private bool _searchMatchWholeWord = false;
+    private bool SearchMatchWholeWord
+    {
+        get => _searchMatchWholeWord;
+        set { _searchMatchWholeWord = value; ClearCellSelection(); CurrentPage = 1; }
+    }
+    
+    private bool _searchExactMatch = false;
+    private bool SearchExactMatch
+    {
+        get => _searchExactMatch;
+        set { _searchExactMatch = value; ClearCellSelection(); CurrentPage = 1; }
+    }
+
+    private int _pageSize = 24;
+    private bool IsPageSizeDropdownOpen = false;
+    private int PageSize
+    {
+        get => _pageSize;
+        set
+        {
+            _pageSize = value;
+            ClearCellSelection();
+            CurrentPage = 1;
+        }
+    }
+
+    private int CurrentPage = 1;
 
     private string _tableContainerId = "gridTable_" + Guid.NewGuid().ToString("N");
     private Dictionary<string, double> _columnWidths = new();
@@ -700,15 +840,7 @@ else
 
     protected override void OnParametersSet()
     {
-        if (SearchTerm != _prevSearch || SearchCaseSensitive != _prevCase || SearchMatchWholeWord != _prevWhole || SearchExactMatch != _prevExact)
-        {
-            _prevSearch = SearchTerm;
-            _prevCase = SearchCaseSensitive;
-            _prevWhole = SearchMatchWholeWord;
-            _prevExact = SearchExactMatch;
-            ClearCellSelection();
-        }
-
+        ClearCellSelection();
         Rows = Data.Select(d => (IDictionary<string, object>)d).ToList();
         if (Rows.Any())
         {
@@ -824,6 +956,8 @@ else
         }
     }
 
+    private int TotalPages => PageSize == -1 ? 1 : (int)Math.Ceiling(FilteredRows.Count / (double)PageSize);
+
     private List<IDictionary<string, object>> SortedRows
     {
         get
@@ -879,6 +1013,25 @@ else
             SortColumn = column;
             SortAscending = true;
         }
+        CurrentPage = 1;
+    }
+
+    private List<IDictionary<string, object>> PagedRows
+    {
+        get
+        {
+            var sorted = SortedRows;
+            if (PageSize == -1) return sorted;
+            
+            return sorted.Skip((CurrentPage - 1) * PageSize).Take(PageSize).ToList();
+        }
+    }
+
+    private void SetPage(int page)
+    {
+        if (page < 1 || page > TotalPages) return;
+        ClearCellSelection();
+        CurrentPage = page;
     }
 
     private void HideContextMenu()
@@ -992,11 +1145,11 @@ else
     private void ToggleSelectAll()
     {
         HideContextMenu();
-        var rowCount = SortedRows.Count;
+        var pagedCount = PagedRows.Count;
         var colCount = Columns.Count;
-        if (rowCount == 0 || colCount == 0) return;
+        if (pagedCount == 0 || colCount == 0) return;
 
-        int totalCells = rowCount * colCount;
+        int totalCells = pagedCount * colCount;
         if (SelectedCells.Count == totalCells)
         {
             ClearCellSelection();
@@ -1004,7 +1157,7 @@ else
         else
         {
             SelectedCells.Clear();
-            for (int r = 0; r < rowCount; r++)
+            for (int r = 0; r < pagedCount; r++)
             {
                 for (int c = 0; c < colCount; c++)
                 {
@@ -1016,13 +1169,13 @@ else
         StateHasChanged();
     }
 
-    private void SelectAllRows()
+    private void SelectAllCurrentPage()
     {
         HideContextMenu();
         SelectedCells.Clear();
-        var rowCount = SortedRows.Count;
+        var pagedCount = PagedRows.Count;
         var colCount = Columns.Count;
-        for (int r = 0; r < rowCount; r++)
+        for (int r = 0; r < pagedCount; r++)
         {
             for (int c = 0; c < colCount; c++)
             {
@@ -1035,9 +1188,9 @@ else
 
     private bool IsColumnFullySelected(int colIndex)
     {
-        var rowCount = SortedRows.Count;
-        if (rowCount == 0) return false;
-        for (int r = 0; r < rowCount; r++)
+        var pagedCount = PagedRows.Count;
+        if (pagedCount == 0) return false;
+        for (int r = 0; r < pagedCount; r++)
         {
             if (!SelectedCells.Contains((r, colIndex))) return false;
         }
@@ -1048,13 +1201,13 @@ else
     {
         HideContextMenu();
 
-        var rowCount = SortedRows.Count;
-        if (rowCount == 0) return;
+        var pagedCount = PagedRows.Count;
+        if (pagedCount == 0) return;
 
         if (e.CtrlKey || e.MetaKey)
         {
             bool allSelected = IsColumnFullySelected(colIndex);
-            for (int r = 0; r < rowCount; r++)
+            for (int r = 0; r < pagedCount; r++)
             {
                 if (allSelected)
                 {
@@ -1076,7 +1229,7 @@ else
             int startC = Math.Min(_lastSelectedCell.Col, colIndex);
             int endC = Math.Max(_lastSelectedCell.Col, colIndex);
 
-            for (int r = 0; r < rowCount; r++)
+            for (int r = 0; r < pagedCount; r++)
             {
                 for (int c = startC; c <= endC; c++)
                 {
@@ -1087,7 +1240,7 @@ else
         else
         {
             SelectedCells.Clear();
-            for (int r = 0; r < rowCount; r++)
+            for (int r = 0; r < pagedCount; r++)
             {
                 SelectedCells.Add((r, colIndex));
             }
@@ -1105,8 +1258,8 @@ else
         if (!allSelected)
         {
             SelectedCells.Clear();
-            var rowCount = SortedRows.Count;
-            for (int r = 0; r < rowCount; r++)
+            var pagedCount = PagedRows.Count;
+            for (int r = 0; r < pagedCount; r++)
             {
                 SelectedCells.Add((r, colIndex));
             }
@@ -1164,7 +1317,7 @@ else
             // Right-clicked the # header: if no selection, select all
             if (SelectedCells.Count == 0)
             {
-                SelectAllRows();
+                SelectAllCurrentPage();
             }
         }
 
@@ -1180,10 +1333,10 @@ else
             if (SelectedCells.Count == 1)
             {
                 var (r, c) = SelectedCells.First();
-                var sorted = SortedRows;
-                if (r >= 0 && r < sorted.Count && c >= 0 && c < Columns.Count)
+                var paged = PagedRows;
+                if (r >= 0 && r < paged.Count && c >= 0 && c < Columns.Count)
                 {
-                    if (sorted[r].TryGetValue(Columns[c], out var val) && val is byte[] bytes)
+                    if (paged[r].TryGetValue(Columns[c], out var val) && val is byte[] bytes)
                     {
                         return bytes;
                     }
@@ -1195,16 +1348,16 @@ else
 
     private string BuildClipboardText(bool includeHeaders)
     {
-        var sorted = SortedRows;
-        if (sorted.Count == 0 || Columns.Count == 0 || SelectedCells.Count == 0) return string.Empty;
+        var paged = PagedRows;
+        if (paged.Count == 0 || Columns.Count == 0 || SelectedCells.Count == 0) return string.Empty;
 
         // Single cell special case: clean raw copy
         if (SelectedCells.Count == 1)
         {
             var (r, c) = SelectedCells.First();
-            if (r >= 0 && r < sorted.Count && c >= 0 && c < Columns.Count)
+            if (r >= 0 && r < paged.Count && c >= 0 && c < Columns.Count)
             {
-                var row = sorted[r];
+                var row = paged[r];
                 var col = Columns[c];
                 if (row.TryGetValue(col, out var raw) && raw is byte[] bytes)
                 {
@@ -1212,7 +1365,7 @@ else
                     if (includeHeaders) return $"{col}\r\n{hex}";
                     return hex;
                 }
-                var val = GetColumnValue(sorted[r], Columns[c]) ?? "NULL";
+                var val = GetColumnValue(paged[r], Columns[c]) ?? "NULL";
                 if (includeHeaders)
                 {
                     return $"{Columns[c]}\r\n{val}";
@@ -1221,7 +1374,7 @@ else
             }
         }
 
-        var targetRows = SelectedCells.Select(x => x.Row).Where(r => r >= 0 && r < sorted.Count).Distinct().OrderBy(r => r).ToList();
+        var targetRows = SelectedCells.Select(x => x.Row).Where(r => r >= 0 && r < paged.Count).Distinct().OrderBy(r => r).ToList();
         var targetCols = SelectedCells.Select(x => x.Col).Where(c => c >= 0 && c < Columns.Count).Distinct().OrderBy(c => c).ToList();
 
         if (targetRows.Count == 0 || targetCols.Count == 0) return string.Empty;
@@ -1237,7 +1390,7 @@ else
 
         for (int rIdx = 0; rIdx < targetRows.Count; rIdx++)
         {
-            var row = sorted[targetRows[rIdx]];
+            var row = paged[targetRows[rIdx]];
             var rowValues = new List<string>(targetCols.Count);
 
             foreach (var c in targetCols)
@@ -1339,7 +1492,7 @@ else
             }
             else if (e.Key.Equals("a", StringComparison.OrdinalIgnoreCase))
             {
-                SelectAllRows();
+                SelectAllCurrentPage();
             }
         }
         else if (e.Key == "Escape")
@@ -1386,10 +1539,10 @@ else
         else if (SelectedCells.Count > 0)
         {
             // Right-clicked cell area: take values of the selected cells
-            var sorted = SortedRows;
+            var paged = PagedRows;
             rawList = SelectedCells
-                .Where(coord => coord.Row >= 0 && coord.Row < sorted.Count && coord.Col >= 0 && coord.Col < Columns.Count)
-                .Select(coord => GetColumnValue(sorted[coord.Row], Columns[coord.Col]))
+                .Where(coord => coord.Row >= 0 && coord.Row < paged.Count && coord.Col >= 0 && coord.Col < Columns.Count)
+                .Select(coord => GetColumnValue(paged[coord.Row], Columns[coord.Col]))
                 .Where(v => v != null)
                 .ToList();
         }

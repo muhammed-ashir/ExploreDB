@@ -2063,55 +2063,6 @@ window.initProfilerSplitter = function (dotNetRef) {
     return true;
 };
 
-window.initStackedResultSetSplitters = function (containerId) {
-    containerId = containerId || 'stacked-result-sets-container';
-    var container = document.getElementById(containerId);
-    if (!container) return false;
-    var splitters = container.querySelectorAll('.result-set-splitter');
-    splitters.forEach(function (splitter) {
-        if (splitter._hasSplitterHandler) return;
-        splitter._hasSplitterHandler = true;
-        splitter.addEventListener('pointerdown', function (e) {
-            if (e.button !== 0) return;
-            e.preventDefault();
-            try { splitter.setPointerCapture(e.pointerId); } catch (err) {}
-            var prevPane = splitter.previousElementSibling;
-            var nextPane = splitter.nextElementSibling;
-            if (!prevPane || !nextPane) return;
-            var startY = e.clientY;
-            var startH_A = prevPane.offsetHeight;
-            var startH_B = nextPane.offsetHeight;
-            var totalH = startH_A + startH_B;
-            var minH = 60;
-            splitter.classList.add('dragging');
-            document.body.style.cursor = 'row-resize';
-            document.body.style.userSelect = 'none';
-            function onPointerMove(moveEvent) {
-                var deltaY = moveEvent.clientY - startY;
-                var newH_A = Math.round(Math.min(totalH - minH, Math.max(minH, startH_A + deltaY)));
-                var newH_B = totalH - newH_A;
-                prevPane.style.flex = '0 0 ' + newH_A + 'px';
-                nextPane.style.flex = '0 0 ' + newH_B + 'px';
-                window.dispatchEvent(new Event('resize'));
-            }
-            function onPointerUp(upEvent) {
-                try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
-                splitter.removeEventListener('pointermove', onPointerMove);
-                splitter.removeEventListener('pointerup', onPointerUp);
-                splitter.removeEventListener('pointercancel', onPointerUp);
-                splitter.classList.remove('dragging');
-                document.body.style.cursor = '';
-                document.body.style.userSelect = '';
-                window.dispatchEvent(new Event('resize'));
-            }
-            splitter.addEventListener('pointermove', onPointerMove);
-            splitter.addEventListener('pointerup', onPointerUp);
-            splitter.addEventListener('pointercancel', onPointerUp);
-        });
-    });
-    return true;
-};
-
 window.triggerWindowResize = function () {
     window.dispatchEvent(new Event('resize'));
 };

@@ -233,8 +233,7 @@
              style="@(IsFullScreen ? "background-color: var(--app-bg); z-index: 9999;" : IsMinimized ? "" : "min-height: 0;")">
             <div class="card shadow-sm d-flex flex-column h-100" style="@(IsFullScreen ? "height: 100%;" : IsMinimized ? "border-bottom-left-radius: 0; border-bottom-right-radius: 0;" : "min-height: 0;") background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); overflow: hidden;">
                 <div class="card-header p-0 d-flex justify-content-between align-items-center flex-shrink-0" style="border-bottom: 1px solid var(--app-border); background-color: var(--app-surface-secondary);">
-                    <div class="d-flex align-items-center flex-grow-1 overflow-hidden">
-                        <ul class="nav nav-tabs border-bottom-0 flex-shrink-0" style="border-color: var(--app-border);">
+                    <ul class="nav nav-tabs flex-grow-1 border-bottom-0" style="border-color: var(--app-border);">
                         <li class="nav-item">
                             <a class="nav-link @(ResultTab == "Results" ? "active border-bottom-0" : "border-transparent")"
                                style="@(ResultTab == "Results" ? "background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border);" : "color: var(--app-text-muted);") cursor:pointer;"
@@ -249,27 +248,8 @@
                             </a>
                         </li>
                     </ul>
-                    @if (ResultTab == "Results" && ActiveTab.HasExecuted && !ActiveTab.IsExecuting && ActiveTab.ResultSets.Count > 0)
-                    {
-                        <span class="text-muted small ms-3 fw-medium">@GetTotalRowsSummary()</span>
-                    }
-                    @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
-                    {
-                        <span class="text-muted small ms-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
-                    }
-                </div>
                     <div class="d-flex align-items-center pe-2">
-                        @if (ResultTab == "Results" && ActiveTab.HasExecuted && !ActiveTab.IsExecuting && ActiveTab.ResultSets.Count > 0)
-                        {
-                            <button class="btn btn-sm @(IsSearchOpen ? "btn-primary" : "btn-outline-secondary border-0") d-flex align-items-center gap-1 me-2" 
-                                    style="font-size: 0.8rem; color: @(IsSearchOpen ? "#fff" : "var(--app-text)");" 
-                                    @onclick="ToggleSearch" 
-                                    title="Find in results (Ctrl+F)">
-                                <i class="bi bi-search"></i>
-                                <span>Search</span>
-                            </button>
-                        }
-                        @if (false)
+                        @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
                         {
                             <span class="text-muted small me-3"><i class="bi bi-stopwatch me-1"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
                         }
@@ -293,35 +273,7 @@
                 </div>
                 @if (!IsMinimized)
                 {
-                    <div class="card-body p-0 position-relative flex-grow-1 overflow-hidden d-flex flex-column" style="min-height: 0;">
-                        @if (IsSearchOpen && ResultTab == "Results")
-                        {
-                            <div class="position-absolute shadow-lg rounded p-1 d-flex align-items-center gap-1" 
-                                 style="top: 10px; right: 20px; z-index: 1000; background-color: var(--app-surface); border: 1px solid var(--app-border); box-shadow: 0 4px 16px rgba(0,0,0,0.35) !important;">
-                                <i class="bi bi-search text-muted ms-2 me-1" style="font-size: 0.8rem;"></i>
-                                <input type="text" 
-                                       class="form-control form-control-sm border-0 shadow-none px-1" 
-                                       style="width: 200px; font-size: 0.82rem; background: transparent; color: var(--app-text);" 
-                                       placeholder="Find in results..." 
-                                       value="@SearchTerm" 
-                                       @oninput="e => SearchTerm = e.Value?.ToString() ?? string.Empty" 
-                                       autofocus />
-                                <button class="btn btn-sm @(SearchCaseSensitive ? "btn-primary" : "btn-outline-secondary border-0") px-2 py-0" 
-                                        style="font-size: 0.75rem; height: 24px; min-width: 24px;" 
-                                        title="Match Case" 
-                                        @onclick="() => SearchCaseSensitive = !SearchCaseSensitive">Aa</button>
-                                <button class="btn btn-sm @(SearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary border-0") px-2 py-0" 
-                                        style="font-size: 0.75rem; height: 24px; min-width: 24px;" 
-                                        title="Match Whole Word" 
-                                        @onclick="() => SearchMatchWholeWord = !SearchMatchWholeWord">ab</button>
-                                <div class="vr mx-1" style="height: 16px; opacity: 0.3;"></div>
-                                <button class="btn btn-sm btn-link text-muted p-0 px-1 me-1" 
-                                        title="Close" 
-                                        @onclick="() => { IsSearchOpen = false; SearchTerm = string.Empty; }">
-                                    <i class="bi bi-x-lg" style="font-size: 0.75rem;"></i>
-                                </button>
-                            </div>
-                        }
+                    <div class="card-body overflow-auto flex-grow-1 custom-scrollbar-light" style="min-height: 0;">
                             @if (ResultTab == "Results")
                             {
                                 if (ActiveTab.IsExecuting)
@@ -352,47 +304,8 @@
                                 }
                                 else
                                 {
-                                    if (ActiveTab.ResultSets.Count == 1)
-                                    {
-                                        <div class="w-100 h-100 overflow-hidden" style="min-height: 0;">
-                                            <ResultSetGrid Data="ActiveTab.ResultSets[0]" 
-                                                           SearchTerm="@SearchTerm" 
-                                                           SearchCaseSensitive="@SearchCaseSensitive" 
-                                                           SearchMatchWholeWord="@SearchMatchWholeWord" 
-                                                           OnExportStateChanged="HandleExportStateChanged" 
-                                                           OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
-                                        </div>
-                                    }
-                                    else
-                                    {
-                                        <div id="stacked-result-sets-container" class="d-flex flex-column h-100 w-100 overflow-hidden" style="min-height: 0;">
-                                            @for (int i = 0; i < ActiveTab.ResultSets.Count; i++)
-                                            {
-                                                var rs = ActiveTab.ResultSets[i];
-                                                int rsNum = i + 1;
-                                                <div class="result-set-pane d-flex flex-column" style="flex: 1 1 0px; min-height: 60px; overflow: hidden;">
-                                                    <div class="px-2 py-1 small fw-semibold text-muted d-flex align-items-center justify-content-between flex-shrink-0" 
-                                                         style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border); font-size: 0.75rem; user-select: none;">
-                                                        <span><i class="bi bi-table me-1 text-primary"></i>Result Set @rsNum <span class="badge rounded-pill bg-dark-subtle text-muted ms-1" style="font-size: 0.7rem; border: 1px solid var(--app-border);">@rs.Count() rows</span></span>
-                                                    </div>
-                                                    <div class="flex-grow-1 overflow-hidden" style="min-height: 0;">
-                                                        <ResultSetGrid Data="rs" 
-                                                                       SearchTerm="@SearchTerm" 
-                                                                       SearchCaseSensitive="@SearchCaseSensitive" 
-                                                                       SearchMatchWholeWord="@SearchMatchWholeWord" 
-                                                                       OnExportStateChanged="HandleExportStateChanged" 
-                                                                       OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
-                                                    </div>
-                                                </div>
-                                                @if (i < ActiveTab.ResultSets.Count - 1)
-                                                {
-                                                    <div class="result-set-splitter" title="Drag to resize result sets"></div>
-                                                }
-                                            }
-                                        </div>
-                                    }
                                     int rsIndex = 1;
-                                    foreach (var rs in (false ? ActiveTab.ResultSets : System.Linq.Enumerable.Empty<dynamic>()))
+                                    foreach (var rs in ActiveTab.ResultSets)
                                     {
                                         var capturedIndex = rsIndex;
                                         @if (ActiveTab.ResultSets.Count > 1) 
@@ -421,8 +334,7 @@
                             }
                             else if (ResultTab == "Messages")
                             {
-                                <div class="p-3 h-100 overflow-auto">
-                                    <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap; font-family: Consolas, 'Courier New', monospace;">
+                                <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap; font-family: Consolas, 'Courier New', monospace;">
 @if (ActiveTab.Messages.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
 @foreach (var msg in ActiveTab.Messages)
 {
@@ -435,8 +347,7 @@
         <span>@msg.Text</span><br/>
     }
 }
-                                    </pre>
-                                </div>
+                                </pre>
                             }
                         </div>
                     }
@@ -700,35 +611,6 @@
     private ExploreDB.Services.QueryTab _fallbackTab = new ExploreDB.Services.QueryTab();
     private ExploreDB.Services.QueryTab ActiveTab => QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId) ?? _fallbackTab;
     
-    // Search State
-    private bool IsSearchOpen = false;
-    private string SearchTerm = "";
-    private bool SearchCaseSensitive = false;
-    private bool SearchMatchWholeWord = false;
-
-    private void ToggleSearch()
-    {
-        IsSearchOpen = !IsSearchOpen;
-        if (!IsSearchOpen)
-        {
-            SearchTerm = "";
-        }
-    }
-
-    [JSInvokable]
-    public void OpenResultsSearch()
-    {
-        IsSearchOpen = true;
-        StateHasChanged();
-    }
-
-    private string GetTotalRowsSummary()
-    {
-        if (ActiveTab.ResultSets == null || ActiveTab.ResultSets.Count == 0) return "0 rows";
-        int total = ActiveTab.ResultSets.Sum(rs => rs?.Count() ?? 0);
-        return total == 1 ? "1 row" : $"{total} rows";
-    }
-
     // Global Export State
     private string ExportFormatName = "Excel";
     private bool IsExportingToExcel = false;
@@ -1155,21 +1037,6 @@
             try
             {
                 await JS.InvokeVoidAsync("initQueryEditorSplitter", _objRef);
-            }
-            catch { }
-        }
-
-        if (ActiveTab.HasExecuted && ActiveTab.ResultSets.Count > 1 && ResultTab == "Results")
-        {
-            try
-            {
-                await JS.InvokeVoidAsync("initStackedResultSetSplitters", "stacked-result-sets-container");
-            }
-            catch { }
-            try {
-                try {
-            }
-            catch { }
             }
             catch { }
         }
