@@ -337,7 +337,7 @@
                         *@
                         @if (!IsFullScreen)
                         {
-                            <button class="btn btn-sm btn-outline-secondary border-0 p-0 d-flex align-items-center justify-content-center me-1" style="width: 22px; height: 22px; color: var(--app-text);" @onclick="ToggleMinimize" title="@(IsMinimized ? "Restore Up" : "Minimize")">
+                            <button class="btn btn-sm btn-outline-secondary border-0 p-0 d-flex align-items-center justify-content-center me-1" style="width: 22px; height: 22px; color: var(--app-text);" @onclick="ToggleMinimize" title="@(IsMinimized ? "Restore Up (Ctrl+R)" : "Minimize (Ctrl+R)")">
                                 <i class="bi @(IsMinimized ? "bi-chevron-up" : "bi-chevron-down")" style="font-size: 0.75rem; line-height: 1;"></i>
                             </button>
                         }
@@ -976,6 +976,7 @@
     {
         IsMinimized = !IsMinimized;
         if (IsMinimized) { IsFullScreen = false; IsEditorFullScreen = false; }
+        try { _ = JS.InvokeVoidAsync("layoutMonacoEditors"); } catch { }
     }
 
     private void ToggleFullScreen()
@@ -2262,6 +2263,16 @@
         if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
         {
             await SchemaService.LoadSchemaAsync();
+        }
+    }
+
+    [JSInvokable]
+    public void ToggleMinimizeFromShortcut()
+    {
+        if (ActiveTab != null && ActiveTab.HasExecuted)
+        {
+            ToggleMinimize();
+            StateHasChanged();
         }
     }
 

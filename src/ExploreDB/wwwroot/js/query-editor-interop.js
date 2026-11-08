@@ -1360,6 +1360,24 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 } catch (e) { }
             }
 
+            // Toggle Results Pane (Ctrl+R)
+            if (!editor.getAction('toggle-results-pane')) {
+                try {
+                    editor.addAction({
+                        id: 'toggle-results-pane',
+                        label: 'Toggle Results Pane (Ctrl+R)',
+                        keybindings: [
+                            monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR
+                        ],
+                        run: function(ed) {
+                            if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                                window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('ToggleMinimizeFromShortcut');
+                            }
+                        }
+                    });
+                } catch (e) { }
+            }
+
             // Toggle Comment in context menu & keyboard chords
             if (!editor.getAction('toggle-comment-action')) {
                 try {

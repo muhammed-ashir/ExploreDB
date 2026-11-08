@@ -192,6 +192,14 @@
                 }
             }
 
+            // Intercept Ctrl+R (Toggle Results Pane Minimize/Restore)
+            if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'r' || e.key === 'R')) {
+                e.preventDefault(); // Block WebView2/browser refresh
+                if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                    window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('ToggleMinimizeFromShortcut');
+                }
+            }
+
             // Intercept Ctrl+N
             if (e.ctrlKey && !e.shiftKey && (e.key === 'n' || e.key === 'N')) {
                 e.preventDefault(); // Block default new window shortcut
