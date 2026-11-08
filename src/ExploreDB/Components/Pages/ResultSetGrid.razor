@@ -313,10 +313,13 @@ else
             </button>
 
             <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
-            <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CopyColumnAsInClause">
+            @if (CanCopyAsInClause)
+            {
+                <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CopyColumnAsInClause">
                 <i class="bi bi-clipboard text-muted"></i>
                 <span>Copy as IN clause</span>
             </button>
+            }
             @if (IsColumnContextMenu || !string.IsNullOrEmpty(ContextMenuColumn))
             {
                 <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CalculateAggregates">
@@ -1699,9 +1702,30 @@ else
         });
     }
 
+    private bool CanCopyAsInClause
+    {
+        get
+        {
+            if (_isAllSelected) return false;
+            if (SelectedEntireCols.Count > 1) return false;
+            if (SelectedEntireRows.Count > 0) return false;
+
+            if (SelectedEntireCols.Count == 1) return true;
+            if (IsColumnContextMenu && !string.IsNullOrEmpty(ContextMenuColumn)) return true;
+
+            if (SelectedCells.Count > 0)
+            {
+                return SelectedCells.Select(c => c.Col).Distinct().Count() == 1;
+            }
+
+            return !string.IsNullOrEmpty(ContextMenuColumn);
+        }
+    }
+
     private async Task CopyColumnAsInClause()
     {
         HideContextMenu();
+        if (!CanCopyAsInClause) return;
         List<string?> rawList;
 
         if (IsColumnContextMenu || SelectedEntireCols.Count > 0 || (SelectedCells.Count == 0 && SelectedEntireRows.Count == 0 && !_isAllSelected && !string.IsNullOrEmpty(ContextMenuColumn)))
