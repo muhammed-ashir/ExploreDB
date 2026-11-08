@@ -79,7 +79,7 @@
                             <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-1 gap-2" 
                                  style="cursor: pointer; user-select: none;" 
                                  title="Click to select column (Ctrl+Click to toggle, Shift+Click for range)"
-                                 @onclick="e => HandleColumnHeaderClick(e, localCol)" 
+                                 @onclick="e => OnColumnHeaderClick(e, localCol)" 
                                  @oncontextmenu="e => ShowColumnHeaderContextMenu(e, localCol, col)" 
                                  @oncontextmenu:preventDefault="true">
                                 <div class="d-flex align-items-center gap-1 text-truncate flex-grow-1" style="min-width: 0;">
@@ -138,7 +138,7 @@
                         <td class="col-index text-center align-middle" 
                             style="font-size: 0.75rem; cursor: pointer; user-select: none; padding: 2px 4px; height: @(RowHeight)px;"
                             title="Click to select row (Ctrl+Click to toggle, Shift+Click for range)"
-                            @onclick="e => HandleRowHeaderClick(e, actualIndex)"
+                            @onclick="e => OnRowHeaderClick(e, actualIndex)"
                             @oncontextmenu="e => ShowRowHeaderContextMenu(e, actualIndex)"
                             @oncontextmenu:preventDefault="true">
                             @if (isFullRowSelected)
@@ -163,7 +163,7 @@
                             <td class="@(isCellSelected ? "selected-cell" : "")"
                                 style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis; padding: 2px 8px; font-size: 0.78rem; line-height: 1.25; height: @(RowHeight)px;" 
                                 title="@val"
-                                @onclick="e => HandleCellClick(e, actualIndex, localCol)"
+                                @onclick="e => OnCellClick(e, actualIndex, localCol)"
                                 @oncontextmenu="e => ShowCellContextMenu(e, actualIndex, localCol)"
                                 @oncontextmenu:preventDefault="true">
                                 @if (val == null) {
@@ -1709,6 +1709,40 @@ else
                 InvokeAsync(StateHasChanged);
             }
         });
+    }
+
+    private void OnColumnHeaderClick(MouseEventArgs e, int colIndex)
+    {
+        if (!e.CtrlKey && !e.MetaKey && SelectedEntireCols.Count == 1 && SelectedEntireCols.Contains(colIndex) && !_isAllSelected && SelectedCells.Count == 0 && SelectedEntireRows.Count == 0)
+        {
+            HideContextMenu();
+            ClearCellSelection();
+            return;
+        }
+        HandleColumnHeaderClick(e, colIndex);
+    }
+
+    private void OnRowHeaderClick(MouseEventArgs e, int actualRowIndex)
+    {
+        if (!e.CtrlKey && !e.MetaKey && !e.ShiftKey && SelectedEntireRows.Count == 1 && SelectedEntireRows.Contains(actualRowIndex) && !_isAllSelected && SelectedCells.Count == 0 && SelectedEntireCols.Count == 0)
+        {
+            HideContextMenu();
+            ClearCellSelection();
+            return;
+        }
+        HandleRowHeaderClick(e, actualRowIndex);
+    }
+
+    private void OnCellClick(MouseEventArgs e, int actualRowIndex, int colIndex)
+    {
+        var coord = (actualRowIndex, colIndex);
+        if (!e.CtrlKey && !e.MetaKey && !e.ShiftKey && SelectedCells.Count == 1 && SelectedCells.Contains(coord) && !_isAllSelected && SelectedEntireRows.Count == 0 && SelectedEntireCols.Count == 0)
+        {
+            HideContextMenu();
+            ClearCellSelection();
+            return;
+        }
+        HandleCellClick(e, actualRowIndex, colIndex);
     }
 
     private bool CanCopyAsInClause
