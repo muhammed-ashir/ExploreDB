@@ -2246,7 +2246,7 @@ window.initResultSetSplitters = function (containerId) {
             var startY = e.clientY;
             var startHeight = prevPane.offsetHeight;
             var minHeight = 60;
-            var maxHeight = Math.max(minHeight, container.offsetHeight - 100);
+            var maxHeight = Math.max(minHeight, Math.max(container.offsetHeight * 2, 800));
             var layoutRaf = null;
             var rafId = null;
 
