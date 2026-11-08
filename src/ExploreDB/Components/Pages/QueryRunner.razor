@@ -80,7 +80,7 @@
         </div>
     </div>
     
-    @if (!string.IsNullOrEmpty(FormatError))
+    @if (!string.IsNullOrEmpty(FormatError) && !IsEditorFullScreen)
     {
         <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-2 flex-shrink-0" role="alert">
             <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Format Error:</strong> @FormatError
@@ -91,7 +91,7 @@
     <!-- Split-Pane Workspace Area -->
     <div class="query-runner-workspace d-flex flex-column flex-grow-1 overflow-hidden" style="min-height: 0;">
         <!-- Execution Harness Area (Editor) -->
-        <div class="card shadow-sm @(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "flex-shrink-0") d-flex flex-column overflow-hidden" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); min-height: 120px;">
+        <div class="card shadow-sm @(IsEditorFullScreen ? "position-fixed top-0 start-0 w-100 h-100 p-2 m-0 rounded-0" : !ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "flex-shrink-0") d-flex flex-column overflow-hidden" style="@(IsEditorFullScreen ? "background-color: var(--app-bg); z-index: 9999; height: 100vh;" : "background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); min-height: 120px;")">
             <!-- SSMS-Style Tab Strip -->
             <div class="ssms-tab-strip d-flex align-items-stretch justify-content-between flex-shrink-0">
                 <div id="ssms-tab-scroll" class="ssms-tab-scroll d-flex align-items-stretch flex-grow-1">
@@ -135,6 +135,31 @@
 
                     <!-- Right Controls: Tab Search Dropdown & Popout -->
                     <div class="d-flex align-items-center flex-shrink-0 px-2 gap-1 border-start" style="border-color: var(--app-border) !important;">
+                        @if (IsEditorFullScreen)
+                        {
+                            <button type="button" 
+                                    class="btn btn-sm toolbar-icon-btn border-0 shadow-none d-flex align-items-center justify-content-center" 
+                                    style="width: 22px; height: 22px; min-width: 22px; min-height: 22px;"
+                                    title="Save Query (Ctrl+S)" 
+                                    @onclick="SaveActiveQueryAsync">
+                                <i class="bi bi-floppy" style="font-size: 0.75rem;"></i>
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-sm toolbar-icon-btn border-0 shadow-none d-flex align-items-center justify-content-center" 
+                                    style="width: 22px; height: 22px; min-width: 22px; min-height: 22px;"
+                                    title="Format SQL" 
+                                    @onclick="FormatSqlAsync">
+                                <i class="bi bi-magic text-info" style="font-size: 0.75rem;"></i>
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-sm toolbar-icon-btn border-0 shadow-none d-flex align-items-center justify-content-center" 
+                                    style="width: 22px; height: 22px; min-width: 22px; min-height: 22px;"
+                                    title="Toggle Comment (Ctrl+/)" 
+                                    @onclick="ToggleCommentAsync">
+                                <i class="bi bi-chat-left-text text-info" style="font-size: 0.75rem;"></i>
+                            </button>
+                            <div class="vr my-1 mx-1" style="height: 14px; opacity: 0.25;"></div>
+                        }
                         <div class="position-relative">
                             <button type="button" 
                                     class="btn btn-sm toolbar-icon-btn border-0 shadow-none @(IsTabDropdownOpen ? "active" : "")" 
@@ -189,7 +214,25 @@
                             }
                         </div>
 
-                        @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+                        @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1 && !IsEditorFullScreen)
+                        {
+                            <button type="button" 
+                                    class="btn btn-sm toolbar-icon-btn border-0 shadow-none" 
+                                    style="width: 22px; height: 22px; min-width: 22px; min-height: 22px;"
+                                    title="Pop Out Active Tab" 
+                                    @onclick="() => PopoutTabAsync(ActiveTab.Id)">
+                                <i class="bi bi-box-arrow-up-right text-info" style="font-size: 0.8rem;"></i>
+                            </button>
+                        }
+
+                        <button type="button" 
+                                class="btn btn-sm toolbar-icon-btn border-0 shadow-none d-flex align-items-center justify-content-center" 
+                                style="width: 22px; height: 22px; min-width: 22px; min-height: 22px;"
+                                title="@(IsEditorFullScreen ? "Restore Down (Esc)" : "Expand Editor to Full Screen")" 
+                                @onclick="ToggleEditorFullScreen">
+                            <i class="bi @(IsEditorFullScreen ? "bi-fullscreen-exit text-warning" : "bi-arrows-fullscreen")" style="font-size: 0.75rem;"></i>
+                        </button>
+                        @if (false /* skip old popout */ && QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
                         {
                             <button type="button" 
                                     class="btn btn-sm toolbar-icon-btn border-0 shadow-none" 
@@ -203,7 +246,7 @@
                 </div>
 
                 <div class="card-body p-0 d-flex flex-column flex-grow-1" style="min-height: 0; overflow: hidden;">
-                    <div id="query-editor-wrapper" class="@(!ActiveTab.HasExecuted || IsMinimized ? "flex-grow-1" : "")" style="@(!ActiveTab.HasExecuted || IsMinimized ? "height: 100%;" : (_customEditorHeight.HasValue ? $"height: {_customEditorHeight.Value}px;" : "height: 180px;")) width: 100%; display: block; overflow: hidden; min-height: 120px;">
+                    <div id="query-editor-wrapper" class="@(!ActiveTab.HasExecuted || IsMinimized || IsEditorFullScreen ? "flex-grow-1" : "")" style="@(!ActiveTab.HasExecuted || IsMinimized || IsEditorFullScreen ? "height: 100%;" : (_customEditorHeight.HasValue ? $"height: {_customEditorHeight.Value}px;" : "height: 180px;")) width: 100%; display: block; overflow: hidden; min-height: 120px;">
                         @if (QueryStateService.Initialized && _isMonacoLoaded)
                         {
                             <StandaloneCodeEditor @ref="_editor" Id="query-editor" CssClass="w-100 h-100" ConstructionOptions="EditorConstructionOptions" OnDidInit="EditorOnDidInit" OnDidChangeModelContent="EditorOnDidChangeModelContent" />
@@ -932,13 +975,47 @@
     private void ToggleMinimize()
     {
         IsMinimized = !IsMinimized;
-        if (IsMinimized) IsFullScreen = false;
+        if (IsMinimized) { IsFullScreen = false; IsEditorFullScreen = false; }
     }
 
     private void ToggleFullScreen()
     {
         IsFullScreen = !IsFullScreen;
-        if (IsFullScreen) IsMinimized = false;
+        if (IsFullScreen)
+        {
+            IsMinimized = false;
+            IsEditorFullScreen = false;
+        }
+    }
+
+    private bool IsEditorFullScreen = false;
+
+    private async Task ToggleEditorFullScreen()
+    {
+        IsEditorFullScreen = !IsEditorFullScreen;
+        if (IsEditorFullScreen)
+        {
+            IsFullScreen = false;
+            IsMinimized = false;
+        }
+        await Task.Yield();
+        await Task.Delay(50);
+        try
+        {
+            await JS.InvokeVoidAsync("layoutMonacoEditors");
+            await JS.InvokeVoidAsync("triggerWindowResize");
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public async Task RestoreEditorFullScreenIfActive()
+    {
+        if (IsEditorFullScreen && !_isSearchOpen)
+        {
+            await ToggleEditorFullScreen();
+            StateHasChanged();
+        }
     }
     private string? FormatError = null;
     private StandaloneCodeEditor _editor = default!;

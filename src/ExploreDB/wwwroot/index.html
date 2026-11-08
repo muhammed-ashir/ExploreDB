@@ -240,6 +240,13 @@
             }
 
             // Intercept Ctrl+A when focused inside result set table or container
+            // Intercept Escape key to restore editor full screen
+            if (e.key === 'Escape') {
+                if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                    window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('RestoreEditorFullScreenIfActive');
+                }
+            }
+
             if (e.ctrlKey && (e.key === 'a' || e.key === 'A')) {
                 if (e.target && e.target.closest && e.target.closest('.table-responsive, .result-set-table')) {
                     e.preventDefault();
