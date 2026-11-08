@@ -258,41 +258,41 @@ else
     <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 2050;" @onclick="HideContextMenu" @oncontextmenu="HideContextMenu" @oncontextmenu:preventDefault="true"></div>
     
     <!-- Unified context menu positioned at cursor -->
-    <div class="position-fixed shadow-lg rounded" 
-         style="top: min(@(RowContextMenuY)px, calc(100vh - 230px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); overflow: hidden;" 
+    <div id="@_contextMenuId" class="position-fixed shadow-lg rounded" 
+         style="top: min(@(RowContextMenuY)px, calc(100vh - 280px)); left: min(@(RowContextMenuX)px, calc(100vw - 250px)); z-index: 2060; min-width: 230px; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); color: var(--app-text); max-height: calc(100vh - 20px); overflow-y: auto; visibility: hidden;" 
          @onclick:stopPropagation>
         <div class="py-1">
             @if (SelectedSingleCellByteValue is byte[] selectedBytes)
             {
-                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = OpenBinaryViewer(selectedBytes, ContextMenuColumn); }">
+                <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = OpenBinaryViewer(selectedBytes, ContextMenuColumn); }">
                     <i class="bi @(BinaryDataHelper.IsImage(selectedBytes, out _, out _) ? "bi-image text-info" : (BinaryDataHelper.IsPdf(selectedBytes) ? "bi-file-earmark-pdf text-danger" : "bi-file-earmark-binary text-warning")) text-muted"></i>
                     <span>@(BinaryDataHelper.IsImage(selectedBytes, out _, out _) ? "View Image" : (BinaryDataHelper.IsPdf(selectedBytes) ? "View PDF Document" : "View Binary / Hex"))</span>
                 </button>
-                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = CopyBinaryHexAsync(selectedBytes); }">
+                <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = CopyBinaryHexAsync(selectedBytes); }">
                     <i class="bi bi-file-earmark-code text-muted"></i>
                     <span>Copy Hex (0x...)</span>
                 </button>
-                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = DownloadBinaryBytesAsync(selectedBytes, ContextMenuColumn); }">
+                <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="() => { HideContextMenu(); _ = DownloadBinaryBytesAsync(selectedBytes, ContextMenuColumn); }">
                     <i class="bi bi-download text-muted"></i>
                     <span>Save to File</span>
                 </button>
                 <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
             }
-            <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedAsync">
+            <button class="dropdown-item px-3 py-1 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedAsync">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-copy text-muted"></i>
                     <span>Copy</span>
                 </div>
                 <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+C</span>
             </button>
-            <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedWithHeadersAsync">
+            <button class="dropdown-item px-3 py-1 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="CopySelectedWithHeadersAsync">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-file-earmark-spreadsheet text-muted"></i>
                     <span>Copy with Headers</span>
                 </div>
                 <span class="text-muted small ms-3" style="font-size: 0.75rem;">Ctrl+Shift+C</span>
             </button>
-            <button class="dropdown-item px-3 py-2 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="SelectAllCurrentPage">
+            <button class="dropdown-item px-3 py-1 d-flex align-items-center justify-content-between grid-ctx-btn" type="button" @onclick="SelectAllCurrentPage">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-check2-all text-muted"></i>
                     <span>Select All</span>
@@ -301,23 +301,23 @@ else
             </button>
 
             <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
-            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CopyColumnAsInClause">
+            <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CopyColumnAsInClause">
                 <i class="bi bi-clipboard text-muted"></i>
                 <span>Copy as IN clause</span>
             </button>
             @if (IsColumnContextMenu || !string.IsNullOrEmpty(ContextMenuColumn))
             {
-                <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CalculateAggregates">
+                <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CalculateAggregates">
                     <i class="bi bi-calculator text-muted"></i>
                     <span>Show aggregate result</span>
                 </button>
             }
             <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
-            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToExcelAsync(); }">
+            <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToExcelAsync(); }">
                 <i class="bi bi-file-earmark-excel text-success fs-6"></i>
                 <span>Export to Excel (.xlsx)</span>
             </button>
-            <button class="dropdown-item px-3 py-2 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToCsvAsync(); }">
+            <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToCsvAsync(); }">
                 <i class="bi bi-file-earmark-text text-primary fs-6"></i>
                 <span>Export to CSV (.csv)</span>
             </button>
@@ -379,6 +379,9 @@ else
         text-align: left;
         cursor: pointer;
         transition: background-color 0.1s ease;
+        font-size: 0.82rem;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
     }
     .grid-ctx-btn:hover {
         background-color: var(--primary-color) !important;
@@ -674,6 +677,8 @@ else
     private double RowContextMenuX = 0;
     private double RowContextMenuY = 0;
     private string ContextMenuColumn = "";
+    private string _contextMenuId = "ctxMenu_" + Guid.NewGuid().ToString("N");
+    private bool _shouldPositionContextMenu = false;
     private string? _copyFeedbackMessage = null;
     private CancellationTokenSource? _copyFeedbackCts;
 
@@ -809,6 +814,16 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (ShowContextMenuState && _shouldPositionContextMenu)
+        {
+            _shouldPositionContextMenu = false;
+            try
+            {
+                await JS.InvokeVoidAsync("positionContextMenu", _contextMenuId, RowContextMenuX, RowContextMenuY);
+            }
+            catch { }
+        }
+
         if (_shouldResetScroll)
         {
             _shouldResetScroll = false;
@@ -1165,6 +1180,7 @@ else
     private void HideContextMenu()
     {
         ShowContextMenuState = false;
+        _shouldPositionContextMenu = false;
         IsColumnContextMenu = false;
     }
 
@@ -1282,6 +1298,7 @@ else
         RowContextMenuX = e.ClientX;
         RowContextMenuY = e.ClientY;
         ShowContextMenuState = true;
+        _shouldPositionContextMenu = true;
     }
 
     private void ShowCellContextMenu(MouseEventArgs e, int actualRowIndex, int colIndex)
@@ -1302,6 +1319,7 @@ else
         RowContextMenuX = e.ClientX;
         RowContextMenuY = e.ClientY;
         ShowContextMenuState = true;
+        _shouldPositionContextMenu = true;
     }
 
     private void ShowRowHeaderContextMenu(MouseEventArgs e, int actualRowIndex)
@@ -1328,6 +1346,7 @@ else
         RowContextMenuX = e.ClientX;
         RowContextMenuY = e.ClientY;
         ShowContextMenuState = true;
+        _shouldPositionContextMenu = true;
     }
 
     private byte[]? SelectedSingleCellByteValue

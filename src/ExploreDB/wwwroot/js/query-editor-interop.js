@@ -2274,3 +2274,38 @@ window.initResultSetSplitters = function (containerId) {
 
     return true;
 };
+
+
+window.positionContextMenu = function (elOrId, x, y) {
+    var el = (typeof elOrId === 'string') ? document.getElementById(elOrId) : elOrId;
+    if (!el) return;
+
+    var rect = el.getBoundingClientRect();
+    var vh = window.innerHeight;
+    var vw = window.innerWidth;
+
+    var top = y;
+    var left = x;
+
+    // Auto-flip UPWARDS if opening downwards would overflow the viewport:
+    if (y + rect.height > vh - 10) {
+        if (y - rect.height >= 10) {
+            top = y - rect.height;
+        } else {
+            top = Math.max(10, vh - rect.height - 10);
+        }
+    }
+
+    // Auto-flip LEFTWARDS if opening to the right would overflow the viewport:
+    if (x + rect.width > vw - 10) {
+        if (x - rect.width >= 10) {
+            left = x - rect.width;
+        } else {
+            left = Math.max(10, vw - rect.width - 10);
+        }
+    }
+
+    el.style.top = Math.round(top) + 'px';
+    el.style.left = Math.round(left) + 'px';
+    el.style.visibility = 'visible';
+};
