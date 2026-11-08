@@ -379,8 +379,8 @@
                                             </div>
 
                                             <button class="btn btn-sm btn-link text-muted p-0 border-0 ms-1 me-1" 
-                                                    @onclick="ToggleSearch" 
-                                                    title="Close (Esc)">
+                                                    @onclick="HandleSearchCloseClick" 
+                                                    title="@(!string.IsNullOrEmpty(_globalSearchTerm) ? "Clear (Esc)" : "Close (Esc)")">
                                                 <i class="bi bi-x-lg" style="font-size: 0.8rem;"></i>
                                             </button>
                                         </div>
@@ -431,8 +431,8 @@
                                                 }
 
                                                 <button class="btn btn-sm btn-link text-muted p-0 border-0 ms-1 me-1" 
-                                                        @onclick="ToggleSearch" 
-                                                        title="Close (Esc)">
+                                                        @onclick="HandleSearchCloseClick" 
+                                                        title="@(!string.IsNullOrEmpty(_globalSearchTerm) ? "Clear (Esc)" : "Close (Esc)")">
                                                     <i class="bi bi-x-lg" style="font-size: 0.8rem;"></i>
                                                 </button>
                                             </div>
@@ -808,6 +808,23 @@
                 await JS.InvokeVoidAsync("eval", "var el = document.getElementById('global-results-search-input'); if(el) el.focus();");
             }
             catch { }
+        }
+    }
+
+    private async Task HandleSearchCloseClick()
+    {
+        if (!string.IsNullOrEmpty(_globalSearchTerm))
+        {
+            _globalSearchTerm = string.Empty;
+            try
+            {
+                await JS.InvokeVoidAsync("eval", "var el = document.getElementById('global-results-search-input'); if(el) el.focus();");
+            }
+            catch { }
+        }
+        else
+        {
+            await ToggleSearch();
         }
     }
 
