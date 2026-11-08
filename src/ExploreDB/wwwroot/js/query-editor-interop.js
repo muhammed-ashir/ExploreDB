@@ -73,6 +73,141 @@ window.formatSql = (code) => {
     if (!window.sqlFormatter) {
         throw new Error("SQL Formatter is not loaded correctly.");
     }
+    if (!code || !code.trim()) return code;
+
+    var baseFormatted;
+    try {
+        baseFormatted = window.sqlFormatter.format(code, {
+            language: 'tsql',
+            keywordCase: 'upper',
+            linesBetweenQueries: 2
+        });
+    } catch (e) {
+        return code;
+    }
+
+    try {
+        var lines = baseFormatted.split(/\r?\n/);
+        var result = [];
+
+        var clausePatterns = [
+            { name: 'SELECT DISTINCT' },
+            { name: 'SELECT' },
+            { name: 'FROM' },
+            { name: 'WHERE' },
+            { name: 'GROUP BY' },
+            { name: 'ORDER BY' },
+            { name: 'HAVING' },
+            { name: 'SET' },
+            { name: 'VALUES' },
+            { name: 'INSERT INTO' }
+        ];
+
+        var isClauseKeyword = function (str) {
+            var upper = str.trim().toUpperCase();
+            return clausePatterns.some(function (p) {
+                return upper === p.name || upper.indexOf(p.name + ' ') === 0;
+            });
+        };
+
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var trimmed = line.trim();
+
+            if (!trimmed) {
+                result.push(line);
+                continue;
+            }
+
+            var leadingSpaces = line.match(/^\s*/)[0];
+            var baseIndentLen = leadingSpaces.length;
+
+            var matchedClause = null;
+            for (var cIdx = 0; cIdx < clausePatterns.length; cIdx++) {
+                if (trimmed.toUpperCase() === clausePatterns[cIdx].name) {
+                    matchedClause = clausePatterns[cIdx].name;
+                    break;
+                }
+            }
+
+            if (matchedClause && i + 1 < lines.length) {
+                var nextLine = lines[i + 1];
+                var nextTrimmed = nextLine.trim();
+
+                if (nextTrimmed.indexOf('--') === 0 || nextTrimmed.indexOf('/*') === 0) {
+                    result.push(line);
+                    continue;
+                }
+
+                if (isClauseKeyword(nextTrimmed) || nextTrimmed === ')' || nextTrimmed === 'END') {
+                    result.push(line);
+                    continue;
+                }
+
+                result.push(leadingSpaces + matchedClause + ' ' + nextTrimmed);
+                i++;
+
+                var alignColLen = baseIndentLen + matchedClause.length + 1;
+                var alignIndent = ' '.repeat(alignColLen);
+
+                while (i + 1 < lines.length) {
+                    var peekLine = lines[i + 1];
+                    var peekTrimmed = peekLine.trim();
+                    var peekLeading = peekLine.match(/^\s*/)[0].length;
+
+                    if (!peekTrimmed) {
+                        result.push(peekLine);
+                        i++;
+                        continue;
+                    }
+
+                    if (peekLeading <= baseIndentLen && (isClauseKeyword(peekTrimmed) || peekTrimmed.indexOf(')') === 0)) {
+                        break;
+                    }
+
+                    if (matchedClause === 'FROM' && peekTrimmed.match(/^(INNER\s+|LEFT\s+|RIGHT\s+|FULL\s+|CROSS\s+)?(OUTER\s+)?(JOIN\b)/i)) {
+                        i++;
+                        var joinIndent = ' '.repeat(baseIndentLen + 5);
+                        var onIndent = ' '.repeat(baseIndentLen + 10);
+
+                        var onMatch = peekTrimmed.match(/\s+(ON\b.*)$/i);
+                        if (onMatch) {
+                            var joinPart = peekTrimmed.substring(0, onMatch.index).trim();
+                            var onPart = onMatch[1].trim();
+                            result.push(joinIndent + joinPart);
+                            result.push(onIndent + onPart);
+                        } else {
+                            result.push(joinIndent + peekTrimmed);
+                        }
+                        continue;
+                    }
+
+                    if (peekLeading === baseIndentLen + 2) {
+                        i++;
+                        result.push(alignIndent + peekTrimmed);
+                    } else if (peekLeading > baseIndentLen + 2) {
+                        i++;
+                        var extraSpaces = ' '.repeat(peekLeading - (baseIndentLen + 2));
+                        result.push(alignIndent + extraSpaces + peekTrimmed);
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                result.push(line);
+            }
+        }
+
+        return result.join('\n');
+    } catch (err) {
+        return baseFormatted;
+    }
+};
+
+window._oldFormatSql = (code) => {
+    if (!window.sqlFormatter) {
+        throw new Error("SQL Formatter is not loaded correctly.");
+    }
     return window.sqlFormatter.format(code, {
         language: 'tsql',
         keywordCase: 'upper',
@@ -112,7 +247,8 @@ window.formatSqlEditor = (editorId) => {
     var codeToFormat = hasSelection ? model.getValueInRange(selection) : editor.getValue();
     if (!codeToFormat || !codeToFormat.trim()) return;
 
-    var formatted = window.sqlFormatter.format(codeToFormat, {
+    var formatted = window.formatSql(codeToFormat);
+    if (false) var _ignore = window.sqlFormatter.format(codeToFormat, {
         language: 'tsql',
         keywordCase: 'upper',
         linesBetweenQueries: 2
