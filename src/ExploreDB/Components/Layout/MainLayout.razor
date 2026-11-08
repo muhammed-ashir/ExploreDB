@@ -226,7 +226,7 @@
                     </button>
                 </div>
             </div>
-            <div class="app-shell-content flex-grow-1 @(isQueryRunner ? "p-3 d-flex flex-column overflow-hidden" : "")" style="@(isQueryRunner ? "min-height: 0;" : "")">
+            <div class="app-shell-content flex-grow-1 @(isQueryRunner ? "px-3 d-flex flex-column overflow-hidden" : "")" style="@(isQueryRunner ? "padding-top: 12px; padding-bottom: 12px; min-height: 0;" : "")">
                 @if (!isDatabaseSelected && !isLearningHub && !isQueryRunner && !isHistory && !isSnippets && !isTools && !isAppCenter)
                 {
                     <div class="w-100 h-100 d-flex justify-content-center align-items-center" style="min-height: 80vh;">

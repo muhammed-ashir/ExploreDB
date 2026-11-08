@@ -1195,12 +1195,12 @@ body.grid-col-resizing * {
 
 /* Unified Toolbar Icon Buttons */
 .toolbar-icon-btn {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
-    max-width: 32px;
-    max-height: 32px;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+    max-width: 30px;
+    max-height: 30px;
     padding: 0 !important;
     display: inline-flex !important;
     align-items: center !important;
@@ -1578,7 +1578,8 @@ a.card.glow-highlight:hover,
 .query-runner-toolbar {
     position: relative;
     z-index: 10;
-    min-height: 38px;
+    min-height: 30px;
+    padding-bottom: 10px;
 }
 
 .query-runner-workspace {

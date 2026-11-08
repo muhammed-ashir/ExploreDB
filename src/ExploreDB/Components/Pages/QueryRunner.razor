@@ -28,7 +28,7 @@
     else
     {
     <!-- Fixed Top Action Toolbar -->
-    <div class="query-runner-toolbar d-flex justify-content-between align-items-center flex-nowrap pb-2 flex-shrink-0">
+    <div class="query-runner-toolbar d-flex justify-content-between align-items-center flex-nowrap flex-shrink-0">
         <div class="d-flex gap-2 flex-shrink-0 align-items-center">
             <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Open File (Ctrl+O)" data-bs-placement="bottom" @onclick="OpenFileAsync">
                 <i class="bi bi-folder2-open"></i>
@@ -60,20 +60,20 @@
             {
                 @if (ActiveTab.IsCancelling)
                 {
-                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center opacity-75" style="height: 32px;" disabled>
+                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center opacity-75" style="height: 30px;" disabled>
                         <span class="spinner-border spinner-border-sm me-1" role="status" style="width: 12px; height: 12px;"></span><span>Stopping...</span>
                     </button>
                 }
                 else
                 {
-                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
+                    <button class="btn btn-sm btn-danger shadow-sm d-inline-flex align-items-center" style="height: 30px;" data-bs-tooltip="true" data-bs-title="Stop Execution" data-bs-placement="bottom" @onclick="CancelExecution">
                         <i class="bi bi-stop-fill me-1"></i><span>Stop</span>
                     </button>
                 }
             }
             else
             {
-                <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center" style="height: 32px;" data-bs-tooltip="true" data-bs-title="Execute Query (F5)" data-bs-placement="bottom" @onclick="ExecuteAsync">
+                <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center" style="height: 30px;" data-bs-tooltip="true" data-bs-title="Execute Query (F5)" data-bs-placement="bottom" @onclick="ExecuteAsync">
                     <i class="bi bi-play-fill me-1"></i><span>Execute</span>
                 </button>
             }
