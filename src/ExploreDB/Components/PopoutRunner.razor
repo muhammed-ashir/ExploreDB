@@ -145,8 +145,8 @@
                     <div class="d-flex align-items-center pe-2 gap-1">
                         @if (ResultTab == "Results" && ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 0 && !ActiveTab.IsExecuting)
                         {
-                            <button class="btn btn-sm btn-outline-secondary border-0 d-flex align-items-center gap-1 me-1 @(_isSearchOpen ? "text-primary active" : "")" 
-                                    style="color: var(--app-text); font-size: 0.8rem; padding: 2px 8px;" 
+                            <button class="btn btn-sm d-flex align-items-center gap-1 me-1 @(_isSearchOpen ? "btn-primary text-white border-0 shadow-sm" : "btn-outline-secondary border-0")" 
+                                    style="@(_isSearchOpen ? "font-size: 0.8rem; padding: 2px 8px;" : "color: var(--app-text); font-size: 0.8rem; padding: 2px 8px;")" 
                                     @onclick="ToggleSearch" 
                                     title="Find in results (Ctrl+F)">
                                 <i class="bi bi-search"></i>
@@ -215,30 +215,31 @@
                                                    style="color: var(--app-text); width: 180px; font-size: 0.82rem;"
                                                    @bind="_globalSearchTerm" 
                                                    @bind:event="oninput" 
+                                                   @onkeydown='async (e) => { if (e.Key == "Escape") { if (!string.IsNullOrEmpty(_globalSearchTerm)) _globalSearchTerm = string.Empty; else await ToggleSearch(); } }'
                                                    id="global-results-search-input" />
                                             
                                             <div class="btn-group btn-group-sm">
                                                 <button class="btn btn-sm py-0 px-1 @(_searchCaseSensitive ? "btn-primary text-white" : "btn-outline-secondary")" 
                                                         style="font-size: 0.72rem; border-radius: 4px;" 
                                                         @onclick="() => _searchCaseSensitive = !_searchCaseSensitive" 
-                                                        title="Match Case (Aa)">
+                                                        title="Match Case">
                                                     Aa
                                                 </button>
                                                 <button class="btn btn-sm py-0 px-1 ms-1 @(_searchMatchWholeWord ? "btn-primary text-white" : "btn-outline-secondary")" 
                                                         style="font-size: 0.72rem; border-radius: 4px;" 
                                                         @onclick="() => _searchMatchWholeWord = !_searchMatchWholeWord" 
-                                                        title="Match Whole Word ([ab])">
+                                                        title="Match Whole Word">
                                                     [ab]
                                                 </button>
                                                 <button class="btn btn-sm py-0 px-1 ms-1 @(_searchExactMatch ? "btn-primary text-white" : "btn-outline-secondary")" 
                                                         style="font-size: 0.72rem; border-radius: 4px;" 
                                                         @onclick="() => _searchExactMatch = !_searchExactMatch" 
-                                                        title="Exact Match (⊚)">
+                                                        title="Exact Match">
                                                     ⊚
                                                 </button>
                                             </div>
 
-                                            @if (!string.IsNullOrEmpty(_globalSearchTerm))
+                                            @if (false /* Removed duplicate clear button in search box */)
                                             {
                                                 <button class="btn btn-sm btn-link text-muted p-0 border-0 ms-1" 
                                                         @onclick="() => _globalSearchTerm = string.Empty" 
@@ -385,7 +386,11 @@
     private async Task ToggleSearch()
     {
         _isSearchOpen = !_isSearchOpen;
-        if (_isSearchOpen)
+        if (!_isSearchOpen)
+        {
+            _globalSearchTerm = string.Empty;
+        }
+        else
         {
             await Task.Delay(50);
             try
