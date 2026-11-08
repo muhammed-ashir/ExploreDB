@@ -1081,12 +1081,72 @@
         try
         {
             await JS.InvokeVoidAsync("setAppTheme", ThemeService.CurrentTheme);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+#if false
+    private void Unused_HandleThemeChanged()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("setAppTheme", ThemeService.CurrentTheme);
         }
         catch { }
         await InvokeAsync(StateHasChanged);
     }
 
+#endif
+
     private async void HandleTabUpdated(Guid tabId)
+    {
+        try
+        {
+            if (QueryStateService.ActiveTabId == tabId && _editor != null)
+            {
+                var tab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabId);
+                if (tab != null)
+                {
+                    var currentEditorContent = await _editor.GetValue();
+                    if (currentEditorContent != tab.Content)
+                    {
+                        await _editor.SetValue(tab.Content);
+                    }
+                }
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Error handling tab update in QueryRunner");
+        }
+    }
+
+    private async void OnConnectionChangedHandler()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(ConnectionService.ConnectionString) && !QueryStateService.Initialized && !ShowRestoreSessionPrompt)
+            {
+                await InvokeAsync(InitializeSessionAsync);
+            }
+
+            if (ActiveTab != _fallbackTab && ActiveTab.ConnectionString != ConnectionService.ConnectionString)
+            {
+                ActiveTab.ConnectionString = ConnectionService.ConnectionString;
+                await QueryStateService.SaveTabsAsync();
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Error handling connection changed in QueryRunner");
+        }
+    }
+
+#if false
+    private void Unused_OldTabAndConnHandlers()
     {
         if (QueryStateService.ActiveTabId == tabId && _editor != null)
         {
@@ -1117,6 +1177,8 @@
         }
         await InvokeAsync(StateHasChanged);
     }
+
+#endif
 
     private async void OnDatabaseSwitchingHandler(string dbName)
     {
@@ -1521,7 +1583,7 @@
     {
         try
         {
-            var chosenPath = WindowManager.ShowOpenFileDialog("SQL Script (*.sql)|*.sql|All Files (*.*)|*.*");
+            var chosenPath = await WindowManager.ShowOpenFileDialogAsync("SQL Script (*.sql)|*.sql|All Files (*.*)|*.*");
 
             if (!string.IsNullOrEmpty(chosenPath))
             {
@@ -1929,7 +1991,7 @@
                 return true;
             }
 
-            var chosenPath = WindowManager.ShowSaveFileDialog(tabToSave.Name);
+            var chosenPath = await WindowManager.ShowSaveFileDialogAsync(tabToSave.Name);
             if (!string.IsNullOrEmpty(chosenPath))
             {
                 await File.WriteAllTextAsync(chosenPath, queryText);
@@ -1958,7 +2020,7 @@
             if (activeTab == null) return;
             activeTab.Content = queryText;
 
-                        var chosenPath = WindowManager.ShowSaveFileDialog(activeTab.Name);
+                        var chosenPath = await WindowManager.ShowSaveFileDialogAsync(activeTab.Name);
             if (!string.IsNullOrEmpty(chosenPath))
             {
                 await File.WriteAllTextAsync(chosenPath, queryText);

@@ -52,7 +52,7 @@ public partial class ToolPopoutWindow : Window
 
     private void HandleConnectionChanged()
     {
-        Dispatcher.Invoke(Close);
+        Dispatcher.InvokeAsync(Close);
     }
 
     protected override async void OnClosed(EventArgs e)

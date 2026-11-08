@@ -545,10 +545,23 @@
         try
         {
             await JS.InvokeVoidAsync("setAppTheme", ThemeService.CurrentTheme);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+#if false
+    private void Unused_HandleThemeChanged()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("setAppTheme", ThemeService.CurrentTheme);
         }
         catch { }
         await InvokeAsync(StateHasChanged);
     }
+
+#endif
 
     private async void HandleSettingsChanged()
     {
@@ -609,9 +622,25 @@
 
     private async void OnSchemaLoadedHandler()
     {
+        try
+        {
+            if (!_isEditorReady) return;
+            await InvokeAsync(RegisterAutocompleteItemsAsync);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Error handling schema loaded in PopoutRunner");
+        }
+    }
+
+#if false
+    private void Unused_OnSchemaLoadedHandler()
+    {
         if (!_isEditorReady) return;
         await InvokeAsync(RegisterAutocompleteItemsAsync);
     }
+
+#endif
 
     private void HandleTabUpdated(Guid tabId)
     {
@@ -1091,7 +1120,7 @@
                 return true;
             }
 
-            var chosenPath = WindowManager.ShowSaveFileDialog(tabToSave.Name);
+            var chosenPath = await WindowManager.ShowSaveFileDialogAsync(tabToSave.Name);
             if (!string.IsNullOrEmpty(chosenPath))
             {
                 await System.IO.File.WriteAllTextAsync(chosenPath, queryText);
@@ -1120,7 +1149,7 @@
             if (ActiveTab == null) return;
             ActiveTab.Content = queryText;
 
-            var chosenPath = WindowManager.ShowSaveFileDialog(ActiveTab.Name);
+            var chosenPath = await WindowManager.ShowSaveFileDialogAsync(ActiveTab.Name);
             if (!string.IsNullOrEmpty(chosenPath))
             {
                 await System.IO.File.WriteAllTextAsync(chosenPath, queryText);

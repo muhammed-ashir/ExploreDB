@@ -1898,7 +1898,34 @@
         return dbs;
     }
 
-    private void BrowseSourceDacpac()
+    private async Task BrowseSourceDacpac()
+    {
+        try
+        {
+            var path = await WindowManager.ShowOpenFileDialogAsync("Data-tier Application Package (*.dacpac)|*.dacpac|All Files (*.*)|*.*", "Select Source .dacpac File");
+            if (!string.IsNullOrEmpty(path))
+            {
+                _source.DacpacPath = path;
+            }
+        }
+        catch { }
+    }
+
+    private async Task BrowseTargetDacpac()
+    {
+        try
+        {
+            var path = await WindowManager.ShowOpenFileDialogAsync("Data-tier Application Package (*.dacpac)|*.dacpac|All Files (*.*)|*.*", "Select Target .dacpac File");
+            if (!string.IsNullOrEmpty(path))
+            {
+                _target.DacpacPath = path;
+            }
+        }
+        catch { }
+    }
+
+#if false
+    private void Unused_BrowseSourceDacpac()
     {
         try
         {
@@ -1915,7 +1942,7 @@
         catch { }
     }
 
-    private void BrowseTargetDacpac()
+    private async Task BrowseTargetDacpac()
     {
         try
         {
@@ -1931,6 +1958,8 @@
         }
         catch { }
     }
+
+#endif
 
     private async Task StartComparisonAsync()
     {

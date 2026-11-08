@@ -261,10 +261,17 @@
 
     private async void OnConnectionChangedHandler()
     {
-        await LoadServerDatabases();
-        ConnectionSearch = GetActiveConnectionDisplayName();
-        await SchemaService.LoadSchemaAsync();
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await LoadServerDatabases();
+            ConnectionSearch = GetActiveConnectionDisplayName();
+            await SchemaService.LoadSchemaAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Error handling connection changed in NavMenu");
+        }
     }
 
     private async Task LoadServerDatabases()

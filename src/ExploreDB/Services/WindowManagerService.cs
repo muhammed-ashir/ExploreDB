@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using Microsoft.Extensions.Configuration;
 
 namespace ExploreDB.Services;
@@ -175,9 +177,10 @@ public class WindowManagerService
         });
     }
 
-    public string? ShowSaveFileDialog(string defaultFileName, string filter = "SQL Script (*.sql)|*.sql|Plain Text (*.txt)|*.txt|All Files (*.*)|*.*")
+    public async Task<string?> ShowSaveFileDialogAsync(string defaultFileName, string filter = "SQL Script (*.sql)|*.sql|Plain Text (*.txt)|*.txt|All Files (*.*)|*.*")
     {
-        return Application.Current.Dispatcher.Invoke(() =>
+        await Task.Yield();
+        return await Application.Current.Dispatcher.InvokeAsync(() =>
         {
             var dialog = new Microsoft.Win32.SaveFileDialog
             {
@@ -186,13 +189,16 @@ public class WindowManagerService
                 DefaultExt = ".sql"
             };
 
-            return dialog.ShowDialog(Application.Current.MainWindow) == true ? dialog.FileName : null;
-        });
+            var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) 
+                        ?? Application.Current.MainWindow;
+            return dialog.ShowDialog(owner) == true ? dialog.FileName : null;
+        }, DispatcherPriority.Background);
     }
 
-    public string? ShowOpenFileDialog(string filter = "SQL Script (*.sql)|*.sql|All Files (*.*)|*.*")
+    public async Task<string?> ShowOpenFileDialogAsync(string filter = "SQL Script (*.sql)|*.sql|All Files (*.*)|*.*", string? title = null)
     {
-        return Application.Current.Dispatcher.Invoke(() =>
+        await Task.Yield();
+        return await Application.Current.Dispatcher.InvokeAsync(() =>
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
@@ -200,8 +206,15 @@ public class WindowManagerService
                 DefaultExt = ".sql"
             };
 
-            return dialog.ShowDialog(Application.Current.MainWindow) == true ? dialog.FileName : null;
-        });
+            if (!string.IsNullOrEmpty(title))
+            {
+                dialog.Title = title;
+            }
+
+            var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) 
+                        ?? Application.Current.MainWindow;
+            return dialog.ShowDialog(owner) == true ? dialog.FileName : null;
+        }, DispatcherPriority.Background);
     }
 
     public void SetClipboardText(string text)
