@@ -249,11 +249,16 @@
                                @onclick='() => { ResultTab = "Messages"; IsMinimized = false; }'>
                                 <i class="bi bi-file-earmark-text" style="font-size: 0.75rem;"></i>
                                 <span>Messages</span>
-                                @if (ActiveTab.Messages.Count > 0) { <span class="badge bg-secondary ms-1" style="font-size: 0.65rem; padding: 1px 5px; border-radius: 8px;">@ActiveTab.Messages.Count</span> }
+                                @if (ActiveTab.MessageBadgeCount > 0) { <span class="badge @(ActiveTab.HasMessageErrors ? "bg-danger text-white" : "bg-secondary") ms-1" style="font-size: 0.65rem; padding: 1px 5px; border-radius: 8px;">@ActiveTab.MessageBadgeCount</span> }
                             </a>
                         </li>
                         </ul>
                         <div class="d-flex align-items-center ms-3 gap-3">
+                            @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
+                            {
+                                <span class="text-muted" style="font-size: 0.75rem; white-space: nowrap;"><i class="bi bi-stopwatch me-1" style="font-size: 0.75rem;"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+                            }
+
                             @if (ResultTab == "Results" && ActiveTab.ResultSets.Count > 0 && !ActiveTab.IsExecuting)
                             {
                                 var totalRows = GetTotalRowCount(ActiveTab.ResultSets);
@@ -262,9 +267,9 @@
                                 </span>
                             }
     
-                            @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
+                            @if (false)
                             {
-                                <span class="text-muted" style="font-size: 0.75rem; white-space: nowrap;"><i class="bi bi-stopwatch me-1" style="font-size: 0.75rem;"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+
                             }
                         </div>
                     </div>
@@ -459,7 +464,7 @@
 @if (ActiveTab.Messages.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
 @foreach (var msg in ActiveTab.Messages)
 {
-    @if (msg.IsError)
+    @if (msg.IsError || msg.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || msg.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
     {
         <span class="text-danger fw-semibold">@msg.Text</span><br/>
     }
@@ -2340,6 +2345,10 @@
                         table.IsComplete = true;
                         ActiveTab.ResultSets.Add(table);
                         totalRows += table.RowCount;
+                        var rowWord = table.RowCount == 1 ? "row" : "rows";
+                        ActiveTab.Messages.Add($"({table.RowCount} {rowWord} returned)");
+                        ActiveTab.Messages.Add("");
+                        affectedStatementCount++;
                     }
                     else
                     {
@@ -2347,6 +2356,8 @@
                         {
                             var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
                             ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
+                ActiveTab.Messages.Add("");
+
                             affectedStatementCount++;
                         }
                     }
@@ -2359,14 +2370,15 @@
             }
             while (await reader.NextResultAsync(ActiveTab.QueryCts.Token));
             
-            if (affectedStatementCount == 0 && reader.RecordsAffected >= 0)
+            if (affectedStatementCount == 0 && ActiveTab.ResultSets.Count == 0 && reader.RecordsAffected >= 0)
             {
                 var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
                 ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
+                ActiveTab.Messages.Add("");
             }
 
             ActiveTab.Messages.Add("");
-            ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
+            ActiveTab.AddCompletionTime();
 
             ResultTab = ActiveTab.ResultSets.Count == 0 ? "Messages" : "Results";
             isSuccess = true;
@@ -2377,7 +2389,7 @@
             {
                 ActiveTab.Messages.Add("Execution cancelled by user.");
                 ActiveTab.Messages.Add("");
-                ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
+                ActiveTab.AddCompletionTime();
                 ResultTab = "Messages";
                 errorMessage = "Cancelled";
             }
@@ -2396,13 +2408,13 @@
                     ActiveTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true));
                 }
                 ActiveTab.Messages.Add("");
-                ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
+                ActiveTab.AddCompletionTime();
             }
             else
             {
                 ActiveTab.Messages.Add(new QueryOutputMessage($"ERROR: {ex.Message}", isError: true));
                 ActiveTab.Messages.Add("");
-                ActiveTab.Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
+                ActiveTab.AddCompletionTime();
                 ResultTab = "Messages";
                 errorMessage = ex.Message;
             }

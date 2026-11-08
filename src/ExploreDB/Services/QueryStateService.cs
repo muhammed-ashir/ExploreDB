@@ -52,6 +52,37 @@ public class QueryTab
     
     [System.Text.Json.Serialization.JsonIgnore]
     public List<QueryOutputMessage> Messages { get; set; } = new();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasMessageErrors => Messages.Any(m => m.IsError || m.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || m.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase));
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int MessageBadgeCount
+    {
+        get
+        {
+            if (Messages.Count == 0) return 0;
+            if (HasMessageErrors)
+            {
+                var errCount = Messages.Count(m => (m.IsError || m.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || m.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase)) && !m.Text.StartsWith("Msg ", StringComparison.OrdinalIgnoreCase));
+                return errCount > 0 ? errCount : Messages.Count(m => m.IsError);
+            }
+            return Messages.Count(m => !string.IsNullOrWhiteSpace(m.Text) && !m.Text.StartsWith("Completion time:", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    public void AddCompletionTime()
+    {
+        while (Messages.Count > 0 && string.IsNullOrWhiteSpace(Messages[^1].Text))
+        {
+            Messages.RemoveAt(Messages.Count - 1);
+        }
+        if (Messages.Count > 0)
+        {
+            Messages.Add("");
+        }
+        Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
+    }
     
     [System.Text.Json.Serialization.JsonIgnore]
     public bool HasExecuted { get; set; }
