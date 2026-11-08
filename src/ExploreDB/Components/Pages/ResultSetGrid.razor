@@ -1704,16 +1704,33 @@ else
         HideContextMenu();
         List<string?> rawList;
 
-        if (IsColumnContextMenu && !string.IsNullOrEmpty(ContextMenuColumn))
+        if (IsColumnContextMenu || SelectedEntireCols.Count > 0 || (SelectedCells.Count == 0 && SelectedEntireRows.Count == 0 && !_isAllSelected && !string.IsNullOrEmpty(ContextMenuColumn)))
         {
             int colIdx = _tableStore != null ? _tableStore.GetColumnIndex(ContextMenuColumn) : Columns.IndexOf(ContextMenuColumn);
             int rowCount = ActiveRowCount;
-            rawList = new List<string?>(Math.Min(rowCount, 10000));
-            for (int i = 0; i < Math.Min(rowCount, 10000); i++)
+            var targetCols = new List<int>();
+            if (SelectedEntireCols.Count > 0)
+            {
+                targetCols.AddRange(SelectedEntireCols.Where(c => c >= 0 && c < Columns.Count).OrderBy(c => c));
+            }
+            else if (colIdx >= 0)
+            {
+                targetCols.Add(colIdx);
+            }
+            if (targetCols.Count == 0) return;
+
+            int limit = Math.Min(rowCount, 10000);
+            rawList = new List<string?>(limit * Math.Max(1, targetCols.Count));
+            for (int i = 0; i < limit; i++)
             {
                 int actualIdx = GetActualRowIndex(i);
-                var val = FormatCellValue(GetRawCellValue(actualIdx, colIdx, ContextMenuColumn), colIdx);
-                if (val != null) rawList.Add(val);
+                foreach (var c in targetCols)
+                {
+                    var val = FormatCellValue(GetRawCellValue(actualIdx, c, Columns[c]), c);
+                    if (val != null) rawList.Add(val);
+    
+                }
+
             }
         }
         else if (SelectedCells.Count > 0 || SelectedEntireRows.Count > 0 || _isAllSelected)
@@ -1730,6 +1747,7 @@ else
                     int actualIdx = GetActualRowIndex(i);
                     var val = FormatCellValue(GetRawCellValue(actualIdx, colIdx, Columns[colIdx]), colIdx);
                     if (val != null) rawList.Add(val);
+    
                 }
             }
             else if (SelectedEntireRows.Count > 0)
@@ -1738,6 +1756,7 @@ else
                 {
                     var val = FormatCellValue(GetRawCellValue(r, colIdx, Columns[colIdx]), colIdx);
                     if (val != null) rawList.Add(val);
+    
                 }
             }
             else
@@ -1748,6 +1767,7 @@ else
                     {
                         var val = FormatCellValue(GetRawCellValue(coord.Row, coord.Col, Columns[coord.Col]), coord.Col);
                         if (val != null) rawList.Add(val);
+        
                     }
                 }
             }
