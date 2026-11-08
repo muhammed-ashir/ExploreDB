@@ -307,7 +307,7 @@
                             {
                                 var totalRows = GetTotalRowCount(ActiveTab.ResultSets);
                                 <span class="text-muted fw-medium" style="font-size: 0.75rem; white-space: nowrap;">
-                                    @(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")
+                                    <i class="bi bi-list me-1" style="font-size: 0.75rem;"></i>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")
                                 </span>
                             }
     
