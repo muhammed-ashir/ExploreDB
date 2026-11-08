@@ -320,7 +320,7 @@ else
                 <span>Copy as IN clause</span>
             </button>
             }
-            @if (IsColumnContextMenu || !string.IsNullOrEmpty(ContextMenuColumn))
+            @if (CanCopyAsInClause)
             {
                 <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CalculateAggregates">
                     <i class="bi bi-calculator text-muted"></i>
@@ -350,6 +350,9 @@ else
 }
 
 <style>
+    .dropdown-divider + .dropdown-divider {
+        display: none !important;
+    }
     .table-responsive,
     .result-set-table,
     .result-set-table tbody,
@@ -443,7 +446,10 @@ else
 
 @if (IsCodeViewerOpen)
 {
-    <style>.glass-card { backdrop-filter: none !important; }</style><div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); z-index: 999999;">
+    <style>
+    .dropdown-divider + .dropdown-divider {
+        display: none !important;
+    }.glass-card { backdrop-filter: none !important; }</style><div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); z-index: 999999;">
         <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 90vh;">
             <div class="modal-content shadow-lg h-100 flex-column d-flex" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-header py-2 flex-shrink-0" style="border-bottom: 1px solid var(--app-border);">
@@ -464,8 +470,11 @@ else
 
 @if (IsBinaryViewerOpen && _activeBinaryBytes != null)
 {
-    <style>.glass-card { backdrop-filter: none !important; }</style>
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); z-index: 999999;">
+    <style>
+    .dropdown-divider + .dropdown-divider {
+        display: none !important;
+
+        }.glass-card { backdrop-filter: none !important; }</style><div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); z-index: 999999;">
         <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 90vh;">
             <div class="modal-content shadow-lg h-100 flex-column d-flex" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <!-- Header -->
@@ -1836,6 +1845,7 @@ else
 
     private void CalculateAggregates()
     {
+        if (!CanCopyAsInClause) return;
         if (string.IsNullOrEmpty(ContextMenuColumn)) return;
         int colIdx = _tableStore != null ? _tableStore.GetColumnIndex(ContextMenuColumn) : Columns.IndexOf(ContextMenuColumn);
         if (colIdx < 0) return;
