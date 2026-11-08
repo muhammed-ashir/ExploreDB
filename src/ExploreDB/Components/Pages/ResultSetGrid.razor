@@ -53,17 +53,17 @@
         <table class="result-set-table" style="width: max-content;">
             <thead>
                 <tr>
-                    <th class="col-index p-0 align-middle text-center" 
+                    <th class="col-index p-0 align-middle text-center @(_isAllSelected ? "selected-col-header" : "")" 
                         style="cursor: pointer; user-select: none;" 
                         @onclick="ToggleSelectAll" 
                         @oncontextmenu="e => ShowRowHeaderContextMenu(e, -1)" 
                         @oncontextmenu:preventDefault="true"
                         title="@(_isAllSelected ? "Click to deselect all" : "Click to select all")">
-                        <div class="px-2 py-1 d-flex align-items-center justify-content-center gap-1" style="font-size: 0.75rem;">
+                        <div class="px-2 py-1 d-flex align-items-center justify-content-center" style="font-size: 0.75rem;">
                             <span>#</span>
                             @if (_isAllSelected)
                             {
-                                <i class="bi bi-check-square-fill text-primary" style="font-size: 0.75rem;"></i>
+
                             }
                         </div>
                     </th>
@@ -143,8 +143,8 @@
                             @oncontextmenu:preventDefault="true">
                             @if (isFullRowSelected)
                             {
-                                <span class="d-inline-flex align-items-center justify-content-center gap-1">
-                                    <i class="bi bi-caret-right-fill text-primary" style="font-size: 0.65rem;"></i>
+                                <span class="d-inline-flex align-items-center justify-content-center">
+
                                     @(displayIndex + 1)
                                 </span>
                             }
