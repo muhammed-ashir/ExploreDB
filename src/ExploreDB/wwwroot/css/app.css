@@ -1477,20 +1477,64 @@ a.card.glow-highlight:hover,
 }
 
 .ssms-tab-close-btn {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    min-height: 18px;
     border-radius: 50%;
     color: var(--app-text-muted);
     text-decoration: none;
-    opacity: 0.55;
+    opacity: 0.6;
     transition: all 0.15s ease;
     border: none;
     background: transparent;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
 }
 
+.ssms-tab-close-btn i.ssms-tab-close-icon,
 .ssms-tab-close-btn i {
     font-size: 0.95rem;
     line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* VS Code-style dirty indicator: yellow circular badge in place of close button */
+.ssms-tab-dirty-dot {
+    display: none;
+}
+
+.ssms-tab-close-btn.is-dirty {
+    opacity: 1 !important;
+}
+
+.ssms-tab-close-btn.is-dirty .ssms-tab-dirty-dot {
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #ffc107;
+    box-shadow: 0 0 3px rgba(255, 193, 7, 0.5);
+    transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.ssms-tab-close-btn.is-dirty .ssms-tab-close-icon {
+    display: none;
+}
+
+/* When hovering over the close button on a dirty tab: morph dot to close 'x' icon */
+.ssms-tab-close-btn.is-dirty:hover .ssms-tab-dirty-dot {
+    display: none;
+}
+
+.ssms-tab-close-btn.is-dirty:hover .ssms-tab-close-icon {
+    display: flex;
+    color: #dc3545 !important;
 }
 
 .ssms-tab:hover .ssms-tab-close-btn,
@@ -1541,7 +1585,3 @@ a.card.glow-highlight:hover,
     min-height: 0;
     position: relative;
 }
-
-
-
-

@@ -107,18 +107,19 @@
                                  data-bs-placement="bottom">
                                 <i class="bi bi-file-earmark-code me-1 ssms-tab-icon @(isCurrent ? "text-primary" : "text-muted")"></i>
                                 <span class="ssms-tab-name text-truncate">@tab.Name</span>
-                                @if (tab.IsDirty)
+                                @if (false)
                                 {
-                                    <span class="ssms-tab-dirty ms-1 text-warning fw-bold" title="Unsaved changes">*</span>
+
                                 }
-                                @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+                                @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1 || tab.IsDirty)
                                 {
                                     <button type="button" 
-                                            class="btn btn-sm btn-link p-0 ms-2 ssms-tab-close-btn d-flex align-items-center justify-content-center" 
+                                            class="btn btn-sm btn-link p-0 ms-2 ssms-tab-close-btn @(tab.IsDirty ? "is-dirty" : "") d-flex align-items-center justify-content-center" 
                                             @onclick="() => CloseTabAsync(tab.Id)" 
                                             @onclick:stopPropagation 
-                                            title="Close Tab (Ctrl+W)">
-                                        <i class="bi bi-x"></i>
+                                            title="@(tab.IsDirty ? "Unsaved changes (Click to close)" : "Close Tab (Ctrl+W)")">
+                                        <span class="ssms-tab-dirty-dot"></span>
+                                        <i class="bi bi-x ssms-tab-close-icon"></i>
                                     </button>
                                 }
                             </div>
@@ -193,7 +194,7 @@
                                                     }
                                                 </div>
                                                 <div class="d-flex align-items-center flex-shrink-0">
-                                                    @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+                                                    @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1 || tab.IsDirty)
                                                     {
                                                         <button class="btn btn-sm btn-outline-info border-0 p-0 rounded me-1 d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await PopoutTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Pop Out">
                                                             <i class="bi bi-box-arrow-up-right" style="font-size: 0.9rem;"></i>
@@ -1595,7 +1596,7 @@
 
     private async Task CloseTabAsync(Guid tabId)
     {
-        if (QueryStateService.Tabs.Count <= 1) return;
+        if (QueryStateService.Tabs.Count == 0) return;
         
         var tabToRemove = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabId);
         if (tabToRemove == null) return;
@@ -2250,7 +2251,7 @@
     [JSInvokable]
     public async Task CloseActiveTabFromShortcut()
     {
-        if (ActiveTab != null && QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+        if (ActiveTab != null && (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1 || ActiveTab.IsDirty))
         {
             await CloseTabAsync(ActiveTab.Id);
             StateHasChanged();
