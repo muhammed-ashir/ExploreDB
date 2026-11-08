@@ -14,10 +14,12 @@ public class QueryResultTable : IEnumerable<object>
 {
     private readonly List<object?[]> _rows = new();
     private readonly List<string> _columns = new();
+    private readonly List<string> _columnTypes = new();
     private readonly Dictionary<string, int> _columnIndexMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lock = new();
 
     public IReadOnlyList<string> Columns => _columns;
+    public IReadOnlyList<string> ColumnTypes => _columnTypes;
     public int RowCount
     {
         get
@@ -31,8 +33,9 @@ public class QueryResultTable : IEnumerable<object>
 
     public bool IsComplete { get; set; } = false;
 
-    public QueryResultTable(IEnumerable<string> columns)
+    public QueryResultTable(IEnumerable<string> columns, IEnumerable<string>? columnTypes = null)
     {
+        if (columnTypes != null) _columnTypes.AddRange(columnTypes);
         int idx = 0;
         foreach (var col in columns)
         {
@@ -44,6 +47,20 @@ public class QueryResultTable : IEnumerable<object>
             }
             idx++;
         }
+    }
+
+    public string? GetColumnType(int colIndex)
+    {
+        if (colIndex >= 0 && colIndex < _columnTypes.Count)
+            return _columnTypes[colIndex];
+        return null;
+    }
+
+    public string? GetColumnType(string columnName)
+    {
+        if (_columnIndexMap.TryGetValue(columnName, out var idx) && idx < _columnTypes.Count)
+            return _columnTypes[idx];
+        return null;
     }
 
     public void AddRow(object?[] row)

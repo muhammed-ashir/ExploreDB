@@ -872,13 +872,15 @@
                     if (fieldCount > 0)
                     {
                         var columnNames = new string[fieldCount];
+                        var columnTypes = new string[fieldCount];
                         for (int i = 0; i < fieldCount; i++)
                         {
                             columnNames[i] = reader.GetName(i);
                             if (string.IsNullOrEmpty(columnNames[i])) columnNames[i] = $"Column{i}";
+                            try { columnTypes[i] = reader.GetDataTypeName(i); } catch { columnTypes[i] = ""; }
                         }
 
-                        var table = new QueryResultTable(columnNames);
+                        var table = new QueryResultTable(columnNames, columnTypes);
                         var batch = new List<object?[]>(1000);
                         int yieldCount = 0;
                         while (await reader.ReadAsync(ActiveTab.QueryCts.Token))

@@ -82,7 +82,19 @@
                                  @onclick="e => HandleColumnHeaderClick(e, localCol)" 
                                  @oncontextmenu="e => ShowColumnHeaderContextMenu(e, localCol, col)" 
                                  @oncontextmenu:preventDefault="true">
-                                <span class="text-truncate flex-grow-1">@col</span>
+                                <div class="d-flex align-items-center gap-1 text-truncate flex-grow-1" style="min-width: 0;">
+                                    <span class="text-truncate">@col</span>
+                                    @{
+                                        var dateFormat = GetColumnDateFormat(localCol);
+                                    }
+                                    @if (!string.IsNullOrEmpty(dateFormat))
+                                    {
+                                        <i class="bi bi-info-circle text-info flex-shrink-0" 
+                                           style="font-size: 0.72rem; opacity: 0.85; cursor: help;" 
+                                           title="Format: @dateFormat"
+                                           @onclick:stopPropagation="true"></i>
+                                    }
+                                </div>
                                 <button class="btn btn-link p-0 px-1 ms-2 me-1 d-inline-flex align-items-center justify-content-center sort-btn text-decoration-none border-0 shadow-none flex-shrink-0" 
                                         type="button"
                                         title="Sort by @col"
@@ -146,7 +158,7 @@
                             var col = Columns[colIdx];
                             int localCol = colIdx;
                             var rawCellVal = GetRawCellValue(actualIndex, localCol, col);
-                            var val = FormatCellValue(rawCellVal);
+                            var val = FormatCellValue(rawCellVal, localCol);
                             bool isCellSelected = IsCellSelected(actualIndex, localCol);
                             <td class="@(isCellSelected ? "selected-cell" : "")"
                                 style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis; padding: 2px 8px; font-size: 0.78rem; line-height: 1.25; height: @(RowHeight)px;" 
@@ -751,14 +763,14 @@ else
             for (int r = 0; r < sampleCount; r++)
             {
                 var raw = GetRawCellValue(r, c, col);
-                var formatted = FormatCellValue(raw);
+                var formatted = FormatCellValue(raw, c);
                 if (!string.IsNullOrEmpty(formatted))
                 {
                     maxDataChars = Math.Max(maxDataChars, formatted.Length);
                 }
             }
 
-            double headerWidth = headerChars * 6.5 + 34;
+            double headerWidth = headerChars * 6.5 + 34 + (!string.IsNullOrEmpty(GetColumnDateFormat(c)) ? 18 : 0);
             double dataWidth = maxDataChars > 0 ? (maxDataChars * 6.2 + 16) : 0;
             double estimatedWidth = Math.Clamp(Math.Max(headerWidth, dataWidth), 52, 420);
             _columnWidths[col] = Math.Round(estimatedWidth);
@@ -769,6 +781,8 @@ else
     {
         ClearCellSelection();
 
+
+        _columnDateFormatCache.Clear();
         bool isNewData = !ReferenceEquals(Data, _lastDataRef);
         if (isNewData)
         {
@@ -882,11 +896,129 @@ else
         return null;
     }
 
-    private string? FormatCellValue(object? rawVal)
+    private readonly Dictionary<int, string?> _columnDateFormatCache = new();
+
+    private string? GetColumnDataType(int colIdx)
+    {
+        if (_tableStore != null)
+        {
+            return _tableStore.GetColumnType(colIdx);
+        }
+        return null;
+    }
+
+    private string? GetColumnDateFormat(int colIdx)
+    {
+        if (_columnDateFormatCache.TryGetValue(colIdx, out var cached))
+        {
+            return cached;
+        }
+
+        string? format = null;
+        var typeName = GetColumnDataType(colIdx)?.ToLowerInvariant();
+        if (!string.IsNullOrEmpty(typeName))
+        {
+            format = typeName switch
+            {
+                "datetime2" => "yyyy-MM-dd HH:mm:ss.fffffff",
+                "datetime" => "yyyy-MM-dd HH:mm:ss.fff",
+                "date" => "yyyy-MM-dd",
+                "time" => "HH:mm:ss.fffffff",
+                "smalldatetime" => "yyyy-MM-dd HH:mm:ss",
+                "datetimeoffset" => "yyyy-MM-dd HH:mm:ss.fffffff zzz",
+                _ => null
+            };
+        }
+
+        if (format == null && TotalDataCount > 0 && colIdx >= 0 && colIdx < Columns.Count)
+        {
+            int checkLimit = Math.Min(10, TotalDataCount);
+            for (int r = 0; r < checkLimit; r++)
+            {
+                var sample = GetRawCellValue(r, colIdx, Columns[colIdx]);
+                if (sample == null) continue;
+                if (sample is DateTime dt)
+                {
+                    if (dt.Ticks % TimeSpan.TicksPerMillisecond != 0)
+                        format = "yyyy-MM-dd HH:mm:ss.fffffff";
+                    else if (dt.Millisecond != 0)
+                        format = "yyyy-MM-dd HH:mm:ss.fff";
+                    else if (dt.TimeOfDay == TimeSpan.Zero)
+                        format = "yyyy-MM-dd";
+                    else
+                        format = "yyyy-MM-dd HH:mm:ss";
+                    break;
+                }
+                if (sample is DateTimeOffset)
+                {
+                    format = "yyyy-MM-dd HH:mm:ss.fffffff zzz";
+                    break;
+                }
+                if (sample is DateOnly)
+                {
+                    format = "yyyy-MM-dd";
+                    break;
+                }
+                if (sample is TimeOnly || sample is TimeSpan)
+                {
+                    format = "HH:mm:ss.fffffff";
+                    break;
+                }
+                break;
+            }
+        }
+
+        _columnDateFormatCache[colIdx] = format;
+        return format;
+    }
+
+    private string? FormatCellValue(object? rawVal, int colIdx = -1)
     {
         if (rawVal == null) return null;
-        if (rawVal is DateTime dt) return dt.ToString("M/d/yyyy h:mm:ss.fff tt");
-        if (rawVal is DateTimeOffset dto) return dto.ToString("M/d/yyyy h:mm:ss.fff tt zzz");
+        if (rawVal is DateTime dt)
+        {
+            var typeName = colIdx >= 0 ? GetColumnDataType(colIdx)?.ToLowerInvariant() : null;
+            if (typeName == "date")
+                return dt.ToString("yyyy-MM-dd");
+            if (typeName == "datetime")
+                return dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            if (typeName == "smalldatetime")
+                return dt.ToString("yyyy-MM-dd HH:mm:ss");
+            if (typeName == "datetime2")
+                return dt.ToString("yyyy-MM-dd HH:mm:ss.fffffff");
+
+            // Intelligent fallback when column type is not explicitly known
+            if (dt.Ticks % TimeSpan.TicksPerMillisecond != 0)
+                return dt.ToString("yyyy-MM-dd HH:mm:ss.fffffff");
+            if (dt.Millisecond != 0)
+                return dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            if (dt.TimeOfDay == TimeSpan.Zero)
+                return dt.ToString("yyyy-MM-dd");
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+        if (rawVal is DateTimeOffset dto)
+        {
+            return dto.ToString("yyyy-MM-dd HH:mm:ss.fffffff zzz");
+        }
+
+        if (rawVal is DateOnly d)
+        {
+            return d.ToString("yyyy-MM-dd");
+        }
+
+        if (rawVal is TimeOnly to)
+        {
+            return to.ToString("HH:mm:ss.fffffff");
+        }
+
+        if (rawVal is TimeSpan ts)
+        {
+            var typeName = colIdx >= 0 ? GetColumnDataType(colIdx)?.ToLowerInvariant() : null;
+            if (typeName == "time")
+            {
+                return ts.ToString(@"hh\:mm\:ss\.fffffff");
+            }
+        }
         if (rawVal is byte[] b) return BinaryDataHelper.FormatBinaryForDisplay(b);
         return rawVal.ToString();
     }
@@ -895,7 +1027,8 @@ else
     {
         if (row.TryGetValue(column, out var val))
         {
-            return FormatCellValue(val);
+            int colIdx = _tableStore != null ? _tableStore.GetColumnIndex(column) : Columns.IndexOf(column);
+            return FormatCellValue(val, colIdx);
         }
         return null;
     }
@@ -1042,7 +1175,7 @@ else
             {
                 var val = GetRawCellValue(i, c, Columns[c]);
                 if (val == null) continue;
-                var str = FormatCellValue(val);
+                var str = FormatCellValue(val, c);
                 if (string.IsNullOrEmpty(str)) continue;
 
                 var compStr = SearchCaseSensitive ? str : str.ToLowerInvariant();
@@ -1071,6 +1204,7 @@ else
     private void SortBy(string column)
     {
         ClearCellSelection();
+
         if (SortColumn == column)
         {
             if (SortAscending)
@@ -1199,6 +1333,7 @@ else
         else if (e.ShiftKey && _lastSelectedCell.Row >= 0)
         {
             ClearCellSelection();
+
             int startR = Math.Min(_lastSelectedCell.Row, actualRowIndex);
             int endR = Math.Max(_lastSelectedCell.Row, actualRowIndex);
             for (int r = startR; r <= endR; r++) SelectedEntireRows.Add(r);
@@ -1206,6 +1341,7 @@ else
         else
         {
             ClearCellSelection();
+
             SelectedEntireRows.Add(actualRowIndex);
             _lastSelectedCell = (actualRowIndex, 0);
         }
@@ -1229,6 +1365,7 @@ else
         else if (e.ShiftKey && _lastSelectedCell.Row >= 0 && _lastSelectedCell.Col >= 0)
         {
             ClearCellSelection();
+
             int startR = Math.Min(_lastSelectedCell.Row, actualRowIndex);
             int endR = Math.Max(_lastSelectedCell.Row, actualRowIndex);
             int startC = Math.Min(_lastSelectedCell.Col, colIndex);
@@ -1245,6 +1382,7 @@ else
         else
         {
             ClearCellSelection();
+
             SelectedCells.Add(coord);
             _lastSelectedCell = coord;
         }
@@ -1263,6 +1401,7 @@ else
         else
         {
             ClearCellSelection();
+
             SelectedEntireCols.Add(colIndex);
             _lastSelectedCell = (0, colIndex);
         }
@@ -1292,6 +1431,7 @@ else
         if (!SelectedEntireCols.Contains(colIndex) && !_isAllSelected)
         {
             ClearCellSelection();
+
             SelectedEntireCols.Add(colIndex);
             _lastSelectedCell = (0, colIndex);
         }
@@ -1313,6 +1453,7 @@ else
         if (!IsCellSelected(actualRowIndex, colIndex))
         {
             ClearCellSelection();
+
             SelectedCells.Add(coord);
             _lastSelectedCell = coord;
         }
@@ -1332,6 +1473,7 @@ else
             if (!SelectedEntireRows.Contains(actualRowIndex) && !_isAllSelected)
             {
                 ClearCellSelection();
+
                 SelectedEntireRows.Add(actualRowIndex);
                 _lastSelectedCell = (actualRowIndex, 0);
             }
@@ -1383,7 +1525,7 @@ else
                     var hex = BinaryDataHelper.ToHexString(bytes, prefix: true);
                     return includeHeaders ? $"{Columns[c]}\r\n{hex}" : hex;
                 }
-                var val = FormatCellValue(raw) ?? "NULL";
+                var val = FormatCellValue(raw, c) ?? "NULL";
                 return includeHeaders ? $"{Columns[c]}\r\n{val}" : val;
             }
         }
@@ -1443,7 +1585,7 @@ else
                 }
                 else
                 {
-                    rowVals.Add(FormatCellValue(raw) ?? "NULL");
+                    rowVals.Add(FormatCellValue(raw, c) ?? "NULL");
                 }
             }
             sb.Append(string.Join("\t", rowVals));
@@ -1533,6 +1675,7 @@ else
         {
             HideContextMenu();
             ClearCellSelection();
+
             StateHasChanged();
         }
     }
@@ -1569,7 +1712,7 @@ else
             for (int i = 0; i < Math.Min(rowCount, 10000); i++)
             {
                 int actualIdx = GetActualRowIndex(i);
-                var val = FormatCellValue(GetRawCellValue(actualIdx, colIdx, ContextMenuColumn));
+                var val = FormatCellValue(GetRawCellValue(actualIdx, colIdx, ContextMenuColumn), colIdx);
                 if (val != null) rawList.Add(val);
             }
         }
@@ -1585,7 +1728,7 @@ else
                 for (int i = 0; i < rowCount; i++)
                 {
                     int actualIdx = GetActualRowIndex(i);
-                    var val = FormatCellValue(GetRawCellValue(actualIdx, colIdx, Columns[colIdx]));
+                    var val = FormatCellValue(GetRawCellValue(actualIdx, colIdx, Columns[colIdx]), colIdx);
                     if (val != null) rawList.Add(val);
                 }
             }
@@ -1593,7 +1736,7 @@ else
             {
                 foreach (var r in SelectedEntireRows.OrderBy(x => x).Take(5000))
                 {
-                    var val = FormatCellValue(GetRawCellValue(r, colIdx, Columns[colIdx]));
+                    var val = FormatCellValue(GetRawCellValue(r, colIdx, Columns[colIdx]), colIdx);
                     if (val != null) rawList.Add(val);
                 }
             }
@@ -1603,7 +1746,7 @@ else
                 {
                     if (coord.Col >= 0 && coord.Col < Columns.Count)
                     {
-                        var val = FormatCellValue(GetRawCellValue(coord.Row, coord.Col, Columns[coord.Col]));
+                        var val = FormatCellValue(GetRawCellValue(coord.Row, coord.Col, Columns[coord.Col]), coord.Col);
                         if (val != null) rawList.Add(val);
                     }
                 }
@@ -1857,11 +2000,11 @@ else
                                 }
                                 else if (val is DateTime dt)
                                 {
-                                    writer.Write(EscapeCsvCell(dt.ToString("M/d/yyyy h:mm:ss.fff tt")));
+                                    writer.Write(EscapeCsvCell(FormatCellValue(dt, colIdx)));
                                 }
                                 else if (val is DateTimeOffset dto)
                                 {
-                                    writer.Write(EscapeCsvCell(dto.ToString("M/d/yyyy h:mm:ss.fff tt zzz")));
+                                    writer.Write(EscapeCsvCell(FormatCellValue(dto, colIdx)));
                                 }
                                 else if (val is bool b)
                                 {
