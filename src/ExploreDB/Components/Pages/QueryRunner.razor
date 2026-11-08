@@ -111,7 +111,7 @@
                                 {
 
                                 }
-                                @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1 || tab.IsDirty)
+                                @if (true)
                                 {
                                     <button type="button" 
                                             class="btn btn-sm btn-link p-0 ms-2 ssms-tab-close-btn @(tab.IsDirty ? "is-dirty" : "") d-flex align-items-center justify-content-center" 
@@ -194,7 +194,7 @@
                                                     }
                                                 </div>
                                                 <div class="d-flex align-items-center flex-shrink-0">
-                                                    @if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1 || tab.IsDirty)
+                                                    @if (true)
                                                     {
                                                         <button class="btn btn-sm btn-outline-info border-0 p-0 rounded me-1 d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await PopoutTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Pop Out">
                                                             <i class="bi bi-box-arrow-up-right" style="font-size: 0.9rem;"></i>
@@ -677,7 +677,7 @@
             <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-body p-4 pb-2">
                     <p class="mb-0" style="font-size: 0.95rem; color: var(--app-text);">
-                        This tab has <strong class="text-warning">unsaved code</strong>. Do you want to save it before closing?
+                        Do you want to save the changes you made to <strong class="text-warning">@(QueryStateService.Tabs.FirstOrDefault(t => t.Id == TabIdToClose)?.Name ?? "this tab")</strong>?
                     </p>
                 </div>
                 <div class="modal-footer border-0 p-4 pt-2">
@@ -1425,7 +1425,7 @@
     {
         if (e.Button == 1) // Middle click (wheel click)
         {
-            if (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1)
+            if (true)
             {
                 await CloseTabAsync(tabId);
             }
@@ -1670,7 +1670,8 @@
             tabToRemove.Content = currentContent;
         }
 
-        if (!string.IsNullOrWhiteSpace(currentContent) && string.IsNullOrEmpty(tabToRemove.FilePath))
+        bool hasUnsavedChanges = tabToRemove.IsDirty && (!string.IsNullOrEmpty(tabToRemove.FilePath) || !string.IsNullOrWhiteSpace(currentContent));
+        if (hasUnsavedChanges)
         {
             TabIdToClose = tabId;
             ShowCloseTabConfirmation = true;
@@ -1740,7 +1741,7 @@
             ActiveTab.Content = await _editor.GetValue();
         }
 
-        bool hasUnsaved = QueryStateService.Tabs.Any(t => !string.IsNullOrWhiteSpace(t.Content) && string.IsNullOrEmpty(t.FilePath));
+        bool hasUnsaved = QueryStateService.Tabs.Any(t => t.IsDirty && (!string.IsNullOrEmpty(t.FilePath) || !string.IsNullOrWhiteSpace(t.Content)));
         if (hasUnsaved)
         {
             ShowClearAllTabsConfirmation = true;
@@ -2313,7 +2314,7 @@
     [JSInvokable]
     public async Task CloseActiveTabFromShortcut()
     {
-        if (ActiveTab != null && (QueryStateService.Tabs.Count(t => !t.IsPoppedOut) > 1 || ActiveTab.IsDirty))
+        if (ActiveTab != null)
         {
             await CloseTabAsync(ActiveTab.Id);
             StateHasChanged();
