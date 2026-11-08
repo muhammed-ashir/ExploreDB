@@ -1223,6 +1223,7 @@
         try
         {
             await JS.InvokeVoidAsync("scrollActiveTabIntoView", "ssms-tab-scroll");
+            await JS.InvokeVoidAsync("layoutMonacoEditors");
         }
         catch { }
     }

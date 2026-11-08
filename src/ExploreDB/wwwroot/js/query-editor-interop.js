@@ -1485,6 +1485,7 @@ window.initSqlCompareSplitter = function (dotNetRef) {
             var startHeight = topPanel.offsetHeight;
             var minHeight = 120;
             var lastHeight = startHeight;
+        var layoutRaf = null;
 
             topSplitter.classList.add('dragging');
             document.body.style.cursor = 'row-resize';
@@ -1500,6 +1501,10 @@ window.initSqlCompareSplitter = function (dotNetRef) {
             }
 
             function onPointerUp(upEvent) {
+            if (layoutRaf) {
+                cancelAnimationFrame(layoutRaf);
+                layoutRaf = null;
+            }
                 try { topSplitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
                 topSplitter.removeEventListener('pointermove', onPointerMove);
                 topSplitter.removeEventListener('pointerup', onPointerUp);
@@ -1510,7 +1515,10 @@ window.initSqlCompareSplitter = function (dotNetRef) {
                 window.dispatchEvent(new Event('resize'));
 
                 if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
-                    dotNetRef.invokeMethodAsync('SetTopPanelHeight', lastHeight);
+                    if (window.layoutMonacoEditors) {
+                    window.layoutMonacoEditors();
+                }
+                dotNetRef.invokeMethodAsync('SetTopPanelHeight', lastHeight);
                 }
             }
 
@@ -1534,6 +1542,7 @@ window.initSqlCompareSplitter = function (dotNetRef) {
             var startHeight = diffPanel.offsetHeight;
             var minHeight = 220;
             var lastHeight = startHeight;
+        var layoutRaf = null;
 
             diffSplitter.classList.add('dragging');
             document.body.style.cursor = 'row-resize';
@@ -1544,10 +1553,22 @@ window.initSqlCompareSplitter = function (dotNetRef) {
                 var newHeight = Math.round(Math.max(minHeight, startHeight + deltaY));
                 lastHeight = newHeight;
                 diffPanel.style.height = newHeight + 'px';
+                if (!layoutRaf) {
+                    layoutRaf = requestAnimationFrame(function () {
+                        layoutRaf = null;
+                        if (window.layoutMonacoEditors) {
+                            window.layoutMonacoEditors();
+                        }
+                    });
+                }
                 window.dispatchEvent(new Event('resize'));
             }
 
             function onPointerUp(upEvent) {
+            if (layoutRaf) {
+                cancelAnimationFrame(layoutRaf);
+                layoutRaf = null;
+            }
                 try { diffSplitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
                 diffSplitter.removeEventListener('pointermove', onPointerMove);
                 diffSplitter.removeEventListener('pointerup', onPointerUp);
@@ -1558,7 +1579,10 @@ window.initSqlCompareSplitter = function (dotNetRef) {
                 window.dispatchEvent(new Event('resize'));
 
                 if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
-                    dotNetRef.invokeMethodAsync('SetDiffPanelHeight', lastHeight);
+                    if (window.layoutMonacoEditors) {
+                    window.layoutMonacoEditors();
+                }
+                dotNetRef.invokeMethodAsync('SetDiffPanelHeight', lastHeight);
                 }
             }
 
@@ -1571,12 +1595,45 @@ window.initSqlCompareSplitter = function (dotNetRef) {
     return true;
 };
 
+window.layoutMonacoEditors = function () {
+    if (typeof monaco !== 'undefined' && monaco.editor) {
+        if (typeof monaco.editor.getEditors === 'function') {
+            var editors = monaco.editor.getEditors();
+            for (var i = 0; i < editors.length; i++) {
+                try { editors[i].layout(); } catch (err) {}
+            }
+        }
+        if (typeof monaco.editor.getDiffEditors === 'function') {
+            var diffEditors = monaco.editor.getDiffEditors();
+            for (var j = 0; j < diffEditors.length; j++) {
+                try { diffEditors[j].layout(); } catch (err) {}
+            }
+        }
+    }
+};
+
+window.addEventListener('resize', function () {
+    if (window.layoutMonacoEditors) {
+        window.layoutMonacoEditors();
+    }
+}, { passive: true });
+
 window.initQueryEditorSplitter = function (dotNetRef, splitterId, wrapperId) {
     splitterId = splitterId || 'query-editor-resizer';
     wrapperId = wrapperId || 'query-editor-wrapper';
     var splitter = document.getElementById(splitterId);
     var wrapper = document.getElementById(wrapperId);
     if (!splitter || !wrapper) return false;
+
+    if (window.ResizeObserver && !wrapper._hasResizeObserver) {
+        wrapper._hasResizeObserver = true;
+        var ro = new ResizeObserver(function () {
+            if (window.layoutMonacoEditors) {
+                window.layoutMonacoEditors();
+            }
+        });
+        ro.observe(wrapper);
+    }
 
     if (splitter._hasSplitterHandler) return true;
     splitter._hasSplitterHandler = true;
@@ -1589,6 +1646,7 @@ window.initQueryEditorSplitter = function (dotNetRef, splitterId, wrapperId) {
         var startHeight = wrapper.offsetHeight;
         var minHeight = 120;
         var lastHeight = startHeight;
+        var layoutRaf = null;
 
         splitter.classList.add('dragging');
         document.body.style.cursor = 'row-resize';
@@ -1603,10 +1661,23 @@ window.initQueryEditorSplitter = function (dotNetRef, splitterId, wrapperId) {
             lastHeight = newHeight;
             wrapper.style.height = newHeight + 'px';
             wrapper.style.flexGrow = '0';
+
+            if (!layoutRaf) {
+                layoutRaf = requestAnimationFrame(function () {
+                    layoutRaf = null;
+                    if (window.layoutMonacoEditors) {
+                        window.layoutMonacoEditors();
+                    }
+                });
+            }
             window.dispatchEvent(new Event('resize'));
         }
 
         function onPointerUp(upEvent) {
+            if (layoutRaf) {
+                cancelAnimationFrame(layoutRaf);
+                layoutRaf = null;
+            }
             try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
             splitter.removeEventListener('pointermove', onPointerMove);
             splitter.removeEventListener('pointerup', onPointerUp);
@@ -1617,6 +1688,9 @@ window.initQueryEditorSplitter = function (dotNetRef, splitterId, wrapperId) {
             window.dispatchEvent(new Event('resize'));
 
             if (dotNetRef && typeof dotNetRef.invokeMethodAsync === 'function') {
+                if (window.layoutMonacoEditors) {
+                    window.layoutMonacoEditors();
+                }
                 dotNetRef.invokeMethodAsync('SetQueryEditorHeight', lastHeight);
             }
         }
@@ -2014,6 +2088,7 @@ window.initProfilerSplitter = function (dotNetRef) {
             var maxContainerHeight = mainBox ? mainBox.offsetHeight : (window.innerHeight - 200);
             var maxHeight = Math.max(minHeight + 40, maxContainerHeight - 110);
             var lastHeight = startHeight;
+        var layoutRaf = null;
             var rafId = null;
 
             splitter.classList.add('dragging');
@@ -2036,6 +2111,10 @@ window.initProfilerSplitter = function (dotNetRef) {
             }
 
             function onPointerUp(upEvent) {
+            if (layoutRaf) {
+                cancelAnimationFrame(layoutRaf);
+                layoutRaf = null;
+            }
                 try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
                 splitter.removeEventListener('pointermove', onPointerMove);
                 splitter.removeEventListener('pointerup', onPointerUp);
@@ -2173,6 +2252,10 @@ window.initResultSetSplitters = function (containerId) {
             }
 
             function onPointerUp(upEvent) {
+            if (layoutRaf) {
+                cancelAnimationFrame(layoutRaf);
+                layoutRaf = null;
+            }
                 try { splitter.releasePointerCapture(upEvent.pointerId); } catch (err) {}
                 splitter.removeEventListener('pointermove', onPointerMove);
                 splitter.removeEventListener('pointerup', onPointerUp);
