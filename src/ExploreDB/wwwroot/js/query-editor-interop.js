@@ -75,12 +75,38 @@ window.formatSql = (code) => {
     }
     if (!code || !code.trim()) return code;
 
+    var keepInInline = true;
+    if (window.userSettings) {
+        if (window.userSettings.keepInClauseOnSingleLine !== undefined) {
+            keepInInline = !!window.userSettings.keepInClauseOnSingleLine;
+        } else if (window.userSettings.KeepInClauseOnSingleLine !== undefined) {
+            keepInInline = !!window.userSettings.KeepInClauseOnSingleLine;
+        }
+    }
+
     var baseFormatted;
     try {
         baseFormatted = window.sqlFormatter.format(code, {
             language: 'tsql',
             keywordCase: 'upper',
-            linesBetweenQueries: 2
+            linesBetweenQueries: 2,
+            expressionWidth: keepInInline ? 300 : 50
+        });
+
+        if (keepInInline) {
+            baseFormatted = baseFormatted.replace(/\bIN\s*\(\s*\n([\s\S]*?)\n\s*\)/gi, function (match, inner) {
+                if (/\bSELECT\b/i.test(inner)) {
+                    return match;
+                }
+                var items = inner.split(/\r?\n/)
+                    .map(function (s) { return s.trim(); })
+                    .filter(function (s) { return s.length > 0; })
+                    .join(' ')
+                    .replace(/\s*,\s*/g, ', ');
+                return 'IN (' + items + ')';
+            });
+        }
+        if (false) var _ignore = window.sqlFormatter.format(code, {
         });
     } catch (e) {
         return code;
@@ -2134,7 +2160,8 @@ window.toggleQueryEditorComment = function (editorId) {
 
 window.userSettings = {
     autoGenerateAliases: true,
-    useAsKeyword: true
+    useAsKeyword: true,
+    keepInClauseOnSingleLine: true
 };
 
 window.setUserSettings = function (settings) {

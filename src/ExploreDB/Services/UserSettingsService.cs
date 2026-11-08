@@ -8,6 +8,7 @@ public class UserSettings
 {
     public bool AutoGenerateAliases { get; set; } = true;
     public bool UseAsKeyword { get; set; } = true;
+    public bool KeepInClauseOnSingleLine { get; set; } = true;
     public string DisplayName { get; set; } = "";
     public string LicenseKey { get; set; } = "";
 }
@@ -41,10 +42,18 @@ public class UserSettingsService
         OnSettingsModalStateChanged?.Invoke();
     }
 
-    public void UpdateSettings(bool autoGenerateAliases, bool useAsKeyword)
+    public void UpdateSettings(bool autoGenerateAliases, bool useAsKeyword, bool? keepInClauseOnSingleLine = null)
     {
         Settings.AutoGenerateAliases = autoGenerateAliases;
         Settings.UseAsKeyword = useAsKeyword;
+        if (keepInClauseOnSingleLine.HasValue) Settings.KeepInClauseOnSingleLine = keepInClauseOnSingleLine.Value;
+        SaveSettings();
+        OnSettingsChanged?.Invoke();
+    }
+
+    public void UpdateKeepInClauseOnSingleLine(bool keepInClauseOnSingleLine)
+    {
+        Settings.KeepInClauseOnSingleLine = keepInClauseOnSingleLine;
         SaveSettings();
         OnSettingsChanged?.Invoke();
     }
