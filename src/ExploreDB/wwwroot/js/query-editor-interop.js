@@ -2119,6 +2119,12 @@ window.initProfilerSplitter = function (dotNetRef) {
                 splitter.removeEventListener('pointermove', onPointerMove);
                 splitter.removeEventListener('pointerup', onPointerUp);
                 splitter.removeEventListener('pointercancel', onPointerUp);
+                window.removeEventListener('pointerup', onPointerUp);
+                window.removeEventListener('pointercancel', onPointerUp);
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
                 splitter.classList.remove('dragging');
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
@@ -2136,6 +2142,8 @@ window.initProfilerSplitter = function (dotNetRef) {
             splitter.addEventListener('pointermove', onPointerMove);
             splitter.addEventListener('pointerup', onPointerUp);
             splitter.addEventListener('pointercancel', onPointerUp);
+            window.addEventListener('pointerup', onPointerUp);
+            window.addEventListener('pointercancel', onPointerUp);
         });
     }
 
@@ -2239,6 +2247,8 @@ window.initResultSetSplitters = function (containerId) {
             var startHeight = prevPane.offsetHeight;
             var minHeight = 60;
             var maxHeight = Math.max(minHeight, container.offsetHeight - 100);
+            var layoutRaf = null;
+            var rafId = null;
 
             splitter.classList.add('dragging');
             document.body.style.cursor = 'row-resize';
@@ -2249,6 +2259,13 @@ window.initResultSetSplitters = function (containerId) {
                 var newHeight = Math.round(Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY)));
                 prevPane.style.flex = '0 0 ' + newHeight + 'px';
                 prevPane.style.height = newHeight + 'px';
+
+                if (!rafId) {
+                    rafId = requestAnimationFrame(function () {
+                        rafId = null;
+                        window.dispatchEvent(new Event('resize'));
+                    });
+                }
             }
 
             function onPointerUp(upEvent) {
@@ -2260,6 +2277,12 @@ window.initResultSetSplitters = function (containerId) {
                 splitter.removeEventListener('pointermove', onPointerMove);
                 splitter.removeEventListener('pointerup', onPointerUp);
                 splitter.removeEventListener('pointercancel', onPointerUp);
+                window.removeEventListener('pointerup', onPointerUp);
+                window.removeEventListener('pointercancel', onPointerUp);
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
                 splitter.classList.remove('dragging');
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
@@ -2269,6 +2292,8 @@ window.initResultSetSplitters = function (containerId) {
             splitter.addEventListener('pointermove', onPointerMove);
             splitter.addEventListener('pointerup', onPointerUp);
             splitter.addEventListener('pointercancel', onPointerUp);
+            window.addEventListener('pointerup', onPointerUp);
+            window.addEventListener('pointercancel', onPointerUp);
         });
     });
 
