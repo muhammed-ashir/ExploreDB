@@ -53,7 +53,7 @@
         <table class="result-set-table" style="width: max-content;">
             <thead>
                 <tr>
-                    <th class="col-index p-0 align-middle text-center @(_isAllSelected ? "selected-col-header" : "")" 
+                    <th class="col-index p-0 align-middle text-center" 
                         style="cursor: pointer; user-select: none;" 
                         @onclick="ToggleSelectAll" 
                         @oncontextmenu="e => ShowRowHeaderContextMenu(e, -1)" 
@@ -135,7 +135,7 @@
                     int actualIndex = GetActualRowIndex(displayIndex);
                     bool isFullRowSelected = IsRowFullySelected(actualIndex);
                     <tr style="height: @(RowHeight)px;">
-                        <td class="col-index text-center align-middle @(isFullRowSelected ? "selected-row-header" : "")" 
+                        <td class="col-index text-center align-middle" 
                             style="font-size: 0.75rem; cursor: pointer; user-select: none; padding: 2px 4px; height: @(RowHeight)px;"
                             title="Click to select row (Ctrl+Click to toggle, Shift+Click for range)"
                             @onclick="e => HandleRowHeaderClick(e, actualIndex)"
@@ -1307,7 +1307,7 @@ else
 
     private bool IsColumnFullySelected(int colIndex)
     {
-        if (_isAllSelected || SelectedEntireCols.Contains(colIndex)) return true;
+        if (SelectedEntireCols.Contains(colIndex)) return true;
         return false;
     }
 
@@ -1647,7 +1647,7 @@ else
         {
             if (e.Key.Equals("c", StringComparison.OrdinalIgnoreCase))
             {
-                if (SelectedCells.Count > 0)
+                if (SelectedCells.Count > 0 || SelectedEntireRows.Count > 0 || SelectedEntireCols.Count > 0 || _isAllSelected)
                 {
                     if (e.ShiftKey)
                     {
