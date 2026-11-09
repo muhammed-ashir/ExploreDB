@@ -1548,6 +1548,120 @@ a.card.glow-highlight:hover,
     color: #dc3545 !important;
 }
 
+/* Pinned tab button & VS Code-style dirty badge */
+.ssms-tab-pin-btn {
+    width: 16px;
+    height: 16px;
+    padding: 0 !important;
+    margin: 0 0 0 10px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--app-text-muted) !important;
+    border-radius: 3px;
+    position: relative;
+    opacity: 0.85;
+    transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    text-decoration: none !important;
+}
+
+.ssms-tab:hover .ssms-tab-pin-btn,
+.ssms-tab.active .ssms-tab-pin-btn {
+    opacity: 1;
+}
+
+.ssms-tab-pin-btn:hover {
+    color: var(--app-text) !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-bs-theme="light"] .ssms-tab-pin-btn:hover {
+    background-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.ssms-tab-pin-btn i.ssms-tab-pin-icon {
+    font-size: 0.76rem;
+    line-height: 1;
+    display: inline-block;
+    transition: transform 0.15s ease;
+}
+
+.ssms-tab-pin-btn:hover i.ssms-tab-pin-icon {
+    color: var(--app-text) !important;
+}
+
+.ssms-tab-pin-dirty-dot {
+    position: absolute;
+    bottom: 1.5px;
+    right: 1.5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #ffc107;
+    box-shadow: 0 0 0 1.5px var(--app-surface-secondary, #252526);
+    pointer-events: none;
+}
+
+/* Tab Search Dropdown Pin Button */
+.tab-dropdown-pin-btn {
+    width: 26px;
+    height: 26px;
+    background: transparent;
+    border: none;
+    color: var(--app-text-muted);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tab-dropdown-pin-btn:hover {
+    background-color: rgba(255, 193, 7, 0.18) !important;
+    color: #ffc107 !important;
+}
+
+.tab-dropdown-pin-btn.is-pinned {
+    color: #ffc107 !important;
+}
+
+.tab-dropdown-pin-btn.is-pinned:hover {
+    background-color: rgba(255, 193, 7, 0.25) !important;
+    color: #ffd043 !important;
+}
+
+/* Tab Strip Context Menu */
+.tab-context-menu {
+    position: fixed;
+    z-index: 1060;
+    min-width: 195px;
+    background-color: var(--app-surface-secondary);
+    color: var(--app-text);
+    border: 1px solid var(--app-border);
+    border-radius: 0.375rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    padding: 4px;
+}
+
+.tab-context-menu .dropdown-item {
+    font-size: 0.82rem;
+    padding: 5px 10px;
+    border-radius: 0.25rem;
+    color: var(--app-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.tab-context-menu .dropdown-item:hover {
+    background-color: var(--primary-color);
+    color: #ffffff;
+}
+
+.tab-context-menu .dropdown-divider {
+    margin: 4px 0;
+    border-color: var(--app-border);
+}
+
 .ssms-new-tab-btn {
     color: var(--app-text-muted);
     text-decoration: none;

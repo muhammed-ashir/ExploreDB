@@ -31,6 +31,7 @@ public class QueryTab
     public string Content { get; set; } = "";
     public string OriginalContent { get; set; } = "";
     public string? FilePath { get; set; }
+    public bool IsPinned { get; set; } = false;
     
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsDirty => Content != OriginalContent;

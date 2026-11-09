@@ -95,10 +95,12 @@
             <!-- SSMS-Style Tab Strip -->
             <div class="ssms-tab-strip d-flex align-items-stretch justify-content-between flex-shrink-0">
                 <div id="ssms-tab-scroll" class="ssms-tab-scroll d-flex align-items-stretch flex-grow-1">
-                        @foreach (var tab in QueryStateService.Tabs.Where(t => !t.IsPoppedOut))
+                        @foreach (var tab in QueryStateService.Tabs.Where(t => !t.IsPoppedOut).OrderByDescending(t => t.IsPinned))
                         {
                             var isCurrent = tab.Id == QueryStateService.ActiveTabId;
-                            <div class="ssms-tab @(isCurrent ? "active" : "") d-flex align-items-center user-select-none" 
+                            <div class="ssms-tab @(isCurrent ? "active" : "") @(tab.IsPinned ? "is-pinned" : "") d-flex align-items-center user-select-none" 
+                                 @oncontextmenu="(e) => ShowTabContextMenu(e, tab.Id)"
+                                 @oncontextmenu:preventDefault="true"
                                  @onclick="() => SwitchTabAsync(tab.Id)"
                                  @onmouseup="(e) => OnTabMouseUpAsync(e, tab.Id)"
                                  data-bs-tooltip="true" 
@@ -107,6 +109,20 @@
                                  data-bs-placement="bottom">
                                 <i class="bi bi-file-earmark-code me-1 ssms-tab-icon @(isCurrent ? "text-primary" : "text-muted")"></i>
                                 <span class="ssms-tab-name text-truncate">@tab.Name</span>
+                                @if (tab.IsPinned)
+                                {
+                                    <button type="button" 
+                                            class="btn btn-sm btn-link p-0 ms-2 ssms-tab-pin-btn position-relative d-flex align-items-center justify-content-center" 
+                                            @onclick="() => TogglePinTabAsync(tab.Id)" 
+                                            @onclick:stopPropagation 
+                                            title="@(tab.IsDirty ? "Unsaved changes • Pinned (Click to unpin)" : "Pinned (Click to unpin)")">
+                                        <i class="bi bi-pin-angle ssms-tab-pin-icon"></i>
+                                        @if (tab.IsDirty)
+                                        {
+                                            <span class="ssms-tab-pin-dirty-dot"></span>
+                                        }
+                                    </button>
+                                }
                                 @if (false)
                                 {
 
@@ -114,7 +130,7 @@
                                 @if (true)
                                 {
                                     <button type="button" 
-                                            class="btn btn-sm btn-link p-0 ms-2 ssms-tab-close-btn @(tab.IsDirty ? "is-dirty" : "") d-flex align-items-center justify-content-center" 
+                                            class="btn btn-sm btn-link p-0 ms-2 ssms-tab-close-btn @(tab.IsDirty ? "is-dirty" : "") @(tab.IsPinned ? "d-none" : "d-flex") align-items-center justify-content-center" 
                                             @onclick="() => CloseTabAsync(tab.Id)" 
                                             @onclick:stopPropagation 
                                             title="@(tab.IsDirty ? "Unsaved changes (Click to close)" : "Close Tab (Ctrl+W)")">
@@ -183,11 +199,21 @@
                                         }
                                     </div>
                                     <div class="custom-scrollbar-light custom-scrollbar-solid-track" style="max-height: 300px; overflow-y: auto;">
-                                        @foreach (var tab in QueryStateService.Tabs.Where(t => !t.IsPoppedOut && (string.IsNullOrEmpty(TabSearchTerm) || t.Name.Contains(TabSearchTerm, StringComparison.OrdinalIgnoreCase))))
+                                        @foreach (var tab in QueryStateService.Tabs.Where(t => !t.IsPoppedOut && (string.IsNullOrEmpty(TabSearchTerm) || t.Name.Contains(TabSearchTerm, StringComparison.OrdinalIgnoreCase))).OrderByDescending(t => t.IsPinned))
                                         {
                                             <div class="dropdown-item d-flex justify-content-between align-items-center @(tab.Id == QueryStateService.ActiveTabId ? "bg-primary bg-opacity-25 rounded-1" : "rounded-1")" style="cursor: pointer; min-width: 0; color: var(--app-text);" data-bs-tooltip="true" data-bs-title="@GetTabTooltip(tab)" data-bs-html="true" data-bs-placement="left" @onclick="async () => { await SwitchTabAsync(tab.Id); IsTabDropdownOpen = false; }">
                                                 <div class="d-flex flex-column text-truncate me-3" style="flex: 1; min-width: 0;">
-                                                    <span class="text-truncate">@GetTabDisplayName(tab)</span>
+                                                    <div class="d-flex align-items-center text-truncate">
+                                                        @if (false)
+                                                        {
+                                                            <i class="bi bi-pin-angle-fill text-warning me-1" style="font-size: 0.8rem;" title="Pinned"></i>
+                                                        }
+                                                        <span class="text-truncate">@GetTabDisplayName(tab)</span>
+                                                        @if (false)
+                                                        {
+                                                            <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem; padding: 1px 4px;">Unsaved</span>
+                                                        }
+                                                    </div>
                                                     @if (!string.IsNullOrEmpty(GetTabConnectionSummary(tab)))
                                                     {
                                                         <span class="text-secondary text-truncate" style="font-size: 0.7rem;">@GetTabConnectionSummary(tab)</span>
@@ -196,10 +222,13 @@
                                                 <div class="d-flex align-items-center flex-shrink-0">
                                                     @if (true)
                                                     {
+                                                        <button type="button" class="btn btn-sm p-0 rounded me-1 d-flex align-items-center justify-content-center tab-dropdown-pin-btn @(tab.IsPinned ? "is-pinned" : "")" @onclick="async () => { await TogglePinTabAsync(tab.Id); }" @onclick:stopPropagation title="@(tab.IsPinned ? "Unpin Tab" : "Pin Tab")">
+                                                            <i class="bi @(tab.IsPinned ? "bi-pin-angle-fill" : "bi-pin-angle")" style="font-size: 0.85rem;"></i>
+                                                        </button>
                                                         <button class="btn btn-sm btn-outline-info border-0 p-0 rounded me-1 d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await PopoutTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Pop Out">
                                                             <i class="bi bi-box-arrow-up-right" style="font-size: 0.9rem;"></i>
                                                         </button>
-                                                        <button class="btn btn-sm btn-outline-danger border-0 p-0 rounded d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { await CloseTabAsync(tab.Id); IsTabDropdownOpen = false; }" @onclick:stopPropagation title="Close">
+                                                        <button class="btn btn-sm btn-outline-danger border-0 p-0 rounded @(tab.IsPinned ? "d-none" : "d-flex") align-items-center justify-content-center" style="width: 26px; height: 26px;" @onclick="async () => { if (!tab.IsPinned) { await CloseTabAsync(tab.Id); IsTabDropdownOpen = false; } }" @onclick:stopPropagation title="Close">
                                                             <i class="bi bi-x" style="font-size: 1.3rem;"></i>
                                                         </button>
                                                     }
@@ -670,6 +699,48 @@
     </div>
 }
 
+@if (_showTabContextMenu)
+{
+    <div class="modal-backdrop fade show" style="opacity: 0; z-index: 1055;" @onclick="CloseTabContextMenu" @oncontextmenu="CloseTabContextMenu" @oncontextmenu:preventDefault="true"></div>
+    <div class="tab-context-menu" style="left: @(_tabContextMenuX)px; top: @(_tabContextMenuY)px;">
+        @{
+            var ctxTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == _contextMenuTabId);
+        }
+        @if (ctxTab != null)
+        {
+            <div class="dropdown-item" @onclick="async () => { await TogglePinTabAsync(ctxTab.Id); CloseTabContextMenu(); }">
+                <i class="bi @(ctxTab.IsPinned ? "bi-pin-angle text-warning" : "bi-pin-angle-fill text-warning")"></i>
+                <span>@(ctxTab.IsPinned ? "Unpin Tab" : "Pin Tab")</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            @if (!ctxTab.IsPinned)
+            {
+                <div class="dropdown-item text-danger" @onclick="async () => { await CloseTabAsync(ctxTab.Id); CloseTabContextMenu(); }">
+                    <i class="bi bi-x-lg text-danger"></i>
+                    <span>Close Tab</span>
+                </div>
+            }
+            <div class="dropdown-item" @onclick="async () => { await CloseOtherTabsAsync(ctxTab.Id); CloseTabContextMenu(); }">
+                <i class="bi bi-x-circle"></i>
+                <span>Close Other Tabs</span>
+            </div>
+            <div class="dropdown-item" @onclick="async () => { await CloseTabsToTheRightAsync(ctxTab.Id); CloseTabContextMenu(); }">
+                <i class="bi bi-arrow-right-circle"></i>
+                <span>Close Tabs to the Right</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-item" @onclick="async () => { await PopoutTabAsync(ctxTab.Id); CloseTabContextMenu(); }">
+                <i class="bi bi-box-arrow-up-right text-info"></i>
+                <span>Pop Out to Window</span>
+            </div>
+            <div class="dropdown-item" @onclick="async () => { await DuplicateTabAsync(ctxTab.Id); CloseTabContextMenu(); }">
+                <i class="bi bi-files text-primary"></i>
+                <span>Duplicate Tab</span>
+            </div>
+        }
+    </div>
+}
+
 @if (ShowCloseTabConfirmation)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000;">
@@ -1044,6 +1115,10 @@
     private bool ShowDangerousQueryWarning = false;
     private TaskCompletionSource<bool>? _dangerousQueryTcs;
     private Guid? TabIdToClose = null;
+    private bool _showTabContextMenu = false;
+    private double _tabContextMenuX = 0;
+    private double _tabContextMenuY = 0;
+    private Guid _contextMenuTabId = Guid.Empty;
     private System.Timers.Timer? _saveDebounceTimer;
     private bool _isEditorReady = false;
     private bool _isMonacoLoaded = false;
@@ -1661,7 +1736,7 @@
         if (QueryStateService.Tabs.Count == 0) return;
         
         var tabToRemove = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabId);
-        if (tabToRemove == null) return;
+        if (tabToRemove == null || tabToRemove.IsPinned) return;
 
         string currentContent = tabToRemove.Content;
         if (QueryStateService.ActiveTabId == tabId && _editor != null)
@@ -1741,7 +1816,7 @@
             ActiveTab.Content = await _editor.GetValue();
         }
 
-        bool hasUnsaved = QueryStateService.Tabs.Any(t => t.IsDirty && (!string.IsNullOrEmpty(t.FilePath) || !string.IsNullOrWhiteSpace(t.Content)));
+        bool hasUnsaved = QueryStateService.Tabs.Where(t => !t.IsPinned).Any(t => t.IsDirty && (!string.IsNullOrEmpty(t.FilePath) || !string.IsNullOrWhiteSpace(t.Content)));
         if (hasUnsaved)
         {
             ShowClearAllTabsConfirmation = true;
@@ -1752,7 +1827,185 @@
         await ConfirmClearAllTabsAsync();
     }
 
+    private void ShowTabContextMenu(MouseEventArgs e, Guid tabId)
+    {
+        _contextMenuTabId = tabId;
+        _tabContextMenuX = e.ClientX;
+        _tabContextMenuY = e.ClientY;
+        _showTabContextMenu = true;
+    }
+
+    private void CloseTabContextMenu()
+    {
+        _showTabContextMenu = false;
+        _contextMenuTabId = Guid.Empty;
+    }
+
+    private async Task TogglePinTabAsync(Guid tabId)
+    {
+        var tab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabId);
+        if (tab != null)
+        {
+            tab.IsPinned = !tab.IsPinned;
+            await QueryStateService.SaveTabsAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task DuplicateTabAsync(Guid tabId)
+    {
+        var sourceTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == tabId);
+        if (sourceTab == null) return;
+
+        string currentContent = sourceTab.Content;
+        if (QueryStateService.ActiveTabId == tabId && _editor != null)
+        {
+            currentContent = await _editor.GetValue();
+            sourceTab.Content = currentContent;
+        }
+
+        var newTab = new QueryTab
+        {
+            Id = Guid.NewGuid(),
+            Name = $"{System.IO.Path.GetFileNameWithoutExtension(sourceTab.Name)} (Copy).sql",
+            Content = currentContent,
+            OriginalContent = "",
+            ConnectionString = sourceTab.ConnectionString,
+            ConnectionName = sourceTab.ConnectionName
+        };
+
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+
+        if (_editor != null)
+        {
+            await _editor.SetValue(newTab.Content);
+        }
+
+        await QueryStateService.SaveTabsAsync();
+        await ScrollActiveTabIntoViewAsync();
+    }
+
+    private async Task CloseOtherTabsAsync(Guid keepTabId)
+    {
+        if (_editor != null)
+        {
+            ActiveTab.Content = await _editor.GetValue();
+        }
+
+        var tabsToClose = QueryStateService.Tabs
+            .Where(t => t.Id != keepTabId && !t.IsPinned)
+            .ToList();
+
+        foreach (var tab in tabsToClose)
+        {
+            if (tab.QueryCts != null && !tab.QueryCts.IsCancellationRequested)
+            {
+                try { tab.CancelAction?.Invoke(); } catch { }
+                try { tab.QueryCts.Cancel(); } catch { }
+            }
+            QueryStateService.Tabs.Remove(tab);
+        }
+
+        QueryStateService.ActiveTabId = keepTabId;
+        var activeTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == keepTabId);
+        if (activeTab != null && _editor != null)
+        {
+            await _editor.SetValue(activeTab.Content);
+        }
+
+        await QueryStateService.SaveTabsAsync();
+        await ScrollActiveTabIntoViewAsync();
+    }
+
+    private async Task CloseTabsToTheRightAsync(Guid currentTabId)
+    {
+        if (_editor != null)
+        {
+            ActiveTab.Content = await _editor.GetValue();
+        }
+
+        var orderedTabs = QueryStateService.Tabs.Where(t => !t.IsPoppedOut).OrderByDescending(t => t.IsPinned).ToList();
+        int currentIndex = orderedTabs.FindIndex(t => t.Id == currentTabId);
+        if (currentIndex < 0 || currentIndex >= orderedTabs.Count - 1) return;
+
+        var tabsToClose = orderedTabs.Skip(currentIndex + 1).Where(t => !t.IsPinned).ToList();
+
+        foreach (var tab in tabsToClose)
+        {
+            if (tab.QueryCts != null && !tab.QueryCts.IsCancellationRequested)
+            {
+                try { tab.CancelAction?.Invoke(); } catch { }
+                try { tab.QueryCts.Cancel(); } catch { }
+            }
+            QueryStateService.Tabs.Remove(tab);
+        }
+
+        if (!QueryStateService.Tabs.Any(t => t.Id == QueryStateService.ActiveTabId))
+        {
+            QueryStateService.ActiveTabId = currentTabId;
+            var activeTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == currentTabId);
+            if (activeTab != null && _editor != null)
+            {
+                await _editor.SetValue(activeTab.Content);
+            }
+        }
+
+        await QueryStateService.SaveTabsAsync();
+        await ScrollActiveTabIntoViewAsync();
+    }
+
+    private async Task<bool> HandleClearAllTabsWithPinsAsync()
+    {
+        var unpinnedTabs = QueryStateService.Tabs.Where(t => !t.IsPinned).ToList();
+        foreach (var tab in unpinnedTabs)
+        {
+            if (tab.QueryCts != null && !tab.QueryCts.IsCancellationRequested)
+            {
+                try { tab.CancelAction?.Invoke(); } catch { }
+                try { tab.QueryCts.Cancel(); } catch { }
+            }
+            QueryStateService.Tabs.Remove(tab);
+        }
+
+        if (QueryStateService.Tabs.Count == 0)
+        {
+            var newTab = new QueryTab
+            {
+                Id = Guid.NewGuid(),
+                Name = "SQLQuery1.sql",
+                ConnectionString = ConnectionService.ConnectionString
+            };
+            QueryStateService.Tabs.Add(newTab);
+            QueryStateService.ActiveTabId = newTab.Id;
+            if (_editor != null)
+            {
+                await _editor.SetValue("");
+            }
+        }
+        else
+        {
+            var active = QueryStateService.Tabs.FirstOrDefault(t => t.Id == QueryStateService.ActiveTabId) ?? QueryStateService.Tabs.First();
+            QueryStateService.ActiveTabId = active.Id;
+            if (_editor != null)
+            {
+                await _editor.SetValue(active.Content);
+            }
+        }
+
+        await QueryStateService.SaveTabsAsync();
+        IsTabDropdownOpen = false;
+        ShowClearAllTabsConfirmation = false;
+        return true;
+    }
+
     private async Task ConfirmClearAllTabsAsync()
+    {
+        if (QueryStateService.Tabs.Count > 0)
+        {
+            await HandleClearAllTabsWithPinsAsync();
+            return;
+        }
     {
         foreach (var tab in QueryStateService.Tabs)
         {
@@ -1781,6 +2034,8 @@
         await QueryStateService.SaveTabsAsync();
         IsTabDropdownOpen = false;
         ShowClearAllTabsConfirmation = false;
+    }
+
     }
 
     private async Task SaveAndCloseTabAsync()
