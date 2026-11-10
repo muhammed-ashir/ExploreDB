@@ -179,6 +179,19 @@ public class ToolRegistryService
                 Status = "Live",
                 IsVisible = true,
                 CloseOnConnectionChange = false
+            },
+            new ToolItem
+            {
+                Id = "sp-debugger",
+                Title = "SP Debugger",
+                Description = "Interactive statement-by-statement execution, variable inspection, and live temp table examination with automated rollback safety.",
+                Icon = "bi-bug",
+                IconBg = "rgba(16, 185, 129, 0.12)",
+                IconColor = "#10b981",
+                Route = "/tools/sp-debugger",
+                Status = "Live",
+                IsVisible = true,
+                CloseOnConnectionChange = false
             }
         };
     }

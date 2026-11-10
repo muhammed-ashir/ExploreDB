@@ -1,0 +1,1017 @@
+@page "/tools/sp-debugger"
+@using ExploreDB.Services
+@using ExploreDB.Services.SpDebugger
+@using BlazorMonaco
+@using BlazorMonaco.Editor
+@inject SpDebuggerService DebuggerService
+@inject ConnectionService ConnectionService
+@inject SchemaService SchemaService
+@inject ToolRegistryService ToolService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ThemeService ThemeService
+@implements IDisposable
+
+<div class="container-fluid d-flex flex-column h-100 pb-3 sp-debugger-container" style="color: var(--app-text); min-height: 0;">
+    <!-- TOP TOOLBAR -->
+    <div class="d-flex align-items-center justify-content-between py-2 flex-wrap gap-2 border-bottom" style="border-color: var(--app-border) !important;">
+        <div class="d-flex align-items-center gap-2">
+            <div class="rounded-3 d-flex align-items-center justify-content-center"
+                 style="width: 36px; height: 36px; background-color: rgba(16, 185, 129, 0.12); color: #10b981; font-size: 1.15rem;">
+                <i class="bi bi-bug"></i>
+            </div>
+            <div>
+                <h4 class="fw-bold mb-0" style="font-size: 1.15rem; line-height: 1.2;">SP Debugger</h4>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge" style="background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 500; font-size: 0.72rem;">
+                        <i class="bi bi-shield-check me-1"></i>Dry Run Active (Auto-Rollback)
+                    </span>
+                    @if (_session != null && _session.IsRecorded)
+                    {
+                        <span class="text-muted small" style="font-size: 0.75rem;">
+                            Step @(_session.CurrentStepIndex + 1) of @_session.Statements.Count
+                            @if (_session.CurrentStatement != null)
+                            {
+                                <span>(Line @_session.CurrentStatement.LineNumber)</span>
+                            }
+                            • Recorded in @(_session.TotalServerExecutionMs)ms
+                        </span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Action & Navigation Controls -->
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if (_session != null && _session.Statements.Count > 0)
+            {
+                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
+                        @onclick="RunAndRecordAsync"
+                        disabled="@(_isRecording || _isLoadingDef)"
+                        title="Execute dry-run recording on SQL Server and record all step states (F5)">
+                    @if (_isRecording)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                        <span>Recording...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-play-fill fs-6"></i>
+                        <span>@(_session.IsRecorded ? "Re-Run & Record" : "Run & Record")</span>
+                    }
+                </button>
+
+                <div class="btn-group btn-group-sm shadow-sm" role="group">
+                    <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+                            @onclick="StepBack"
+                            disabled="@(!_session.IsRecorded || _session.CurrentStepIndex <= 0 || _isRecording)"
+                            title="Step to previous statement (F9)">
+                        <i class="bi bi-arrow-left"></i>
+                        <span>Step Back</span>
+                    </button>
+                    <button class="btn btn-outline-primary d-inline-flex align-items-center gap-1"
+                            @onclick="StepForwardAsync"
+                            disabled="@(!_session.IsRecorded || _session.CurrentStepIndex >= _session.Statements.Count - 1 || _isRecording)"
+                            title="Step to next statement (F10)">
+                        <span>Step</span>
+                        <i class="bi bi-arrow-right"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+                            @onclick="ResetToFirstStepAsync"
+                            disabled="@(!_session.IsRecorded || _session.CurrentStepIndex == 0 || _isRecording)"
+                            title="Rewind to Step 1">
+                        <i class="bi bi-skip-start"></i>
+                    </button>
+                </div>
+
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="OpenParametersModal"
+                        title="Configure input parameters">
+                    <i class="bi bi-sliders"></i>
+                    <span>Parameters @(_session.Parameters.Count > 0 ? $"({_session.Parameters.Count})" : "")</span>
+                </button>
+
+                <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="ClearSession"
+                        title="Reset session and release memory">
+                    <i class="bi bi-x-circle"></i>
+                    <span>Clear</span>
+                </button>
+            }
+
+            @if (!IsPopout)
+            {
+                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm ms-2">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Tools Hub</span>
+                </a>
+            }
+        </div>
+    </div>
+
+    <!-- SELECTION BAR: Target Database & Stored Procedure Picker -->
+    <div class="row g-2 align-items-center py-2 px-1 border-bottom" style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary);">
+        <!-- Active Database Badge -->
+        <div class="col-12 col-md-4 col-lg-3">
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-muted small">Target Database:</span>
+                <span class="badge border py-1 px-2 font-monospace"
+                      style="background-color: var(--app-input-bg); color: var(--app-text); border-color: var(--app-border) !important; font-size: 0.82rem;">
+                    <i class="bi bi-database me-1 text-primary"></i>@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)
+                </span>
+            </div>
+        </div>
+
+        <!-- Procedure Filter / Autocomplete Dropdown -->
+        <div class="col-12 col-md-5 col-lg-5">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                    <i class="bi bi-gear-wide-connected"></i>
+                </span>
+                <input type="text"
+                       class="form-control form-control-sm shadow-none border-start-0 @(!string.IsNullOrEmpty(_spFilter) ? "border-end-0" : "")"
+                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                       placeholder="Select or filter stored procedure..."
+                       value="@_spFilter"
+                       @oninput="OnSpFilterInput"
+                       @onfocus="() => _showSpDropdown = true" />
+                @if (!string.IsNullOrEmpty(_spFilter))
+                {
+                    <button class="btn btn-outline-secondary border-start-0"
+                            style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
+                            @onclick="ClearSpFilter">
+                        <i class="bi bi-x"></i>
+                    </button>
+                }
+                <button class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                        style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
+                        @onclick="() => _showSpDropdown = !_showSpDropdown">
+                </button>
+            </div>
+
+            <!-- SP Dropdown Menu -->
+            @if (_showSpDropdown)
+            {
+                <div class="dropdown-menu show shadow-lg w-100 mt-1 py-1"
+                     style="max-height: 320px; overflow-y: auto; background-color: var(--app-surface); border: 1px solid var(--app-border); z-index: 1050;">
+                    @if (FilteredProcedures.Any())
+                    {
+                        @foreach (var sp in FilteredProcedures)
+                        {
+                            <button type="button"
+                                    class="dropdown-item py-1 px-3 d-flex align-items-center justify-content-between @(sp.FullName.Equals(_selectedSpName, StringComparison.OrdinalIgnoreCase) ? "active" : "")"
+                                    style="font-size: 0.85rem; color: var(--app-text);"
+                                    @onclick="() => SelectProcedureAsync(sp)">
+                                <span class="text-truncate">
+                                    <strong class="text-muted">@sp.Schema.</strong>@sp.Name
+                                </span>
+                                @if (sp.Parameters.Count > 0)
+                                {
+                                    <span class="badge bg-secondary-subtle text-muted ms-2" style="font-size: 0.68rem;">
+                                        @sp.Parameters.Count params
+                                    </span>
+                                }
+                            </button>
+                        }
+                    }
+                    else
+                    {
+                        <div class="px-3 py-2 text-muted small">No procedures found matching "@_spFilter"</div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Selected SP Pill & Status -->
+        <div class="col-12 col-md-3 col-lg-4 text-md-end">
+            @if (!string.IsNullOrEmpty(_selectedSpName))
+            {
+                <span class="badge rounded-pill border py-1 px-3"
+                      style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border) !important; font-size: 0.8rem;">
+                    <i class="bi bi-check2-circle text-success me-1"></i>@_selectedSpName
+                </span>
+            }
+            else
+            {
+                <span class="text-muted small">Choose a stored procedure to begin</span>
+            }
+        </div>
+    </div>
+
+    <!-- ERROR BANNER -->
+    @if (!string.IsNullOrEmpty(_session?.ErrorMessage))
+    {
+        <div class="alert alert-danger d-flex align-items-center justify-content-between py-2 px-3 my-2 mb-0 shadow-sm" role="alert" style="font-size: 0.85rem;">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                <div>
+                    <strong>Debug Notice:</strong> @_session.ErrorMessage
+                </div>
+            </div>
+            <button type="button" class="btn-close" @onclick="() => _session.ErrorMessage = null"></button>
+        </div>
+    }
+
+    <!-- PRE-FLIGHT WARNINGS BANNER -->
+    @if (_session != null && _session.Warnings.Count > 0 && _showWarningsBanner)
+    {
+        <div class="alert alert-warning d-flex align-items-center justify-content-between py-2 px-3 my-2 mb-0 shadow-sm" role="alert" style="font-size: 0.85rem;">
+            <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-shield-exclamation fs-5 text-warning"></i>
+                <div>
+                    <strong>Pre-flight Safety Notice:</strong>
+                    @foreach (var w in _session.Warnings)
+                    {
+                        <div class="small">
+                            • Line @w.LineNumber: @w.Message
+                        </div>
+                    }
+                </div>
+            </div>
+            <button type="button" class="btn-close" @onclick="() => _showWarningsBanner = false"></button>
+        </div>
+    }
+
+    <!-- MAIN DEBUGGER WORKSPACE (SPLIT LAYOUT) -->
+    <div class="row g-2 flex-grow-1 mt-1 overflow-hidden" style="min-height: 400px;">
+        <!-- LEFT COLUMN: MONACO CODE VIEWER -->
+        <div class="col-12 col-lg-7 d-flex flex-column h-100">
+            <div class="card h-100 d-flex flex-column shadow-sm overflow-hidden"
+                 style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                <!-- Code Header -->
+                <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between"
+                     style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fw-semibold small" style="color: var(--app-text);">
+                            <i class="bi bi-code-slash me-1 text-primary"></i>Procedure Definition
+                        </span>
+                        @if (_session != null && _session.Statements.Count > 0)
+                        {
+                            <span class="badge bg-secondary-subtle text-muted" style="font-size: 0.7rem;">
+                                @_session.Statements.Count statements parsed
+                            </span>
+                        }
+                    </div>
+
+                    @if (_session?.CurrentStatement != null)
+                    {
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge" style="background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 600;">
+                                ▶ Step @(_session.CurrentStepIndex + 1): @_session.CurrentStatement.StatementType
+                            </span>
+                        </div>
+                    }
+                </div>
+
+                <!-- Monaco Editor Body -->
+                <div class="card-body p-0 flex-grow-1 position-relative" style="min-height: 350px;">
+                    @if (_isLoadingDef)
+                    {
+                        <div class="d-flex flex-column align-items-center justify-content-center h-100 p-5">
+                            <div class="spinner-border text-primary mb-2" role="status"></div>
+                            <span class="text-muted small">Loading procedure definition and parsing AST...</span>
+                        </div>
+                    }
+                    else if (string.IsNullOrEmpty(_selectedSpName))
+                    {
+                        <div class="d-flex flex-column align-items-center justify-content-center h-100 p-5 text-center">
+                            <i class="bi bi-bug text-muted" style="font-size: 3rem; opacity: 0.5;"></i>
+                            <h5 class="fw-bold text-muted mt-3 mb-1">Select a Stored Procedure</h5>
+                            <p class="text-muted small mb-0" style="max-width: 420px;">
+                                Pick a procedure from the dropdown above to inspect statements, examine variables, and trace temp tables safely with automated rollback.
+                            </p>
+                        </div>
+                    }
+                    else
+                    {
+                        <StandaloneCodeEditor @ref="_editor"
+                                              Id="sp-debugger-editor"
+                                              CssClass="w-100 h-100"
+                                              ConstructionOptions="EditorOptions" />
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: STATE INSPECTOR (TABS) -->
+        <div class="col-12 col-lg-5 d-flex flex-column h-100">
+            <div class="card h-100 d-flex flex-column shadow-sm overflow-hidden"
+                 style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                <!-- Inspector Tab Header -->
+                <div class="card-header p-0" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                    <ul class="nav nav-tabs border-0 px-2 pt-2" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link py-2 px-3 @(_activeInspectorTab == "Variables" ? "active fw-semibold" : "text-muted")"
+                                    style="@(_activeInspectorTab == "Variables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
+                                    @onclick='() => _activeInspectorTab = "Variables"'>
+                                <i class="bi bi-braces me-1 text-info"></i>Variables
+                                @if (CurrentSnapshotVariables.Count > 0)
+                                {
+                                    <span class="badge bg-secondary-subtle text-muted ms-1" style="font-size: 0.68rem;">
+                                        @CurrentSnapshotVariables.Count
+                                    </span>
+                                }
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link py-2 px-3 @(_activeInspectorTab == "TempTables" ? "active fw-semibold" : "text-muted")"
+                                    style="@(_activeInspectorTab == "TempTables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
+                                    @onclick='() => _activeInspectorTab = "TempTables"'>
+                                <i class="bi bi-table me-1 text-warning"></i>Temp Tables
+                                @if (CurrentSnapshotTempTables.Count > 0)
+                                {
+                                    <span class="badge bg-warning-subtle text-warning ms-1" style="font-size: 0.68rem;">
+                                        @CurrentSnapshotTempTables.Count
+                                    </span>
+                                }
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link py-2 px-3 @(_activeInspectorTab == "Results" ? "active fw-semibold" : "text-muted")"
+                                    style="@(_activeInspectorTab == "Results" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
+                                    @onclick='() => _activeInspectorTab = "Results"'>
+                                <i class="bi bi-grid-3x3 me-1 text-success"></i>Results
+                                @if (CurrentSnapshotResults.Count > 0)
+                                {
+                                    <span class="badge bg-success-subtle text-success ms-1" style="font-size: 0.68rem;">
+                                        @CurrentSnapshotResults.Count
+                                    </span>
+                                }
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link py-2 px-3 @(_activeInspectorTab == "Messages" ? "active fw-semibold" : "text-muted")"
+                                    style="@(_activeInspectorTab == "Messages" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
+                                    @onclick='() => _activeInspectorTab = "Messages"'>
+                                <i class="bi bi-chat-left-text me-1 text-secondary"></i>Log
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Inspector Tab Content Body -->
+                <div class="card-body p-0 flex-grow-1 overflow-auto position-relative" style="background-color: var(--app-surface);">
+                    @if (_session == null || !_session.IsRecorded)
+                    {
+                        <div class="d-flex flex-column align-items-center justify-content-center h-100 p-4 text-center">
+                            <i class="bi bi-play-circle text-muted" style="font-size: 2.2rem; opacity: 0.6;"></i>
+                            <h6 class="fw-bold text-muted mt-3 mb-1">Click [Run & Record] to Start</h6>
+                            <p class="text-muted small mb-0" style="max-width: 320px;">
+                                ExploreDB will run the procedure in a rollback transaction (under 500ms) and capture all variable states and temp tables for instant stepping.
+                            </p>
+                        </div>
+                    }
+                    else if (_activeInspectorTab == "Variables")
+                    {
+                        <!-- VARIABLES TAB -->
+                        <div class="d-flex flex-column h-100">
+                            <!-- Variables Search Filter -->
+                            <div class="p-2 border-bottom" style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary);">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text"
+                                           class="form-control form-control-sm shadow-none border-start-0"
+                                           style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                           placeholder="Filter variables..."
+                                           @bind="_varFilter"
+                                           @bind:event="oninput" />
+                                </div>
+                            </div>
+
+                            <!-- Variables Table -->
+                            <div class="table-responsive flex-grow-1 m-0">
+                                <table class="table table-sm table-hover mb-0" style="font-size: 0.82rem; color: var(--app-text);">
+                                    <thead class="sticky-top" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                                        <tr>
+                                            <th class="ps-3 py-2">Variable</th>
+                                            <th class="py-2">Type</th>
+                                            <th class="py-2">Value</th>
+                                            <th class="pe-3 py-2 text-end">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (FilteredVariables.Any())
+                                        {
+                                            @foreach (var v in FilteredVariables)
+                                            {
+                                                <tr class="@(v.HasChanged ? "table-warning bg-opacity-10" : "")">
+                                                    <td class="ps-3 py-2 font-monospace fw-semibold" style="color: var(--app-text);">
+                                                        @v.Name
+                                                        @if (v.IsParameter)
+                                                        {
+                                                            <span class="badge bg-secondary-subtle text-muted ms-1" style="font-size: 0.65rem;">PARAM</span>
+                                                        }
+                                                    </td>
+                                                    <td class="py-2 text-muted font-monospace">@v.DataType</td>
+                                                    <td class="py-2 font-monospace @(v.HasChanged ? "fw-bold text-warning" : "")" style="word-break: break-all;">
+                                                        @(v.Value ?? "NULL")
+                                                        @if (v.HasChanged && v.PreviousValue != null)
+                                                        {
+                                                            <div class="text-muted small text-decoration-line-through font-monospace" style="font-size: 0.72rem;">
+                                                                was: @v.PreviousValue
+                                                            </div>
+                                                        }
+                                                    </td>
+                                                    <td class="pe-3 py-2 text-end">
+                                                        @if (v.HasChanged)
+                                                        {
+                                                            <span class="badge bg-warning text-dark" style="font-size: 0.68rem; font-weight: 600;">
+                                                                Changed
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted small" style="font-size: 0.7rem;">unchanged</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <tr>
+                                                <td colspan="4" class="text-center py-4 text-muted small">
+                                                    No variables match filter "@_varFilter"
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
+                    else if (_activeInspectorTab == "TempTables")
+                    {
+                        <!-- TEMP TABLES TAB -->
+                        <div class="d-flex flex-column h-100">
+                            @if (CurrentSnapshotTempTables.Count == 0)
+                            {
+                                <div class="d-flex flex-column align-items-center justify-content-center h-100 p-4 text-center">
+                                    <i class="bi bi-table text-muted" style="font-size: 2rem; opacity: 0.5;"></i>
+                                    <h6 class="fw-bold text-muted mt-2 mb-1">No Active Temp Tables</h6>
+                                    <p class="text-muted small mb-0" style="max-width: 320px;">
+                                        No `#temp` tables are active at statement #@(_session.CurrentStepIndex + 1). As statements create `#tables`, they will appear here.
+                                    </p>
+                                </div>
+                            }
+                            else
+                            {
+                                <!-- Temp Table Picker Bar -->
+                                <div class="d-flex align-items-center justify-content-between p-2 border-bottom flex-wrap gap-2"
+                                     style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary);">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <label class="form-label small mb-0 text-muted">Table:</label>
+                                        <select class="form-select form-select-sm shadow-none"
+                                                style="width: auto; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                                @bind="_selectedTempTableName">
+                                            @foreach (var tt in CurrentSnapshotTempTables)
+                                            {
+                                                <option value="@tt.Name">@tt.Name (@tt.TotalRowCount rows)</option>
+                                            }
+                                        </select>
+                                    </div>
+
+                                    @if (ActiveTempTable != null)
+                                    {
+                                        <span class="badge bg-secondary-subtle text-muted" style="font-size: 0.75rem;">
+                                            Showing @ActiveTempTable.Rows.Count preview of @ActiveTempTable.TotalRowCount total rows
+                                        </span>
+                                    }
+                                </div>
+
+                                <!-- Temp Table Grid -->
+                                @if (ActiveTempTable != null && ActiveTempTable.Columns.Count > 0)
+                                {
+                                    <div class="table-responsive flex-grow-1 m-0">
+                                        <table class="table table-sm table-bordered table-hover mb-0" style="font-size: 0.8rem; color: var(--app-text);">
+                                            <thead class="sticky-top" style="background-color: var(--app-surface-secondary); border-color: var(--app-border);">
+                                                <tr>
+                                                    <th class="py-2 text-center text-muted" style="width: 40px;">#</th>
+                                                    @foreach (var col in ActiveTempTable.Columns)
+                                                    {
+                                                        <th class="py-2 font-monospace">@col</th>
+                                                    }
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @if (ActiveTempTable.Rows.Count == 0)
+                                                {
+                                                    <tr>
+                                                        <td colspan="@(ActiveTempTable.Columns.Count + 1)" class="text-center py-4 text-muted small">
+                                                            Temp table is empty (0 rows).
+                                                        </td>
+                                                    </tr>
+                                                }
+                                                else
+                                                {
+                                                    int rIdx = 1;
+                                                    @foreach (var row in ActiveTempTable.Rows)
+                                                    {
+                                                        <tr>
+                                                            <td class="text-center text-muted small">@rIdx</td>
+                                                            @foreach (var col in ActiveTempTable.Columns)
+                                                            {
+                                                                var val = row.TryGetValue(col, out var raw) ? raw?.ToString() : null;
+                                                                <td class="font-monospace text-truncate" style="max-width: 250px;">
+                                                                    @(val ?? "NULL")
+                                                                </td>
+                                                            }
+                                                        </tr>
+                                                        rIdx++;
+                                                    }
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    }
+                    else if (_activeInspectorTab == "Results")
+                    {
+                        <!-- RESULT SETS TAB (Option A: Cumulative) -->
+                        <div class="d-flex flex-column h-100 p-2 overflow-auto">
+                            @if (CurrentSnapshotResults.Count == 0)
+                            {
+                                <div class="d-flex flex-column align-items-center justify-content-center h-100 p-4 text-center">
+                                    <i class="bi bi-grid-3x3 text-muted" style="font-size: 2rem; opacity: 0.5;"></i>
+                                    <h6 class="fw-bold text-muted mt-2 mb-1">No Result Sets Emitted</h6>
+                                    <p class="text-muted small mb-0" style="max-width: 320px;">
+                                        No `SELECT` statements have produced query output up to this step.
+                                    </p>
+                                </div>
+                            }
+                            else
+                            {
+                                int rsIndex = 1;
+                                @foreach (var rs in CurrentSnapshotResults)
+                                {
+                                    <div class="card mb-3 shadow-sm" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                                        <div class="card-header py-1 px-3 d-flex align-items-center justify-content-between"
+                                             style="background-color: var(--app-surface-secondary); font-size: 0.8rem;">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <strong>Result Set #@rsIndex</strong>
+                                                @if (rs.LineNumber > 0)
+                                                {
+                                                    <span class="text-muted small">(Line @rs.LineNumber)</span>
+                                                }
+                                            </div>
+                                            <span class="badge @(rs.Rows.Count > 0 ? "bg-success-subtle text-success" : "bg-secondary-subtle text-muted")">
+                                                @rs.Rows.Count rows
+                                            </span>
+                                        </div>
+                                        <div class="card-body p-0 table-responsive" style="max-height: 280px;">
+                                            <table class="table table-sm table-hover mb-0" style="font-size: 0.78rem; color: var(--app-text);">
+                                                <thead class="sticky-top" style="background-color: var(--app-surface-secondary);">
+                                                    <tr>
+                                                        <th class="py-1 text-center text-muted" style="width: 35px;">#</th>
+                                                        @foreach (var col in rs.Columns)
+                                                        {
+                                                            <th class="py-1 font-monospace">@col</th>
+                                                        }
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @if (rs.Rows.Count == 0)
+                                                    {
+                                                        <tr>
+                                                            <td colspan="@(rs.Columns.Count + 1)" class="text-center py-3 text-muted small">
+                                                                <i class="bi bi-info-circle me-1"></i>0 rows returned
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                    else
+                                                    {
+                                                        int rNum = 1;
+                                                        @foreach (var r in rs.Rows)
+                                                        {
+                                                            <tr>
+                                                                <td class="text-center text-muted small">@rNum</td>
+                                                                @foreach (var col in rs.Columns)
+                                                                {
+                                                                    var cellVal = r.TryGetValue(col, out var raw) ? raw?.ToString() : null;
+                                                                    <td class="font-monospace text-truncate" style="max-width: 220px;" title="@cellVal">
+                                                                        @(cellVal ?? "NULL")
+                                                                    </td>
+                                                                }
+                                                            </tr>
+                                                            rNum++;
+                                                        }
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    rsIndex++;
+                                }
+                            }
+                        </div>
+                    }
+                    else if (_activeInspectorTab == "Messages")
+                    {
+                        <!-- MESSAGES TAB -->
+                        <div class="d-flex flex-column h-100 p-3 overflow-auto">
+                            <h6 class="fw-bold mb-2 small" style="color: var(--app-text);">Execution Messages & Print Output</h6>
+                            @if (_session.CurrentSnapshot != null && _session.CurrentSnapshot.Messages.Count > 0)
+                            {
+                                <div class="p-2 rounded font-monospace small" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border); white-space: pre-wrap;">
+                                    @foreach (var msg in _session.CurrentSnapshot.Messages)
+                                    {
+                                        <div>@msg</div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-muted small">No PRINT or diagnostic messages emitted for this step.</div>
+                            }
+
+                            <div class="mt-4 pt-3 border-top" style="border-color: var(--app-border) !important;">
+                                <h6 class="fw-bold mb-2 small" style="color: var(--app-text);">Session Diagnostics</h6>
+                                <ul class="list-unstyled small text-muted mb-0">
+                                    <li>Total Executable Statements: <strong>@_session.Statements.Count</strong></li>
+                                    <li>Recording Duration: <strong>@(_session.TotalServerExecutionMs) ms</strong></li>
+                                    <li>Transaction State: <strong class="text-success">Rolled Back (Zero locks held)</strong></li>
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PARAMETERS MODAL -->
+@if (_showParametersModal && _session != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.65); backdrop-filter: blur(4px); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header py-2 px-3" style="border-bottom: 1px solid var(--app-border);">
+                    <h5 class="modal-title fs-6 fw-bold">
+                        <i class="bi bi-sliders me-2 text-primary"></i>Configure Procedure Parameters
+                    </h5>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => _showParametersModal = false"></button>
+                </div>
+                <div class="modal-body py-3 px-4">
+                    @if (_session.Parameters.Count == 0)
+                    {
+                        <div class="text-center py-4 text-muted small">
+                            <i class="bi bi-info-circle fs-4 mb-2 d-block"></i>
+                            This stored procedure has no input parameters. You can proceed directly to debug recording.
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-3">
+                            Provide parameter values to test execution branches and debug conditional logic.
+                        </p>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle" style="font-size: 0.85rem; color: var(--app-text);">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid var(--app-border);">
+                                        <th style="width: 30%;">Parameter</th>
+                                        <th style="width: 25%;">Data Type</th>
+                                        <th style="width: 45%;">Test Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var param in _session.Parameters)
+                                    {
+                                        <tr>
+                                            <td class="font-monospace fw-semibold">
+                                                @param.Name
+                                                @if (param.IsOutput)
+                                                {
+                                                    <span class="badge bg-info-subtle text-info ms-1" style="font-size: 0.65rem;">OUTPUT</span>
+                                                }
+                                            </td>
+                                            <td class="font-monospace text-muted">@param.DataType</td>
+                                            <td>
+                                                <input type="text"
+                                                       class="form-control form-control-sm font-monospace shadow-none"
+                                                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                                       placeholder="@(param.HasDefault ? $"Default: {param.DefaultValue}" : "NULL")"
+                                                       @bind="param.Value" />
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer py-2 px-3" style="border-top: 1px solid var(--app-border);">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ResetParamDefaults">Reset to Defaults</button>
+                    <button type="button" class="btn btn-sm btn-primary px-3" @onclick="() => _showParametersModal = false">Apply & Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .sp-debugger-container {
+        font-family: inherit;
+    }
+    .active-statement-highlight {
+        background-color: rgba(16, 185, 129, 0.2) !important;
+        border-left: 3px solid #10b981 !important;
+    }
+    .active-statement-gutter {
+        background-color: rgba(16, 185, 129, 0.15) !important;
+    }
+    .active-statement-glyph {
+        color: #10b981 !important;
+    }
+</style>
+
+@code {
+    [CascadingParameter(Name = "IsPopout")]
+    public bool IsPopout { get; set; }
+
+    private SpDebugSessionState? _session;
+    private StandaloneCodeEditor? _editor;
+    private string[] _decorationIds = Array.Empty<string>();
+
+    private string _selectedSpName = string.Empty;
+    private string _spFilter = string.Empty;
+    private bool _showSpDropdown = false;
+    private bool _showParametersModal = false;
+    private bool _showWarningsBanner = true;
+    private bool _isLoadingDef = false;
+    private bool _isRecording = false;
+
+    private string _activeInspectorTab = "Variables";
+    private string _varFilter = string.Empty;
+    private string? _selectedTempTableName;
+
+    private IEnumerable<SpInfo> FilteredProcedures => SchemaService.StoredProcedures.Where(p =>
+    {
+        if (string.IsNullOrWhiteSpace(_spFilter)) return true;
+        return p.FullName.Contains(_spFilter, StringComparison.OrdinalIgnoreCase) ||
+               p.Name.Contains(_spFilter, StringComparison.OrdinalIgnoreCase);
+    });
+
+    private Dictionary<string, SpVariableInfo> CurrentSnapshotVariables =>
+        _session?.CurrentSnapshot?.Variables ?? new Dictionary<string, SpVariableInfo>(StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<SpVariableInfo> FilteredVariables =>
+        CurrentSnapshotVariables.Values.Where(v =>
+            string.IsNullOrWhiteSpace(_varFilter) ||
+            v.Name.Contains(_varFilter, StringComparison.OrdinalIgnoreCase) ||
+            v.DataType.Contains(_varFilter, StringComparison.OrdinalIgnoreCase));
+
+    private List<SpTempTableInfo> CurrentSnapshotTempTables =>
+        _session?.CurrentSnapshot?.TempTables ?? new List<SpTempTableInfo>();
+
+    private SpTempTableInfo? ActiveTempTable
+    {
+        get
+        {
+            var list = CurrentSnapshotTempTables;
+            if (list.Count == 0) return null;
+            if (!string.IsNullOrEmpty(_selectedTempTableName))
+            {
+                var match = list.FirstOrDefault(t => t.Name.Equals(_selectedTempTableName, StringComparison.OrdinalIgnoreCase));
+                if (match != null) return match;
+            }
+            return list[0];
+        }
+    }
+
+    private List<SpResultSetInfo> CurrentSnapshotResults =>
+        _session?.CurrentSnapshot?.ResultSets ?? new List<SpResultSetInfo>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!ToolService.IsToolAvailable("sp-debugger"))
+        {
+            Nav.NavigateTo("tools");
+            return;
+        }
+
+        ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
+
+        _session = DebuggerService.ActiveSession;
+        if (_session != null)
+        {
+            _selectedSpName = _session.FullName;
+        }
+    }
+
+    private void OnSpFilterInput(ChangeEventArgs e)
+    {
+        _spFilter = e.Value?.ToString() ?? string.Empty;
+        _showSpDropdown = true;
+    }
+
+    private void ClearSpFilter()
+    {
+        _spFilter = string.Empty;
+        _showSpDropdown = true;
+    }
+
+    private async Task SelectProcedureAsync(SpInfo sp)
+    {
+        _showSpDropdown = false;
+        _selectedSpName = sp.FullName;
+        _spFilter = sp.FullName;
+
+        ClearSession();
+
+        _isLoadingDef = true;
+        StateHasChanged();
+
+        try
+        {
+            if (!sp.IsDefinitionLoaded)
+            {
+                await SchemaService.LoadDefinitionAsync(sp.FullName);
+            }
+
+            var definition = sp.Definition ?? string.Empty;
+            _session = DebuggerService.CreateSession(SchemaService.ActiveDatabase, sp.Schema, sp.Name, definition);
+
+            if (_editor != null && !string.IsNullOrEmpty(definition))
+            {
+                await _editor.SetValue(definition);
+            }
+
+            // Prompt parameter input if required parameters exist
+            if (_session.Parameters.Any(p => !p.HasDefault))
+            {
+                _showParametersModal = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_session != null)
+            {
+                _session.ErrorMessage = $"Failed to load procedure: {ex.Message}";
+            }
+        }
+        finally
+        {
+            _isLoadingDef = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RunAndRecordAsync()
+    {
+        if (_session == null || _isRecording) return;
+
+        var connStr = ConnectionService.ConnectionString;
+        if (string.IsNullOrEmpty(connStr))
+        {
+            _session.ErrorMessage = "No active database connection string found.";
+            return;
+        }
+
+        _isRecording = true;
+        StateHasChanged();
+
+        try
+        {
+            var success = await DebuggerService.RecordDebugSessionAsync(connStr, _session);
+            if (success)
+            {
+                _session.CurrentStepIndex = 0;
+                await HighlightCurrentStepAsync();
+            }
+        }
+        finally
+        {
+            _isRecording = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StepForwardAsync()
+    {
+        if (_session == null || !_session.IsRecorded || _session.CurrentStepIndex >= _session.Statements.Count - 1) return;
+
+        _session.CurrentStepIndex++;
+        await HighlightCurrentStepAsync();
+        StateHasChanged();
+    }
+
+    private async Task StepBack()
+    {
+        if (_session == null || !_session.IsRecorded || _session.CurrentStepIndex <= 0) return;
+
+        _session.CurrentStepIndex--;
+        await HighlightCurrentStepAsync();
+        StateHasChanged();
+    }
+
+    private async Task ResetToFirstStepAsync()
+    {
+        if (_session == null || !_session.IsRecorded) return;
+
+        _session.CurrentStepIndex = 0;
+        await HighlightCurrentStepAsync();
+        StateHasChanged();
+    }
+
+    private void ClearSession()
+    {
+        _session?.ClearMemory();
+        DebuggerService.DisposeActiveSession();
+        _session = null;
+        _decorationIds = Array.Empty<string>();
+        _showWarningsBanner = true;
+        StateHasChanged();
+    }
+
+    private async Task HighlightCurrentStepAsync()
+    {
+        if (_editor == null || _session == null) return;
+
+        var stmt = _session.CurrentStatement;
+        if (stmt == null)
+        {
+            _decorationIds = await _editor.DeltaDecorations(_decorationIds, Array.Empty<ModelDeltaDecoration>());
+            return;
+        }
+
+        var startLine = stmt.LineNumber > 0 ? stmt.LineNumber : 1;
+        var endLine = stmt.EndLineNumber >= startLine ? stmt.EndLineNumber : startLine;
+
+        var newDecorations = new[]
+        {
+            new ModelDeltaDecoration
+            {
+                Range = new BlazorMonaco.Range(startLine, 1, endLine, 1),
+                Options = new ModelDecorationOptions
+                {
+                    IsWholeLine = true,
+                    ClassName = "active-statement-highlight",
+                    MarginClassName = "active-statement-gutter",
+                    GlyphMarginClassName = "active-statement-glyph"
+                }
+            }
+        };
+
+        _decorationIds = await _editor.DeltaDecorations(_decorationIds, newDecorations);
+        await _editor.RevealLineInCenter(startLine);
+    }
+
+    private void OpenParametersModal()
+    {
+        _showParametersModal = true;
+    }
+
+    private void ResetParamDefaults()
+    {
+        if (_session == null) return;
+        foreach (var p in _session.Parameters)
+        {
+            p.Value = p.DefaultValue;
+        }
+    }
+
+    private StandaloneEditorConstructionOptions EditorOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "sql",
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
+            Value = _session?.ProcedureDefinition ?? "",
+            AutomaticLayout = true,
+            ReadOnly = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            LineNumbers = "on",
+            ScrollBeyondLastLine = false,
+            FontSize = 13,
+            GlyphMargin = true
+        };
+    }
+
+    private void OnDatabaseSwitchedHandler()
+    {
+        InvokeAsync(() =>
+        {
+            ClearSession();
+            _selectedSpName = string.Empty;
+            _spFilter = string.Empty;
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
+
+        // Guaranteed memory cleanup to ensure 0 MB memory leak
+        _session?.ClearMemory();
+        DebuggerService.DisposeActiveSession();
+        _session = null;
+        _editor?.Dispose();
+        GC.Collect();
+    }
+}

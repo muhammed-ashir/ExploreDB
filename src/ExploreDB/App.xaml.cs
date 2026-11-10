@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using ExploreDB.Services;
 using ExploreDB.Services.Profiler;
+using ExploreDB.Services.SpDebugger;
 using ExploreDB.Services.SqlCompare;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -103,6 +104,7 @@ public partial class App : Application
             services.AddSingleton<IHtmlReportGenerator, HtmlReportGenerator>();
             services.AddSingleton<ToolRegistryService>();
             services.AddSingleton<UserSettingsService>();
+            services.AddSingleton<SpDebuggerService>();
 
             // Register Windows
             services.AddTransient<MainWindow>();
@@ -139,6 +141,13 @@ public partial class App : Application
         catch { }
 
         Log.CloseAndFlush();
+        try
+        {
+            var spDebugger = Services?.GetService<SpDebuggerService>();
+            spDebugger?.Dispose();
+        }
+        catch { }
+
         base.OnExit(e);
     }
 }
