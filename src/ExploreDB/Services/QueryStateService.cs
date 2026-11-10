@@ -99,6 +99,10 @@ public class QueryTab
     
     [System.Text.Json.Serialization.JsonIgnore]
     public long LastExecutionTimeMs { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public long LastConnectionTimeMs { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public long LastQueryTimeMs { get; set; }
     
     [System.Text.Json.Serialization.JsonIgnore]
     public int ExecElapsedSeconds { get; set; }

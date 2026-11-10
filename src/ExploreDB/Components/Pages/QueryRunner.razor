@@ -327,9 +327,19 @@
                         </li>
                         </ul>
                         <div class="d-flex align-items-center ms-3 gap-3">
-                            @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs > 0 && !ActiveTab.IsExecuting)
+                            @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs >= 0 && !ActiveTab.IsExecuting)
                             {
-                                <span class="text-muted" style="font-size: 0.75rem; white-space: nowrap;"><i class="bi bi-stopwatch me-1" style="font-size: 0.75rem;"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+                                var timingTooltip = ActiveTab.LastConnectionTimeMs > 0
+                                    ? $"Query: {GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)} | Connection: {GetFormattedExecutionTimeMs(ActiveTab.LastConnectionTimeMs)}"
+                                    : $"Query: {GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)}";
+
+                                <span class="text-muted d-inline-flex align-items-center" style="font-size: 0.75rem; white-space: nowrap;" title="@timingTooltip">
+                                    <i class="bi bi-stopwatch me-1" style="font-size: 0.75rem;"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)
+                                    @if (ActiveTab.LastConnectionTimeMs >= 1000)
+                                    {
+                                        <span class="text-warning-emphasis ms-1" style="font-size: 0.7rem; opacity: 0.9;" title="Initial network connection took @GetFormattedExecutionTimeMs(ActiveTab.LastConnectionTimeMs)">(conn: @GetFormattedExecutionTimeMs(ActiveTab.LastConnectionTimeMs))</span>
+                                    }
+                                </span>
                             }
 
                             @if (ResultTab == "Results" && ActiveTab.ResultSets.Count > 0 && !ActiveTab.IsExecuting)
@@ -1441,6 +1451,7 @@
         
         if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
         {
+            ConnectionService.PrewarmConnection(ConnectionService.ConnectionString);
             await InitializeSessionAsync();
         }
 
@@ -2662,7 +2673,8 @@
         ResultTab = "Results";
         StateHasChanged();
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var connWatch = System.Diagnostics.Stopwatch.StartNew();
+        var queryWatch = new System.Diagnostics.Stopwatch();
         bool isSuccess = false;
         string? errorMessage = null;
         string dbName = "";
@@ -2710,6 +2722,9 @@
                 InvokeAsync(StateHasChanged);
             };
             await conn.OpenAsync();
+            connWatch.Stop();
+            ActiveTab.LastConnectionTimeMs = connWatch.ElapsedMilliseconds;
+            queryWatch.Start();
 
             if (!ActiveTab.IsCurrentQuerySelect)
             {
@@ -2889,8 +2904,11 @@
         }
         finally
         {
-            watch.Stop();
-            ActiveTab.LastExecutionTimeMs = watch.ElapsedMilliseconds;
+            if (connWatch.IsRunning) connWatch.Stop();
+            if (queryWatch.IsRunning) queryWatch.Stop();
+            ActiveTab.LastConnectionTimeMs = connWatch.ElapsedMilliseconds;
+            ActiveTab.LastExecutionTimeMs = queryWatch.ElapsedMilliseconds > 0 ? queryWatch.ElapsedMilliseconds : connWatch.ElapsedMilliseconds;
+            ActiveTab.LastQueryTimeMs = queryWatch.ElapsedMilliseconds;
             ActiveTab.IsExecuting = false;
             ActiveTab.IsCancelling = false;
             ActiveTab.CancelAction = null;

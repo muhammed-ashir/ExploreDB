@@ -38,6 +38,33 @@ public class ConnectionService
 
     public List<SavedConnection> ActiveSessionConnections { get; } = new();
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _prewarmedConnections = new(StringComparer.OrdinalIgnoreCase);
+
+    public void PrewarmConnection(string connString)
+    {
+        if (string.IsNullOrWhiteSpace(connString)) return;
+
+        if (_prewarmedConnections.TryGetValue(connString, out var lastWarmed) && (DateTime.UtcNow - lastWarmed).TotalMinutes < 3)
+        {
+            return;
+        }
+
+        _prewarmedConnections[connString] = DateTime.UtcNow;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var conn = new SqlConnection(connString);
+                await conn.OpenAsync();
+            }
+            catch
+            {
+                // Silent background pre-warm
+            }
+        });
+    }
+
     public void SaveActiveConnection(string connString)
     {
         ConnectionString = connString;
@@ -99,6 +126,7 @@ public class ConnectionService
         }
         
         SaveToDisk();
+        PrewarmConnection(connString);
         OnConnectionChanged?.Invoke();
     }
 
