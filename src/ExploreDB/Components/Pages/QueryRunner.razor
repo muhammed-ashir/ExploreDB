@@ -716,7 +716,7 @@
             @if (!ctxTab.IsPinned)
             {
                 <div class="dropdown-item text-danger" @onclick="async () => { await CloseTabAsync(ctxTab.Id); CloseTabContextMenu(); }">
-                    <i class="bi bi-x-lg text-danger"></i>
+                    <i class="bi bi-x-lg"></i>
                     <span>Close Tab</span>
                 </div>
             }
@@ -731,7 +731,7 @@
             <div class="dropdown-divider"></div>
             <div class="dropdown-item" @onclick="async () => { await PopoutTabAsync(ctxTab.Id); CloseTabContextMenu(); }">
                 <i class="bi bi-box-arrow-up-right text-info"></i>
-                <span>Pop Out</span>
+                <span>Pop Out Tab</span>
             </div>
             <div class="dropdown-item" @onclick="async () => { await DuplicateTabAsync(ctxTab.Id); CloseTabContextMenu(); }">
                 <i class="bi bi-files text-primary"></i>

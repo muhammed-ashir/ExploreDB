@@ -1654,7 +1654,22 @@ a.card.glow-highlight:hover,
 
 .tab-context-menu .dropdown-item:hover {
     background-color: var(--primary-color);
-    color: #ffffff;
+    color: #ffffff !important;
+}
+
+.tab-context-menu .dropdown-item:hover i,
+.tab-context-menu .dropdown-item:hover span {
+    color: #ffffff !important;
+}
+
+.tab-context-menu .dropdown-item.text-danger:hover {
+    background-color: #dc3545 !important;
+    color: #ffffff !important;
+}
+
+.tab-context-menu .dropdown-item.text-danger:hover i,
+.tab-context-menu .dropdown-item.text-danger:hover span {
+    color: #ffffff !important;
 }
 
 .tab-context-menu .dropdown-divider {
