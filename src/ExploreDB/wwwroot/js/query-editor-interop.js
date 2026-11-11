@@ -84,9 +84,33 @@ window.formatSql = (code) => {
         }
     }
 
+    var hints = [];
+    var hintRegex = /\bWITH\s*\(\s*(?:NOLOCK|READUNCOMMITTED|UPDLOCK|REPEATABLEREAD|SERIALIZABLE|READCOMMITTED|READCOMMITTEDLOCK|TABLOCK|TABLOCKX|PAGLOCK|ROWLOCK|NOWAIT|HOLDLOCK|XLOCK|NOEXPAND|FORCESEEK|FORCESCAN|FASTFIRSTROW|INDEX)(?:[^()]*|\([^()]*\))*\)/gi;
+    var processedCode = code.replace(hintRegex, function (match) {
+        var cleanHint = match.replace(/\s+/g, ' ')
+            .replace(/\bwith\b/gi, 'WITH')
+            .replace(/\bnolock\b/gi, 'NOLOCK')
+            .replace(/\breaduncommitted\b/gi, 'READUNCOMMITTED')
+            .replace(/\bupdlock\b/gi, 'UPDLOCK')
+            .replace(/\browlock\b/gi, 'ROWLOCK')
+            .replace(/\btablockx?\b/gi, function (m) { return m.toUpperCase(); })
+            .replace(/\(\s+/g, '(')
+            .replace(/\s+\)/g, ')');
+        hints.push(cleanHint);
+        return '__TBLHINT_' + (hints.length - 1) + '__';
+    });
+
+    var unmaskHints = function (text) {
+        if (!hints || hints.length === 0 || !text) return text;
+        for (var h = 0; h < hints.length; h++) {
+            text = text.replace(new RegExp('__TBLHINT_' + h + '__', 'g'), hints[h]);
+        }
+        return text;
+    };
+
     var baseFormatted;
     try {
-        baseFormatted = window.sqlFormatter.format(code, {
+        baseFormatted = window.sqlFormatter.format(processedCode, {
             language: 'tsql',
             keywordCase: 'upper',
             linesBetweenQueries: 2,
@@ -193,8 +217,8 @@ window.formatSql = (code) => {
 
                     if (matchedClause === 'FROM' && peekTrimmed.match(/^(INNER\s+|LEFT\s+|RIGHT\s+|FULL\s+|CROSS\s+)?(OUTER\s+)?(JOIN\b)/i)) {
                         i++;
-                        var joinIndent = ' '.repeat(baseIndentLen + 5);
-                        var onIndent = ' '.repeat(baseIndentLen + 10);
+                        var joinIndent = ' '.repeat(baseIndentLen + 4);
+                        var onIndent = ' '.repeat(baseIndentLen + 8);
 
                         var onMatch = peekTrimmed.match(/\s+(ON\b.*)$/i);
                         if (onMatch) {
@@ -224,9 +248,9 @@ window.formatSql = (code) => {
             }
         }
 
-        return result.join('\n');
+        return unmaskHints(result.join('\n'));
     } catch (err) {
-        return baseFormatted;
+        return unmaskHints(baseFormatted);
     }
 };
 
