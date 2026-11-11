@@ -2805,7 +2805,11 @@
                             {
                                 table.AddRows(batch);
                                 batch.Clear();
-                                if (++yieldCount % 5 == 0)
+                                if (++yieldCount % 10 == 0)
+                                {
+                                    await Task.Yield();
+                                }
+                                if (false)
                                 {
                                     await Task.Delay(1);
                                     await InvokeAsync(StateHasChanged);

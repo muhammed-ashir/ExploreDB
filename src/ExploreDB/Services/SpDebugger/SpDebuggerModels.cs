@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace ExploreDB.Services.SpDebugger;
 
@@ -113,6 +114,8 @@ public class SpDebugSessionState : IDisposable
     public List<SpStatementStep> Statements { get; set; } = new();
     public List<SpPreFlightWarning> Warnings { get; set; } = new();
     public Dictionary<int, SpDebugStepSnapshot> StepSnapshots { get; set; } = new();
+    public List<SpDebugStepSnapshot> RecordedSteps { get; set; } = new();
+    public StatementList? BodyStatementList { get; set; }
 
     public int CurrentStepIndex { get; set; } = -1;
     public bool IsRecorded { get; set; }
@@ -121,11 +124,36 @@ public class SpDebugSessionState : IDisposable
     public long TotalServerExecutionMs { get; set; }
     public string? ErrorMessage { get; set; }
 
-    public SpDebugStepSnapshot? CurrentSnapshot =>
-        CurrentStepIndex >= 0 && StepSnapshots.TryGetValue(CurrentStepIndex, out var snap) ? snap : null;
+    public int TotalExecutionSteps => RecordedSteps.Count > 0 ? Math.Max(1, RecordedSteps.Count - 1) : Statements.Count;
+    public bool IsAtCompletion => RecordedSteps.Count > 0
+        ? CurrentStepIndex >= RecordedSteps.Count - 1
+        : CurrentStepIndex >= Statements.Count;
 
-    public SpStatementStep? CurrentStatement =>
-        CurrentStepIndex >= 0 && CurrentStepIndex < Statements.Count ? Statements[CurrentStepIndex] : null;
+    public SpDebugStepSnapshot? CurrentSnapshot =>
+        RecordedSteps.Count > 0 && CurrentStepIndex >= 0 && CurrentStepIndex < RecordedSteps.Count
+            ? RecordedSteps[CurrentStepIndex]
+            : (CurrentStepIndex >= 0 && StepSnapshots.TryGetValue(CurrentStepIndex, out var snap) ? snap : null);
+
+    public SpStatementStep? CurrentStatement
+    {
+        get
+        {
+            if (RecordedSteps.Count > 0 && CurrentStepIndex >= 0 && CurrentStepIndex < RecordedSteps.Count)
+            {
+                var snap = RecordedSteps[CurrentStepIndex];
+                if (snap.StatementType == "COMPLETED") return null;
+                return new SpStatementStep
+                {
+                    StepIndex = snap.StepIndex,
+                    LineNumber = snap.LineNumber,
+                    EndLineNumber = snap.EndLineNumber,
+                    StatementText = snap.StatementText,
+                    StatementType = snap.StatementType
+                };
+            }
+            return CurrentStepIndex >= 0 && CurrentStepIndex < Statements.Count ? Statements[CurrentStepIndex] : null;
+        }
+    }
 
     public void ClearMemory()
     {
@@ -134,9 +162,17 @@ public class SpDebugSessionState : IDisposable
             snap.Clear();
         }
         StepSnapshots.Clear();
+
+        foreach (var snap in RecordedSteps)
+        {
+            snap.Clear();
+        }
+        RecordedSteps.Clear();
+
         Statements.Clear();
         Parameters.Clear();
         Warnings.Clear();
+        BodyStatementList = null;
         ProcedureDefinition = string.Empty;
         ErrorMessage = null;
         CurrentStepIndex = -1;

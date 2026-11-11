@@ -764,7 +764,7 @@ else
     private void InitializeSmartColumnWidths()
     {
         if (Columns.Count == 0) return;
-        int sampleCount = Math.Min(15, TotalDataCount);
+        int sampleCount = Math.Min(3, TotalDataCount);
 
         for (int c = 0; c < Columns.Count; c++)
         {
@@ -1097,7 +1097,7 @@ else
         }
 
         int viewportRows = GetViewportRows();
-        int buffer = 25;
+        int buffer = 15;
 
         int firstVisible = CalculateFirstVisible(count, viewportRows, out bool isScaled);
 
@@ -1154,6 +1154,7 @@ else
 
         int viewportRows = GetViewportRows();
         int firstVisible = CalculateFirstVisible(count, viewportRows, out _);
+        if (firstVisible == _renderedFirstVisible) return;
 
         if (_renderedFirstVisible < 0 || Math.Abs(firstVisible - _renderedFirstVisible) >= 4 || firstVisible <= 5 || firstVisible >= count - viewportRows - 5)
         {
@@ -1298,7 +1299,31 @@ else
         _lastSelectedCell = (-1, -1);
     }
 
+    private bool HasAnySelection => _isAllSelected || SelectedEntireRows.Count > 0 || SelectedEntireCols.Count > 0 || SelectedCells.Count > 0;
+
     private bool IsCellSelected(int actualRowIndex, int localCol)
+    {
+        if (!HasAnySelection) return false;
+        return _isAllSelected || 
+               SelectedEntireRows.Contains(actualRowIndex) || 
+               SelectedEntireCols.Contains(localCol) || 
+               SelectedCells.Contains((actualRowIndex, localCol));
+    }
+
+    private bool IsRowFullySelected(int actualRowIndex)
+    {
+        if (!HasAnySelection) return false;
+        if (_isAllSelected || SelectedEntireRows.Contains(actualRowIndex)) return true;
+        if (Columns.Count == 0) return false;
+        for (int c = 0; c < Columns.Count; c++)
+        {
+            if (!IsCellSelected(actualRowIndex, c)) return false;
+        }
+        return true;
+    }
+
+#if false
+    private bool _unusedOldIsCellSelected(int actualRowIndex, int localCol)
     {
         return _isAllSelected || 
                SelectedEntireRows.Contains(actualRowIndex) || 
@@ -1317,6 +1342,7 @@ else
         return true;
     }
 
+#endif
     private bool IsColumnFullySelected(int colIndex)
     {
         if (SelectedEntireCols.Contains(colIndex)) return true;

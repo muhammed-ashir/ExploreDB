@@ -12,32 +12,34 @@
 @inject ThemeService ThemeService
 @implements IDisposable
 
-<div class="container-fluid d-flex flex-column h-100 pb-3 sp-debugger-container" style="color: var(--app-text); min-height: 0;">
+<div class="container-fluid d-flex flex-column h-100 pb-3 sp-debugger-container" style="color: var(--app-text); min-height: 0; outline: none;" tabindex="0" @onkeydown="HandleKeyDown">
     <!-- TOP TOOLBAR -->
     <div class="d-flex align-items-center justify-content-between py-2 flex-wrap gap-2 border-bottom" style="border-color: var(--app-border) !important;">
         <div class="d-flex align-items-center gap-2">
-            <div class="rounded-3 d-flex align-items-center justify-content-center"
-                 style="width: 36px; height: 36px; background-color: rgba(16, 185, 129, 0.12); color: #10b981; font-size: 1.15rem;">
-                <i class="bi bi-bug"></i>
-            </div>
             <div>
                 <h4 class="fw-bold mb-0" style="font-size: 1.15rem; line-height: 1.2;">SP Debugger</h4>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge" style="background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 500; font-size: 0.72rem;">
-                        <i class="bi bi-shield-check me-1"></i>Dry Run Active (Auto-Rollback)
-                    </span>
-                    @if (_session != null && _session.IsRecorded)
-                    {
-                        <span class="text-muted small" style="font-size: 0.75rem;">
-                            Step @(_session.CurrentStepIndex + 1) of @_session.Statements.Count
-                            @if (_session.CurrentStatement != null)
-                            {
-                                <span>(Line @_session.CurrentStatement.LineNumber)</span>
-                            }
-                            • Recorded in @(_session.TotalServerExecutionMs)ms
-                        </span>
-                    }
-                </div>
+                @if (_session != null && _session.IsRecorded)
+                {
+                    <div class="d-flex align-items-center gap-2 mt-1">
+                        @if (!_session.IsAtCompletion)
+                        {
+                            <span class="text-muted small" style="font-size: 0.75rem;">
+                                Step @(_session.CurrentStepIndex + 1) of @_session.TotalExecutionSteps
+                                @if (_session.CurrentStatement != null)
+                                {
+                                    <span>(Line @_session.CurrentStatement.LineNumber@(_session.CurrentStatement.EndLineNumber > _session.CurrentStatement.LineNumber ? $"-{_session.CurrentStatement.EndLineNumber}" : "")) • Next: <strong class="text-primary">@_session.CurrentStatement.StatementType</strong></span>
+                                }
+                                • Recorded in @(_session.TotalServerExecutionMs)ms
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="text-success small fw-semibold" style="font-size: 0.75rem;">
+                                <i class="bi bi-check-circle-fill me-1"></i>Completed (All @_session.TotalExecutionSteps statements executed) • Recorded in @(_session.TotalServerExecutionMs)ms
+                            </span>
+                        }
+                    </div>
+                }
             </div>
         </div>
 
@@ -48,16 +50,16 @@
                 <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
                         @onclick="RunAndRecordAsync"
                         disabled="@(_isRecording || _isLoadingDef)"
-                        title="Execute dry-run recording on SQL Server and record all step states (F5)">
+                        title="Execute dry-run on SQL Server and record all step states (F5)">
                     @if (_isRecording)
                     {
                         <span class="spinner-border spinner-border-sm" role="status"></span>
-                        <span>Recording...</span>
+                        <span>Running...</span>
                     }
                     else
                     {
                         <i class="bi bi-play-fill fs-6"></i>
-                        <span>@(_session.IsRecorded ? "Re-Run & Record" : "Run & Record")</span>
+                        <span>Run</span>
                     }
                 </button>
 
@@ -71,7 +73,7 @@
                     </button>
                     <button class="btn btn-outline-primary d-inline-flex align-items-center gap-1"
                             @onclick="StepForwardAsync"
-                            disabled="@(!_session.IsRecorded || _session.CurrentStepIndex >= _session.Statements.Count - 1 || _isRecording)"
+                            disabled="@(!_session.IsRecorded || _session.IsAtCompletion || _isRecording)"
                             title="Step to next statement (F10)">
                         <span>Step</span>
                         <i class="bi bi-arrow-right"></i>
@@ -91,10 +93,9 @@
                     <span>Parameters @(_session.Parameters.Count > 0 ? $"({_session.Parameters.Count})" : "")</span>
                 </button>
 
-                <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm"
+                <button class="btn btn-sm btn-outline-danger shadow-sm px-2"
                         @onclick="ClearSession"
                         title="Reset session and release memory">
-                    <i class="bi bi-x-circle"></i>
                     <span>Clear</span>
                 </button>
             }
@@ -110,20 +111,18 @@
     </div>
 
     <!-- SELECTION BAR: Target Database & Stored Procedure Picker -->
-    <div class="row g-2 align-items-center py-2 px-1 border-bottom" style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary);">
+    <div class="row g-2 align-items-center py-2 px-1">
         <!-- Active Database Badge -->
-        <div class="col-12 col-md-4 col-lg-3">
-            <div class="d-flex align-items-center gap-2">
-                <span class="text-muted small">Target Database:</span>
-                <span class="badge border py-1 px-2 font-monospace"
-                      style="background-color: var(--app-input-bg); color: var(--app-text); border-color: var(--app-border) !important; font-size: 0.82rem;">
-                    <i class="bi bi-database me-1 text-primary"></i>@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)
-                </span>
-            </div>
+        <div class="col-auto">
+            <span class="badge border py-1 px-2 font-monospace"
+                  style="background-color: var(--app-input-bg); color: var(--app-text); border-color: var(--app-border) !important; font-size: 0.82rem;"
+                  title="Target Database">
+                <i class="bi bi-database me-1 text-primary"></i>@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)
+            </span>
         </div>
 
         <!-- Procedure Filter / Autocomplete Dropdown -->
-        <div class="col-12 col-md-5 col-lg-5">
+        <div class="col-12 col-sm-6 col-md-5 col-lg-4 position-relative">
             <div class="input-group input-group-sm">
                 <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
                     <i class="bi bi-gear-wide-connected"></i>
@@ -159,18 +158,10 @@
                         @foreach (var sp in FilteredProcedures)
                         {
                             <button type="button"
-                                    class="dropdown-item py-1 px-3 d-flex align-items-center justify-content-between @(sp.FullName.Equals(_selectedSpName, StringComparison.OrdinalIgnoreCase) ? "active" : "")"
+                                    class="dropdown-item py-1 px-3 text-truncate @(sp.FullName.Equals(_selectedSpName, StringComparison.OrdinalIgnoreCase) ? "active" : "")"
                                     style="font-size: 0.85rem; color: var(--app-text);"
                                     @onclick="() => SelectProcedureAsync(sp)">
-                                <span class="text-truncate">
-                                    <strong class="text-muted">@sp.Schema.</strong>@sp.Name
-                                </span>
-                                @if (sp.Parameters.Count > 0)
-                                {
-                                    <span class="badge bg-secondary-subtle text-muted ms-2" style="font-size: 0.68rem;">
-                                        @sp.Parameters.Count params
-                                    </span>
-                                }
+                                <strong class="text-muted">@sp.Schema.</strong>@sp.Name
                             </button>
                         }
                     }
@@ -182,21 +173,45 @@
             }
         </div>
 
-        <!-- Selected SP Pill & Status -->
-        <div class="col-12 col-md-3 col-lg-4 text-md-end">
-            @if (!string.IsNullOrEmpty(_selectedSpName))
-            {
-                <span class="badge rounded-pill border py-1 px-3"
-                      style="background-color: var(--app-surface); color: var(--app-text); border-color: var(--app-border) !important; font-size: 0.8rem;">
-                    <i class="bi bi-check2-circle text-success me-1"></i>@_selectedSpName
-                </span>
-            }
-            else
-            {
-                <span class="text-muted small">Choose a stored procedure to begin</span>
-            }
+        <!-- Right-Aligned View Logs Button -->
+        <div class="col text-end">
+            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                    @onclick="() => _showLogsModal = true"
+                    title="View execution messages and session diagnostics">
+                <i class="bi bi-journal-text"></i>
+                <span>View Logs</span>
+                @if (AllRecordedMessages.Count > 0)
+                {
+                    <span class="badge bg-secondary ms-1" style="font-size: 0.68rem;">@AllRecordedMessages.Count</span>
+                }
+            </button>
         </div>
     </div>
+
+    <!-- SAFETY & HOW-IT-WORKS NOTICE BANNER -->
+    @if (_showSafetyAlert)
+    {
+        <div class="alert py-2 px-3 my-2 mb-1 shadow-sm border"
+             role="alert"
+             style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; color: var(--app-text); font-size: 0.85rem;">
+            <!-- First Line: Safety Icon + Heading + Close Icon -->
+            <div class="d-flex align-items-center justify-content-between mb-1">
+                <div class="d-flex align-items-center gap-2 fw-semibold" style="color: var(--app-text);">
+                    <i class="bi bi-shield-check text-success fs-6"></i>
+                    <span>Safe Dry-Run Debugging (Zero Database Locks)</span>
+                </div>
+                <button type="button"
+                        class="btn-close shadow-none"
+                        style="font-size: 0.68rem; padding: 0.2rem; margin: 0;"
+                        @onclick="() => _showSafetyAlert = false"
+                        aria-label="Close"></button>
+            </div>
+            <!-- Second Line: Details Description -->
+            <div class="text-muted small ps-4" style="line-height: 1.45;">
+                Runs the procedure in an isolated transaction that is <strong>always rolled back</strong> in milliseconds—your tables are <strong>never modified</strong> and all database locks are <strong>immediately released</strong>. All step-by-step debugging, variable diffs, <code>#temp</code> tables, and result sets then operate entirely offline on the captured local memory snapshot with zero connection or lock overhead.
+            </div>
+        </div>
+    }
 
     <!-- ERROR BANNER -->
     @if (!string.IsNullOrEmpty(_session?.ErrorMessage))
@@ -241,25 +256,30 @@
                 <!-- Code Header -->
                 <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between"
                      style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="fw-semibold small" style="color: var(--app-text);">
-                            <i class="bi bi-code-slash me-1 text-primary"></i>Procedure Definition
+                    <div class="d-flex align-items-center gap-2 text-truncate" style="max-width: 60%;">
+                        <span class="fw-semibold small text-truncate" style="color: var(--app-text);" title="@(!string.IsNullOrEmpty(_session?.FullName) ? _session.FullName : (!string.IsNullOrEmpty(_selectedSpName) ? _selectedSpName : "Procedure"))">
+                            <i class="bi bi-code-slash me-1 text-primary"></i>@(!string.IsNullOrEmpty(_session?.FullName) ? _session.FullName : (!string.IsNullOrEmpty(_selectedSpName) ? _selectedSpName : "Procedure"))
                         </span>
-                        @if (_session != null && _session.Statements.Count > 0)
-                        {
-                            <span class="badge bg-secondary-subtle text-muted" style="font-size: 0.7rem;">
-                                @_session.Statements.Count statements parsed
-                            </span>
-                        }
                     </div>
 
-                    @if (_session?.CurrentStatement != null)
+                    @if (_session?.IsRecorded == true)
                     {
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge" style="background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 600;">
-                                ▶ Step @(_session.CurrentStepIndex + 1): @_session.CurrentStatement.StatementType
-                            </span>
-                        </div>
+                        @if (_session.CurrentStatement != null)
+                        {
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge" style="background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 600;">
+                                    ▶ Next: @_session.CurrentStatement.StatementType (Line @_session.CurrentStatement.LineNumber@(_session.CurrentStatement.EndLineNumber > _session.CurrentStatement.LineNumber ? $"-{_session.CurrentStatement.EndLineNumber}" : ""))
+                                </span>
+                            </div>
+                        }
+                        else if (_session.IsAtCompletion)
+                        {
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-success-subtle text-success" style="font-weight: 600;">
+                                    <i class="bi bi-check-circle me-1"></i>All Statements Executed
+                                </span>
+                            </div>
+                        }
                     }
                 </div>
 
@@ -304,7 +324,7 @@
                             <button class="nav-link py-2 px-3 @(_activeInspectorTab == "Variables" ? "active fw-semibold" : "text-muted")"
                                     style="@(_activeInspectorTab == "Variables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
                                     @onclick='() => _activeInspectorTab = "Variables"'>
-                                <i class="bi bi-braces me-1 text-info"></i>Variables
+                                Variables
                                 @if (CurrentSnapshotVariables.Count > 0)
                                 {
                                     <span class="badge bg-secondary-subtle text-muted ms-1" style="font-size: 0.68rem;">
@@ -317,7 +337,7 @@
                             <button class="nav-link py-2 px-3 @(_activeInspectorTab == "TempTables" ? "active fw-semibold" : "text-muted")"
                                     style="@(_activeInspectorTab == "TempTables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
                                     @onclick='() => _activeInspectorTab = "TempTables"'>
-                                <i class="bi bi-table me-1 text-warning"></i>Temp Tables
+                                Temp Tables
                                 @if (CurrentSnapshotTempTables.Count > 0)
                                 {
                                     <span class="badge bg-warning-subtle text-warning ms-1" style="font-size: 0.68rem;">
@@ -330,20 +350,13 @@
                             <button class="nav-link py-2 px-3 @(_activeInspectorTab == "Results" ? "active fw-semibold" : "text-muted")"
                                     style="@(_activeInspectorTab == "Results" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
                                     @onclick='() => _activeInspectorTab = "Results"'>
-                                <i class="bi bi-grid-3x3 me-1 text-success"></i>Results
+                                Results
                                 @if (CurrentSnapshotResults.Count > 0)
                                 {
                                     <span class="badge bg-success-subtle text-success ms-1" style="font-size: 0.68rem;">
                                         @CurrentSnapshotResults.Count
                                     </span>
                                 }
-                            </button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link py-2 px-3 @(_activeInspectorTab == "Messages" ? "active fw-semibold" : "text-muted")"
-                                    style="@(_activeInspectorTab == "Messages" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
-                                    @onclick='() => _activeInspectorTab = "Messages"'>
-                                <i class="bi bi-chat-left-text me-1 text-secondary"></i>Log
                             </button>
                         </li>
                     </ul>
@@ -355,7 +368,7 @@
                     {
                         <div class="d-flex flex-column align-items-center justify-content-center h-100 p-4 text-center">
                             <i class="bi bi-play-circle text-muted" style="font-size: 2.2rem; opacity: 0.6;"></i>
-                            <h6 class="fw-bold text-muted mt-3 mb-1">Click [Run & Record] to Start</h6>
+                            <h6 class="fw-bold text-muted mt-3 mb-1">Click [Run] to Start</h6>
                             <p class="text-muted small mb-0" style="max-width: 320px;">
                                 ExploreDB will run the procedure in a rollback transaction (under 500ms) and capture all variable states and temp tables for instant stepping.
                             </p>
@@ -609,35 +622,6 @@
                             }
                         </div>
                     }
-                    else if (_activeInspectorTab == "Messages")
-                    {
-                        <!-- MESSAGES TAB -->
-                        <div class="d-flex flex-column h-100 p-3 overflow-auto">
-                            <h6 class="fw-bold mb-2 small" style="color: var(--app-text);">Execution Messages & Print Output</h6>
-                            @if (_session.CurrentSnapshot != null && _session.CurrentSnapshot.Messages.Count > 0)
-                            {
-                                <div class="p-2 rounded font-monospace small" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border); white-space: pre-wrap;">
-                                    @foreach (var msg in _session.CurrentSnapshot.Messages)
-                                    {
-                                        <div>@msg</div>
-                                    }
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="text-muted small">No PRINT or diagnostic messages emitted for this step.</div>
-                            }
-
-                            <div class="mt-4 pt-3 border-top" style="border-color: var(--app-border) !important;">
-                                <h6 class="fw-bold mb-2 small" style="color: var(--app-text);">Session Diagnostics</h6>
-                                <ul class="list-unstyled small text-muted mb-0">
-                                    <li>Total Executable Statements: <strong>@_session.Statements.Count</strong></li>
-                                    <li>Recording Duration: <strong>@(_session.TotalServerExecutionMs) ms</strong></li>
-                                    <li>Transaction State: <strong class="text-success">Rolled Back (Zero locks held)</strong></li>
-                                </ul>
-                            </div>
-                        </div>
-                    }
                 </div>
             </div>
         </div>
@@ -713,6 +697,76 @@
     </div>
 }
 
+<!-- LOGS & DIAGNOSTICS MODAL -->
+@if (_showLogsModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.65); backdrop-filter: blur(4px); z-index: 2000;">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
+                <div class="modal-header py-2 px-3" style="border-bottom: 1px solid var(--app-border);">
+                    <h5 class="modal-title fs-6 fw-bold">
+                        <i class="bi bi-journal-text me-2 text-primary"></i>Execution Logs & Diagnostics
+                    </h5>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => _showLogsModal = false"></button>
+                </div>
+                <div class="modal-body py-3 px-4">
+                    <!-- Execution Messages / PRINT statements -->
+                    <h6 class="fw-bold mb-2 small" style="color: var(--app-text);">Server Messages & Print Output</h6>
+                    @if (AllRecordedMessages.Count > 0)
+                    {
+                        <div class="p-3 rounded font-monospace small mb-3" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border); white-space: pre-wrap; max-height: 250px; overflow-y: auto;">
+                            @foreach (var msg in AllRecordedMessages)
+                            {
+                                <div>@msg</div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="p-3 rounded text-muted small mb-3" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border);">
+                            No PRINT or diagnostic output messages recorded. Click [Run] to execute and capture logs.
+                        </div>
+                    }
+
+                    <!-- Session Diagnostics -->
+                    <h6 class="fw-bold mb-2 small" style="color: var(--app-text);">Session Diagnostics</h6>
+                    <div class="p-3 rounded small" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border);">
+                        <div class="row g-2">
+                            <div class="col-sm-6">
+                                <span class="text-muted">Target Procedure:</span>
+                                <strong class="ms-1">@(!string.IsNullOrEmpty(_session?.FullName) ? _session.FullName : (!string.IsNullOrEmpty(_selectedSpName) ? _selectedSpName : "None selected"))</strong>
+                            </div>
+                            <div class="col-sm-6">
+                                <span class="text-muted">Database:</span>
+                                <strong class="ms-1">@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)</strong>
+                            </div>
+                            <div class="col-sm-6">
+                                <span class="text-muted">Executable Statements:</span>
+                                <strong class="ms-1">@(_session?.Statements.Count ?? 0)</strong>
+                            </div>
+                            <div class="col-sm-6">
+                                <span class="text-muted">Execution Steps Recorded:</span>
+                                <strong class="ms-1">@(_session?.TotalExecutionSteps ?? 0)</strong>
+                            </div>
+                            <div class="col-sm-6">
+                                <span class="text-muted">Server Recording Time:</span>
+                                <strong class="ms-1">@(_session?.TotalServerExecutionMs ?? 0) ms</strong>
+                            </div>
+                            <div class="col-sm-6">
+                                <span class="text-muted">Transaction State:</span>
+                                <strong class="ms-1 text-success">Rolled Back (Zero locks held)</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 px-3" style="border-top: 1px solid var(--app-border);">
+                    <button type="button" class="btn btn-sm btn-secondary px-3" @onclick="() => _showLogsModal = false">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <style>
     .sp-debugger-container {
         font-family: inherit;
@@ -740,7 +794,9 @@
     private string _selectedSpName = string.Empty;
     private string _spFilter = string.Empty;
     private bool _showSpDropdown = false;
+    private bool _showSafetyAlert = true;
     private bool _showParametersModal = false;
+    private bool _showLogsModal = false;
     private bool _showWarningsBanner = true;
     private bool _isLoadingDef = false;
     private bool _isRecording = false;
@@ -786,6 +842,23 @@
     private List<SpResultSetInfo> CurrentSnapshotResults =>
         _session?.CurrentSnapshot?.ResultSets ?? new List<SpResultSetInfo>();
 
+    private List<string> AllRecordedMessages
+    {
+        get
+        {
+            if (_session == null) return new List<string>();
+            var list = new List<string>();
+            foreach (var step in _session.RecordedSteps)
+            {
+                foreach (var m in step.Messages)
+                {
+                    if (!list.Contains(m)) list.Add(m);
+                }
+            }
+            return list;
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         if (!ToolService.IsToolAvailable("sp-debugger"))
@@ -800,6 +873,7 @@
         if (_session != null)
         {
             _selectedSpName = _session.FullName;
+            _showSafetyAlert = false;
         }
     }
 
@@ -818,6 +892,7 @@
     private async Task SelectProcedureAsync(SpInfo sp)
     {
         _showSpDropdown = false;
+        _showSafetyAlert = false;
         _selectedSpName = sp.FullName;
         _spFilter = sp.FullName;
 
@@ -893,11 +968,27 @@
 
     private async Task StepForwardAsync()
     {
-        if (_session == null || !_session.IsRecorded || _session.CurrentStepIndex >= _session.Statements.Count - 1) return;
+        if (_session == null || !_session.IsRecorded || _session.IsAtCompletion) return;
 
         _session.CurrentStepIndex++;
         await HighlightCurrentStepAsync();
         StateHasChanged();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "F10")
+        {
+            await StepForwardAsync();
+        }
+        else if (e.Key == "F9")
+        {
+            await StepBack();
+        }
+        else if (e.Key == "F5")
+        {
+            await RunAndRecordAsync();
+        }
     }
 
     private async Task StepBack()

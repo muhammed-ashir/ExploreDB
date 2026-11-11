@@ -75,6 +75,7 @@ public class SpDebuggerService : IDisposable
             session.Parameters = visitor.Parameters;
             session.Statements = visitor.Statements;
             session.Warnings = visitor.Warnings;
+            session.BodyStatementList = visitor.BodyStatementList;
 
             if (session.Statements.Count == 0)
             {
@@ -140,7 +141,11 @@ public class SpDebuggerService : IDisposable
             cmd.CommandText = script;
             cmd.CommandTimeout = 120; // 2 min max for recording
 
-            int currentStep = 0;
+            session.RecordedSteps.Clear();
+            session.StepSnapshots.Clear();
+
+            int currentStepId = -1;
+            SpDebugStepSnapshot? currentSnapshot = null;
             var currentVars = new Dictionary<string, SpVariableInfo>(StringComparer.OrdinalIgnoreCase);
 
             // Initialize variables with input parameter values
@@ -154,6 +159,32 @@ public class SpDebuggerService : IDisposable
                     IsParameter = true
                 };
             }
+
+            // Pre-seed Snapshot 0 (Initial state before any statement executes)
+            var initialStmt = session.Statements.Count > 0 ? session.Statements[0] : null;
+            var snap0 = new SpDebugStepSnapshot
+            {
+                StepIndex = 0,
+                LineNumber = initialStmt?.LineNumber ?? 1,
+                EndLineNumber = initialStmt?.EndLineNumber ?? 1,
+                StatementText = initialStmt?.StatementText ?? "",
+                StatementType = initialStmt?.StatementType ?? "START",
+                DurationMs = 0
+            };
+            foreach (var kv in currentVars)
+            {
+                snap0.Variables[kv.Key] = new SpVariableInfo
+                {
+                    Name = kv.Value.Name,
+                    DataType = kv.Value.DataType,
+                    Value = kv.Value.Value,
+                    PreviousValue = null,
+                    IsParameter = kv.Value.IsParameter
+                };
+            }
+            session.RecordedSteps.Add(snap0);
+            session.StepSnapshots[0] = snap0;
+            currentSnapshot = snap0;
 
             using (ct.Register(() =>
             {
@@ -169,14 +200,33 @@ public class SpDebuggerService : IDisposable
 
                     string firstCol = reader.GetName(0);
 
-                    // 1. Step Marker: Step {i} is executing
+                    // 1. Step Marker: Step {stepId} is executing
                     if (firstCol.Equals("__EXPLOREDB_STEP__", StringComparison.OrdinalIgnoreCase))
                     {
                         if (await reader.ReadAsync(ct))
                         {
-                            currentStep = Convert.ToInt32(reader[0]);
+                            currentStepId = Convert.ToInt32(reader[0]);
                         }
-                        EnsureSnapshot(session, currentStep, currentVars, messages, stopwatch.ElapsedMilliseconds);
+
+                        var stmt = session.Statements.FirstOrDefault(s => s.StepIndex == currentStepId);
+                        var prevSnap = session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : snap0;
+
+                        var newSnap = new SpDebugStepSnapshot
+                        {
+                            StepIndex = currentStepId,
+                            LineNumber = stmt?.LineNumber ?? prevSnap.LineNumber,
+                            EndLineNumber = stmt?.EndLineNumber ?? prevSnap.EndLineNumber,
+                            StatementText = stmt?.StatementText ?? "",
+                            StatementType = stmt?.StatementType ?? "STATEMENT",
+                            DurationMs = stopwatch.ElapsedMilliseconds,
+                            Messages = new List<string>(messages)
+                        };
+
+                        CloneSnapshotState(prevSnap, newSnap);
+
+                        session.RecordedSteps.Add(newSnap);
+                        session.StepSnapshots[currentStepId] = newSnap;
+                        currentSnapshot = newSnap;
                         continue;
                     }
 
@@ -217,9 +267,9 @@ public class SpDebuggerService : IDisposable
                                 }
                             }
 
-                            var snap = EnsureSnapshot(session, currentStep, currentVars, messages, stopwatch.ElapsedMilliseconds);
-                            snap.TempTables.RemoveAll(t => t.Name.Equals(ttName, StringComparison.OrdinalIgnoreCase));
-                            snap.TempTables.Add(ttInfo);
+                            var targetSnap = currentSnapshot ?? (session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : snap0);
+                            targetSnap.TempTables.RemoveAll(t => t.Name.Equals(ttName, StringComparison.OrdinalIgnoreCase));
+                            targetSnap.TempTables.Add(ttInfo);
                         }
                         continue;
                     }
@@ -227,7 +277,7 @@ public class SpDebuggerService : IDisposable
                     // 3. Variables Probe
                     if (firstCol.Equals("__EXPLOREDB_VAR_NAME__", StringComparison.OrdinalIgnoreCase))
                     {
-                        var snap = EnsureSnapshot(session, currentStep, currentVars, messages, stopwatch.ElapsedMilliseconds);
+                        var targetSnap = currentSnapshot ?? (session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : snap0);
                         while (await reader.ReadAsync(ct))
                         {
                             var vName = reader.GetString(0);
@@ -244,20 +294,20 @@ public class SpDebuggerService : IDisposable
                                 IsParameter = session.Parameters.Any(p => p.Name.Equals(vName, StringComparison.OrdinalIgnoreCase))
                             };
                             currentVars[vName] = updatedVar;
-                            snap.Variables[vName] = updatedVar;
+                            targetSnap.Variables[vName] = updatedVar;
                         }
 
                         messages.Clear();
                         continue;
                     }
 
-                    // 4. Real user SELECT result set produced by statement {currentStep}!
-                    var stmt = currentStep < session.Statements.Count ? session.Statements[currentStep] : null;
+                    // 4. Real user SELECT result set
+                    var activeStmt = session.Statements.FirstOrDefault(s => s.StepIndex == currentStepId);
                     var rsInfo = new SpResultSetInfo
                     {
-                        StepIndex = currentStep,
-                        LineNumber = stmt?.LineNumber ?? 0,
-                        StatementSummary = stmt?.StatementText?.Trim() ?? ""
+                        StepIndex = currentStepId,
+                        LineNumber = activeStmt?.LineNumber ?? 0,
+                        StatementSummary = activeStmt?.StatementText?.Trim() ?? ""
                     };
                     for (int i = 0; i < fieldCount; i++)
                     {
@@ -280,20 +330,30 @@ public class SpDebuggerService : IDisposable
                         }
                     }
 
-                    var targetSnap = EnsureSnapshot(session, currentStep, currentVars, messages, stopwatch.ElapsedMilliseconds);
-                    targetSnap.ResultSets.Add(rsInfo);
+                    var rsTargetSnap = currentSnapshot ?? (session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : snap0);
+                    rsTargetSnap.ResultSets.Add(rsInfo);
                 }
                 while (await reader.NextResultAsync(ct));
             }
 
-            // Fill snapshots for any steps that didn't emit probes
-            for (int i = 0; i < session.Statements.Count; i++)
+            // Append final Completed snapshot
+            var lastSnap = session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : snap0;
+            var lastStmt = session.Statements.Count > 0 ? session.Statements[^1] : null;
+            var snapCompleted = new SpDebugStepSnapshot
             {
-                EnsureSnapshot(session, i, currentVars, messages, stopwatch.ElapsedMilliseconds);
-            }
+                StepIndex = session.Statements.Count,
+                LineNumber = lastStmt?.EndLineNumber ?? 1,
+                EndLineNumber = lastStmt?.EndLineNumber ?? 1,
+                StatementText = "Execution Completed",
+                StatementType = "COMPLETED",
+                DurationMs = stopwatch.ElapsedMilliseconds,
+                Messages = new List<string>(messages)
+            };
+            CloneSnapshotState(lastSnap, snapCompleted);
+            session.RecordedSteps.Add(snapCompleted);
 
             session.IsRecorded = true;
-            session.CurrentStepIndex = session.Statements.Count > 0 ? 0 : -1;
+            session.CurrentStepIndex = 0;
             stopwatch.Stop();
             session.TotalServerExecutionMs = stopwatch.ElapsedMilliseconds;
             return true;
@@ -316,89 +376,47 @@ public class SpDebuggerService : IDisposable
         }
     }
 
-    private static SpDebugStepSnapshot EnsureSnapshot(SpDebugSessionState session, int stepIndex, Dictionary<string, SpVariableInfo> currentVars, List<string> messages, long elapsedMs)
+    private static void CloneSnapshotState(SpDebugStepSnapshot source, SpDebugStepSnapshot target)
     {
-        if (session.StepSnapshots.TryGetValue(stepIndex, out var existing))
+        foreach (var kv in source.Variables)
         {
-            return existing;
+            target.Variables[kv.Key] = new SpVariableInfo
+            {
+                Name = kv.Value.Name,
+                DataType = kv.Value.DataType,
+                Value = kv.Value.Value,
+                PreviousValue = kv.Value.Value,
+                IsParameter = kv.Value.IsParameter
+            };
         }
 
-        var stmt = stepIndex < session.Statements.Count ? session.Statements[stepIndex] : null;
-        var snap = new SpDebugStepSnapshot
+        foreach (var tt in source.TempTables)
         {
-            StepIndex = stepIndex,
-            LineNumber = stmt?.LineNumber ?? 1,
-            EndLineNumber = stmt?.EndLineNumber ?? 1,
-            StatementText = stmt?.StatementText ?? "",
-            StatementType = stmt?.StatementType ?? "STATEMENT",
-            DurationMs = elapsedMs,
-            Messages = new List<string>(messages)
-        };
-
-        // Inherit state from previous step (Option A: Cumulative)
-        if (stepIndex > 0 && session.StepSnapshots.TryGetValue(stepIndex - 1, out var prevSnap))
-        {
-            // Inherit variables
-            foreach (var kv in prevSnap.Variables)
+            var cloneTt = new SpTempTableInfo
             {
-                snap.Variables[kv.Key] = new SpVariableInfo
-                {
-                    Name = kv.Value.Name,
-                    DataType = kv.Value.DataType,
-                    Value = kv.Value.Value,
-                    PreviousValue = kv.Value.Value,
-                    IsParameter = kv.Value.IsParameter
-                };
-            }
-
-            // Inherit temp tables
-            foreach (var tt in prevSnap.TempTables)
+                Name = tt.Name,
+                TotalRowCount = tt.TotalRowCount,
+                Columns = new List<string>(tt.Columns)
+            };
+            foreach (var r in tt.Rows)
             {
-                var cloneTt = new SpTempTableInfo
-                {
-                    Name = tt.Name,
-                    TotalRowCount = tt.TotalRowCount,
-                    Columns = new List<string>(tt.Columns)
-                };
-                foreach (var r in tt.Rows)
-                {
-                    cloneTt.Rows.Add(new Dictionary<string, object?>(r, StringComparer.OrdinalIgnoreCase));
-                }
-                snap.TempTables.Add(cloneTt);
+                cloneTt.Rows.Add(new Dictionary<string, object?>(r, StringComparer.OrdinalIgnoreCase));
             }
-
-            // Inherit result sets (Option A: Cumulative)
-            foreach (var rs in prevSnap.ResultSets)
-            {
-                var cloneRs = new SpResultSetInfo
-                {
-                    StepIndex = rs.StepIndex,
-                    LineNumber = rs.LineNumber,
-                    StatementSummary = rs.StatementSummary,
-                    Columns = new List<string>(rs.Columns),
-                    Rows = new List<IDictionary<string, object?>>(rs.Rows)
-                };
-                snap.ResultSets.Add(cloneRs);
-            }
-        }
-        else
-        {
-            // First step: seed with parameter values
-            foreach (var kv in currentVars)
-            {
-                snap.Variables[kv.Key] = new SpVariableInfo
-                {
-                    Name = kv.Value.Name,
-                    DataType = kv.Value.DataType,
-                    Value = kv.Value.Value,
-                    PreviousValue = null,
-                    IsParameter = kv.Value.IsParameter
-                };
-            }
+            target.TempTables.Add(cloneTt);
         }
 
-        session.StepSnapshots[stepIndex] = snap;
-        return snap;
+        foreach (var rs in source.ResultSets)
+        {
+            var cloneRs = new SpResultSetInfo
+            {
+                StepIndex = rs.StepIndex,
+                LineNumber = rs.LineNumber,
+                StatementSummary = rs.StatementSummary,
+                Columns = new List<string>(rs.Columns),
+                Rows = new List<IDictionary<string, object?>>(rs.Rows)
+            };
+            target.ResultSets.Add(cloneRs);
+        }
     }
 
     private string BuildInstrumentedBatch(SpDebugSessionState session)
@@ -418,7 +436,6 @@ public class SpDebuggerService : IDisposable
         foreach (var p in session.Parameters)
         {
             var val = string.IsNullOrWhiteSpace(p.Value) ? "NULL" : p.Value.Trim();
-            // Wrap in quotes if string/date and not already quoted
             if (!val.Equals("NULL", StringComparison.OrdinalIgnoreCase) &&
                 (p.DataType.Contains("CHAR", StringComparison.OrdinalIgnoreCase) ||
                  p.DataType.Contains("DATE", StringComparison.OrdinalIgnoreCase) ||
@@ -440,60 +457,29 @@ public class SpDebuggerService : IDisposable
 
         var allTempTables = new List<string>();
 
-        // 3. Emit each statement followed by step markers, variable probes, and temp table probes
-        for (int i = 0; i < session.Statements.Count; i++)
+        // 3. Emit statements with AST branch nesting
+        if (session.BodyStatementList != null)
         {
-            var stmt = session.Statements[i];
-
-            // If statement is a DECLARE statement, also track any newly declared variables and their data types
-            ExtractDeclaredVarsWithTypes(stmt.StatementText, varTypes);
-
-            // Track any temp tables referenced
-            var ttMatches = System.Text.RegularExpressions.Regex.Matches(stmt.StatementText, @"(?<!\w)#[a-zA-Z0-9_]+");
-            foreach (System.Text.RegularExpressions.Match match in ttMatches)
+            EmitStatements(sb, session.BodyStatementList, session, varTypes, allTempTables);
+        }
+        else
+        {
+            for (int i = 0; i < session.Statements.Count; i++)
             {
-                if (!allTempTables.Contains(match.Value, StringComparer.OrdinalIgnoreCase))
-                {
-                    allTempTables.Add(match.Value);
-                }
+                var stmt = session.Statements[i];
+                ExtractDeclaredVarsWithTypes(stmt.StatementText, varTypes);
+                TrackTempTables(stmt.StatementText, allTempTables);
+
+                sb.AppendLine($"-- STEP {stmt.StepIndex}: Line {stmt.LineNumber}");
+                sb.AppendLine($"SELECT {stmt.StepIndex} AS [__EXPLOREDB_STEP__];");
+                sb.AppendLine();
+
+                sb.AppendLine(stmt.StatementText.TrimEnd(';'));
+                sb.AppendLine(";");
+                sb.AppendLine();
+
+                EmitProbes(sb, varTypes, allTempTables);
             }
-
-            sb.AppendLine($"-- STEP {i}: Line {stmt.LineNumber}");
-            // Emit Step Marker BEFORE statement execution so any result sets emitted are captured into step {i}
-            sb.AppendLine($"SELECT {i} AS [__EXPLOREDB_STEP__];");
-            sb.AppendLine();
-
-            sb.AppendLine(stmt.StatementText.TrimEnd(';'));
-            sb.AppendLine(";");
-            sb.AppendLine();
-
-            // Emit Variables Probe
-            if (varTypes.Count > 0)
-            {
-                sb.AppendLine("SELECT [__EXPLOREDB_VAR_NAME__], [DataType], [Val] FROM (");
-                int vIdx = 0;
-                foreach (var kvp in varTypes)
-                {
-                    var varName = kvp.Key;
-                    var dataType = kvp.Value.Replace("'", "''");
-                    var union = vIdx > 0 ? "UNION ALL " : "";
-                    sb.AppendLine($"  {union}SELECT '{varName}' AS [__EXPLOREDB_VAR_NAME__], '{dataType}' AS [DataType], TRY_CONVERT(NVARCHAR(4000), {varName}) AS [Val]");
-                    vIdx++;
-                }
-                sb.AppendLine(") AS [_vars];");
-            }
-
-            // Emit Temp Table Probes
-            foreach (var tt in allTempTables)
-            {
-                sb.AppendLine($"IF OBJECT_ID('tempdb..{tt}') IS NOT NULL");
-                sb.AppendLine("BEGIN");
-                sb.AppendLine($"    SELECT '{tt}' AS [__EXPLOREDB_TEMP_NAME__], COUNT_BIG(*) AS [TotalRows] FROM {tt};");
-                sb.AppendLine($"    SELECT TOP 500 * FROM {tt};");
-                sb.AppendLine("END;");
-            }
-
-            sb.AppendLine();
         }
 
         // 4. Guaranteed Safety Rollback in all cases
@@ -505,6 +491,169 @@ public class SpDebuggerService : IDisposable
 
         return sb.ToString();
     }
+
+    private void EmitStatements(StringBuilder sb, StatementList? statementList, SpDebugSessionState session, Dictionary<string, string> varTypes, List<string> allTempTables)
+    {
+        if (statementList == null || statementList.Statements == null) return;
+        foreach (var stmt in statementList.Statements)
+        {
+            EmitStatementOrBlock(sb, stmt, session, varTypes, allTempTables);
+        }
+    }
+
+    private void EmitStatementOrBlock(StringBuilder sb, TSqlStatement stmt, SpDebugSessionState session, Dictionary<string, string> varTypes, List<string> allTempTables)
+    {
+        if (stmt is BeginEndBlockStatement block)
+        {
+            sb.AppendLine("BEGIN");
+            EmitStatements(sb, block.StatementList, session, varTypes, allTempTables);
+            sb.AppendLine("END;");
+            return;
+        }
+
+        if (stmt is TryCatchStatement tc)
+        {
+            sb.AppendLine("BEGIN TRY");
+            EmitStatements(sb, tc.TryStatements, session, varTypes, allTempTables);
+            sb.AppendLine("END TRY");
+            sb.AppendLine("BEGIN CATCH");
+            EmitStatements(sb, tc.CatchStatements, session, varTypes, allTempTables);
+            sb.AppendLine("END CATCH;");
+            return;
+        }
+
+        if (stmt is IfStatement ifStmt)
+        {
+            var ifStep = session.Statements.FirstOrDefault(s => s.LineNumber == ifStmt.StartLine && s.StatementType == "IF");
+            int ifStepId = ifStep?.StepIndex ?? 0;
+
+            sb.AppendLine($"-- STEP {ifStepId}: Line {ifStmt.StartLine} (IF Condition)");
+            sb.AppendLine($"SELECT {ifStepId} AS [__EXPLOREDB_STEP__];");
+            sb.AppendLine();
+
+            var condText = ExtractFragmentText(ifStmt.Predicate, session.ProcedureDefinition);
+            sb.AppendLine($"IF {condText}");
+            sb.AppendLine("BEGIN");
+
+            if (ifStmt.ThenStatement is BeginEndBlockStatement thenBlock)
+            {
+                EmitStatements(sb, thenBlock.StatementList, session, varTypes, allTempTables);
+            }
+            else if (ifStmt.ThenStatement != null)
+            {
+                EmitStatementOrBlock(sb, ifStmt.ThenStatement, session, varTypes, allTempTables);
+            }
+
+            sb.AppendLine("END");
+
+            if (ifStmt.ElseStatement != null)
+            {
+                sb.AppendLine("ELSE");
+                sb.AppendLine("BEGIN");
+
+                if (ifStmt.ElseStatement is BeginEndBlockStatement elseBlock)
+                {
+                    EmitStatements(sb, elseBlock.StatementList, session, varTypes, allTempTables);
+                }
+                else if (ifStmt.ElseStatement != null)
+                {
+                    EmitStatementOrBlock(sb, ifStmt.ElseStatement, session, varTypes, allTempTables);
+                }
+
+                sb.AppendLine("END");
+            }
+            sb.AppendLine(";");
+            return;
+        }
+
+        // Normal statement
+        var stmtText = ExtractFragmentText(stmt, session.ProcedureDefinition);
+        if (string.IsNullOrWhiteSpace(stmtText)) return;
+
+        ExtractDeclaredVarsWithTypes(stmtText, varTypes);
+        TrackTempTables(stmtText, allTempTables);
+
+        var stmtType = SpDebuggerService.GetStatementTypeName(stmt);
+        var step = session.Statements.FirstOrDefault(s => s.LineNumber == stmt.StartLine && s.StatementType == stmtType);
+        int stepId = step?.StepIndex ?? 0;
+
+        sb.AppendLine($"-- STEP {stepId}: Line {stmt.StartLine} ({stmtType})");
+        sb.AppendLine($"SELECT {stepId} AS [__EXPLOREDB_STEP__];");
+        sb.AppendLine();
+
+        sb.AppendLine(stmtText.TrimEnd(';'));
+        sb.AppendLine(";");
+        sb.AppendLine();
+
+        EmitProbes(sb, varTypes, allTempTables);
+    }
+
+    private static void TrackTempTables(string text, List<string> allTempTables)
+    {
+        var ttMatches = System.Text.RegularExpressions.Regex.Matches(text, @"(?<!\w)#[a-zA-Z0-9_]+");
+        foreach (System.Text.RegularExpressions.Match match in ttMatches)
+        {
+            if (!allTempTables.Contains(match.Value, StringComparer.OrdinalIgnoreCase))
+            {
+                allTempTables.Add(match.Value);
+            }
+        }
+    }
+
+    private static void EmitProbes(StringBuilder sb, Dictionary<string, string> varTypes, List<string> allTempTables)
+    {
+        if (varTypes.Count > 0)
+        {
+            sb.AppendLine("SELECT [__EXPLOREDB_VAR_NAME__], [DataType], [Val] FROM (");
+            int vIdx = 0;
+            foreach (var kvp in varTypes)
+            {
+                var varName = kvp.Key;
+                var dataType = kvp.Value.Replace("'", "''");
+                var union = vIdx > 0 ? "UNION ALL " : "";
+                sb.AppendLine($"  {union}SELECT '{varName}' AS [__EXPLOREDB_VAR_NAME__], '{dataType}' AS [DataType], TRY_CONVERT(NVARCHAR(4000), {varName}) AS [Val]");
+                vIdx++;
+            }
+            sb.AppendLine(") AS [_vars];");
+        }
+
+        foreach (var tt in allTempTables)
+        {
+            sb.AppendLine($"IF OBJECT_ID('tempdb..{tt}') IS NOT NULL");
+            sb.AppendLine("BEGIN");
+            sb.AppendLine($"    SELECT '{tt}' AS [__EXPLOREDB_TEMP_NAME__], COUNT_BIG(*) AS [TotalRows] FROM {tt};");
+            sb.AppendLine($"    SELECT TOP 500 * FROM {tt};");
+            sb.AppendLine("END;");
+        }
+
+        sb.AppendLine();
+    }
+
+    internal static string ExtractFragmentText(TSqlFragment fragment, string fullScript)
+    {
+        if (fragment.StartOffset >= 0 && fragment.FragmentLength > 0 &&
+            fragment.StartOffset + fragment.FragmentLength <= fullScript.Length)
+        {
+            return fullScript.Substring(fragment.StartOffset, fragment.FragmentLength).Trim();
+        }
+        return string.Empty;
+    }
+
+    internal static string GetStatementTypeName(TSqlStatement stmt) => stmt switch
+    {
+        SelectStatement => "SELECT",
+        UpdateStatement => "UPDATE",
+        InsertStatement => "INSERT",
+        DeleteStatement => "DELETE",
+        SetVariableStatement => "SET",
+        ExecuteStatement => "EXECUTE",
+        DeclareVariableStatement => "DECLARE",
+        CreateTableStatement => "CREATE TABLE",
+        IfStatement => "IF",
+        WhileStatement => "WHILE",
+        BeginEndBlockStatement => "BLOCK",
+        _ => "STATEMENT"
+    };
 
     private static void ExtractDeclaredVarsWithTypes(string text, Dictionary<string, string> varTypes)
     {
@@ -591,6 +740,7 @@ internal class ProcedureAstVisitor : TSqlFragmentVisitor
     public List<SpParameterInput> Parameters { get; } = new();
     public List<SpStatementStep> Statements { get; } = new();
     public List<SpPreFlightWarning> Warnings { get; } = new();
+    public StatementList? BodyStatementList { get; private set; }
 
     public ProcedureAstVisitor(string fullScript)
     {
@@ -599,6 +749,7 @@ internal class ProcedureAstVisitor : TSqlFragmentVisitor
 
     public override void ExplicitVisit(CreateProcedureStatement node)
     {
+        BodyStatementList = node.StatementList;
         ExtractHeader(node.Parameters);
         ExtractStatements(node.StatementList);
         base.ExplicitVisit(node);
@@ -606,6 +757,7 @@ internal class ProcedureAstVisitor : TSqlFragmentVisitor
 
     public override void ExplicitVisit(AlterProcedureStatement node)
     {
+        BodyStatementList = node.StatementList;
         ExtractHeader(node.Parameters);
         ExtractStatements(node.StatementList);
         base.ExplicitVisit(node);
@@ -613,6 +765,7 @@ internal class ProcedureAstVisitor : TSqlFragmentVisitor
 
     public override void ExplicitVisit(CreateOrAlterProcedureStatement node)
     {
+        BodyStatementList = node.StatementList;
         ExtractHeader(node.Parameters);
         ExtractStatements(node.StatementList);
         base.ExplicitVisit(node);
@@ -680,14 +833,59 @@ internal class ProcedureAstVisitor : TSqlFragmentVisitor
             return;
         }
 
+        if (stmt is IfStatement ifStmt)
+        {
+            ScanForWarnings(ifStmt);
+
+            // 1. Register step for the IF condition itself
+            var ifStartLine = ifStmt.StartLine;
+            var predEndLine = ifStmt.Predicate.StartLine + (ExtractFragmentText(ifStmt.Predicate).Split('\n').Length - 1);
+            var ifCondLength = (ifStmt.Predicate.StartOffset + ifStmt.Predicate.FragmentLength) - ifStmt.StartOffset;
+            var ifCondText = ifCondLength > 0 && ifStmt.StartOffset + ifCondLength <= _fullScript.Length
+                ? _fullScript.Substring(ifStmt.StartOffset, ifCondLength).Trim()
+                : $"IF {ExtractFragmentText(ifStmt.Predicate)}";
+
+            Statements.Add(new SpStatementStep
+            {
+                StepIndex = Statements.Count,
+                LineNumber = ifStartLine,
+                EndLineNumber = predEndLine >= ifStartLine ? predEndLine : ifStartLine,
+                Column = ifStmt.StartColumn,
+                StatementText = ifCondText,
+                StatementType = "IF"
+            });
+
+            // 2. Extract then branch statements
+            if (ifStmt.ThenStatement is BeginEndBlockStatement thenBlock)
+            {
+                ExtractStatements(thenBlock.StatementList);
+            }
+            else if (ifStmt.ThenStatement != null)
+            {
+                ExtractStatement(ifStmt.ThenStatement);
+            }
+
+            // 3. Extract else branch statements
+            if (ifStmt.ElseStatement is BeginEndBlockStatement elseBlock)
+            {
+                ExtractStatements(elseBlock.StatementList);
+            }
+            else if (ifStmt.ElseStatement != null)
+            {
+                ExtractStatement(ifStmt.ElseStatement);
+            }
+            return;
+        }
+
         ScanForWarnings(stmt);
 
         var startLine = stmt.StartLine;
-        var endLine = stmt.StartLine;
         var text = ExtractFragmentText(stmt);
         if (string.IsNullOrWhiteSpace(text)) return;
 
-        var stmtType = GetStatementTypeName(stmt);
+        var lineCount = text.Split('\n').Length - 1;
+        var endLine = startLine + lineCount;
+        var stmtType = SpDebuggerService.GetStatementTypeName(stmt);
 
         Statements.Add(new SpStatementStep
         {
@@ -735,31 +933,7 @@ internal class ProcedureAstVisitor : TSqlFragmentVisitor
         }
     }
 
-    private string ExtractFragmentText(TSqlFragment fragment)
-    {
-        if (fragment.StartOffset >= 0 && fragment.FragmentLength > 0 &&
-            fragment.StartOffset + fragment.FragmentLength <= _fullScript.Length)
-        {
-            return _fullScript.Substring(fragment.StartOffset, fragment.FragmentLength).Trim();
-        }
-        return string.Empty;
-    }
-
-    private static string GetStatementTypeName(TSqlStatement stmt) => stmt switch
-    {
-        SelectStatement => "SELECT",
-        UpdateStatement => "UPDATE",
-        InsertStatement => "INSERT",
-        DeleteStatement => "DELETE",
-        SetVariableStatement => "SET",
-        ExecuteStatement => "EXECUTE",
-        DeclareVariableStatement => "DECLARE",
-        CreateTableStatement => "CREATE TABLE",
-        IfStatement => "IF",
-        WhileStatement => "WHILE",
-        BeginEndBlockStatement => "BLOCK",
-        _ => "STATEMENT"
-    };
+    private string ExtractFragmentText(TSqlFragment fragment) => SpDebuggerService.ExtractFragmentText(fragment, _fullScript);
 
     private static string GetDataTypeString(DataTypeReference? dt)
     {
