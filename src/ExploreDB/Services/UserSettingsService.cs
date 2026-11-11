@@ -9,6 +9,7 @@ public class UserSettings
     public bool AutoGenerateAliases { get; set; } = true;
     public bool UseAsKeyword { get; set; } = true;
     public bool KeepInClauseOnSingleLine { get; set; } = true;
+    public string FormattingStyle { get; set; } = "Default";
     public string DisplayName { get; set; } = "";
     public string LicenseKey { get; set; } = "";
 }
@@ -47,6 +48,13 @@ public class UserSettingsService
         Settings.AutoGenerateAliases = autoGenerateAliases;
         Settings.UseAsKeyword = useAsKeyword;
         if (keepInClauseOnSingleLine.HasValue) Settings.KeepInClauseOnSingleLine = keepInClauseOnSingleLine.Value;
+        SaveSettings();
+        OnSettingsChanged?.Invoke();
+    }
+
+    public void UpdateFormattingStyle(string formattingStyle)
+    {
+        Settings.FormattingStyle = formattingStyle;
         SaveSettings();
         OnSettingsChanged?.Invoke();
     }

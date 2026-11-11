@@ -8,53 +8,127 @@ namespace ExploreDB.Services.Profiler.Engine;
 
 /// <summary>
 /// Manages SQL Server Extended Event session lifecycle (test permissions, create, start, stop, drop).
+/// Supports both Server-level and Database-scoped sessions.
 /// </summary>
 public sealed class XEventSessionManager : IAsyncDisposable
 {
     private string? _activeConnectionString;
     private string? _activeSessionName;
+    private bool _isDatabaseScope;
 
     public string? ActiveSessionName => _activeSessionName;
     public bool IsSessionActive => !string.IsNullOrEmpty(_activeSessionName);
+    public bool IsDatabaseScope => _isDatabaseScope;
 
-    /// <summary>
-    /// Checks whether the current SQL connection has permission to create and manage Extended Event sessions.
-    /// </summary>
-    public static async Task<(bool HasPermission, string? ErrorDetail)> CheckPermissionsAsync(string connectionString, CancellationToken ct = default)
+    public static string BuildDatabaseConnectionString(string baseConnStr, string database)
     {
         try
         {
-            await using var conn = new SqlConnection(connectionString);
-            await conn.OpenAsync(ct);
+            var builder = new SqlConnectionStringBuilder(baseConnStr)
+            {
+                InitialCatalog = database
+            };
+            return builder.ConnectionString;
+        }
+        catch
+        {
+            return baseConnStr;
+        }
+    }
 
-            // Check for ALTER ANY EVENT SESSION or VIEW SERVER STATE / VIEW SERVER PERFORMANCE STATE
-            const string sql = @"
+    /// <summary>
+    /// Checks whether the current SQL connection has permission to create and manage Extended Event sessions.
+    /// Prefers Database-Scoped sessions if a target database is specified and supported.
+    /// </summary>
+    public static async Task<(bool HasPermission, bool IsDatabaseScope, string? ErrorDetail)> CheckPermissionsAsync(
+        string connectionString, 
+        string? targetDatabase, 
+        CancellationToken ct = default)
+    {
+        // 1. If targetDatabase is specified, first check Database-Scoped Extended Events permissions directly on that database
+        if (!string.IsNullOrWhiteSpace(targetDatabase) && !string.Equals(targetDatabase, "master", StringComparison.OrdinalIgnoreCase))
+        {
+            string dbConnStr = BuildDatabaseConnectionString(connectionString, targetDatabase);
+            try
+            {
+                await using var dbConn = new SqlConnection(dbConnStr);
+                await dbConn.OpenAsync(ct);
+
+                const string dbCheckSql = @"
+                    SELECT 
+                        CASE WHEN OBJECT_ID('sys.database_event_sessions') IS NOT NULL THEN 1 ELSE 0 END AS SupportsDbScope,
+                        COALESCE(HAS_PERMS_BY_NAME(NULL, 'DATABASE', 'ALTER ANY DATABASE EVENT SESSION'), 0) AS HasDbEventPerm,
+                        COALESCE(IS_MEMBER('db_owner'), 0) AS IsDbOwner,
+                        COALESCE(HAS_PERMS_BY_NAME(NULL, 'SERVER', 'ALTER ANY EVENT SESSION'), 0) AS HasServerEventPerm,
+                        COALESCE(IS_SRVROLEMEMBER('sysadmin'), 0) AS IsSysAdmin;
+                ";
+
+                await using var cmd = new SqlCommand(dbCheckSql, dbConn);
+                cmd.CommandTimeout = 10;
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+                if (await reader.ReadAsync(ct))
+                {
+                    int supportsDbScope = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
+                    int hasDbPerm = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
+                    int isDbOwner = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+                    int hasServerPerm = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+                    int isSysAdmin = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
+
+                    // If database scope is supported and user has DB-level permission (or is db_owner / sysadmin)
+                    if (supportsDbScope == 1 && (hasDbPerm == 1 || isDbOwner == 1 || isSysAdmin == 1))
+                    {
+                        return (true, true, null);
+                    }
+
+                    // If database scope is not supported (older SQL Server), but user has server-level permission
+                    if (hasServerPerm == 1 || isSysAdmin == 1)
+                    {
+                        return (true, false, null);
+                    }
+                }
+            }
+            catch
+            {
+                // If connecting directly to targetDatabase failed, fall through to checking server-level master connection
+            }
+        }
+
+        // 2. Check server-level permissions (e.g. against master or default connection)
+        try
+        {
+            string serverConnStr = BuildDatabaseConnectionString(connectionString, "master");
+            await using var srvConn = new SqlConnection(serverConnStr);
+            await srvConn.OpenAsync(ct);
+
+            const string srvCheckSql = @"
                 SELECT 
-                    HAS_PERMS_BY_NAME(NULL, 'SERVER', 'ALTER ANY EVENT SESSION') AS HasAlterEventSession,
-                    IS_SRVROLEMEMBER('sysadmin') AS IsSysAdmin;
+                    COALESCE(HAS_PERMS_BY_NAME(NULL, 'SERVER', 'ALTER ANY EVENT SESSION'), 0) AS HasServerEventPerm,
+                    COALESCE(IS_SRVROLEMEMBER('sysadmin'), 0) AS IsSysAdmin;
             ";
 
-            await using var cmd = new SqlCommand(sql, conn);
+            await using var cmd = new SqlCommand(srvCheckSql, srvConn);
             cmd.CommandTimeout = 10;
             await using var reader = await cmd.ExecuteReaderAsync(ct);
 
             if (await reader.ReadAsync(ct))
             {
-                int hasAlter = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
+                int hasServerPerm = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
                 int isSysAdmin = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
 
-                if (hasAlter == 1 || isSysAdmin == 1)
+                if (hasServerPerm == 1 || isSysAdmin == 1)
                 {
-                    return (true, null);
+                    return (true, false, null);
                 }
             }
-
-            return (false, "Your SQL login lacks 'ALTER ANY EVENT SESSION' permission required to create Extended Event sessions.");
         }
-        catch (Exception ex)
+        catch
         {
-            return (false, ex.Message);
+            // If master is unreachable (e.g. Azure SQL DB), continue to friendly error
         }
+
+        string dbNamePart = !string.IsNullOrWhiteSpace(targetDatabase) ? $" on database '{targetDatabase}'" : string.Empty;
+        return (false, false, $"Your SQL login lacks permissions to create Extended Event sessions. It needs either 'ALTER ANY DATABASE EVENT SESSION' (or db_owner role){dbNamePart} or server-level 'ALTER ANY EVENT SESSION'.");
     }
 
     public static async Task<System.Collections.Generic.List<string>> GetOnlineDatabasesAsync(string connectionString, CancellationToken ct = default)
@@ -82,13 +156,13 @@ public sealed class XEventSessionManager : IAsyncDisposable
         return databases;
     }
 
-    public async Task StartSessionAsync(string connectionString, TraceSessionConfig config, CancellationToken ct = default)
+    public async Task StartSessionAsync(string connectionString, TraceSessionConfig config, bool isDatabaseScope, CancellationToken ct = default)
     {
         await using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync(ct);
 
         // 1. Generate & Execute Create Script
-        string createSql = XEventScriptGenerator.GenerateCreateSessionScript(config);
+        string createSql = XEventScriptGenerator.GenerateCreateSessionScript(config, isDatabaseScope);
         await using (var cmd = new SqlCommand(createSql, conn))
         {
             cmd.CommandTimeout = 30;
@@ -96,7 +170,7 @@ public sealed class XEventSessionManager : IAsyncDisposable
         }
 
         // 2. Start the Session
-        string startSql = XEventScriptGenerator.GenerateStartSessionScript(config.SessionName);
+        string startSql = XEventScriptGenerator.GenerateStartSessionScript(config.SessionName, isDatabaseScope);
         await using (var cmd = new SqlCommand(startSql, conn))
         {
             cmd.CommandTimeout = 30;
@@ -105,6 +179,7 @@ public sealed class XEventSessionManager : IAsyncDisposable
 
         _activeConnectionString = connectionString;
         _activeSessionName = config.SessionName;
+        _isDatabaseScope = isDatabaseScope;
     }
 
     public async Task StopAndDropSessionAsync(CancellationToken ct = default)
@@ -114,6 +189,7 @@ public sealed class XEventSessionManager : IAsyncDisposable
 
         string connStr = _activeConnectionString;
         string sessName = _activeSessionName;
+        bool isDbScope = _isDatabaseScope;
         _activeSessionName = null;
 
         try
@@ -124,7 +200,7 @@ public sealed class XEventSessionManager : IAsyncDisposable
             // Stop session
             try
             {
-                string stopSql = XEventScriptGenerator.GenerateStopSessionScript(sessName);
+                string stopSql = XEventScriptGenerator.GenerateStopSessionScript(sessName, isDbScope);
                 await using var cmdStop = new SqlCommand(stopSql, conn);
                 cmdStop.CommandTimeout = 15;
                 await cmdStop.ExecuteNonQueryAsync(ct);
@@ -137,7 +213,7 @@ public sealed class XEventSessionManager : IAsyncDisposable
             // Drop session
             try
             {
-                string dropSql = XEventScriptGenerator.GenerateDropSessionScript(sessName);
+                string dropSql = XEventScriptGenerator.GenerateDropSessionScript(sessName, isDbScope);
                 await using var cmdDrop = new SqlCommand(dropSql, conn);
                 cmdDrop.CommandTimeout = 15;
                 await cmdDrop.ExecuteNonQueryAsync(ct);

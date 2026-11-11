@@ -13,7 +13,7 @@ public static class XEventParser
 {
     private static long _sequenceId = 0;
 
-    public static TraceEvent Parse(IXEvent rawEvent)
+    public static TraceEvent Parse(IXEvent rawEvent, string? fallbackDatabaseName = null)
     {
         long id = System.Threading.Interlocked.Increment(ref _sequenceId);
 
@@ -32,12 +32,12 @@ public static class XEventParser
         string? textData = GetString(rawEvent, "statement") ?? GetString(rawEvent, "sql_text");
 
         // Read context from actions or fields
-        string? dbName = GetString(rawEvent, "database_name");
+        string? dbName = GetString(rawEvent, "database_name") ?? fallbackDatabaseName;
         int? dbId = GetInt(rawEvent, "database_id");
         int? spid = GetInt(rawEvent, "session_id");
         string? appName = GetString(rawEvent, "client_app_name");
         string? hostName = GetString(rawEvent, "client_hostname");
-        string? ntUser = GetString(rawEvent, "nt_username");
+        string? ntUser = GetString(rawEvent, "nt_username") ?? GetString(rawEvent, "server_principal_name") ?? GetString(rawEvent, "username");
         long? txId = GetNullableLong(rawEvent, "transaction_id");
 
         // Read errors or deadlocks
@@ -105,7 +105,7 @@ public static class XEventParser
             "sql_batch_completed" => TraceEventType.SqlBatchCompleted,
             "rpc_completed" => TraceEventType.RpcCompleted,
             "error_reported" => TraceEventType.ErrorReported,
-            "xml_deadlock_report" => TraceEventType.Deadlock,
+            "xml_deadlock_report" or "database_xml_deadlock_report" => TraceEventType.Deadlock,
             "attention" => TraceEventType.Attention,
             _ => TraceEventType.Other
         };
@@ -144,8 +144,21 @@ public static class XEventParser
 
     private static long? GetNullableLong(IXEvent evt, string key)
     {
-        long val = GetLong(evt, key);
-        return val != 0 ? val : null;
+        if (evt.Fields.TryGetValue(key, out var val) && val != null)
+        {
+            if (val is long l) return l;
+            if (val is int i) return i;
+            if (long.TryParse(val.ToString(), out long parsed)) return parsed;
+        }
+
+        if (evt.Actions.TryGetValue(key, out val) && val != null)
+        {
+            if (val is long l) return l;
+            if (val is int i) return i;
+            if (long.TryParse(val.ToString(), out long parsed)) return parsed;
+        }
+
+        return null;
     }
 
     private static int? GetInt(IXEvent evt, string key)
@@ -154,12 +167,14 @@ public static class XEventParser
         {
             if (val is int i) return i;
             if (val is short s) return s;
+            if (val is byte b) return b;
             if (int.TryParse(val.ToString(), out int parsed)) return parsed;
         }
 
         if (evt.Actions.TryGetValue(key, out val) && val != null)
         {
             if (val is int i) return i;
+            if (val is short s) return s;
             if (int.TryParse(val.ToString(), out int parsed)) return parsed;
         }
 

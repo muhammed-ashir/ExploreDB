@@ -75,6 +75,27 @@ window.formatSql = (code) => {
     }
     if (!code || !code.trim()) return code;
 
+    var style = 'Default';
+    if (window.userSettings) {
+        if (window.userSettings.formattingStyle !== undefined) {
+            style = window.userSettings.formattingStyle;
+        } else if (window.userSettings.FormattingStyle !== undefined) {
+            style = window.userSettings.FormattingStyle;
+        }
+    }
+
+    if (String(style).toLowerCase() === 'collapsed') {
+        return window.formatSqlCollapsed(code);
+    }
+    return window.formatSqlDefault(code);
+};
+
+window.formatSqlDefault = (code) => {
+    if (!window.sqlFormatter) {
+        throw new Error("SQL Formatter is not loaded correctly.");
+    }
+    if (!code || !code.trim()) return code;
+
     var keepInInline = true;
     if (window.userSettings) {
         if (window.userSettings.keepInClauseOnSingleLine !== undefined) {
@@ -246,6 +267,181 @@ window.formatSql = (code) => {
             } else {
                 result.push(line);
             }
+        }
+
+        return unmaskHints(result.join('\n'));
+    } catch (err) {
+        return unmaskHints(baseFormatted);
+    }
+};
+
+window.formatSqlCollapsed = (code) => {
+    if (!window.sqlFormatter) {
+        throw new Error("SQL Formatter is not loaded correctly.");
+    }
+    if (!code || !code.trim()) return code;
+
+    // Ensure boundary between closing bracket/paren and ON keyword
+    var normalizedCode = code.replace(/(\))\s*(ON\b)/gi, '$1 $2');
+
+    var hints = [];
+    var hintRegex = /\bWITH\s*\(\s*(?:NOLOCK|READUNCOMMITTED|UPDLOCK|REPEATABLEREAD|SERIALIZABLE|READCOMMITTED|READCOMMITTEDLOCK|TABLOCK|TABLOCKX|PAGLOCK|ROWLOCK|NOWAIT|HOLDLOCK|XLOCK|NOEXPAND|FORCESEEK|FORCESCAN|FASTFIRSTROW|INDEX)(?:[^()]*|\([^()]*\))*\)/gi;
+    var processedCode = normalizedCode.replace(hintRegex, function (match) {
+        var cleanHint = match.replace(/\s+/g, '')
+            .replace(/\bwith\b/gi, 'WITH')
+            .replace(/\bnolock\b/gi, 'NOLOCK')
+            .replace(/\breaduncommitted\b/gi, 'READUNCOMMITTED')
+            .replace(/\bupdlock\b/gi, 'UPDLOCK')
+            .replace(/\browlock\b/gi, 'ROWLOCK')
+            .replace(/\btablockx?\b/gi, function (m) { return m.toUpperCase(); });
+        hints.push(cleanHint);
+        return '__TBLHINT_' + (hints.length - 1) + '__';
+    });
+
+    var unmaskHints = function (text) {
+        if (!hints || hints.length === 0 || !text) return text;
+        for (var h = 0; h < hints.length; h++) {
+            text = text.replace(new RegExp('__TBLHINT_' + h + '__', 'g'), hints[h]);
+        }
+        return text;
+    };
+
+    var baseFormatted;
+    try {
+        baseFormatted = window.sqlFormatter.format(processedCode, {
+            language: 'tsql',
+            keywordCase: 'upper',
+            linesBetweenQueries: 2,
+            expressionWidth: 1000
+        });
+    } catch (e) {
+        return code;
+    }
+
+    try {
+        var lines = baseFormatted.split(/\r?\n/);
+        var result = [];
+
+        var clauseKeywords = ['SELECT', 'SELECT DISTINCT', 'FROM', 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'SET', 'VALUES', 'INSERT INTO'];
+        var isClause = function (line) {
+            var t = line.trim().toUpperCase();
+            return clauseKeywords.some(function (k) { return t === k || t.indexOf(k + ' ') === 0; });
+        };
+
+        var compactOperators = function (str) {
+            var parts = str.split(/('(?:''|[^'])*')/g);
+            for (var p = 0; p < parts.length; p++) {
+                if (p % 2 === 0) {
+                    parts[p] = parts[p]
+                        .replace(/\s*(>=|<=|<>|!=|=|>|<)\s*/g, '$1')
+                        .replace(/\s*\bAND\b\s*/g, ' AND ')
+                        .replace(/\s*\bOR\b\s*/g, ' OR ');
+                }
+            }
+            return parts.join('');
+        };
+
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var trimmed = line.trim();
+            if (!trimmed) {
+                result.push(line);
+                continue;
+            }
+
+            var upper = trimmed.toUpperCase();
+
+            // 1. SELECT / SELECT DISTINCT
+            if (upper === 'SELECT' || upper === 'SELECT DISTINCT') {
+                var selectKeyword = upper;
+                var columns = [];
+                while (i + 1 < lines.length) {
+                    var next = lines[i + 1].trim();
+                    if (!next) { i++; continue; }
+                    if (isClause(next) || next === ')' || next === 'END') break;
+                    columns.push(next.replace(/,$/, ''));
+                    i++;
+                }
+                result.push(selectKeyword + ' ' + columns.join(', '));
+                continue;
+            }
+
+            // 2. FROM
+            if (upper === 'FROM' || upper.indexOf('FROM ') === 0) {
+                var fromContent = '';
+                if (upper === 'FROM') {
+                    i++;
+                    fromContent = lines[i].trim();
+                } else {
+                    fromContent = trimmed.substring(5).trim();
+                }
+                result.push('FROM ' + fromContent);
+
+                while (i + 1 < lines.length) {
+                    var peek = lines[i + 1].trim();
+                    if (!peek) { i++; continue; }
+                    if (isClause(peek) || peek === ')' || peek === 'END') break;
+
+                    if (peek.match(/^(INNER\s+|LEFT\s+|RIGHT\s+|FULL\s+|CROSS\s+)?(OUTER\s+)?JOIN\b/i)) {
+                        i++;
+                        var joinLine = peek;
+                        if (i + 1 < lines.length) {
+                            var nextAfterJoin = lines[i + 1].trim();
+                            if (nextAfterJoin.match(/^ON\b/i)) {
+                                i++;
+                                joinLine += ' ' + nextAfterJoin;
+                            }
+                        }
+
+                        var onIdx = joinLine.search(/\bON\b/i);
+                        if (onIdx !== -1) {
+                            var joinPart = joinLine.substring(0, onIdx);
+                            var onPart = joinLine.substring(onIdx);
+                            joinLine = joinPart.trimEnd() + ' ' + compactOperators(onPart);
+                        }
+                        result.push('     ' + joinLine);
+                        continue;
+                    }
+
+                    i++;
+                    result.push('     ' + peek);
+                }
+                continue;
+            }
+
+            // 3. WHERE / HAVING
+            if (upper === 'WHERE' || upper === 'HAVING') {
+                var clauseName = upper;
+                var conditions = [];
+                while (i + 1 < lines.length) {
+                    var nextCond = lines[i + 1].trim();
+                    if (!nextCond) { i++; continue; }
+                    if (isClause(nextCond) || nextCond === ')' || nextCond === 'END') break;
+                    conditions.push(nextCond);
+                    i++;
+                }
+                var mergedCond = conditions.join(' ');
+                mergedCond = compactOperators(mergedCond);
+                result.push(clauseName + ' ' + mergedCond);
+                continue;
+            }
+
+            // 4. ORDER BY / GROUP BY
+            if (upper === 'ORDER BY' || upper === 'GROUP BY') {
+                var groupKeyword = upper;
+                var items = [];
+                while (i + 1 < lines.length) {
+                    var nextItem = lines[i + 1].trim();
+                    if (!nextItem) { i++; continue; }
+                    if (isClause(nextItem) || nextItem === ')' || nextItem === 'END') break;
+                    items.push(nextItem.replace(/,$/, ''));
+                    i++;
+                }
+                result.push(groupKeyword + ' ' + items.join(', '));
+                continue;
+            }
+
+            result.push(line);
         }
 
         return unmaskHints(result.join('\n'));
@@ -2203,7 +2399,8 @@ window.toggleQueryEditorComment = function (editorId) {
 window.userSettings = {
     autoGenerateAliases: true,
     useAsKeyword: true,
-    keepInClauseOnSingleLine: true
+    keepInClauseOnSingleLine: true,
+    formattingStyle: 'Default'
 };
 
 window.setUserSettings = function (settings) {

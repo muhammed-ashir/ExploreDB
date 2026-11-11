@@ -113,26 +113,35 @@ public sealed class ProfilerService : IAsyncDisposable
         if (IsStreaming)
             return (true, null);
 
-        string masterConnStr = NormalizeToMasterConnectionString(config.ConnectionString);
+        string? targetDatabase = config.Filters.DatabaseName;
 
-        // Pre-check permissions
-        var (hasPerms, permError) = await XEventSessionManager.CheckPermissionsAsync(masterConnStr);
+        // Pre-check permissions: check Database-level permissions on targetDatabase first,
+        // then fall back to server-level permissions
+        var (hasPerms, isDbScope, permError) = await XEventSessionManager.CheckPermissionsAsync(
+            config.ConnectionString, 
+            targetDatabase);
+
         if (!hasPerms)
         {
             return (false, permError ?? "User lacks permissions to create Extended Event sessions.");
         }
 
+        string activeConnStr = isDbScope && !string.IsNullOrWhiteSpace(targetDatabase)
+            ? XEventSessionManager.BuildDatabaseConnectionString(config.ConnectionString, targetDatabase)
+            : NormalizeToMasterConnectionString(config.ConnectionString);
+
         _traceCts = new CancellationTokenSource();
         var ct = _traceCts.Token;
 
-        StatusChanged?.Invoke($"Creating Extended Event session on SQL Server: {config.SessionName}...");
+        string scopeDescription = isDbScope ? $"database '{targetDatabase}'" : "SQL Server instance";
+        StatusChanged?.Invoke($"Creating Extended Event session on {scopeDescription}: {config.SessionName}...");
 
         try
         {
-            // 1. Create and start session on SQL Server
-            await _sessionManager.StartSessionAsync(masterConnStr, config, ct);
+            // 1. Create and start session
+            await _sessionManager.StartSessionAsync(activeConnStr, config, isDbScope, ct);
 
-            StatusChanged?.Invoke($"Session active. Ingesting live event stream...");
+            StatusChanged?.Invoke($"Session active on {scopeDescription}. Ingesting live event stream...");
 
             var channel = Channel.CreateBounded<TraceEvent>(new BoundedChannelOptions(50_000)
             {
@@ -150,7 +159,7 @@ public sealed class ProfilerService : IAsyncDisposable
             {
                 try
                 {
-                    await _streamer.StreamEventsAsync(masterConnStr, config.SessionName, channel.Writer, ct);
+                    await _streamer.StreamEventsAsync(activeConnStr, config.SessionName, channel.Writer, ct, targetDatabase);
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {

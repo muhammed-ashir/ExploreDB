@@ -17,7 +17,8 @@ public sealed class ProfilerStreamerService
         string connectionString,
         string sessionName,
         ChannelWriter<TraceEvent> writer,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? fallbackDatabaseName = null)
     {
         var streamer = new XELiveEventStreamer(connectionString, sessionName);
 
@@ -33,7 +34,7 @@ public sealed class ProfilerStreamerService
 
                     try
                     {
-                        var parsed = XEventParser.Parse(xEvent);
+                        var parsed = XEventParser.Parse(xEvent, fallbackDatabaseName);
                         writer.TryWrite(parsed);
                     }
                     catch
