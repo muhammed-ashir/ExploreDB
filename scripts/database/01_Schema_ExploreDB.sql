@@ -932,6 +932,126 @@ BEGIN
 END
 GO
 
+-- =======================================================================================
+-- SP DEBUGGER FULL CAPABILITY TEST STORED PROCEDURE
+-- =======================================================================================
+-- Tests all SP debugger capabilities in one self-contained procedure:
+--  1. Scalar variables & SET mutations
+--  2. #temp tables (CREATE, INSERT, UPDATE)
+--  3. Variable mutation via SELECT aggregation
+--  4. SELECT ... INTO #temp table
+--  5. Dynamic conditional branch stepping (IF ... ELSE)
+--  6. Multiple intermediate result sets (including 0-row query schema preservation)
+--  7. PRINT diagnostics
+-- =======================================================================================
+CREATE PROCEDURE dbo.sp_ExploreDB_DebuggerTest
+    @DepartmentId INT = 10,
+    @CustomerTier VARCHAR(20) = 'VIP',
+    @MinOrderAmount DECIMAL(18, 2) = 50.00,
+    @ProcessDate DATE = '2026-11-10'
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- 1. SCALAR VARIABLES DECLARATION
+    DECLARE @TotalOrdersCount INT = 0;
+    DECLARE @CalculatedDiscount DECIMAL(5, 2) = 0.00;
+    DECLARE @StatusMessage NVARCHAR(100) = 'Initialized';
+    DECLARE @MaxOrderAmount DECIMAL(18, 2) = 0.00;
+
+    -- 2. VARIABLE VALUE MUTATION (SET statements)
+    SET @StatusMessage = 'Loading orders dataset...';
+    SET @CalculatedDiscount = CASE WHEN @CustomerTier = 'VIP' THEN 0.15 ELSE 0.05 END;
+
+    -- 3. TEMP TABLE CREATION (#TempOrders)
+    CREATE TABLE #TempOrders (
+        OrderId INT,
+        CustomerName NVARCHAR(50),
+        OrderAmount DECIMAL(18, 2),
+        OrderDate DATE,
+        DiscountApplied DECIMAL(18, 2) DEFAULT 0.00
+    );
+
+    -- 4. INSERT DATA INTO TEMP TABLE
+    INSERT INTO #TempOrders (OrderId, CustomerName, OrderAmount, OrderDate)
+    VALUES 
+        (101, 'Alice Johnson', 120.50, @ProcessDate),
+        (102, 'Bob Smith', 45.00, DATEADD(DAY, -1, @ProcessDate)),
+        (103, 'Charlie Brown', 250.00, DATEADD(DAY, -2, @ProcessDate)),
+        (104, 'Diana Prince', 80.00, @ProcessDate),
+        (105, 'Evan Wright', 310.25, DATEADD(DAY, -3, @ProcessDate));
+
+    -- 5. VARIABLE MUTATION VIA SELECT AGGREGATION
+    SELECT 
+        @TotalOrdersCount = COUNT(*),
+        @MaxOrderAmount = MAX(OrderAmount)
+    FROM #TempOrders;
+
+    -- 6. DATA MUTATION IN TEMP TABLE (UPDATE statement)
+    UPDATE #TempOrders
+    SET DiscountApplied = ROUND(OrderAmount * @CalculatedDiscount, 2)
+    WHERE OrderAmount >= @MinOrderAmount;
+
+    -- 7. SECOND TEMP TABLE CREATION VIA (SELECT ... INTO #HighValueOrders)
+    SELECT 
+        OrderId,
+        CustomerName,
+        OrderAmount,
+        DiscountApplied,
+        (OrderAmount - DiscountApplied) AS FinalAmount
+    INTO #HighValueOrders
+    FROM #TempOrders
+    WHERE OrderAmount >= @MinOrderAmount;
+
+    -- 8. RESULT SET #1: High Value Orders Query
+    SELECT 
+        OrderId,
+        CustomerName,
+        OrderAmount,
+        DiscountApplied,
+        FinalAmount,
+        'High Value Tier' AS Classification
+    FROM #HighValueOrders
+    ORDER BY FinalAmount DESC;
+
+    -- 9. CONDITIONAL BRANCHING (IF ... ELSE)
+    IF @TotalOrdersCount >= 5
+    BEGIN
+        SET @StatusMessage = 'High volume batch processed successfully.';
+    END
+    ELSE
+    BEGIN
+        SET @StatusMessage = 'Low volume batch processed.';
+    END
+
+    -- 10. RESULT SET #2: Aggregated Financial Summary
+    SELECT 
+        @CustomerTier AS CustomerTier,
+        @TotalOrdersCount AS TotalOrdersProcessed,
+        @MaxOrderAmount AS PeakOrderAmount,
+        SUM(OrderAmount) AS TotalGrossSales,
+        SUM(DiscountApplied) AS TotalDiscountsGiven,
+        SUM(OrderAmount - DiscountApplied) AS NetRevenue
+    FROM #TempOrders;
+
+    -- 11. RESULT SET #3: Zero-Row Query (Tests Schema Preservation on Empty Results)
+    SELECT 
+        OrderId,
+        CustomerName,
+        OrderAmount,
+        'Unmatched Flag' AS SpecialStatus
+    FROM #TempOrders
+    WHERE OrderAmount > 50000.00;
+
+    -- 12. EXECUTION DIAGNOSTICS (PRINT statement)
+    PRINT 'ExploreDB Test SP completed successfully for ' + @CustomerTier + ' tier.';
+
+    -- 13. CLEANUP
+    DROP TABLE #HighValueOrders;
+    DROP TABLE #TempOrders;
+END
+GO
+
 
 
 -- =======================================================================================

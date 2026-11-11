@@ -208,7 +208,7 @@
             </div>
             <!-- Second Line: Details Description -->
             <div class="text-muted small ps-4" style="line-height: 1.45;">
-                Runs the procedure in an isolated transaction that is <strong>always rolled back</strong> in milliseconds—your tables are <strong>never modified</strong> and all database locks are <strong>immediately released</strong>. All step-by-step debugging, variable diffs, <code>#temp</code> tables, and result sets then operate entirely offline on the captured local memory snapshot with zero connection or lock overhead.
+                Runs the procedure in an isolated transaction that is <strong>always rolled back</strong> in milliseconds—your tables are <strong>never modified</strong> and all database locks are <strong>immediately released</strong>. All step-by-step debugging, variable diffs, temp tables, and result sets then operate entirely offline on the captured local memory snapshot with zero connection or lock overhead.
             </div>
         </div>
     }
@@ -319,41 +319,41 @@
                  style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
                 <!-- Inspector Tab Header -->
                 <div class="card-header p-0" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
-                    <ul class="nav nav-tabs border-0 px-2 pt-2" role="tablist">
+                    <ul class="nav nav-tabs border-0 px-2 pt-1" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link py-2 px-3 @(_activeInspectorTab == "Variables" ? "active fw-semibold" : "text-muted")"
-                                    style="@(_activeInspectorTab == "Variables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
+                            <button class="nav-link @(_activeInspectorTab == "Variables" ? "active fw-semibold" : "text-muted")"
+                                    style="padding: 0.28rem 0.65rem; font-size: 0.8rem; @(_activeInspectorTab == "Variables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
                                     @onclick='() => _activeInspectorTab = "Variables"'>
                                 Variables
                                 @if (CurrentSnapshotVariables.Count > 0)
                                 {
-                                    <span class="badge bg-secondary-subtle text-muted ms-1" style="font-size: 0.68rem;">
+                                    <span class="badge bg-secondary-subtle text-muted ms-1" style="font-size: 0.65rem; padding: 0.15em 0.4em;">
                                         @CurrentSnapshotVariables.Count
                                     </span>
                                 }
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link py-2 px-3 @(_activeInspectorTab == "TempTables" ? "active fw-semibold" : "text-muted")"
-                                    style="@(_activeInspectorTab == "TempTables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
+                            <button class="nav-link @(_activeInspectorTab == "TempTables" ? "active fw-semibold" : "text-muted")"
+                                    style="padding: 0.28rem 0.65rem; font-size: 0.8rem; @(_activeInspectorTab == "TempTables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
                                     @onclick='() => _activeInspectorTab = "TempTables"'>
                                 Temp Tables
                                 @if (CurrentSnapshotTempTables.Count > 0)
                                 {
-                                    <span class="badge bg-warning-subtle text-warning ms-1" style="font-size: 0.68rem;">
+                                    <span class="badge bg-warning-subtle text-warning ms-1" style="font-size: 0.65rem; padding: 0.15em 0.4em;">
                                         @CurrentSnapshotTempTables.Count
                                     </span>
                                 }
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link py-2 px-3 @(_activeInspectorTab == "Results" ? "active fw-semibold" : "text-muted")"
-                                    style="@(_activeInspectorTab == "Results" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
+                            <button class="nav-link @(_activeInspectorTab == "Results" ? "active fw-semibold" : "text-muted")"
+                                    style="padding: 0.28rem 0.65rem; font-size: 0.8rem; @(_activeInspectorTab == "Results" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
                                     @onclick='() => _activeInspectorTab = "Results"'>
                                 Results
                                 @if (CurrentSnapshotResults.Count > 0)
                                 {
-                                    <span class="badge bg-success-subtle text-success ms-1" style="font-size: 0.68rem;">
+                                    <span class="badge bg-success-subtle text-success ms-1" style="font-size: 0.65rem; padding: 0.15em 0.4em;">
                                         @CurrentSnapshotResults.Count
                                     </span>
                                 }
@@ -398,10 +398,9 @@
                                 <table class="table table-sm table-hover mb-0" style="font-size: 0.82rem; color: var(--app-text);">
                                     <thead class="sticky-top" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
                                         <tr>
-                                            <th class="ps-3 py-2">Variable</th>
-                                            <th class="py-2">Type</th>
-                                            <th class="py-2">Value</th>
-                                            <th class="pe-3 py-2 text-end">Status</th>
+                                            <th class="ps-3 py-2" style="width: 38%;">Variable</th>
+                                            <th class="py-2" style="width: 24%;">Type</th>
+                                            <th class="pe-3 py-2" style="width: 38%;">Value</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -409,8 +408,8 @@
                                         {
                                             @foreach (var v in FilteredVariables)
                                             {
-                                                <tr class="@(v.HasChanged ? "table-warning bg-opacity-10" : "")">
-                                                    <td class="ps-3 py-2 font-monospace fw-semibold" style="color: var(--app-text);">
+                                                <tr class="@(v.HasChanged ? "var-changed-row" : "")">
+                                                    <td class="ps-3 py-2 font-monospace fw-semibold" style="@(v.HasChanged ? "color: #f59e0b !important;" : "color: var(--app-text);")">
                                                         @v.Name
                                                         @if (v.IsParameter)
                                                         {
@@ -418,25 +417,13 @@
                                                         }
                                                     </td>
                                                     <td class="py-2 text-muted font-monospace">@v.DataType</td>
-                                                    <td class="py-2 font-monospace @(v.HasChanged ? "fw-bold text-warning" : "")" style="word-break: break-all;">
+                                                    <td class="pe-3 py-2 font-monospace @(v.HasChanged ? "fw-bold text-warning" : "")" style="word-break: break-all;">
                                                         @(v.Value ?? "NULL")
                                                         @if (v.HasChanged && v.PreviousValue != null)
                                                         {
-                                                            <div class="text-muted small text-decoration-line-through font-monospace" style="font-size: 0.72rem;">
-                                                                was: @v.PreviousValue
+                                                            <div class="text-muted small font-monospace" style="font-size: 0.72rem; opacity: 0.85;">
+                                                                was: <span class="text-decoration-line-through">@v.PreviousValue</span>
                                                             </div>
-                                                        }
-                                                    </td>
-                                                    <td class="pe-3 py-2 text-end">
-                                                        @if (v.HasChanged)
-                                                        {
-                                                            <span class="badge bg-warning text-dark" style="font-size: 0.68rem; font-weight: 600;">
-                                                                Changed
-                                                            </span>
-                                                        }
-                                                        else
-                                                        {
-                                                            <span class="text-muted small" style="font-size: 0.7rem;">unchanged</span>
                                                         }
                                                     </td>
                                                 </tr>
@@ -445,7 +432,7 @@
                                         else
                                         {
                                             <tr>
-                                                <td colspan="4" class="text-center py-4 text-muted small">
+                                                <td colspan="3" class="text-center py-4 text-muted small">
                                                     No variables match filter "@_varFilter"
                                                 </td>
                                             </tr>
@@ -741,15 +728,7 @@
                                 <strong class="ms-1">@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)</strong>
                             </div>
                             <div class="col-sm-6">
-                                <span class="text-muted">Executable Statements:</span>
-                                <strong class="ms-1">@(_session?.Statements.Count ?? 0)</strong>
-                            </div>
-                            <div class="col-sm-6">
-                                <span class="text-muted">Execution Steps Recorded:</span>
-                                <strong class="ms-1">@(_session?.TotalExecutionSteps ?? 0)</strong>
-                            </div>
-                            <div class="col-sm-6">
-                                <span class="text-muted">Server Recording Time:</span>
+                                <span class="text-muted">Server Execution Time:</span>
                                 <strong class="ms-1">@(_session?.TotalServerExecutionMs ?? 0) ms</strong>
                             </div>
                             <div class="col-sm-6">
@@ -780,6 +759,13 @@
     }
     .active-statement-glyph {
         color: #10b981 !important;
+    }
+    .var-changed-row {
+        --bs-table-bg: rgba(245, 158, 11, 0.14) !important;
+        background-color: rgba(245, 158, 11, 0.14) !important;
+    }
+    .var-changed-row td:first-child {
+        border-left: 3px solid #f59e0b !important;
     }
 </style>
 
