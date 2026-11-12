@@ -2785,6 +2785,37 @@
                             try { columnTypes[i] = reader.GetDataTypeName(i); } catch { columnTypes[i] = ""; }
                         }
                         table = new QueryResultTable(columnNames, columnTypes);
+                        try
+                        {
+                            var schemaTable = reader.GetSchemaTable();
+                            if (schemaTable != null && schemaTable.Rows.Count > 0)
+                            {
+                                var hasBaseTable = schemaTable.Columns.Contains("BaseTableName");
+                                var hasBaseSchema = schemaTable.Columns.Contains("BaseSchemaName");
+                                if (hasBaseTable)
+                                {
+                                    var baseTable = schemaTable.Rows[0]["BaseTableName"]?.ToString();
+                                    var baseSchema = hasBaseSchema ? schemaTable.Rows[0]["BaseSchemaName"]?.ToString() : null;
+                                    if (!string.IsNullOrWhiteSpace(baseTable))
+                                    {
+                                        table.TableName = string.IsNullOrWhiteSpace(baseSchema) ? $"[{baseTable}]" : $"[{baseSchema}].[{baseTable}]";
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+
+                        if (string.IsNullOrEmpty(table.TableName) && !string.IsNullOrWhiteSpace(QueryStateService.CustomQuery))
+                        {
+                            var match = System.Text.RegularExpressions.Regex.Match(
+                                QueryStateService.CustomQuery,
+                                @"\bFROM\s+([\[\]a-zA-Z0-9_\.]+)",
+                                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (match.Success)
+                            {
+                                table.TableName = match.Groups[1].Value.Trim();
+                            }
+                        }
                         if (true) {
                         }
 

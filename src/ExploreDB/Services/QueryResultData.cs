@@ -32,6 +32,7 @@ public class QueryResultTable : IEnumerable<object>
     }
 
     public bool IsComplete { get; set; } = false;
+    public string? TableName { get; set; }
 
     public QueryResultTable(IEnumerable<string> columns, IEnumerable<string>? columnTypes = null)
     {
