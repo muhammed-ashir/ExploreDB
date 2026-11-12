@@ -527,9 +527,9 @@
                                             var capturedIndex = i + 1;
                                             var totalCount = ActiveTab.ResultSets.Count;
 
-                                            <div id="@($"rs-pane-{capturedIndex}")" 
+                                            <div @key="rsItem" id="@($"rs-pane-{capturedIndex}")" 
                                                  class="d-flex flex-column overflow-hidden" 
-                                                 style="flex: 1 0 @(100.0 / totalCount)%; min-height: @(totalCount == 1 ? "0" : (totalCount <= 2 ? "90px" : "120px")); position: relative;">
+                                                 style="@GetResultSetPaneStyle(rsItem, totalCount)">
                                                 <ResultSetGrid Data="rsItem" 
                                                                ResultSetIndex="capturedIndex" 
                                                                TotalResultSets="totalCount" 
@@ -964,6 +964,49 @@
             else if (rs is System.Collections.ICollection c) sum += c.Count;
         }
         return sum;
+    }
+
+    private int GetResultRowCount(object? rs)
+    {
+        if (rs == null) return 0;
+        if (rs is QueryResultTable qrt) return qrt.RowCount;
+        if (rs is System.Data.DataTable dt) return dt.Rows.Count;
+        if (rs is System.Collections.ICollection c) return c.Count;
+        if (rs is IEnumerable<dynamic> d) return d.Count();
+        return 0;
+    }
+
+    private bool IsResultTextDefinition(object? rs)
+    {
+        if (rs is QueryResultTable qrt)
+        {
+            return qrt.Columns.Count == 1 &&
+                   qrt.Columns[0].Equals("Text", StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
+    }
+
+    private string GetResultSetPaneStyle(object? rsItem, int totalCount)
+    {
+        if (totalCount <= 1)
+        {
+            return "flex: 1 0 100%; min-height: 0; position: relative;";
+        }
+
+        if (IsResultTextDefinition(rsItem))
+        {
+            return "flex: 1 1 auto; min-height: 280px; position: relative;";
+        }
+
+        int rowCount = GetResultRowCount(rsItem);
+        if (rowCount <= 3)
+        {
+            // Compact auto-fit height: header (~28px) + rows (24px each) + scrollbar allowance (14px) + borders/padding (4px)
+            int compactHeight = 28 + (Math.Max(rowCount, 1) * 24) + 16;
+            return $"flex: 0 0 {compactHeight}px; height: {compactHeight}px; min-height: 54px; position: relative;";
+        }
+
+        return "flex: 1 1 auto; min-height: 90px; position: relative;";
     }
 
     private void HandleExportStateChanged(ExploreDB.Components.Pages.ResultSetGrid.ExportStatus status)

@@ -50,7 +50,7 @@
     else
     {
 
-    <div id="@_tableContainerId" class="table-responsive rounded position-relative flex-grow-1 custom-scrollbar-light" tabindex="0" style="border: 1px solid var(--app-border); outline: none; overflow: auto; min-height: 0; height: 100%; overflow-anchor: none !important;" @onkeydown="HandleKeyDown">
+    <div id="@_tableContainerId" class="table-responsive rounded position-relative flex-grow-1 custom-scrollbar-light" tabindex="0" style="border: 1px solid var(--app-border); outline: none; overflow-x: auto; overflow-y: @(TotalDataCount <= 2 ? "hidden" : "auto"); min-height: 0; height: 100%; overflow-anchor: none !important;" @onkeydown="HandleKeyDown">
         <table class="result-set-table" style="width: max-content;">
             <thead>
                 <tr>
