@@ -12,12 +12,14 @@ public class QueryOutputMessage
 {
     public string Text { get; set; } = string.Empty;
     public bool IsError { get; set; } = false;
+    public int? LineNumber { get; set; }
 
     public QueryOutputMessage() { }
-    public QueryOutputMessage(string text, bool isError = false)
+    public QueryOutputMessage(string text, bool isError = false, int? lineNumber = null)
     {
         Text = text;
         IsError = isError;
+        LineNumber = lineNumber;
     }
 
     public static implicit operator QueryOutputMessage(string text) => new(text);

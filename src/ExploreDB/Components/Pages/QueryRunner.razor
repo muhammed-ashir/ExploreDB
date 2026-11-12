@@ -28,7 +28,7 @@
     else
     {
     <!-- Fixed Top Action Toolbar -->
-    <div class="query-runner-toolbar d-flex justify-content-between align-items-center flex-nowrap flex-shrink-0">
+    <div class="query-runner-toolbar d-flex align-items-center flex-nowrap flex-shrink-0 gap-2">
         <div class="d-flex gap-2 flex-shrink-0 align-items-center">
             <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Open File (Ctrl+O)" data-bs-placement="bottom" @onclick="OpenFileAsync">
                 <i class="bi bi-folder2-open"></i>
@@ -55,6 +55,7 @@
                 <i class="bi bi-bookmarks text-info"></i>
             </button>
         </div>
+
         <div class="d-flex align-items-center flex-shrink-0">
             @if (ActiveTab.IsExecuting)
             {
@@ -219,6 +220,7 @@
                                                         <span class="text-secondary text-truncate" style="font-size: 0.7rem;">@GetTabConnectionSummary(tab)</span>
                                                     }
                                                 </div>
+                                        
                                                 <div class="d-flex align-items-center flex-shrink-0">
                                                     @if (true)
                                                     {
@@ -591,7 +593,21 @@
 {
     @if (msg.IsError || msg.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || msg.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
     {
-        <span class="text-danger fw-semibold">@msg.Text</span><br/>
+        var navLine = msg.LineNumber;
+        if (!navLine.HasValue && msg.IsError)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(msg.Text, @"\bLine\s+(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (match.Success && int.TryParse(match.Groups[1].Value, out int pLine)) navLine = pLine;
+        }
+
+        if (navLine.HasValue && navLine.Value > 0)
+        {
+            <span class="text-danger fw-semibold" style="cursor: pointer; user-select: text;" title="Double-click to navigate to line @(navLine.Value) in editor" @ondblclick="() => JumpToEditorLineAsync(navLine.Value)">@msg.Text</span><br/>
+        }
+        else
+        {
+            <span class="text-danger fw-semibold">@msg.Text</span><br/>
+        }
     }
     else
     {
@@ -1007,6 +1023,69 @@
         }
 
         return "flex: 1 1 auto; min-height: 90px; position: relative;";
+    }
+
+    private (string Header, int? DisplayLine) FormatSqlErrorHeader(SqlError err, int lineOffset)
+    {
+        int displayLine = (string.IsNullOrEmpty(err.Procedure) && err.LineNumber > 0)
+            ? err.LineNumber + lineOffset
+            : err.LineNumber;
+
+        string procPart = !string.IsNullOrEmpty(err.Procedure) ? $", Procedure {err.Procedure}" : "";
+        string header = $"Msg {err.Number}, Level {err.Class}, State {err.State}{procPart}, Line {displayLine}";
+
+        int? navLine = string.IsNullOrEmpty(err.Procedure) && displayLine > 0 ? displayLine : (int?)null;
+        return (header, navLine);
+    }
+
+    private (string Header, int? DisplayLine) FormatSqlErrorHeader(SqlException ex, int lineOffset)
+    {
+        int displayLine = (string.IsNullOrEmpty(ex.Procedure) && ex.LineNumber > 0)
+            ? ex.LineNumber + lineOffset
+            : ex.LineNumber;
+
+        string procPart = !string.IsNullOrEmpty(ex.Procedure) ? $", Procedure {ex.Procedure}" : "";
+        string header = $"Msg {ex.Number}, Level {ex.Class}, State {ex.State}{procPart}, Line {displayLine}";
+
+        int? navLine = string.IsNullOrEmpty(ex.Procedure) && displayLine > 0 ? displayLine : (int?)null;
+        return (header, navLine);
+    }
+
+    private async Task JumpToEditorLineAsync(int lineNumber)
+    {
+        if (_editor == null || lineNumber <= 0) return;
+
+        try
+        {
+            if (IsFullScreen)
+            {
+                IsFullScreen = false;
+                StateHasChanged();
+            }
+            if (IsMinimized)
+            {
+                IsMinimized = false;
+                StateHasChanged();
+            }
+
+            var model = await _editor.GetModel();
+            int maxCol = 100;
+            if (model != null)
+            {
+                maxCol = await model.GetLineMaxColumn(lineNumber);
+            }
+
+            await _editor.SetSelection(source: "api", selection: new Selection
+            {
+                StartLineNumber = lineNumber,
+                StartColumn = 1,
+                EndLineNumber = lineNumber,
+                EndColumn = Math.Max(1, maxCol)
+            });
+            await _editor.RevealLineInCenter(lineNumber);
+            await _editor.Focus();
+        }
+        catch { }
     }
 
     private void HandleExportStateChanged(ExploreDB.Components.Pages.ResultSetGrid.ExportStatus status)
@@ -2502,6 +2581,7 @@
 
     [JSInvokable]
     public async Task OpenSaveSnippetModal()
+
     {
         var queryText = "";
         try
@@ -2662,14 +2742,32 @@
     {
         if (ActiveTab.IsExecuting) return;
 
+        int lineOffset = 0;
+
         var queryText = "";
         var fullScript = "";
+
         try
         {
             if (_editor != null)
             {
                 fullScript = await _editor.GetValue();
                 ActiveTab.Content = fullScript;
+
+                var sel = await _editor.GetSelection();
+                if (sel != null && (sel.StartLineNumber != sel.EndLineNumber || sel.StartColumn != sel.EndColumn))
+                {
+                    var model = await _editor.GetModel();
+                    if (model != null)
+                    {
+                        var selText = await model.GetValueInRange(sel, EndOfLinePreference.TextDefined);
+                        if (!string.IsNullOrWhiteSpace(selText))
+                        {
+                            queryText = selText;
+                            lineOffset = sel.StartLineNumber - 1;
+                        }
+                    }
+                }
             }
         }
         catch { }
@@ -2694,6 +2792,7 @@
         if (string.IsNullOrWhiteSpace(queryText))
         {
             queryText = fullScript;
+            lineOffset = 0;
         }
 
         if (string.IsNullOrWhiteSpace(queryText))
@@ -2752,8 +2851,9 @@
                 {
                     if (err.Class > 10)
                     {
-                        ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {err.Number}, Level {err.Class}, State {err.State}, Line {err.LineNumber}", isError: true));
-                        ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true));
+                        var (hMsg, nLine) = FormatSqlErrorHeader(err, lineOffset);
+                        ActiveTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
+                        ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
                     }
                     else
                     {
@@ -2962,13 +3062,15 @@
                 errorMessage = sqlEx.Message;
                 foreach (SqlError err in sqlEx.Errors)
                 {
-                    ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {err.Number}, Level {err.Class}, State {err.State}, Line {err.LineNumber}", isError: true));
-                    ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true));
+                    var (hMsg, nLine) = FormatSqlErrorHeader(err, lineOffset);
+                    ActiveTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
+                    ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
                 }
                 if (sqlEx.Errors.Count == 0)
                 {
-                    ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {sqlEx.Number}, Level {sqlEx.Class}, State {sqlEx.State}, Line {sqlEx.LineNumber}", isError: true));
-                    ActiveTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true));
+                    var (hEx, nExLine) = FormatSqlErrorHeader(sqlEx, lineOffset);
+                    ActiveTab.Messages.Add(new QueryOutputMessage(hEx, isError: true, lineNumber: nExLine));
+                    ActiveTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true, lineNumber: nExLine));
                 }
                 ActiveTab.Messages.Add("");
                 ActiveTab.AddCompletionTime();

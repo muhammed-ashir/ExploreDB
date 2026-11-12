@@ -373,7 +373,21 @@
 {
     @if (msg.IsError || msg.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || msg.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
     {
-        <span class="text-danger fw-semibold">@msg.Text</span><br/>
+        var navLine = msg.LineNumber;
+        if (!navLine.HasValue && msg.IsError)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(msg.Text, @"\bLine\s+(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (match.Success && int.TryParse(match.Groups[1].Value, out int pLine)) navLine = pLine;
+        }
+
+        if (navLine.HasValue && navLine.Value > 0)
+        {
+            <span class="text-danger fw-semibold" style="cursor: pointer; user-select: text;" title="Double-click to navigate to line @(navLine.Value) in editor" @ondblclick="() => JumpToEditorLineAsync(navLine.Value)">@msg.Text</span><br/>
+        }
+        else
+        {
+            <span class="text-danger fw-semibold">@msg.Text</span><br/>
+        }
     }
     else
     {
@@ -435,6 +449,69 @@
 
     private bool IsFullScreen = false;
     private bool IsMinimized = false;
+
+    private (string Header, int? DisplayLine) FormatSqlErrorHeader(SqlError err, int lineOffset)
+    {
+        int displayLine = (string.IsNullOrEmpty(err.Procedure) && err.LineNumber > 0)
+            ? err.LineNumber + lineOffset
+            : err.LineNumber;
+
+        string procPart = !string.IsNullOrEmpty(err.Procedure) ? $", Procedure {err.Procedure}" : "";
+        string header = $"Msg {err.Number}, Level {err.Class}, State {err.State}{procPart}, Line {displayLine}";
+
+        int? navLine = string.IsNullOrEmpty(err.Procedure) && displayLine > 0 ? displayLine : (int?)null;
+        return (header, navLine);
+    }
+
+    private (string Header, int? DisplayLine) FormatSqlErrorHeader(SqlException ex, int lineOffset)
+    {
+        int displayLine = (string.IsNullOrEmpty(ex.Procedure) && ex.LineNumber > 0)
+            ? ex.LineNumber + lineOffset
+            : ex.LineNumber;
+
+        string procPart = !string.IsNullOrEmpty(ex.Procedure) ? $", Procedure {ex.Procedure}" : "";
+        string header = $"Msg {ex.Number}, Level {ex.Class}, State {ex.State}{procPart}, Line {displayLine}";
+
+        int? navLine = string.IsNullOrEmpty(ex.Procedure) && displayLine > 0 ? displayLine : (int?)null;
+        return (header, navLine);
+    }
+
+    private async Task JumpToEditorLineAsync(int lineNumber)
+    {
+        if (_editor == null || lineNumber <= 0) return;
+
+        try
+        {
+            if (IsFullScreen)
+            {
+                IsFullScreen = false;
+                StateHasChanged();
+            }
+            if (IsMinimized)
+            {
+                IsMinimized = false;
+                StateHasChanged();
+            }
+
+            var model = await _editor.GetModel();
+            int maxCol = 100;
+            if (model != null)
+            {
+                maxCol = await model.GetLineMaxColumn(lineNumber);
+            }
+
+            await _editor.SetSelection(source: "api", selection: new Selection
+            {
+                StartLineNumber = lineNumber,
+                StartColumn = 1,
+                EndLineNumber = lineNumber,
+                EndColumn = Math.Max(1, maxCol)
+            });
+            await _editor.RevealLineInCenter(lineNumber);
+            await _editor.Focus();
+        }
+        catch { }
+    }
 
     // Results Search State
     private bool _isSearchOpen = false;
@@ -927,9 +1004,11 @@
 
         var connWatch = System.Diagnostics.Stopwatch.StartNew();
         var queryWatch = new System.Diagnostics.Stopwatch();
+        int lineOffset = 0;
         try
         {
             string queryToRun = ActiveTab.Content;
+
             
             if (_editor != null)
             {
@@ -938,6 +1017,7 @@
                 {
                     var model = await _editor.GetModel();
                     queryToRun = await model.GetValueInRange(selection, EndOfLinePreference.LF);
+                    lineOffset = (int)selection.StartLineNumber - 1;
                 }
             }
             
@@ -952,7 +1032,23 @@
             conn.InfoMessage += (sender, e) => 
             {
                 InvokeAsync(() => {
-                    ActiveTab.Messages.Add($"[{DateTime.Now:HH:mm:ss}] {e.Message}");
+                    foreach (SqlError err in e.Errors)
+                    {
+                        if (err.Class > 10)
+                        {
+                            var (hMsg, nLine) = FormatSqlErrorHeader(err, lineOffset);
+                            ActiveTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
+                            ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
+                        }
+                        else
+                        {
+                            ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: false));
+                        }
+                    }
+                    if (e.Errors.Count == 0 && !string.IsNullOrWhiteSpace(e.Message))
+                    {
+                        ActiveTab.Messages.Add(new QueryOutputMessage(e.Message, isError: false));
+                    }
                     StateHasChanged();
                 });
             };
@@ -1126,13 +1222,15 @@
             ResultTab = "Messages";
             foreach (SqlError err in sqlEx.Errors)
             {
-                ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {err.Number}, Level {err.Class}, State {err.State}, Line {err.LineNumber}", isError: true));
-                ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true));
+                var (hMsg, nLine) = FormatSqlErrorHeader(err, lineOffset);
+                ActiveTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
+                ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
             }
             if (sqlEx.Errors.Count == 0)
             {
-                ActiveTab.Messages.Add(new QueryOutputMessage($"Msg {sqlEx.Number}, Level {sqlEx.Class}, State {sqlEx.State}, Line {sqlEx.LineNumber}", isError: true));
-                ActiveTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true));
+                var (hEx, nExLine) = FormatSqlErrorHeader(sqlEx, lineOffset);
+                ActiveTab.Messages.Add(new QueryOutputMessage(hEx, isError: true, lineNumber: nExLine));
+                ActiveTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true, lineNumber: nExLine));
             }
             ActiveTab.Messages.Add("");
             ActiveTab.AddCompletionTime();
