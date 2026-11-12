@@ -848,7 +848,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         };
     }
     monaco.languages.registerCompletionItemProvider('sql', {
-        triggerCharacters: ['.', "'", '['],
+        triggerCharacters: ['.', "'", '[', ']'],
         provideCompletionItems: function(model, position) {
             var lineContent = model.getLineContent(position.lineNumber);
             var textBeforeCursor = lineContent.substring(0, position.column - 1);
@@ -937,44 +937,58 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 endColumn: position.column
             });
 
-            var match = textUntilPosition.match(/(?:\[?[a-zA-Z0-9_]+\]?\.)\[?[a-zA-Z0-9_]*$/);
-            if (match) {
+            var matchWithDot = textUntilPosition.match(/(?:\[?[a-zA-Z0-9_]+\]?\.)\[?[a-zA-Z0-9_]*\]?$/);
+            var matchBracketed = textUntilPosition.match(/\[[a-zA-Z0-9_]*\]?$/);
+            if (matchWithDot) {
                 replaceRange = {
                     startLineNumber: position.lineNumber,
                     endLineNumber: position.lineNumber,
-                    startColumn: position.column - match[0].length,
+                    startColumn: position.column - matchWithDot[0].length,
                     endColumn: position.column
                 };
-            }
-
-            var suggestions = [];
-            
-            if (window.sqlSnippets && window.sqlSnippets.length > 0) {
-                window.sqlSnippets.forEach(function(s) {
-                    suggestions.push({
-                        label: s.shortcut,
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: s.code,
-                        detail: s.shortcut + ' \u2192 ' + (s.description || 'Snippet'),
-                        documentation: s.code,
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        sortText: '0000_0_' + s.shortcut
-                    });
-                });
-            } else {
-                suggestions.push({
-                    label: 'ssf',
-                    kind: monaco.languages.CompletionItemKind.Snippet,
-                    insertText: 'SELECT * FROM $0',
-                    documentation: 'SELECT * FROM snippet',
-                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                    sortText: '0000_0_ssf'
-                });
+            } else if (matchBracketed) {
+                replaceRange = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: position.column - matchBracketed[0].length,
+                    endColumn: position.column
+                };
             }
 
             // Intelligent context detection scoped to active statement
             var stmtContext = getActiveStatementContext(model, position);
             var fullTextUntilPosition = stmtContext.textUntilCursor;
+
+            var isInsertContext = /(?:^|[\s;])INSERT(?:\s+INTO)?\s+[a-zA-Z0-9_\[\]\.]*$/i.test(fullTextUntilPosition)
+                && fullTextUntilPosition.indexOf('(') === -1
+                && !/\b(?:VALUES|SELECT)\b/i.test(fullTextUntilPosition);
+
+            var suggestions = [];
+            
+            if (!isInsertContext) {
+                if (window.sqlSnippets && window.sqlSnippets.length > 0) {
+                    window.sqlSnippets.forEach(function(s) {
+                        suggestions.push({
+                            label: s.shortcut,
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: s.code,
+                            detail: s.shortcut + ' \u2192 ' + (s.description || 'Snippet'),
+                            documentation: s.code,
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            sortText: '0000_0_' + s.shortcut
+                        });
+                    });
+                } else {
+                    suggestions.push({
+                        label: 'ssf',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        insertText: 'SELECT * FROM $0',
+                        documentation: 'SELECT * FROM snippet',
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0000_0_ssf'
+                    });
+                }
+            }
 
             // PRIORITY CHECK: Suppress suggestions when typing a table alias on the same line.
             // Must run BEFORE the keyword scan because an alias like 'or', 'and', 'on', 'as' etc.
@@ -999,7 +1013,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
             var lastTableKeyword = null;
             if (matches && matches.length > 0) {
-                var tableKeywords = new Set(['from', 'join', 'into', 'update', 'table']);
+                var tableKeywords = new Set(['from', 'join', 'into', 'insert', 'update', 'table']);
                 var columnKeywords = new Set(['select', 'where', 'on', 'by', 'having', 'set', 'and', 'or']);
                 var spKeywords = new Set(['exec', 'execute']);
                 
@@ -1063,6 +1077,13 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
             }
 
+            if (isInsertContext) {
+                suggestTables = true;
+                suggestColumns = false;
+                suggestSps = false;
+                suggestKeywords = false;
+            }
+
             var autoAlias = (window.userSettings ? window.userSettings.autoGenerateAliases !== false : true) &&
                             (lastTableKeyword === 'from' || lastTableKeyword === 'join' || lastTableKeyword === 'update');
             var useAs = window.userSettings ? window.userSettings.useAsKeyword !== false : true;
@@ -1089,20 +1110,39 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     var detailText = 'Table';
                     var alias = null;
 
-                    if (autoAlias) {
+                    if (isInsertContext) {
+                        var cols = (t.insertColumns && t.insertColumns.length > 0) ? t.insertColumns : (t.columns || []);
+                        var colList = cols.length > 0
+                            ? cols.map(function(c) { return '    [' + c.replace(/[\[\]]/g, '') + ']'; }).join(',\n')
+                            : '    /* ColumnList */';
+                        var valList = cols.length > 0
+                            ? cols.map(function(c) {
+                                var paramName = c.replace(/[\[\]]/g, '').replace(/[^a-zA-Z0-9_]/g, '');
+                                return '    @' + paramName;
+                            }).join(',\n')
+                            : '    /* Values */';
+
+                        insText = t.fullName + '\n(\n' + colList + '\n)\nVALUES\n(\n' + valList + '\n);';
+                        detailText = 'Table';
+                    } else if (autoAlias) {
                         alias = window.generateTableAlias(t.name || t.fullName, existingAliases);
                         insText = t.fullName + (useAs ? " AS " : " ") + alias;
                         detailText = 'Table (' + (useAs ? 'AS ' : '') + alias + ')';
                     }
 
+                    var filterStr = t.name + " [" + t.name + "] " + t.fullName + (t.schema ? (" " + t.schema + "." + t.name) : "") + (autoAlias && alias ? (" " + alias) : "");
+
                     suggestions.push({
                         label: t.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
                         insertText: insText,
-                        filterText: t.name + " " + t.fullName + (autoAlias && alias ? (" " + alias) : ""),
-                        sortText: String(t.name.length).padStart(4, '0') + '_' + t.name + '_' + t.fullName,
+                        filterText: filterStr,
+                        sortText: isInsertContext ? ('0001_' + t.name + '_' + t.fullName) : (String(t.name.length).padStart(4, '0') + '_' + t.name + '_' + t.fullName),
                         range: replaceRange,
-                        detail: detailText
+                        detail: detailText,
+                        documentation: isInsertContext ? {
+                            value: '```sql\nINSERT INTO ' + insText + '\n```'
+                        } : undefined
                     });
                 });
             }
@@ -1113,20 +1153,39 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     var detailText = 'View';
                     var alias = null;
 
-                    if (autoAlias) {
+                    if (isInsertContext) {
+                        var cols = v.columns || [];
+                        var colList = cols.length > 0
+                            ? cols.map(function(c) { return '    [' + c.replace(/[\[\]]/g, '') + ']'; }).join(',\n')
+                            : '    /* ColumnList */';
+                        var valList = cols.length > 0
+                            ? cols.map(function(c) {
+                                var paramName = c.replace(/[\[\]]/g, '').replace(/[^a-zA-Z0-9_]/g, '');
+                                return '    @' + paramName;
+                            }).join(',\n')
+                            : '    /* Values */';
+
+                        insText = v.fullName + '\n(\n' + colList + '\n)\nVALUES\n(\n' + valList + '\n);';
+                        detailText = 'View';
+                    } else if (autoAlias) {
                         alias = window.generateTableAlias(v.name || v.fullName, existingAliases);
                         insText = v.fullName + (useAs ? " AS " : " ") + alias;
                         detailText = 'View (' + (useAs ? 'AS ' : '') + alias + ')';
                     }
 
+                    var vFilterStr = v.name + " [" + v.name + "] " + v.fullName + (autoAlias && alias ? (" " + alias) : "");
+
                     suggestions.push({
                         label: v.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
                         insertText: insText,
-                        filterText: v.name + " " + v.fullName + (autoAlias && alias ? (" " + alias) : ""),
-                        sortText: String(v.name.length).padStart(4, '0') + '_' + v.name + '_' + v.fullName,
+                        filterText: vFilterStr,
+                        sortText: isInsertContext ? ('0001_' + v.name + '_' + v.fullName) : (String(v.name.length).padStart(4, '0') + '_' + v.name + '_' + v.fullName),
                         range: replaceRange,
-                        detail: detailText
+                        detail: detailText,
+                        documentation: isInsertContext ? {
+                            value: '```sql\nINSERT INTO ' + insText + '\n```'
+                        } : undefined
                     });
                 });
             }

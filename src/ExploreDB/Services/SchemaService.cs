@@ -29,6 +29,8 @@ public class ColumnInfo
 {
     public string Name { get; set; } = string.Empty;
     public string DataType { get; set; } = string.Empty;
+    public bool IsIdentity { get; set; } = false;
+    public bool IsComputed { get; set; } = false;
     
     // Lineage info (for views)
     public string? SourceSchema { get; set; }
@@ -459,7 +461,9 @@ public class SchemaService
                     CASE 
                         WHEN ty.name LIKE 'System.%' OR ty.name LIKE '%.%' THEN ISNULL(sty.name, ty.name)
                         ELSE ty.name 
-                    END AS DataType
+                    END AS DataType,
+                    c.is_identity AS IsIdentity,
+                    c.is_computed AS IsComputed
                 FROM sys.columns c
                 INNER JOIN sys.objects o ON c.object_id = o.object_id
                 INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
@@ -510,11 +514,19 @@ public class SchemaService
                     var table = reader.GetString(1);
                     var colName = reader.GetString(2);
                     var dataType = reader.GetString(3);
+                    var isIdentity = !reader.IsDBNull(4) && reader.GetBoolean(4);
+                    var isComputed = !reader.IsDBNull(5) && reader.GetBoolean(5);
                     
                     var key = $"[{schema}].[{table}]";
                     if (tableDict.TryGetValue(key, out var t))
                     {
-                        t.Columns.Add(new ColumnInfo { Name = colName, DataType = NormalizeDataType(dataType) });
+                        t.Columns.Add(new ColumnInfo 
+                        { 
+                            Name = colName, 
+                            DataType = NormalizeDataType(dataType),
+                            IsIdentity = isIdentity,
+                            IsComputed = isComputed
+                        });
                     }
                 }
             }

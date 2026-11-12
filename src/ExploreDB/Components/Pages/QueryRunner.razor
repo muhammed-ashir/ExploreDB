@@ -2124,8 +2124,10 @@
             // Chunk 1: Tables and Views
             var tables = SchemaService.Tables.Select(t => new { 
                 name = t.Name, 
+                schema = t.Schema,
                 fullName = t.FullName, 
                 columns = t.Columns.Select(c => c.Name).ToList(),
+                insertColumns = t.Columns.Where(c => !c.IsIdentity && !c.IsComputed).Select(c => c.Name).ToList(),
                 relations = t.OutgoingKeys.Select(k => new { fromCol = k.FromColumn, toTable = k.ToTable.ToLower(), toCol = k.ToColumn })
                              .Concat(t.IncomingKeys.Select(k => new { fromCol = k.ToColumn, toTable = k.FromTable.ToLower(), toCol = k.FromColumn }))
                              .ToList()

@@ -745,7 +745,26 @@
         if (!_isEditorReady) return;
         var schema = SchemaService.GetCachedSchema(ActiveTab.ConnectionString);
         
-        var tables = schema.Tables.Select(t => new { name = t.Split('.').Last().Trim('[', ']'), fullName = t }).ToList();
+        var tables = (SchemaService.Tables != null && SchemaService.Tables.Count > 0)
+            ? SchemaService.Tables.Select(t => new { 
+                name = t.Name, 
+                schema = t.Schema,
+                fullName = t.FullName, 
+                columns = t.Columns.Select(c => c.Name).ToList(),
+                insertColumns = t.Columns.Where(c => !c.IsIdentity && !c.IsComputed).Select(c => c.Name).ToList()
+              }).ToList()
+            : schema.Tables.Select(t => {
+                var parts = t.Replace("[", "").Replace("]", "").Split('.');
+                var s = parts.Length > 1 ? parts[0] : "dbo";
+                var n = parts.Length > 1 ? parts[1] : parts[0];
+                return new { 
+                    name = n, 
+                    schema = s, 
+                    fullName = t, 
+                    columns = new List<string>(), 
+                    insertColumns = new List<string>() 
+                };
+              }).ToList();
         var views = schema.Views.Select(v => new { name = v.Split('.').Last().Trim('[', ']'), fullName = v }).ToList();
         
         await JS.InvokeVoidAsync("updateSqlAutocompleteData", tables, views, null, null);
