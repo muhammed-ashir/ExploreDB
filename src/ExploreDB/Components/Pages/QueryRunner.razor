@@ -542,9 +542,9 @@
                                                                OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
                                             </div>
 
-                                            @if (i < ActiveTab.ResultSets.Count - 1)
+                                            @if (ActiveTab.ResultSets.Count > 1)
                                             {
-                                                <div class="sql-compare-splitter">
+                                                <div class="sql-compare-splitter" title="Drag to resize result set">
                                                     <div class="sql-compare-splitter-handle"></div>
                                                 </div>
                                             }
