@@ -865,13 +865,16 @@
         if (!_isEditorReady) return;
         var schema = SchemaService.GetCachedSchema(ActiveTab.ConnectionString);
         
-        var tables = (SchemaService.Tables != null && SchemaService.Tables.Count > 0)
-            ? SchemaService.Tables.Select(t => new { 
+        object tables = (SchemaService.Tables != null && SchemaService.Tables.Count > 0)
+            ? (object)SchemaService.Tables.Select(t => new { 
                 name = t.Name, 
                 schema = t.Schema,
                 fullName = t.FullName, 
                 columns = t.Columns.Select(c => c.Name).ToList(),
-                insertColumns = t.Columns.Where(c => !c.IsIdentity && !c.IsComputed).Select(c => c.Name).ToList()
+                insertColumns = t.Columns.Where(c => !c.IsIdentity && !c.IsComputed).Select(c => c.Name).ToList(),
+                relations = t.OutgoingKeys.Select(k => new { fromCol = k.FromColumn, toTable = k.ToTable.ToLower(), toCol = k.ToColumn })
+                             .Concat(t.IncomingKeys.Select(k => new { fromCol = k.ToColumn, toTable = k.FromTable.ToLower(), toCol = k.FromColumn }))
+                             .ToList()
               }).ToList()
             : schema.Tables.Select(t => {
                 var parts = t.Replace("[", "").Replace("]", "").Split('.');
@@ -882,7 +885,8 @@
                     schema = s, 
                     fullName = t, 
                     columns = new List<string>(), 
-                    insertColumns = new List<string>() 
+                    insertColumns = new List<string>(),
+                    relations = new List<object>() 
                 };
               }).ToList();
         var views = (SchemaService.Views != null && SchemaService.Views.Count > 0)
