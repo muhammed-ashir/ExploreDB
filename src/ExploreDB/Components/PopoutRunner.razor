@@ -885,7 +885,9 @@
                     insertColumns = new List<string>() 
                 };
               }).ToList();
-        var views = schema.Views.Select(v => new { name = v.Split('.').Last().Trim('[', ']'), fullName = v }).ToList();
+        var views = (SchemaService.Views != null && SchemaService.Views.Count > 0)
+            ? SchemaService.Views.Select(v => new { name = v.Name, fullName = v.FullName, columns = v.Columns.Select(c => c.Name).ToList() }).ToList()
+            : schema.Views.Select(v => new { name = v.Split('.').Last().Trim('[', ']'), fullName = v, columns = new List<string>() }).ToList();
         
         await JS.InvokeVoidAsync("updateSqlAutocompleteData", tables, views, null, null);
         await Task.Delay(1); 

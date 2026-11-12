@@ -1215,11 +1215,54 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
                 
                 // Parse Aliases (e.g., FROM [hr].[Settings] s)
+                // Parse Tables and Aliases in statement
                 var aliasMap = {};
+                var nonAliasKw = new Set([
+                    'where', 'on', 'join', 'inner', 'left', 'right', 'full', 'outer', 'cross',
+                    'group', 'order', 'having', 'select', 'as', 'apply', 'from', 'set',
+                    'union', 'with', 'limit', 'offset', 'top', 'into', 'values', 'table', 'and', 'or', 'not'
+                ]);
+
+                var cleanText = allText.replace(/\/\*[\s\S]*?\*\/|--.*$/gm, ' ');
+                var fromIndex = cleanText.search(/\bfrom\b/i);
+                var fromAndAfter = fromIndex >= 0 ? cleanText.substring(fromIndex) : cleanText;
+                var tableClauseRegex = /(?:from|join|,)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+(?:as\s+)?([a-zA-Z0-9_\[\]]+))?/gi;
+                var activeTableRefs = [];
+                var seenRefKeys = new Set();
+                var tMatch;
+
+                while ((tMatch = tableClauseRegex.exec(fromAndAfter)) !== null) {
+                    var rawTableName = (tMatch[1] || "").trim();
+                    var rawAlias = (tMatch[2] || "").trim();
+                    var cleanAlias = rawAlias.replace(/[\[\]]/g, '');
+                    var isRealAlias = cleanAlias && !nonAliasKw.has(cleanAlias.toLowerCase());
+                    var alias = isRealAlias ? cleanAlias : "";
+
+                    var matchedTable = null;
+                    if (window.sqlTables) matchedTable = window.sqlTables.find(t => tablesMatch(t.fullName, rawTableName));
+                    if (!matchedTable && window.sqlViews) matchedTable = window.sqlViews.find(v => tablesMatch(v.fullName, rawTableName));
+
+                    if (matchedTable) {
+                        if (alias) {
+                            aliasMap[alias] = matchedTable.fullName;
+                        }
+                        var refKey = (matchedTable.fullName || rawTableName).toLowerCase() + '::' + alias.toLowerCase();
+                        if (!seenRefKeys.has(refKey)) {
+                            seenRefKeys.add(refKey);
+                            activeTableRefs.push({
+                                tableObj: matchedTable,
+                                alias: alias,
+                                qualifier: alias || matchedTable.name || matchedTable.fullName
+                            });
+                        }
+                    } else if (alias) {
+                        aliasMap[alias] = rawTableName;
+                    }
+                }
                 var sqlKw = new Set(['where', 'on', 'join', 'inner', 'left', 'right', 'outer', 'group', 'order', 'having', 'select', 'as', 'cross', 'apply', 'from', 'set']);
                 var tableRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)([a-zA-Z0-9_]+)/gi;
                 var match;
-                while ((match = tableRegex.exec(allText)) !== null) {
+                if (false) while ((match = tableRegex.exec(allText)) !== null) {
                     var tableName = match[1].trim();
                     var rawAlias = match[2].trim();
                     if (!sqlKw.has(rawAlias.toLowerCase())) {
@@ -1245,7 +1288,95 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
 
                 if (suggestColumns) {
-                    var allTokens = allText.match(/[a-zA-Z0-9_\[\]\.]+/g) || [];
+                    if (explicitTableName) {
+                        // User explicitly typed "o." -> suggest only columns of that table
+                        var activeCols = [];
+                        var checkTableMatch = (t) => {
+                            var tLower = t.fullName.toLowerCase();
+                            var nameLower = t.name.toLowerCase();
+                            var bracketName = "[" + nameLower + "]";
+                            if (tablesMatch(t.fullName, explicitTableName) || tLower === explicitTableName || nameLower === explicitTableName || bracketName === explicitTableName) {
+                                if (t.columns && Array.isArray(t.columns)) {
+                                    t.columns.forEach(c => activeCols.push(c));
+                                }
+                            }
+                        };
+                        if (window.sqlTables) window.sqlTables.forEach(checkTableMatch);
+                        if (window.sqlViews) window.sqlViews.forEach(checkTableMatch);
+
+                        if (activeCols.length === 0) {
+                            activeCols = window.sqlColumns || [];
+                        }
+
+                        activeCols.forEach(c => {
+                            var cleanCol = c.replace(/[\[\]]/g, '');
+                            var insText = matchBracketed ? (rawPrefix + ".[" + cleanCol + "]") : (rawPrefix + "." + c);
+                            suggestions.push({
+                                label: c,
+                                kind: monaco.languages.CompletionItemKind.Field,
+                                insertText: insText,
+                                filterText: rawPrefix + "." + c + " " + c,
+                                range: replaceRange,
+                                detail: 'Column of ' + explicitTableName
+                            });
+                        });
+                    } else if (activeTableRefs.length > 0) {
+                        // Approach 2: Smart Disambiguation & Alias Insertion for Joined Tables
+                        var hasMultipleTables = activeTableRefs.length > 1;
+                        var colOccurrences = new Map();
+                        var colOrder = [];
+
+                        activeTableRefs.forEach(ref => {
+                            var cols = ref.tableObj.columns || [];
+                            cols.forEach(c => {
+                                var key = c.toLowerCase();
+                                if (!colOccurrences.has(key)) {
+                                    colOccurrences.set(key, []);
+                                    colOrder.push(key);
+                                }
+                                colOccurrences.get(key).push({
+                                    colName: c,
+                                    qualifier: ref.qualifier,
+                                    alias: ref.alias,
+                                    tableName: ref.tableObj.name || ref.tableObj.fullName
+                                });
+                            });
+                        });
+
+                        colOrder.forEach(key => {
+                            var entries = colOccurrences.get(key);
+                            var isAmbiguous = entries.length > 1;
+
+                            entries.forEach(entry => {
+                                var qual = entry.qualifier;
+                                var col = entry.colName;
+                                var shouldQualify = hasMultipleTables || !!entry.alias;
+                                var qualifiedName = shouldQualify && qual ? (qual + "." + col) : col;
+                                var cleanCol = col.replace(/[\[\]]/g, '');
+                                var insertColText = matchBracketed
+                                    ? (shouldQualify && qual ? (qual + ".[" + cleanCol + "]") : ("[" + cleanCol + "]"))
+                                    : qualifiedName;
+
+                                var detailText = 'Column of ' + entry.tableName + (entry.alias ? ' (' + entry.alias + ')' : '');
+                                if (false) {
+                                    detailText += ' \u2022 Ambiguous';
+                                }
+
+                                var filterStr = col + " " + qualifiedName + " [" + col + "]" + (entry.alias ? (" " + entry.alias + "." + col) : "");
+
+                                suggestions.push({
+                                    label: qualifiedName,
+                                    kind: monaco.languages.CompletionItemKind.Field,
+                                    insertText: insertColText,
+                                    filterText: filterStr,
+                                    range: replaceRange,
+                                    detail: detailText,
+                                    sortText: (isAmbiguous ? '0000_' : '0001_') + col + '_' + (entry.alias || '')
+                                });
+                            });
+                        });
+                    } else {
+                        var allTokens = allText.match(/[a-zA-Z0-9_\[\]\.]+/g) || [];
                     var tokenSet = new Set(allTokens.map(x => x.toLowerCase()));
                     
                     var activeColumns = new Set();
@@ -1305,6 +1436,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             detail: explicitTableName ? ('Column of ' + explicitTableName) : 'Column'
                         });
                     });
+
+                    }
 
                     // Suggest aliases if not after a dot
                     if (!explicitTableName) {
