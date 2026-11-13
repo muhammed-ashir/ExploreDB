@@ -29,7 +29,7 @@
     {
     <!-- Fixed Top Action Toolbar -->
     <div class="query-runner-toolbar d-flex align-items-center flex-nowrap flex-shrink-0 gap-2">
-        <div class="d-flex gap-2 flex-shrink-0 align-items-center">
+        <div class="d-flex gap-2 flex-shrink-0 align-items-center ms-auto">
             <button class="btn btn-sm toolbar-icon-btn shadow-sm" data-bs-tooltip="true" data-bs-title="Open File (Ctrl+O)" data-bs-placement="bottom" @onclick="OpenFileAsync">
                 <i class="bi bi-folder2-open"></i>
             </button>
@@ -56,7 +56,7 @@
             </button>
         </div>
 
-        <div class="d-flex align-items-center flex-shrink-0">
+        <div class="d-flex align-items-center flex-shrink-0 order-first">
             @if (ActiveTab.IsExecuting)
             {
                 @if (ActiveTab.IsCancelling)

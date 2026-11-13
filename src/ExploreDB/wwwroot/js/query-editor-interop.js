@@ -96,6 +96,100 @@ window.formatSqlDefault = (code) => {
     }
     if (!code || !code.trim()) return code;
 
+    var wrapInClauses = function (linesToWrap) {
+        var maxLineLength = 110;
+        var out = [];
+
+        var splitSqlItems = function (text) {
+            var items = [];
+            var current = '';
+            var inQuote = false;
+            for (var idx = 0; idx < text.length; idx++) {
+                var ch = text[idx];
+                if (ch === "'") {
+                    inQuote = !inQuote;
+                    current += ch;
+                } else if (ch === ',' && !inQuote) {
+                    var trimmed = current.trim();
+                    if (trimmed) items.push(trimmed);
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+            var lastTrimmed = current.trim();
+            if (lastTrimmed) items.push(lastTrimmed);
+            return items;
+        };
+
+        for (var lineIdx = 0; lineIdx < linesToWrap.length; lineIdx++) {
+            var curLineText = linesToWrap[lineIdx];
+
+            var inRegex = /^(.*?\b(?:NOT\s+)?IN\s*)\(([\s\S]*?)\)(.*)$/i;
+            var inMatch = curLineText.match(inRegex);
+
+            if (!inMatch) {
+                out.push(curLineText);
+                continue;
+            }
+
+            var prefix = inMatch[1];
+            var inner = inMatch[2];
+            var suffix = inMatch[3];
+
+            if (/\bSELECT\b/i.test(inner)) {
+                out.push(curLineText);
+                continue;
+            }
+
+            var items = splitSqlItems(inner);
+            if (items.length <= 1) {
+                out.push(curLineText);
+                continue;
+            }
+
+            var singleLine = prefix.trimEnd() + ' (' + items.join(', ') + ')' + suffix;
+            if (singleLine.length <= maxLineLength) {
+                out.push(singleLine);
+                continue;
+            }
+
+            var header = prefix.trimEnd() + ' ( ';
+            var openParenIndex = header.lastIndexOf('(');
+            var itemIndent = ' '.repeat(openParenIndex + 2);
+            var parenIndent = ' '.repeat(openParenIndex);
+
+            var curWrappedLine = header;
+            for (var k = 0; k < items.length; k++) {
+                var itm = items[k];
+                var isLast = (k === items.length - 1);
+                var itmWithSep = isLast ? itm : (itm + ',');
+
+                var testLine = curWrappedLine.endsWith(' ')
+                    ? (curWrappedLine + itmWithSep)
+                    : (curWrappedLine + ' ' + itmWithSep);
+
+                if (testLine.length <= maxLineLength || curWrappedLine === header || curWrappedLine === itemIndent) {
+                    curWrappedLine = testLine;
+                } else {
+                    if (!curWrappedLine.trim().endsWith(',')) {
+                        curWrappedLine += ',';
+                    }
+                    out.push(curWrappedLine);
+                    curWrappedLine = itemIndent + itmWithSep;
+                }
+            }
+
+            if (curWrappedLine.trim()) {
+                out.push(curWrappedLine);
+            }
+
+            out.push(parenIndent + ')' + suffix);
+        }
+
+        return out;
+    };
+
     var keepInInline = true;
     if (window.userSettings) {
         if (window.userSettings.keepInClauseOnSingleLine !== undefined) {
@@ -139,7 +233,7 @@ window.formatSqlDefault = (code) => {
         });
 
         if (keepInInline) {
-            baseFormatted = baseFormatted.replace(/\bIN\s*\(\s*\n([\s\S]*?)\n\s*\)/gi, function (match, inner) {
+            baseFormatted = baseFormatted.replace(/\b((?:NOT\s+)?IN)\s*\(\s*\n([\s\S]*?)\n\s*\)/gi, function (match, inKw, inner) {
                 if (/\bSELECT\b/i.test(inner)) {
                     return match;
                 }
@@ -148,7 +242,7 @@ window.formatSqlDefault = (code) => {
                     .filter(function (s) { return s.length > 0; })
                     .join(' ')
                     .replace(/\s*,\s*/g, ', ');
-                return 'IN (' + items + ')';
+                return inKw + ' (' + items + ')';
             });
         }
         if (false) var _ignore = window.sqlFormatter.format(code, {
@@ -269,9 +363,10 @@ window.formatSqlDefault = (code) => {
             }
         }
 
+        result = wrapInClauses(result);
         return unmaskHints(result.join('\n'));
     } catch (err) {
-        return unmaskHints(baseFormatted);
+        return unmaskHints(wrapInClauses(baseFormatted.split(/\r?\n/)).join('\n'));
     }
 };
 
