@@ -9,6 +9,7 @@
 @inject IJSRuntime JS
 @inject ThemeService ThemeService
 @inject SchemaService SchemaService
+@inject UserSettingsService UserSettingsService
 @implements IDisposable
 
 <div class="position-relative w-100 h-100 d-flex flex-column overflow-hidden" style="min-height: 0;">
@@ -1056,7 +1057,14 @@ else
         return null;
     }
 
-    private const int RowHeight = 24;
+    private int RowHeight => UserSettingsService.Settings.AppFontSize switch
+    {
+        "Tiny" => 20,
+        "Compact" => 22,
+        "Large" => 26,
+        "XLarge" => 28,
+        _ => 24
+    };
     private const double MaxVirtualHeight = 10_000_000.0;
     private double _currentScrollTop = 0;
     private double _viewportHeight = 450;
@@ -2640,6 +2648,13 @@ else
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged += HandleSettingsChanged;
+    }
+
+    private async void HandleSettingsChanged()
+    {
+        _renderedFirstVisible = -1;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async void HandleThemeChanged()
@@ -2657,6 +2672,7 @@ else
         _dotNetRef?.Dispose();
         _dotNetRef = null;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
         _copyFeedbackCts?.Cancel();
         _copyFeedbackCts?.Dispose();
     }

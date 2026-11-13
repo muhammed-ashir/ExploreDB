@@ -146,7 +146,7 @@
                             @if (ResultTab == "Results" && ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 0)
                             {
                                 var totalRows = GetTotalRowCount(ActiveTab.ResultSets);
-                                @if (ActiveTab.IsExecuting) { <span class="text-primary fw-medium d-inline-flex align-items-center" style="font-size: 0.75rem; white-space: nowrap;"><span class="spinner-border spinner-border-sm me-1" style="width: 0.75rem; height: 0.75rem; border-width: 0.15em;" role="status"></span><span>Loading rows... (@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows"))</span></span> } else { <span class="text-muted fw-medium" style="font-size: 0.75rem; white-space: nowrap;">
+                                @if (ActiveTab.IsExecuting) { <span class="text-primary fw-medium d-inline-flex align-items-center" style="font-size: 0.75rem; white-space: nowrap;"><span class="spinner-border spinner-border-sm me-1" style="width: 0.75rem; height: 0.75rem; border-width: 0.15em;" role="status"></span><span>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")</span></span> } else { <span class="text-muted fw-medium" style="font-size: 0.75rem; white-space: nowrap;">
                                     <i class="bi bi-list me-1" style="font-size: 0.75rem;"></i>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")</span> }
                                 <!--end-timer-->
                             }
@@ -642,6 +642,8 @@
             try
             {
                 await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+            await JS.InvokeVoidAsync("setEditorFontSize", UserSettingsService.Settings.EditorFontSize);
+            await InvokeAsync(StateHasChanged);
             }
             catch { }
 
@@ -698,6 +700,8 @@
         try
         {
             await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+            await JS.InvokeVoidAsync("setEditorFontSize", UserSettingsService.Settings.EditorFontSize);
+            await InvokeAsync(StateHasChanged);
         }
         catch { }
     }
@@ -799,7 +803,7 @@
             Value = ActiveTab.Content,
             Theme = ThemeService.IsDark ? "vs-dark" : "vs",
             Minimap = new EditorMinimapOptions { Enabled = false },
-            FontSize = 14,
+            FontSize = UserSettingsService.Settings.EditorFontSize > 0 ? UserSettingsService.Settings.EditorFontSize : 14,
             WordWrap = "on",
             FormatOnPaste = true,
             AcceptSuggestionOnEnter = "on",
@@ -1075,6 +1079,7 @@
                 });
             };
             
+            ActiveTab.CancelAction = () => { try { conn.Close(); } catch { } };
             await conn.OpenAsync(ActiveTab.QueryCts.Token);
             connWatch.Stop();
             ActiveTab.LastConnectionTimeMs = connWatch.ElapsedMilliseconds;

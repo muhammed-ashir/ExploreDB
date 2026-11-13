@@ -31,6 +31,14 @@
                     </button>
 
                     <button type="button" 
+                            class="list-group-item list-group-item-action d-flex align-items-center gap-3 border-0 py-2.5 px-3 rounded-2 @(ActiveTab == "appearance" ? "active" : "")"
+                            style="@(ActiveTab == "appearance" ? "background-color: var(--app-surface-secondary); color: var(--app-text); font-weight: 600; border-left: 3px solid #0d6efd !important;" : "background: transparent; color: var(--app-text);")"
+                            @onclick='() => ActiveTab = "appearance"'>
+                        <i class="bi bi-palette text-warning fs-5"></i>
+                        <span class="fw-semibold">Appearance</span>
+                    </button>
+
+                    <button type="button" 
                             class="list-group-item list-group-item-action d-flex align-items-center gap-3 border-0 py-2.5 px-3 rounded-2 @(ActiveTab == "license" ? "active" : "")"
                             style="@(ActiveTab == "license" ? "background-color: var(--app-surface-secondary); color: var(--app-text); font-weight: 600; border-left: 3px solid #0d6efd !important;" : "background: transparent; color: var(--app-text);")"
                             @onclick='() => ActiveTab = "license"'>
@@ -122,6 +130,140 @@
                             <pre class="editor-syntax-preview mb-0 p-3 rounded"><code>@GetFormattingPreviewMarkup()</code></pre>
 
 
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (ActiveTab == "appearance")
+            {
+                <div class="card shadow-sm border mb-4" style="background-color: var(--app-surface); border-color: var(--app-border) !important; border-radius: 10px;">
+                    <div class="card-header py-3 px-4 border-bottom" style="background: transparent; border-color: var(--app-border) !important;">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-palette text-warning fs-5"></i>
+                            <h5 class="fw-bold mb-0">Appearance &amp; Display</h5>
+                        </div>
+                    </div>
+                    <div class="card-body p-4">
+                        <!-- Theme Mode -->
+                        <div class="mb-4">
+                            <label class="fw-bold d-block mb-1">Color Theme</label>
+                            <span class="text-muted small d-block mb-3">Choose your visual theme preference for ExploreDB.</span>
+                            <div class="d-flex gap-3">
+                                <div class="card p-3 cursor-pointer flex-fill border text-center transition-all @(ThemeService.IsDark ? "border-primary shadow-sm" : "")"
+                                     style="background-color: var(--app-surface-secondary); border-color: var(--app-border); border-radius: 8px;"
+                                     @onclick='() => SetAppTheme("dark")'>
+                                    <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+                                        <i class="bi bi-moon-stars-fill text-warning fs-5"></i>
+                                        <span class="fw-bold">Dark Theme</span>
+                                    </div>
+                                    <small class="text-muted">High contrast dark surface for low eye strain</small>
+                                </div>
+                                <div class="card p-3 cursor-pointer flex-fill border text-center transition-all @(!ThemeService.IsDark ? "border-primary shadow-sm" : "")"
+                                     style="background-color: var(--app-surface-secondary); border-color: var(--app-border); border-radius: 8px;"
+                                     @onclick='() => SetAppTheme("light")'>
+                                    <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+                                        <i class="bi bi-sun-fill text-warning fs-5"></i>
+                                        <span class="fw-bold">Light Theme</span>
+                                    </div>
+                                    <small class="text-muted">Clean bright interface for illuminated environments</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr style="border-color: var(--app-border);" />
+
+                        <!-- Application UI Font Size -->
+                        <div class="mb-4">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <label class="fw-bold d-block mb-0">Application UI Font Size</label>
+                                <span class="badge bg-secondary-subtle text-secondary border">Active: @UserSettingsService.Settings.AppFontSize</span>
+                            </div>
+                            <span class="text-muted small d-block mb-3">Scales navigation menus, toolbars, dialogs, and result data tables proportionally across the entire app.</span>
+                            
+                            <div class="row g-2">
+                                @{
+                                    var fontSizes = new[]
+                                    {
+                                        new { Key = "Tiny", Label = "Tiny", Size = "12px", Desc = "Max density / 4K monitors" },
+                                        new { Key = "Compact", Label = "Compact", Size = "14px", Desc = "High density for laptops" },
+                                        new { Key = "Default", Label = "Default", Size = "16px", Desc = "Standard ExploreDB size" },
+                                        new { Key = "Large", Label = "Large", Size = "18px", Desc = "Comfortable reading" },
+                                        new { Key = "XLarge", Label = "Extra Large", Size = "20px", Desc = "High visibility & accessibility" }
+                                    };
+                                }
+                                @foreach (var fs in fontSizes)
+                                {
+                                    var isSelected = UserSettingsService.Settings.AppFontSize == fs.Key;
+                                    <div class="col-12 col-sm-6 col-md">
+                                        <div class="card p-2 text-center h-100 cursor-pointer border @(isSelected ? "border-primary bg-primary bg-opacity-10 shadow-sm" : "")"
+                                             style="background-color: var(--app-surface-secondary); border-color: var(--app-border); border-radius: 8px; transition: all 0.15s ease;"
+                                             @onclick="() => OnAppFontSizeChanged(fs.Key)">
+                                            <div class="fw-bold" style="font-size: @(fs.Size);">Aa</div>
+                                            <div class="fw-semibold small mt-1" style="color: var(--app-text);">@fs.Label</div>
+                                            <div class="text-muted" style="font-size: 0.72rem;">@fs.Size</div>
+                                            <div class="text-muted mt-1" style="font-size: 0.68rem; line-height: 1.2;">@fs.Desc</div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <hr style="border-color: var(--app-border);" />
+
+                        <!-- SQL Query Editor Font Size -->
+                        <div class="mb-4">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <label class="fw-bold d-block mb-0">SQL Query Editor Font Size (Monaco)</label>
+                                <span class="badge bg-secondary-subtle text-secondary border">Active: @(UserSettingsService.Settings.EditorFontSize)px</span>
+                            </div>
+                            <span class="text-muted small d-block mb-3">Independent font size control for the SQL query editor.</span>
+
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var edSize in new[] { 11, 12, 13, 14, 15, 16, 18, 20 })
+                                {
+                                    var isEdSelected = UserSettingsService.Settings.EditorFontSize == edSize;
+                                    <button type="button" 
+                                            class="btn btn-sm px-3 py-1.5 @(isEdSelected ? "btn-primary text-white shadow-sm" : "btn-outline-secondary")"
+                                            style="border-radius: 6px; font-weight: 500;"
+                                            @onclick="() => OnEditorFontSizeChanged(edSize)">
+                                        @(edSize)px @(edSize == 14 ? "(Default)" : "")
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        <hr style="border-color: var(--app-border);" />
+
+                        <!-- Live Visual Preview -->
+                        <div>
+                            <label class="fw-bold d-block mb-1">Live Interface Preview</label>
+                            <span class="text-muted small d-block mb-2">Preview how UI controls and code snippets render at your selected font sizes.</span>
+                            
+                            <div class="p-3 rounded border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                <div class="d-flex align-items-center justify-content-between pb-2 mb-2 border-bottom" style="border-color: var(--app-border) !important;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center gap-1" style="height: 28px;">
+                                            <i class="bi bi-play-fill"></i>
+                                            <span>Execute (F5)</span>
+                                        </button>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                            <i class="bi bi-check2 me-1"></i>Connected
+                                        </span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 text-muted small">
+                                        <i class="bi bi-stopwatch"></i>
+                                        <span>Total: 0.8s</span>
+                                        <span>&bull;</span>
+                                        <i class="bi bi-list"></i>
+                                        <span>4,500 rows</span>
+                                    </div>
+                                </div>
+
+                                <div class="rounded p-2.5 font-monospace" style="background-color: var(--app-editor-preview-bg); color: var(--app-editor-preview-text); font-size: @(UserSettingsService.Settings.EditorFontSize)px; border: 1px solid var(--app-border); line-height: 1.5;">
+                                    <span style="color: var(--app-editor-keyword); font-weight: bold;">SELECT</span> TOP 10 CustomerID, CompanyName, City<br/>
+                                    <span style="color: var(--app-editor-keyword); font-weight: bold;">FROM</span> [dbo].[Customers] <span style="color: var(--app-editor-keyword); font-weight: bold;">WITH</span> (NOLOCK);
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -486,6 +628,33 @@
     {
         ProfileName = e.Value?.ToString() ?? "";
         UserSettingsService.UpdateDisplayName(ProfileName);
+    }
+
+    private async Task OnAppFontSizeChanged(string size)
+    {
+        UserSettingsService.UpdateAppFontSize(size);
+        try
+        {
+            await JS.InvokeVoidAsync("setAppFontSize", size);
+            await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+        }
+        catch { }
+    }
+
+    private async Task OnEditorFontSizeChanged(int size)
+    {
+        UserSettingsService.UpdateEditorFontSize(size);
+        try
+        {
+            await JS.InvokeVoidAsync("setEditorFontSize", size);
+            await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+        }
+        catch { }
+    }
+
+    private async Task SetAppTheme(string theme)
+    {
+        await ThemeService.SetThemeAsync(theme);
     }
 
     private void HandleSettingsChanged()

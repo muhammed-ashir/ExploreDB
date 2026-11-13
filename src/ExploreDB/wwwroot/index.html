@@ -12,6 +12,10 @@
             try {
                 var theme = localStorage.getItem('app_theme') || 'dark';
                 document.documentElement.setAttribute('data-bs-theme', theme);
+                var fontSizeMap = { 'Tiny': '12px', 'Compact': '14px', 'Default': '16px', 'Large': '18px', 'XLarge': '20px' };
+                var savedSize = localStorage.getItem('app_font_size') || 'Default';
+                var pixelSize = fontSizeMap[savedSize] || (savedSize.indexOf('px') !== -1 ? savedSize : '16px');
+                document.documentElement.style.fontSize = pixelSize;
             } catch (e) { }
         })();
     </script>
@@ -92,8 +96,35 @@
             try {
                 localStorage.setItem('app_theme', theme);
                 document.documentElement.setAttribute('data-bs-theme', theme);
+                var fontSizeMap = { 'Tiny': '12px', 'Compact': '14px', 'Default': '16px', 'Large': '18px', 'XLarge': '20px' };
+                var savedSize = localStorage.getItem('app_font_size') || 'Default';
+                var pixelSize = fontSizeMap[savedSize] || (savedSize.indexOf('px') !== -1 ? savedSize : '16px');
+                document.documentElement.style.fontSize = pixelSize;
                 if (window.monaco && window.monaco.editor) {
                     window.monaco.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs');
+                }
+            } catch (e) { }
+        };
+
+        window.setAppFontSize = function (fontSize) {
+            try {
+                var fontSizeMap = { 'Tiny': '12px', 'Compact': '14px', 'Default': '16px', 'Large': '18px', 'XLarge': '20px' };
+                var pixelSize = fontSizeMap[fontSize] || (fontSize.indexOf('px') !== -1 ? fontSize : '16px');
+                document.documentElement.style.fontSize = pixelSize;
+                localStorage.setItem('app_font_size', fontSize);
+            } catch (e) { }
+        };
+
+        window.setEditorFontSize = function (size) {
+            try {
+                var numSize = parseInt(size, 10);
+                if (!isNaN(numSize) && numSize >= 10 && numSize <= 32) {
+                    localStorage.setItem('editor_font_size', numSize);
+                    if (window.monaco && window.monaco.editor) {
+                        window.monaco.editor.getEditors().forEach(function (ed) {
+                            ed.updateOptions({ fontSize: numSize });
+                        });
+                    }
                 }
             } catch (e) { }
         };

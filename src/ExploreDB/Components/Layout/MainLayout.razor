@@ -609,6 +609,7 @@
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
         SchemaService.OnError += HandleSchemaError;
         ThemeService.OnThemeChanged += HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged += HandleSettingsChanged;
         WindowManager.OnNavigateMainWindowRequested += HandleNavigateMainWindowRequested;
 
         if (!Config.GetValue<bool>("DisableAutoUpdates", false))
@@ -644,6 +645,8 @@
             {
                 await ThemeService.InitializeAsync(JS);
                 await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
+                await JS.InvokeVoidAsync("setAppFontSize", UserSettingsService.Settings.AppFontSize);
+                await JS.InvokeVoidAsync("setEditorFontSize", UserSettingsService.Settings.EditorFontSize);
                 // Signal to MAUI that the Blazor UI is ready
                 // App ready
             }
@@ -654,6 +657,17 @@
     private async Task ToggleThemeAsync()
     {
         await ThemeService.ToggleThemeAsync();
+    }
+
+    private async void HandleSettingsChanged()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("setAppFontSize", UserSettingsService.Settings.AppFontSize);
+            await JS.InvokeVoidAsync("setEditorFontSize", UserSettingsService.Settings.EditorFontSize);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     private void HandleThemeChanged()
@@ -680,6 +694,7 @@
     {
         WindowManager.OnNavigateMainWindowRequested -= HandleNavigateMainWindowRequested;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
+        UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
         App.RequestAppExit -= HandleRequestAppExit;
         ConnectionService.OnDatabaseSwitching -= OnDatabaseSwitchingHandler;
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;

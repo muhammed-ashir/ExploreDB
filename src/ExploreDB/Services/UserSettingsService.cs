@@ -12,6 +12,8 @@ public class UserSettings
     public string FormattingStyle { get; set; } = "Default";
     public string DisplayName { get; set; } = "";
     public string LicenseKey { get; set; } = "";
+    public string AppFontSize { get; set; } = "Default";
+    public int EditorFontSize { get; set; } = 14;
 }
 
 public class UserSettingsService
@@ -69,6 +71,20 @@ public class UserSettingsService
     public void UpdateDisplayName(string displayName)
     {
         Settings.DisplayName = displayName;
+        SaveSettings();
+        OnSettingsChanged?.Invoke();
+    }
+
+    public void UpdateAppFontSize(string appFontSize)
+    {
+        Settings.AppFontSize = appFontSize;
+        SaveSettings();
+        OnSettingsChanged?.Invoke();
+    }
+
+    public void UpdateEditorFontSize(int editorFontSize)
+    {
+        Settings.EditorFontSize = editorFontSize;
         SaveSettings();
         OnSettingsChanged?.Invoke();
     }
