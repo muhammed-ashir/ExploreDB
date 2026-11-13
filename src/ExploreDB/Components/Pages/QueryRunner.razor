@@ -2567,22 +2567,23 @@
             if (tab.IsExecuting)
             {
                 tab.ExecElapsedSeconds = (int)(DateTime.UtcNow - start).TotalSeconds;
-                await InvokeAsync(StateHasChanged);
+                if (tab == ActiveTab) await InvokeAsync(StateHasChanged);
             }
         }
     }
 
     private void CancelExecution()
     {
-        if (ActiveTab.IsExecuting && !ActiveTab.IsCancelling)
+        var tabToCancel = ActiveTab;
+        if (tabToCancel.IsExecuting && !tabToCancel.IsCancelling)
         {
-            ActiveTab.IsCancelling = true;
+            tabToCancel.IsCancelling = true;
             StateHasChanged();
 
             Task.Run(() =>
             {
-                try { ActiveTab.CancelAction?.Invoke(); } catch { }
-                try { ActiveTab.QueryCts?.Cancel(); } catch { }
+                try { tabToCancel.CancelAction?.Invoke(); } catch { }
+                try { tabToCancel.QueryCts?.Cancel(); } catch { }
             });
         }
     }
@@ -2755,7 +2756,8 @@
 
     private async Task ExecuteAsync()
     {
-        if (ActiveTab.IsExecuting) return;
+        var targetTab = ActiveTab;
+        if (targetTab.IsExecuting) return;
 
         int lineOffset = 0;
 
@@ -2767,7 +2769,7 @@
             if (_editor != null)
             {
                 fullScript = await _editor.GetValue();
-                ActiveTab.Content = fullScript;
+                targetTab.Content = fullScript;
 
                 var sel = await _editor.GetSelection();
                 if (sel != null && (sel.StartLineNumber != sel.EndLineNumber || sel.StartColumn != sel.EndColumn))
@@ -2812,24 +2814,25 @@
 
         if (string.IsNullOrWhiteSpace(queryText))
         {
-            ActiveTab.Messages.Add("Error: Query is empty.");
-            ResultTab = "Messages";
+            targetTab.Messages.Add("Error: Query is empty.");
+
+            if (targetTab == ActiveTab) ResultTab = "Messages";
             return;
         }
 
-        ActiveTab.IsCurrentQuerySelect = IsReadOnlyQuery(queryText);
+        targetTab.IsCurrentQuerySelect = IsReadOnlyQuery(queryText);
 
-        ActiveTab.IsExecuting = true;
-        ActiveTab.IsCancelling = false;
-        ActiveTab.HasExecuted = true;
-        ActiveTab.ExecElapsedSeconds = 0;
+        targetTab.IsExecuting = true;
+        targetTab.IsCancelling = false;
+        targetTab.HasExecuted = true;
+        targetTab.ExecElapsedSeconds = 0;
         
-        ActiveTab.QueryCts = new CancellationTokenSource();
-        _ = UpdateTimerAsync(ActiveTab);
+        targetTab.QueryCts = new CancellationTokenSource();
+        _ = UpdateTimerAsync(targetTab);
 
-        ActiveTab.ResultSets.Clear();
-        ActiveTab.Messages.Clear();
-        ResultTab = "Results";
+        targetTab.ResultSets.Clear();
+        targetTab.Messages.Clear();
+        if (targetTab == ActiveTab) ResultTab = "Results";
         StateHasChanged();
 
         var connWatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2843,18 +2846,18 @@
 
         try
         {
-            if (string.IsNullOrEmpty(ActiveTab.ConnectionString))
+            if (string.IsNullOrEmpty(targetTab.ConnectionString))
             {
-                ActiveTab.Messages.Add("Error: Tab is disconnected. Please connect to a server using the plug icon in the top right.");
-                ResultTab = "Messages";
+                targetTab.Messages.Add("Error: Tab is disconnected. Please connect to a server using the plug icon in the top right.");
+                if (targetTab == ActiveTab) ResultTab = "Messages";
                 return;
             }
 
-            var connStrBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ActiveTab.ConnectionString);
+            var connStrBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(targetTab.ConnectionString);
             if (string.IsNullOrEmpty(connStrBuilder.InitialCatalog))
             {
-                ActiveTab.Messages.Add("Error: No database selected. Please select a database from the sidebar before executing.");
-                ResultTab = "Messages";
+                targetTab.Messages.Add("Error: No database selected. Please select a database from the sidebar before executing.");
+                if (targetTab == ActiveTab) ResultTab = "Messages";
                 return;
             }
 
@@ -2873,41 +2876,41 @@
                     if (err.Class > 10)
                     {
                         var (hMsg, nLine) = FormatSqlErrorHeader(err, lineOffset);
-                        ActiveTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
-                        ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
+                        targetTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
+                        targetTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
                     }
                     else
                     {
-                        ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: false));
+                        targetTab.Messages.Add(new QueryOutputMessage(err.Message, isError: false));
                     }
                 }
                 if (args.Errors.Count == 0 && !string.IsNullOrEmpty(args.Message))
                 {
-                    ActiveTab.Messages.Add(new QueryOutputMessage(args.Message, isError: false));
+                    targetTab.Messages.Add(new QueryOutputMessage(args.Message, isError: false));
                 }
-                InvokeAsync(StateHasChanged);
+                if (targetTab == ActiveTab) InvokeAsync(StateHasChanged);
             };
-            ActiveTab.CancelAction = () => { try { conn.Close(); } catch { } };
-            await conn.OpenAsync(ActiveTab.QueryCts.Token);
+            targetTab.CancelAction = () => { try { conn.Close(); } catch { } };
+            await conn.OpenAsync(targetTab.QueryCts.Token);
             connWatch.Stop();
-            ActiveTab.LastConnectionTimeMs = connWatch.ElapsedMilliseconds;
+            targetTab.LastConnectionTimeMs = connWatch.ElapsedMilliseconds;
             queryWatch.Start();
 
-            if (!ActiveTab.IsCurrentQuerySelect)
+            if (!targetTab.IsCurrentQuerySelect)
             {
                 bool allowNonSelect = Config.GetValue<bool>("AllowNonSelectQueries", false);
                 if (!allowNonSelect)
                 {
-                    ActiveTab.Messages.Add("Error: Execution of non-SELECT statements is disabled.");
-                    ResultTab = "Messages";
+                    targetTab.Messages.Add("Error: Execution of non-SELECT statements is disabled.");
+                    if (targetTab == ActiveTab) ResultTab = "Messages";
                     return;
                 }
 
                 bool confirm = await ConfirmDangerousQueryAsync();
                 if (!confirm)
                 {
-                    ActiveTab.Messages.Add("Execution cancelled by user.");
-                    ResultTab = "Messages";
+                    targetTab.Messages.Add("Execution cancelled by user.");
+                    if (targetTab == ActiveTab) ResultTab = "Messages";
                     return;
                 }
             }
@@ -2916,18 +2919,18 @@
             cmd.CommandText = QueryStateService.CustomQuery;
             cmd.CommandTimeout = 0;
             
-            ActiveTab.CancelAction = () =>
+            targetTab.CancelAction = () =>
             {
                 try { cmd.Cancel(); } catch { }
                 try { conn.Close(); } catch { }
             };
 
-            using var ctr = ActiveTab.QueryCts.Token.Register(() => {
+            using var ctr = targetTab.QueryCts.Token.Register(() => {
                 try { cmd.Cancel(); } catch { }
                 try { conn.Close(); } catch { }
             });
             
-            using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
+            using var reader = await cmd.ExecuteReaderAsync(targetTab.QueryCts.Token);
             int totalRows = 0;
             int affectedStatementCount = 0;
             var renderWatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2985,18 +2988,18 @@
                                 table.TableName = match.Groups[1].Value.Trim();
                             }
                         }
-                        ActiveTab.ResultSets.Add(table);
-                        ResultTab = "Results";
-                        await InvokeAsync(StateHasChanged);
+                        targetTab.ResultSets.Add(table);
+                        if (targetTab == ActiveTab) ResultTab = "Results";
+                        if (targetTab == ActiveTab) await InvokeAsync(StateHasChanged);
                         if (false) {
                         }
 
                         int yieldCount = 0;
-                        while (await reader.ReadAsync(ActiveTab.QueryCts.Token))
+                        while (await reader.ReadAsync(targetTab.QueryCts?.Token ?? CancellationToken.None))
                         {
-                            if (ActiveTab.QueryCts.IsCancellationRequested || ActiveTab.IsCancelling)
+                            if ((targetTab.QueryCts?.IsCancellationRequested ?? false) || targetTab.IsCancelling)
                             {
-                                throw new OperationCanceledException(ActiveTab.QueryCts.Token);
+                                throw new OperationCanceledException(targetTab.QueryCts?.Token ?? CancellationToken.None);
                             }
 
                             var rowValues = new object?[fieldCount];
@@ -3013,7 +3016,7 @@
                                 if (renderWatch.ElapsedMilliseconds >= 300)
                                 {
                                     renderWatch.Restart();
-                                    await InvokeAsync(StateHasChanged);
+                                    if (targetTab == ActiveTab) await InvokeAsync(StateHasChanged);
                                 }
                                 else if (++yieldCount % 10 == 0)
                                 {
@@ -3022,7 +3025,7 @@
                                 if (false)
                                 {
                                     await Task.Delay(1);
-                                    await InvokeAsync(StateHasChanged);
+                                    if (targetTab == ActiveTab) await InvokeAsync(StateHasChanged);
                                 }
                             }
                             if (false) {
@@ -3042,13 +3045,13 @@
                         table.IsComplete = true;
                         currentStreamingTable = null;
                         currentBatch = null;
-                        await InvokeAsync(StateHasChanged);
+                        if (targetTab == ActiveTab) await InvokeAsync(StateHasChanged);
                         if (false)
-                        ActiveTab.ResultSets.Add(table);
+                        targetTab.ResultSets.Add(table);
                         totalRows += table.RowCount;
                         var rowWord = table.RowCount == 1 ? "row" : "rows";
-                        ActiveTab.Messages.Add($"({table.RowCount} {rowWord} returned)");
-                        ActiveTab.Messages.Add("");
+                        targetTab.Messages.Add($"({table.RowCount} {rowWord} returned)");
+                        targetTab.Messages.Add("");
                         affectedStatementCount++;
                     }
                     else
@@ -3056,89 +3059,89 @@
                         if (reader.RecordsAffected >= 0)
                         {
                             var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
-                            ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
-                ActiveTab.Messages.Add("");
+                            targetTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
+                targetTab.Messages.Add("");
 
                             affectedStatementCount++;
                         }
                     }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException && !(ActiveTab.QueryCts?.IsCancellationRequested ?? false) && !ActiveTab.IsCancelling)
+                catch (Exception ex) when (ex is not OperationCanceledException && !(targetTab.QueryCts?.IsCancellationRequested ?? false) && !targetTab.IsCancelling)
                 {
-                    ActiveTab.Messages.Add(new QueryOutputMessage($"Error reading result set: {ex.Message}", isError: true));
+                    targetTab.Messages.Add(new QueryOutputMessage($"Error reading result set: {ex.Message}", isError: true));
                     break;
                 }
             }
-            while (await reader.NextResultAsync(ActiveTab.QueryCts.Token));
+            while (await reader.NextResultAsync(targetTab.QueryCts?.Token ?? CancellationToken.None));
             
-            if (affectedStatementCount == 0 && ActiveTab.ResultSets.Count == 0 && reader.RecordsAffected >= 0)
+            if (affectedStatementCount == 0 && targetTab.ResultSets.Count == 0 && reader.RecordsAffected >= 0)
             {
                 var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
-                ActiveTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
-                ActiveTab.Messages.Add("");
+                targetTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
+                targetTab.Messages.Add("");
             }
 
-            ActiveTab.Messages.Add("");
-            ActiveTab.AddCompletionTime();
+            targetTab.Messages.Add("");
+            targetTab.AddCompletionTime();
 
-            ResultTab = ActiveTab.ResultSets.Count == 0 ? "Messages" : "Results";
+            if (targetTab == ActiveTab) ResultTab = targetTab.ResultSets.Count == 0 ? "Messages" : "Results";
             isSuccess = true;
         }
         catch (Exception ex)
         {
-            if ((ActiveTab.QueryCts != null && ActiveTab.QueryCts.IsCancellationRequested) || ActiveTab.IsCancelling || ex is OperationCanceledException)
+            if ((targetTab.QueryCts != null && targetTab.QueryCts.IsCancellationRequested) || targetTab.IsCancelling || ex is OperationCanceledException)
             {
                 if (currentBatch != null && currentBatch.Count > 0 && currentStreamingTable != null) { currentStreamingTable.AddRows(currentBatch); currentBatch.Clear(); }
                 if (currentStreamingTable != null) currentStreamingTable.IsComplete = true;
-                foreach (var rs in ActiveTab.ResultSets.OfType<QueryResultTable>()) rs.IsComplete = true;
-                int partialTotal = ActiveTab.ResultSets.OfType<QueryResultTable>().Sum(t => t.RowCount);
+                foreach (var rs in targetTab.ResultSets.OfType<QueryResultTable>()) rs.IsComplete = true;
+                int partialTotal = targetTab.ResultSets.OfType<QueryResultTable>().Sum(t => t.RowCount);
                 if (partialTotal > 0)
                 {
-                    ActiveTab.Messages.Add($"({partialTotal:N0} {(partialTotal == 1 ? "row" : "rows")} returned - Execution cancelled by user)");
-                    ResultTab = "Results";
+                    targetTab.Messages.Add($"({partialTotal:N0} {(partialTotal == 1 ? "row" : "rows")} returned - Execution cancelled by user)");
+                    if (targetTab == ActiveTab) ResultTab = "Results";
                 }
                 else
                 {
-                    ActiveTab.Messages.Add("Execution cancelled by user.");
-                    ResultTab = "Messages";
+                    targetTab.Messages.Add("Execution cancelled by user.");
+                    if (targetTab == ActiveTab) ResultTab = "Messages";
                 }
-                ActiveTab.Messages.Add("");
-                ActiveTab.AddCompletionTime();
+                targetTab.Messages.Add("");
+                targetTab.AddCompletionTime();
                 errorMessage = "Cancelled";
             }
             else if (false)
             {
-                ActiveTab.Messages.Add("Execution cancelled by user.");
-                ActiveTab.Messages.Add("");
-                ActiveTab.AddCompletionTime();
-                ResultTab = "Messages";
+                targetTab.Messages.Add("Execution cancelled by user.");
+                targetTab.Messages.Add("");
+                targetTab.AddCompletionTime();
+                if (targetTab == ActiveTab) ResultTab = "Messages";
                 errorMessage = "Cancelled";
             }
             else if (ex is SqlException sqlEx)
             {
-                ResultTab = "Messages";
+                if (targetTab == ActiveTab) ResultTab = "Messages";
                 errorMessage = sqlEx.Message;
                 foreach (SqlError err in sqlEx.Errors)
                 {
                     var (hMsg, nLine) = FormatSqlErrorHeader(err, lineOffset);
-                    ActiveTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
-                    ActiveTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
+                    targetTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
+                    targetTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
                 }
                 if (sqlEx.Errors.Count == 0)
                 {
                     var (hEx, nExLine) = FormatSqlErrorHeader(sqlEx, lineOffset);
-                    ActiveTab.Messages.Add(new QueryOutputMessage(hEx, isError: true, lineNumber: nExLine));
-                    ActiveTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true, lineNumber: nExLine));
+                    targetTab.Messages.Add(new QueryOutputMessage(hEx, isError: true, lineNumber: nExLine));
+                    targetTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true, lineNumber: nExLine));
                 }
-                ActiveTab.Messages.Add("");
-                ActiveTab.AddCompletionTime();
+                targetTab.Messages.Add("");
+                targetTab.AddCompletionTime();
             }
             else
             {
-                ActiveTab.Messages.Add(new QueryOutputMessage($"ERROR: {ex.Message}", isError: true));
-                ActiveTab.Messages.Add("");
-                ActiveTab.AddCompletionTime();
-                ResultTab = "Messages";
+                targetTab.Messages.Add(new QueryOutputMessage($"ERROR: {ex.Message}", isError: true));
+                targetTab.Messages.Add("");
+                targetTab.AddCompletionTime();
+                if (targetTab == ActiveTab) ResultTab = "Messages";
                 errorMessage = ex.Message;
             }
         }
@@ -3146,48 +3149,48 @@
         {
             if (connWatch.IsRunning) connWatch.Stop();
             if (queryWatch.IsRunning) queryWatch.Stop();
-            ActiveTab.LastConnectionTimeMs = connWatch.ElapsedMilliseconds;
-            ActiveTab.LastExecutionTimeMs = queryWatch.ElapsedMilliseconds > 0 ? (connWatch.ElapsedMilliseconds + queryWatch.ElapsedMilliseconds) : connWatch.ElapsedMilliseconds;
-            ActiveTab.LastQueryTimeMs = queryWatch.ElapsedMilliseconds;
-            ActiveTab.IsExecuting = false;
-            ActiveTab.IsCancelling = false;
-            ActiveTab.CancelAction = null;
+            targetTab.LastConnectionTimeMs = connWatch.ElapsedMilliseconds;
+            targetTab.LastExecutionTimeMs = queryWatch.ElapsedMilliseconds > 0 ? (connWatch.ElapsedMilliseconds + queryWatch.ElapsedMilliseconds) : connWatch.ElapsedMilliseconds;
+            targetTab.LastQueryTimeMs = queryWatch.ElapsedMilliseconds;
+            targetTab.IsExecuting = false;
+            targetTab.IsCancelling = false;
+            targetTab.CancelAction = null;
             if (isSuccess)
             {
                 Serilog.Log.Information(
                     "Query executed in {ExecTimeMs}ms (query: {QueryTimeMs}ms, conn: {ConnTimeMs}ms) on {Server}/{Database} [{TabName}]",
-                    ActiveTab.LastExecutionTimeMs,
-                    ActiveTab.LastQueryTimeMs,
-                    ActiveTab.LastConnectionTimeMs,
+                    targetTab.LastExecutionTimeMs,
+                    targetTab.LastQueryTimeMs,
+                    targetTab.LastConnectionTimeMs,
                     string.IsNullOrEmpty(serverName) ? "Server" : serverName,
                     string.IsNullOrEmpty(dbName) ? "Database" : dbName,
-                    ActiveTab.Name);
+                    targetTab.Name);
             }
             else if (!string.IsNullOrEmpty(errorMessage))
             {
                 Serilog.Log.Information(
                     "Query finished with {Status} in {ExecTimeMs}ms on {Server}/{Database} [{TabName}]: {Error}",
                     errorMessage == "Cancelled" ? "Cancellation" : "Error",
-                    ActiveTab.LastExecutionTimeMs,
+                    targetTab.LastExecutionTimeMs,
                     string.IsNullOrEmpty(serverName) ? "Server" : serverName,
                     string.IsNullOrEmpty(dbName) ? "Database" : dbName,
-                    ActiveTab.Name,
+                    targetTab.Name,
                     errorMessage);
             }
-            if (!string.IsNullOrWhiteSpace(fullScript) || !string.IsNullOrWhiteSpace(ActiveTab.Content))
+            if (!string.IsNullOrWhiteSpace(fullScript) || !string.IsNullOrWhiteSpace(targetTab.Content))
             {
-                var scriptToSave = !string.IsNullOrWhiteSpace(fullScript) ? fullScript : ActiveTab.Content;
+                var scriptToSave = !string.IsNullOrWhiteSpace(fullScript) ? fullScript : targetTab.Content;
                 await HistoryService.SaveTabHistoryAsync(
-                    ActiveTab.Id,
-                    ActiveTab.Name,
+                    targetTab.Id,
+                    targetTab.Name,
                     scriptToSave,
                     serverName,
                     dbName,
-                    ActiveTab.ConnectionString,
-                    ActiveTab.ConnectionName);
+                    targetTab.ConnectionString,
+                    targetTab.ConnectionName);
             }
-            ActiveTab.QueryCts?.Dispose();
-            ActiveTab.QueryCts = null;
+            targetTab.QueryCts?.Dispose();
+            targetTab.QueryCts = null;
             await InvokeAsync(StateHasChanged);
         }
     }
