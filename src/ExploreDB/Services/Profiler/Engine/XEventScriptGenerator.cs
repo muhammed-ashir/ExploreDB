@@ -58,7 +58,7 @@ public static class XEventScriptGenerator
             [sqlserver].[client_app_name],
             [sqlserver].[client_hostname],
             [sqlserver].[database_id],
-            [sqlserver].[server_principal_name],
+            [sqlserver].[username],
             [sqlserver].[session_id],
             [sqlserver].[sql_text],
             [sqlserver].[transaction_id]
