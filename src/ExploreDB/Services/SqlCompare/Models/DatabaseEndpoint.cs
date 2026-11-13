@@ -78,7 +78,8 @@ public class DatabaseEndpoint
         {
             DataSource = Server,
             TrustServerCertificate = TrustServerCertificate,
-            ConnectTimeout = ConnectionTimeout
+            ConnectTimeout = ConnectionTimeout,
+            PacketSize = 32767
         };
 
         if (!string.IsNullOrWhiteSpace(Database))

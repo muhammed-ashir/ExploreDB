@@ -174,7 +174,8 @@ public class ConnectionService
         {
             DataSource = server,
             TrustServerCertificate = true, // Helpful for local dev
-            ConnectTimeout = 60 // Increase connection timeout to 60 seconds
+            ConnectTimeout = 60, // Increase connection timeout to 60 seconds
+            PacketSize = 32767
         };
 
         if (authType == "Windows")

@@ -98,7 +98,8 @@
                                 </div>
                                 <button class="btn btn-link p-0 px-1 ms-2 me-1 d-inline-flex align-items-center justify-content-center sort-btn text-decoration-none border-0 shadow-none flex-shrink-0" 
                                         type="button"
-                                        title="Sort by @col"
+                                        disabled="@(_tableStore != null && !_tableStore.IsComplete)"
+                                        title="@(_tableStore != null && !_tableStore.IsComplete ? "Sorting disabled while streaming rows" : $"Sort by {col}")"
                                         @onclick="() => SortBy(col)" 
                                         @onclick:stopPropagation="true">
                                     @if (SortColumn == col)
@@ -107,7 +108,7 @@
                                     }
                                     else
                                     {
-                                        <i class="bi bi-arrow-down-up text-muted" style="opacity: 0.45; font-size: 0.85rem;"></i>
+                                        <i class="bi bi-arrow-down-up text-muted" style="opacity: @(_tableStore != null && !_tableStore.IsComplete ? "0.2" : "0.45"); font-size: 0.85rem;"></i>
                                     }
                                 </button>
                             </div>
@@ -335,14 +336,17 @@ else
                 </button>
             }
             <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
-            <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToExcelAsync(); }">
-                <i class="bi bi-file-earmark-excel text-success fs-6"></i>
-                <span>Export to Excel (.xlsx)</span>
-            </button>
-            <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToCsvAsync(); }">
-                <i class="bi bi-file-earmark-text text-primary fs-6"></i>
-                <span>Export to CSV (.csv)</span>
-            </button>
+            @if (_tableStore == null || _tableStore.IsComplete)
+            {
+                <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToExcelAsync(); }">
+                    <i class="bi bi-file-earmark-excel text-success fs-6"></i>
+                    <span>Export to Excel (.xlsx)</span>
+                </button>
+                <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToCsvAsync(); }">
+                    <i class="bi bi-file-earmark-text text-primary fs-6"></i>
+                    <span>Export to CSV (.csv)</span>
+                </button>
+            }
         </div>
     </div>
 }
@@ -1057,6 +1061,7 @@ else
     private double _currentScrollTop = 0;
     private double _viewportHeight = 450;
     private int _renderedFirstVisible = -1;
+    private int _lastComputedCount = -1;
     private int _lastStartIndex = 0;
     private int _lastEndIndex = 0;
     private int _lastTopSpacerHeight = 0;
@@ -1108,8 +1113,9 @@ else
 
         int firstVisible = CalculateFirstVisible(count, viewportRows, out bool isScaled);
 
-        if (_renderedFirstVisible < 0 || Math.Abs(firstVisible - _renderedFirstVisible) >= 4 || firstVisible <= 5 || firstVisible >= count - viewportRows - 5)
+        if (_renderedFirstVisible < 0 || _lastComputedCount != count || Math.Abs(firstVisible - _renderedFirstVisible) >= 4 || firstVisible <= 5 || firstVisible >= count - viewportRows - 5)
         {
+            _lastComputedCount = count;
             _renderedFirstVisible = firstVisible;
             _lastStartIndex = Math.Max(0, firstVisible - buffer);
             _lastEndIndex = Math.Min(count, firstVisible + viewportRows + buffer);
@@ -1171,6 +1177,12 @@ else
 
     private void ApplyFilter()
     {
+        if (_tableStore != null && !_tableStore.IsComplete)
+        {
+            _filteredIndices = null;
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(SearchTerm))
         {
             _filteredIndices = null;
@@ -1223,6 +1235,7 @@ else
 
     private void SortBy(string column)
     {
+        if (_tableStore != null && !_tableStore.IsComplete) return;
         ClearCellSelection();
 
         if (SortColumn == column)
@@ -1250,6 +1263,12 @@ else
 
     private void ApplySorting()
     {
+        if (_tableStore != null && !_tableStore.IsComplete)
+        {
+            _sortedIndices = null;
+            return;
+        }
+
         if (string.IsNullOrEmpty(SortColumn))
         {
             _sortedIndices = null;
@@ -2179,6 +2198,7 @@ else
 
     private async Task ExportToExcelAsync()
     {
+        if (_tableStore != null && !_tableStore.IsComplete) return;
         int rowCount = ActiveRowCount;
         if (rowCount == 0 || Columns.Count == 0) return;
 
@@ -2288,6 +2308,7 @@ else
 
     private async Task ExportToCsvAsync()
     {
+        if (_tableStore != null && !_tableStore.IsComplete) return;
         int rowCount = ActiveRowCount;
         if (rowCount == 0 || Columns.Count == 0) return;
 

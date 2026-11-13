@@ -61,7 +61,8 @@ public partial class App : Application
 
             TaskScheduler.UnobservedTaskException += (sender, args) =>
             {
-                Log.Fatal(args.Exception, "FATAL: Unobserved Background Task Crash");
+                Log.Warning(args.Exception, "Unobserved background task exception observed and handled");
+                args.SetObserved();
             };
 
             DispatcherUnhandledException += (sender, args) =>

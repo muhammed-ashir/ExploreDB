@@ -135,24 +135,20 @@
                         <div class="d-flex align-items-center ms-3 gap-3">
                             @if (ActiveTab.HasExecuted && ActiveTab.LastExecutionTimeMs >= 0 && !ActiveTab.IsExecuting)
                             {
-                                var timingTooltip = ActiveTab.LastConnectionTimeMs > 0
-                                    ? $"Query: {GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)} | Connection: {GetFormattedExecutionTimeMs(ActiveTab.LastConnectionTimeMs)}"
-                                    : $"Query: {GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)}";
+                                var timingTooltip = ActiveTab.LastConnectionTimeMs > 0 && ActiveTab.LastQueryTimeMs > 0
+                                    ? $"Total: {GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)} (Query: {GetFormattedExecutionTimeMs(ActiveTab.LastQueryTimeMs)} | Connection: {GetFormattedExecutionTimeMs(ActiveTab.LastConnectionTimeMs)})"
+                                    : $"Total: {GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)}";
 
                                 <span class="text-muted d-inline-flex align-items-center" style="font-size: 0.75rem; white-space: nowrap;" title="@timingTooltip">
-                                    <i class="bi bi-stopwatch me-1" style="font-size: 0.75rem;"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)
-                                    @if (ActiveTab.LastConnectionTimeMs >= 1000)
-                                    {
-                                        <span class="text-warning-emphasis ms-1" style="font-size: 0.7rem; opacity: 0.9;" title="Initial network connection took @GetFormattedExecutionTimeMs(ActiveTab.LastConnectionTimeMs)">(conn: @GetFormattedExecutionTimeMs(ActiveTab.LastConnectionTimeMs))</span>
-                                    }
-                                </span>
+                                    <i class="bi bi-stopwatch me-1" style="font-size: 0.75rem;"></i>@GetFormattedExecutionTimeMs(ActiveTab.LastExecutionTimeMs)</span>
+                                <!--end-timer-->
                             }
-                            @if (ResultTab == "Results" && ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 0 && !ActiveTab.IsExecuting)
+                            @if (ResultTab == "Results" && ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 0)
                             {
                                 var totalRows = GetTotalRowCount(ActiveTab.ResultSets);
-                                <span class="text-muted fw-medium" style="font-size: 0.75rem; white-space: nowrap;">
-                                    <i class="bi bi-list me-1" style="font-size: 0.75rem;"></i>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")
-                                </span>
+                                @if (ActiveTab.IsExecuting) { <span class="text-primary fw-medium d-inline-flex align-items-center" style="font-size: 0.75rem; white-space: nowrap;"><span class="spinner-border spinner-border-sm me-1" style="width: 0.75rem; height: 0.75rem; border-width: 0.15em;" role="status"></span><span>Loading rows... (@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows"))</span></span> } else { <span class="text-muted fw-medium" style="font-size: 0.75rem; white-space: nowrap;">
+                                    <i class="bi bi-list me-1" style="font-size: 0.75rem;"></i>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")</span> }
+                                <!--end-timer-->
                             }
                             @if (false)
                             {
@@ -199,7 +195,7 @@
                         <div class="card-body p-0 d-flex flex-column flex-grow-1 position-relative overflow-hidden" style="min-height: 0;">
                         @if (ResultTab == "Results")
                         {
-                            if (ActiveTab.IsExecuting)
+                            if (ActiveTab.IsExecuting && (ActiveTab.ResultSets == null || ActiveTab.ResultSets.Count == 0))
                             {
                                 <div class="text-center mt-5">
                                     <div class="spinner-border @(ActiveTab.IsCancelling ? "text-warning" : "text-primary")" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div>
@@ -750,7 +746,14 @@
     [JSInvokable]
     public async Task ExecuteQueryFromShortcut()
     {
-        await ExecuteAsync();
+        try
+        {
+            await ExecuteAsync();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Shortcut query execution error handled in PopoutRunner");
+        }
         StateHasChanged();
     }
 
@@ -1011,6 +1014,12 @@
         var connWatch = System.Diagnostics.Stopwatch.StartNew();
         var queryWatch = new System.Diagnostics.Stopwatch();
         int lineOffset = 0;
+        bool isSuccess = false;
+        string? errorMessage = null;
+        string dbName = "";
+        string serverName = "";
+        QueryResultTable? currentStreamingTable = null;
+        List<object?[]>? currentBatch = null;
         try
         {
             string queryToRun = ActiveTab.Content;
@@ -1034,7 +1043,14 @@
                 return;
             }
 
-            using var conn = new SqlConnection(ActiveTab.ConnectionString);
+            var connStrBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ActiveTab.ConnectionString);
+            if (connStrBuilder.PacketSize < 32767)
+            {
+                connStrBuilder.PacketSize = 32767;
+            }
+            using var conn = new SqlConnection(connStrBuilder.ConnectionString);
+            dbName = conn.Database;
+            serverName = conn.DataSource;
             conn.InfoMessage += (sender, e) => 
             {
                 InvokeAsync(() => {
@@ -1083,6 +1099,8 @@
             using var reader = await cmd.ExecuteReaderAsync(ActiveTab.QueryCts.Token);
             int totalRows = 0;
             int affectedStatementCount = 0;
+
+            var renderWatch = System.Diagnostics.Stopwatch.StartNew();
             
             do
             {
@@ -1103,6 +1121,7 @@
                         }
 
                         var table = new QueryResultTable(columnNames, columnTypes);
+                        currentStreamingTable = table;
                         try
                         {
                             var schemaTable = reader.GetSchemaTable();
@@ -1134,7 +1153,11 @@
                                 table.TableName = match.Groups[1].Value.Trim();
                             }
                         }
-                        var batch = new List<object?[]>(1000);
+                        ActiveTab.ResultSets.Add(table);
+                        ResultTab = "Results";
+                        await InvokeAsync(StateHasChanged);
+                        var batch = new List<object?[]>(2000);
+                        currentBatch = batch;
                         int yieldCount = 0;
                         while (await reader.ReadAsync(ActiveTab.QueryCts.Token))
                         {
@@ -1150,11 +1173,16 @@
                                 if (rowValues[colIdx] is DBNull) rowValues[colIdx] = null;
                             }
                             batch.Add(rowValues);
-                            if (batch.Count >= 1000)
+                            if (batch.Count >= 2000)
                             {
                                 table.AddRows(batch);
                                 batch.Clear();
-                                if (++yieldCount % 10 == 0)
+                                if (renderWatch.ElapsedMilliseconds >= 300)
+                                {
+                                    renderWatch.Restart();
+                                    await InvokeAsync(StateHasChanged);
+                                }
+                                else if (++yieldCount % 10 == 0)
                                 {
                                     await Task.Yield();
                                 }
@@ -1170,7 +1198,7 @@
                             }
                             // Row added to batch above
                             
-                            if (++yieldCount % 1000 == 0) await Task.Delay(1);
+                            // Throttled UI yields handled above every 300ms without thread sleep delay
                         }
                         
                         if (batch.Count > 0)
@@ -1178,6 +1206,10 @@
                             table.AddRows(batch);
                         }
                         table.IsComplete = true;
+                        currentStreamingTable = null;
+                        currentBatch = null;
+                        await InvokeAsync(StateHasChanged);
+                        if (false)
                         ActiveTab.ResultSets.Add(table);
                         totalRows += table.RowCount;
                         var rowWord = table.RowCount == 1 ? "row" : "rows";
@@ -1215,10 +1247,32 @@
             ActiveTab.AddCompletionTime();
 
             ResultTab = ActiveTab.ResultSets.Count == 0 ? "Messages" : "Results";
+            isSuccess = true;
         }
         catch (Exception ex) when (ex is OperationCanceledException || (ActiveTab.QueryCts != null && ActiveTab.QueryCts.IsCancellationRequested) || ActiveTab.IsCancelling)
         {
+            if (currentBatch != null && currentBatch.Count > 0 && currentStreamingTable != null) { currentStreamingTable.AddRows(currentBatch); currentBatch.Clear(); }
+            if (currentStreamingTable != null) currentStreamingTable.IsComplete = true;
+            if (ActiveTab.ResultSets != null) { foreach (var rs in ActiveTab.ResultSets.OfType<QueryResultTable>()) rs.IsComplete = true; }
+            int partialTotal = ActiveTab.ResultSets?.OfType<QueryResultTable>().Sum(t => t.RowCount) ?? 0;
+            if (partialTotal > 0)
+            {
+                ActiveTab.Messages.Add($"({partialTotal:N0} {(partialTotal == 1 ? "row" : "rows")} returned - Execution cancelled by user)");
+                ResultTab = "Results";
+            }
+            else
+            {
+                ActiveTab.Messages.Add("Query execution was canceled by the user.");
+                ResultTab = "Messages";
+            }
+            errorMessage = "Cancelled";
+            ActiveTab.Messages.Add("");
+            ActiveTab.AddCompletionTime();
+        }
+        catch (Exception ex) when (false)
+        {
             ActiveTab.Messages.Add("Query execution was canceled by the user.");
+            errorMessage = "Cancelled";
             ActiveTab.Messages.Add("");
             ActiveTab.AddCompletionTime();
             ResultTab = "Messages";
@@ -1226,6 +1280,7 @@
         catch (SqlException sqlEx)
         {
             ResultTab = "Messages";
+            errorMessage = sqlEx.Message;
             foreach (SqlError err in sqlEx.Errors)
             {
                 var (hMsg, nLine) = FormatSqlErrorHeader(err, lineOffset);
@@ -1244,6 +1299,7 @@
         catch (Exception ex)
         {
             ActiveTab.Messages.Add(new QueryOutputMessage($"Error: {ex.Message}", isError: true));
+            errorMessage = ex.Message;
             ActiveTab.Messages.Add("");
             ActiveTab.AddCompletionTime();
             ResultTab = "Messages";
@@ -1257,8 +1313,36 @@
             ActiveTab.IsExecuting = false;
             ActiveTab.IsCancelling = false;
             ActiveTab.CancelAction = null;
-            ActiveTab.LastExecutionTimeMs = queryWatch.ElapsedMilliseconds > 0 ? queryWatch.ElapsedMilliseconds : connWatch.ElapsedMilliseconds;
-            ActiveTab.LastQueryTimeMs = queryWatch.ElapsedMilliseconds;
+            var execMs = queryWatch.ElapsedMilliseconds > 0 ? (connWatch.ElapsedMilliseconds + queryWatch.ElapsedMilliseconds) : connWatch.ElapsedMilliseconds;
+            var queryMs = queryWatch.ElapsedMilliseconds;
+            ActiveTab.LastExecutionTimeMs = execMs;
+            ActiveTab.LastQueryTimeMs = queryMs;
+
+
+            if (isSuccess)
+            {
+                Serilog.Log.Information(
+                    "Query executed in {ExecTimeMs}ms (query: {QueryTimeMs}ms, conn: {ConnTimeMs}ms) on {Server}/{Database} [{TabName}] (Popout)",
+                    ActiveTab.LastExecutionTimeMs,
+                    ActiveTab.LastQueryTimeMs,
+                    ActiveTab.LastConnectionTimeMs,
+                    string.IsNullOrEmpty(serverName) ? "Server" : serverName,
+                    string.IsNullOrEmpty(dbName) ? "Database" : dbName,
+                    ActiveTab.Name);
+            }
+            else if (!string.IsNullOrEmpty(errorMessage))
+            {
+                Serilog.Log.Information(
+                    "Query finished with {Status} in {ExecTimeMs}ms on {Server}/{Database} [{TabName}] (Popout): {Error}",
+                    errorMessage == "Cancelled" ? "Cancellation" : "Error",
+                    ActiveTab.LastExecutionTimeMs,
+                    string.IsNullOrEmpty(serverName) ? "Server" : serverName,
+                    string.IsNullOrEmpty(dbName) ? "Database" : dbName,
+                    ActiveTab.Name,
+                    errorMessage);
+            }
+
+
             ActiveTab.QueryCts?.Dispose();
             ActiveTab.QueryCts = null;
             StateHasChanged();
