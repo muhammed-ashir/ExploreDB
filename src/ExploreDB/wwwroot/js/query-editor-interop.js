@@ -1886,11 +1886,16 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 try {
                     editor.addAction({
                         id: 'custom-paste-action',
+                        precondition: 'editorTextFocus',
                         label: 'Paste',
                         keybindings: [
                             monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV
                         ],
                         run: async function(ed) {
+                            var activeEl = document.activeElement;
+                            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') && !activeEl.classList.contains('inputarea')) {
+                                return;
+                            }
                             var text = await window.readClipboardText();
                             if (text) {
                                 var selection = ed.getSelection();
