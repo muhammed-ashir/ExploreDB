@@ -1,11 +1,13 @@
 @page "/app-center"
 @using ExploreDB.Services
+@using Microsoft.Extensions.Logging
 @inject UserSettingsService UserSettingsService
 @inject GitHubUpdateService UpdateService
 @inject StoreUpdateService StoreUpdateService
 @inject IJSRuntime JS
 @inject ThemeService ThemeService
 @inject NavigationManager Nav
+@inject Microsoft.Extensions.Logging.ILogger<AppCenter> Logger
 @implements IDisposable
 
 <div class="container-fluid h-100 d-flex flex-column pb-5" style="color: var(--app-text);">
@@ -807,6 +809,7 @@
         InstallerLaunched = false;
         StoreUpdateReadyToRestart = false;
         UpdateProgress = 0;
+        Logger.LogInformation("AppCenter: Manual check for updates initiated by user.");
         try
         {
 #if WINDOWS
@@ -814,18 +817,23 @@
             if (IsStoreUpdate)
             {
                 AvailableUpdate = new UpdateInfo("STORE_UPDATE", false);
+                Logger.LogInformation("AppCenter: Store update detected.");
             }
             else
             {
                 AvailableUpdate = await UpdateService.CheckForUpdateAsync();
+                Logger.LogInformation("AppCenter: Store update not found. External release check: {Result}", AvailableUpdate != null ? "Update Available" : "Up-to-date");
             }
+
 #else
             AvailableUpdate = await UpdateService.CheckForUpdateAsync();
+            Logger.LogInformation("AppCenter (Non-Windows): External release check: {Result}", AvailableUpdate != null ? "Update Available" : "Up-to-date");
 #endif
             ShowUpdateModal = true;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "AppCenter: Error occurred during manual update check.");
             AvailableUpdate = null;
             ShowUpdateModal = true;
         }
@@ -840,6 +848,7 @@
     {
         if (AvailableUpdate == null) return;
         IsDownloadingUpdate = true;
+        Logger.LogInformation("AppCenter: User initiated update download/install. IsStoreUpdate: {IsStoreUpdate}", IsStoreUpdate);
         DownloadFailed = false;
         try
         {
@@ -852,10 +861,12 @@
                 });
                 if (success)
                 {
+                    Logger.LogInformation("AppCenter: Store update installation successful. Ready to restart.");
                     StoreUpdateReadyToRestart = true;
                 }
                 else
                 {
+                    Logger.LogWarning(IsStoreUpdate ? "AppCenter: Store update installation failed." : "AppCenter: External update installer execution failed.");
                     DownloadFailed = true;
                 }
             }
@@ -865,16 +876,19 @@
                 var success = await UpdateService.DownloadAndExecuteUpdateAsync(AvailableUpdate.DownloadUrl);
                 if (success)
                 {
+                    Logger.LogInformation("AppCenter: External update installer launched successfully.");
                     InstallerLaunched = true;
                 }
                 else
                 {
+                    Logger.LogWarning(IsStoreUpdate ? "AppCenter: Store update installation failed." : "AppCenter: External update installer execution failed.");
                     DownloadFailed = true;
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "AppCenter: Exception occurred during update download/install.");
             DownloadFailed = true;
         }
         finally

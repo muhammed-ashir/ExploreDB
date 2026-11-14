@@ -27,6 +27,7 @@ public class StoreUpdateService
 #if WINDOWS
         try
         {
+            _logger.LogInformation("Checking for Microsoft Store updates...");
             var storeContext = StoreContext.GetDefault();
             
             var mainWindow = System.Windows.Application.Current?.MainWindow;
@@ -35,18 +36,29 @@ public class StoreUpdateService
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(mainWindow).Handle;
                 WinRT.Interop.InitializeWithWindow.Initialize(storeContext, hwnd);
             }
+            else
+            {
+                _logger.LogWarning("StoreUpdateService: MainWindow is null, StoreContext initialized without explicit HWND.");
+            }
 
             var updates = await storeContext.GetAppAndOptionalStorePackageUpdatesAsync();
-            if (updates != null && updates.Count > 0)
+            int count = updates?.Count ?? 0;
+            if (count > 0)
             {
-                _logger.LogInformation($"Found {updates.Count} available Store updates.");
+                _logger.LogInformation("Found {Count} available Store updates.", count);
                 return true;
+            }
+            else
+            {
+                _logger.LogInformation("Microsoft Store check completed: App is up-to-date (0 updates found).");
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to check for Microsoft Store updates.");
         }
+#else
+        _logger.LogInformation("Store updates are only supported on Windows.");
 #endif
         return false;
     }
@@ -60,6 +72,7 @@ public class StoreUpdateService
 #if WINDOWS
         try
         {
+            _logger.LogInformation("Initiating download and installation of Microsoft Store updates...");
             var storeContext = StoreContext.GetDefault();
             
             var mainWindow = System.Windows.Application.Current?.MainWindow;
@@ -72,6 +85,7 @@ public class StoreUpdateService
             var updates = await storeContext.GetAppAndOptionalStorePackageUpdatesAsync();
             if (updates != null && updates.Count > 0)
             {
+                _logger.LogInformation("Requesting download and install for {Count} Store packages...", updates.Count);
                 var operation = storeContext.RequestDownloadAndInstallStorePackageUpdatesAsync(updates);
                 
                 operation.Progress = (asyncInfo, progressInfo) =>
@@ -84,6 +98,7 @@ public class StoreUpdateService
                 };
 
                 var result = await operation;
+                _logger.LogInformation("Store package update operation completed with OverallState: {State}", result.OverallState);
                 
                 if (result.OverallState == StorePackageUpdateState.Completed)
                 {
@@ -91,8 +106,12 @@ public class StoreUpdateService
                 }
                 else
                 {
-                    _logger.LogWarning($"Store update didn't complete successfully. State: {result.OverallState}");
+                    _logger.LogWarning("Store update didn't complete successfully. State: {State}", result.OverallState);
                 }
+            }
+            else
+            {
+                _logger.LogWarning("DownloadAndInstallUpdateAsync called, but no Store package updates were found.");
             }
         }
         catch (Exception ex)
