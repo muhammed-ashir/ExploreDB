@@ -1,5 +1,6 @@
 @page "/tools/sql-profiler"
 @using ExploreDB.Services
+@using static ExploreDB.Services.ConnectionService
 @using ExploreDB.Services.Profiler
 @using ExploreDB.Services.Profiler.Engine
 @using ExploreDB.Services.Profiler.Models
@@ -21,8 +22,143 @@
     <!-- TOP BAR -->
     <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2 pt-2">
         <div>
-            <h3 class="fw-bold mb-0" style="color: var(--app-text);">SQL Profiler</h3>
-            <span class="text-muted small">Database: <strong style="color: var(--app-text);">@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)</strong></span>
+            <h3 class="fw-bold mb-1" style="color: var(--app-text); font-size: 1.35rem;">SQL Profiler</h3>
+
+            <div class="d-flex align-items-center gap-2 mt-1">
+                <!-- Server Dropdown (Sidebar style) -->
+                <div class="position-relative" style="width: 210px;">
+                    <input class="form-control form-control-sm pe-4 text-truncate"
+                           value="@(Profiler.IsStreaming ? (Profiler.ActiveServerName ?? GetSelectedServerDisplayName()) : (_isServerDropdownOpen ? _serverSearch : GetSelectedServerDisplayName()))"
+                           @oninput="@((ChangeEventArgs e) => _serverSearch = e.Value?.ToString() ?? "")"
+                           placeholder="Search connection..."
+                           @onfocus="OpenServerDropdown"
+                           disabled="@Profiler.IsStreaming"
+                           data-bs-tooltip="true"
+                           data-bs-placement="bottom"
+                           data-bs-title="@GetSelectedServerDisplayName()"
+                           style="cursor: @(Profiler.IsStreaming ? "not-allowed" : "pointer"); font-size: 0.82rem; height: 30px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                    @if (_isServerDropdownOpen && !Profiler.IsStreaming)
+                    {
+                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseServerDropdown"></div>
+                        <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                            @{
+                                var filteredConns = _availableConnections.Where(c =>
+                                    string.IsNullOrWhiteSpace(_serverSearch) ||
+                                    (c.Name ?? "").Contains(_serverSearch, StringComparison.OrdinalIgnoreCase) ||
+                                    (c.Server ?? "").Contains(_serverSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                                if (filteredConns.Any())
+                                {
+                                    <div class="list-group list-group-flush">
+                                        @foreach (var c in filteredConns)
+                                        {
+                                            string displayName = GetConnectionOptionLabel(c);
+                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate"
+                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.82rem; background-color: transparent; color: var(--app-text);"
+                                                    data-bs-tooltip="true"
+                                                    data-bs-placement="right"
+                                                    data-bs-title="@displayName"
+                                                    @onclick="() => OnServerSelectedAsync(c.ConnectionString)">
+                                                @displayName
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="p-2 text-muted small text-center" style="font-size: 0.8rem;">No connections found</div>
+                                }
+                            }
+                        </div>
+                    }
+
+                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 8px; top: 0; pointer-events: none;">
+                        @if (Profiler.IsStreaming)
+                        {
+                            <i class="bi bi-lock-fill text-muted" style="font-size: 0.75rem;"></i>
+                        }
+                        else
+                        {
+                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem;"></i>
+                        }
+                    </div>
+                </div>
+
+                <!-- Database Dropdown (Sidebar style) -->
+                <div class="position-relative" style="width: 190px;">
+                    <input class="form-control form-control-sm pe-4 text-truncate"
+                           value="@(Profiler.IsStreaming ? (Profiler.ActiveDatabaseName ?? GetSelectedDatabaseDisplayName()) : (_isDatabaseDropdownOpen ? _databaseSearch : GetSelectedDatabaseDisplayName()))"
+                           @oninput="@((ChangeEventArgs e) => _databaseSearch = e.Value?.ToString() ?? "")"
+                           placeholder="Search database..."
+                           @onfocus="OpenDatabaseDropdown"
+                           disabled="@Profiler.IsStreaming"
+                           data-bs-tooltip="true"
+                           data-bs-placement="bottom"
+                           data-bs-title="@GetSelectedDatabaseDisplayName()"
+                           style="cursor: @(Profiler.IsStreaming ? "not-allowed" : "pointer"); font-size: 0.82rem; height: 30px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                    @if (_isDatabaseDropdownOpen && !Profiler.IsStreaming)
+                    {
+                        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseDatabaseDropdown"></div>
+                        <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                            @if (_isLoadingDatabases)
+                            {
+                                <div class="p-3 text-center text-info">
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    <small>Loading databases...</small>
+                                </div>
+                            }
+                            else if (_availableDatabases.Any())
+                            {
+                                var filteredDbs = _availableDatabases.Where(d =>
+                                    string.IsNullOrWhiteSpace(_databaseSearch) ||
+                                    d.Contains(_databaseSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                                if (filteredDbs.Any())
+                                {
+                                    <div class="list-group list-group-flush">
+                                        @foreach (var db in filteredDbs)
+                                        {
+                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate"
+                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.82rem; background-color: transparent; color: var(--app-text);"
+                                                    data-bs-tooltip="true"
+                                                    data-bs-placement="right"
+                                                    data-bs-title="@db"
+                                                    @onclick="() => OnDatabaseSelected(db)">
+                                                @db
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="p-2 text-muted small text-center" style="font-size: 0.8rem;">No databases found</div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="p-2 text-muted small text-center" style="font-size: 0.8rem;">No databases available</div>
+                            }
+                        </div>
+                    }
+
+                    <div class="position-absolute h-100 d-flex align-items-center" style="right: 8px; top: 0; pointer-events: none;">
+                        @if (Profiler.IsStreaming)
+                        {
+                            <i class="bi bi-lock-fill text-muted" style="font-size: 0.75rem;"></i>
+                        }
+                        else if (_isLoadingDatabases)
+                        {
+                            <span class="spinner-border spinner-border-sm text-info" style="width: 0.75rem; height: 0.75rem;"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem;"></i>
+                        }
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -1016,11 +1152,22 @@
     private bool _isSqlCopied = false;
     private bool _isXmlCopied = false;
 
-    private bool CanStartLiveTrace => SchemaService.IsDatabaseConnected && !Profiler.IsStreaming;
+    private bool CanStartLiveTrace => !string.IsNullOrEmpty(_selectedConnectionString) && !Profiler.IsStreaming;
 
     private string CurrentInspectorSql => _selectedEvent?.TextData ?? _selectedAggregate?.NormalizedText ?? string.Empty;
 
-    protected override void OnInitialized()
+    private List<SavedConnection> _availableConnections = new();
+    private string _selectedConnectionString = string.Empty;
+    private string _selectedDatabase = string.Empty;
+    private List<string> _availableDatabases = new();
+    private bool _isLoadingDatabases = false;
+
+    private string _serverSearch = string.Empty;
+    private bool _isServerDropdownOpen = false;
+    private string _databaseSearch = string.Empty;
+    private bool _isDatabaseDropdownOpen = false;
+
+    protected override async Task OnInitializedAsync()
     {
         // Sync with currently running Profiler session (if user navigated away and returned)
         _events = Profiler.GetAllBufferedEvents().ToList();
@@ -1038,6 +1185,309 @@
         Profiler.ErrorOccurred += HandleErrorOccurred;
         ConnectionService.OnDatabaseSwitched += HandleDatabaseSwitched;
         ConnectionService.OnConnectionChanged += HandleConnectionChanged;
+
+        InitializeConnectionTargets();
+        await LoadDatabasesForSelectedServerAsync();
+    }
+
+    private void InitializeConnectionTargets()
+    {
+        RefreshAvailableConnections();
+
+        if (Profiler.IsStreaming)
+        {
+            if (!string.IsNullOrEmpty(Profiler.ActiveDatabaseName))
+            {
+                _selectedDatabase = Profiler.ActiveDatabaseName;
+            }
+            _serverSearch = GetSelectedServerDisplayName();
+            _databaseSearch = GetSelectedDatabaseDisplayName();
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_selectedConnectionString))
+        {
+            _selectedConnectionString = ConnectionService.ConnectionString;
+        }
+
+        if (string.IsNullOrEmpty(_selectedDatabase))
+        {
+            _selectedDatabase = SchemaService.ActiveDatabase;
+        }
+
+        _serverSearch = GetSelectedServerDisplayName();
+        _databaseSearch = GetSelectedDatabaseDisplayName();
+    }
+
+    private void RefreshAvailableConnections()
+    {
+        var list = new List<SavedConnection>();
+
+        if (ConnectionService.ActiveSessionConnections != null)
+        {
+            foreach (var c in ConnectionService.ActiveSessionConnections)
+            {
+                if (!string.IsNullOrWhiteSpace(c.ConnectionString) && 
+                    !list.Any(x => string.Equals(x.ConnectionString, c.ConnectionString, StringComparison.OrdinalIgnoreCase)))
+                {
+                    list.Add(c);
+                }
+            }
+        }
+
+        if (ConnectionService.SavedConnections != null)
+        {
+            foreach (var c in ConnectionService.SavedConnections)
+            {
+                if (!string.IsNullOrWhiteSpace(c.ConnectionString) && 
+                    !list.Any(x => string.Equals(x.ConnectionString, c.ConnectionString, StringComparison.OrdinalIgnoreCase)))
+                {
+                    list.Add(c);
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(ConnectionService.ConnectionString) &&
+            !list.Any(x => string.Equals(x.ConnectionString, ConnectionService.ConnectionString, StringComparison.OrdinalIgnoreCase)))
+        {
+            string srv = "Active Connection";
+            string db = "";
+            try
+            {
+                var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                srv = b.DataSource;
+                db = b.InitialCatalog;
+            }
+            catch { }
+
+            list.Insert(0, new SavedConnection
+            {
+                Id = "current_active",
+                Name = srv,
+                Server = srv,
+                Database = db,
+                ConnectionString = ConnectionService.ConnectionString
+            });
+        }
+
+        _availableConnections = list;
+
+        if (string.IsNullOrEmpty(_selectedConnectionString) && _availableConnections.Count > 0)
+        {
+            _selectedConnectionString = _availableConnections[0].ConnectionString;
+            if (string.IsNullOrEmpty(_selectedDatabase))
+            {
+                _selectedDatabase = _availableConnections[0].Database ?? "";
+            }
+        }
+    }
+
+    private static string GetConnectionOptionLabel(SavedConnection conn)
+    {
+        if (string.IsNullOrWhiteSpace(conn.Name) || string.Equals(conn.Name, conn.Server, StringComparison.OrdinalIgnoreCase))
+        {
+            return conn.Server ?? "Unknown Server";
+        }
+        return $"{conn.Server} ({conn.Name})";
+    }
+
+    private static string GetServerDisplayName(string? connStr)
+    {
+        if (string.IsNullOrWhiteSpace(connStr)) return "None";
+        try
+        {
+            var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connStr);
+            return b.DataSource;
+        }
+        catch
+        {
+            return "Server";
+        }
+    }
+
+    private string GetSelectedServerDisplayName()
+    {
+        if (Profiler.IsStreaming && !string.IsNullOrEmpty(Profiler.ActiveServerName))
+        {
+            return Profiler.ActiveServerName;
+        }
+
+        var conn = _availableConnections.FirstOrDefault(c => string.Equals(c.ConnectionString, _selectedConnectionString, StringComparison.OrdinalIgnoreCase));
+        if (conn != null)
+        {
+            return GetConnectionOptionLabel(conn);
+        }
+        return GetServerDisplayName(_selectedConnectionString);
+    }
+
+    private string GetSelectedDatabaseDisplayName()
+    {
+        if (Profiler.IsStreaming && !string.IsNullOrEmpty(Profiler.ActiveDatabaseName))
+        {
+            return Profiler.ActiveDatabaseName;
+        }
+        return string.IsNullOrEmpty(_selectedDatabase) ? "All Databases" : _selectedDatabase;
+    }
+
+    private void OpenServerDropdown()
+    {
+        if (Profiler.IsStreaming) return;
+        _isServerDropdownOpen = true;
+        _isDatabaseDropdownOpen = false;
+        _serverSearch = "";
+    }
+
+    private void CloseServerDropdown()
+    {
+        _isServerDropdownOpen = false;
+        _serverSearch = GetSelectedServerDisplayName();
+    }
+
+    private async Task OnServerSelectedAsync(string connString)
+    {
+        _isServerDropdownOpen = false;
+        if (!string.Equals(_selectedConnectionString, connString, StringComparison.OrdinalIgnoreCase))
+        {
+            _selectedConnectionString = connString;
+            _selectedDatabase = string.Empty;
+            _serverSearch = GetSelectedServerDisplayName();
+            await LoadDatabasesForSelectedServerAsync();
+            _databaseSearch = GetSelectedDatabaseDisplayName();
+        }
+        else
+        {
+            _serverSearch = GetSelectedServerDisplayName();
+        }
+    }
+
+    private void OpenDatabaseDropdown()
+    {
+        if (Profiler.IsStreaming) return;
+        _isDatabaseDropdownOpen = true;
+        _isServerDropdownOpen = false;
+        _databaseSearch = "";
+        if (_availableDatabases.Count == 0 && !_isLoadingDatabases)
+        {
+            _ = LoadDatabasesForSelectedServerAsync();
+        }
+    }
+
+    private void CloseDatabaseDropdown()
+    {
+        _isDatabaseDropdownOpen = false;
+        _databaseSearch = GetSelectedDatabaseDisplayName();
+    }
+
+    private void OnDatabaseSelected(string db)
+    {
+        _selectedDatabase = db;
+        _databaseSearch = db;
+        _isDatabaseDropdownOpen = false;
+    }
+
+    private async Task LoadDatabasesForSelectedServerAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedConnectionString))
+        {
+            _availableDatabases.Clear();
+            return;
+        }
+
+        _isLoadingDatabases = true;
+        await InvokeAsync(StateHasChanged);
+
+        var dbs = new List<string>();
+        string targetConn = _selectedConnectionString;
+
+        try
+        {
+            await Task.Run(async () =>
+            {
+                bool fetched = false;
+                try
+                {
+                    var masterBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(targetConn)
+                    {
+                        InitialCatalog = "master",
+                        ConnectTimeout = 4
+                    };
+                    using var conn = new Microsoft.Data.SqlClient.SqlConnection(masterBuilder.ConnectionString);
+                    await conn.OpenAsync();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        dbs.Add(reader.GetString(0));
+                    }
+                    fetched = true;
+                }
+                catch { }
+
+                if (!fetched)
+                {
+                    try
+                    {
+                        using var conn = new Microsoft.Data.SqlClient.SqlConnection(targetConn);
+                        await conn.OpenAsync();
+                        using var cmd = conn.CreateCommand();
+                        cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
+                        using var reader = await cmd.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            dbs.Add(reader.GetString(0));
+                        }
+                        fetched = true;
+                    }
+                    catch { }
+                }
+
+                if (!fetched || dbs.Count == 0)
+                {
+                    try
+                    {
+                        var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(targetConn);
+                        if (!string.IsNullOrWhiteSpace(b.InitialCatalog) && !dbs.Contains(b.InitialCatalog))
+                        {
+                            dbs.Add(b.InitialCatalog);
+                        }
+                    }
+                    catch { }
+                }
+            });
+        }
+        catch { }
+        finally
+        {
+            _availableDatabases = dbs;
+            _isLoadingDatabases = false;
+
+            if (string.IsNullOrEmpty(_selectedDatabase) || !_availableDatabases.Contains(_selectedDatabase, StringComparer.OrdinalIgnoreCase))
+            {
+                if (_availableDatabases.Count > 0)
+                {
+                    string? initialCat = null;
+                    try
+                    {
+                        initialCat = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(targetConn).InitialCatalog;
+                    }
+                    catch { }
+
+                    if (!string.IsNullOrEmpty(initialCat) && _availableDatabases.Contains(initialCat, StringComparer.OrdinalIgnoreCase))
+                    {
+                        _selectedDatabase = initialCat;
+                    }
+                    else
+                    {
+                        _selectedDatabase = _availableDatabases[0];
+                    }
+                }
+            }
+
+            _databaseSearch = GetSelectedDatabaseDisplayName();
+            _serverSearch = GetSelectedServerDisplayName();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private DotNetObjectReference<ProfilerTool>? _dotNetRef;
@@ -1097,6 +1547,15 @@
 
     private void HandleConnectionChanged()
     {
+        RefreshAvailableConnections();
+        if (string.IsNullOrEmpty(_selectedConnectionString) && !string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        {
+            _selectedConnectionString = ConnectionService.ConnectionString;
+            _selectedDatabase = SchemaService.ActiveDatabase;
+            _serverSearch = GetSelectedServerDisplayName();
+            _databaseSearch = GetSelectedDatabaseDisplayName();
+            _ = LoadDatabasesForSelectedServerAsync();
+        }
         InvokeAsync(StateHasChanged);
     }
 
@@ -1187,8 +1646,8 @@
         if (!CanStartLiveTrace) return;
 
         _errorMessage = null;
-        _sessionConfig.ConnectionString = ConnectionService.ConnectionString;
-        _sessionConfig.Filters.DatabaseName = SchemaService.ActiveDatabase;
+        _sessionConfig.ConnectionString = _selectedConnectionString;
+        _sessionConfig.Filters.DatabaseName = _selectedDatabase;
         _sessionConfig.MaxEventBufferSize = _bufferCapacityChoice;
 
         var (success, error) = await Profiler.StartAsync(_sessionConfig);
@@ -1553,14 +2012,7 @@
 
     private void HandleDatabaseSwitched()
     {
-        InvokeAsync(() =>
-        {
-            if (Profiler.IsStreaming)
-            {
-                _statusMessage = $"Sidebar database switched to '{SchemaService.ActiveDatabase}'. (Active trace is profiling '{_sessionConfig.Filters.DatabaseName}').";
-            }
-            StateHasChanged();
-        });
+        InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()

@@ -39,18 +39,6 @@ public sealed class ProfilerService : IAsyncDisposable
     public ProfilerService(ConnectionService? connectionService = null)
     {
         _connectionService = connectionService;
-        if (_connectionService != null)
-        {
-            _connectionService.OnConnectionChanged += HandleConnectionChanged;
-        }
-    }
-
-    private void HandleConnectionChanged()
-    {
-        if (IsStreaming)
-        {
-            _ = StopAsync();
-        }
     }
 
     public event Action<IReadOnlyList<TraceEvent>>? EventsBatchAvailable;
@@ -62,6 +50,8 @@ public sealed class ProfilerService : IAsyncDisposable
     public bool IsPaused { get; private set; }
     public bool IsDemoMode { get; private set; }
     public string? ActiveSessionName => _sessionManager.ActiveSessionName;
+    public string? ActiveDatabaseName { get; private set; }
+    public string? ActiveServerName { get; private set; }
 
     public int TotalBufferedEvents => _eventBuffer.Count;
     public int BufferCapacity => _eventBuffer.Capacity;
@@ -153,6 +143,16 @@ public sealed class ProfilerService : IAsyncDisposable
             IsStreaming = true;
             IsPaused = false;
             IsDemoMode = false;
+            ActiveDatabaseName = targetDatabase;
+            try
+            {
+                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(config.ConnectionString);
+                ActiveServerName = builder.DataSource;
+            }
+            catch
+            {
+                ActiveServerName = null;
+            }
 
             // 2. Launch live streamer
             _streamingTask = Task.Run(async () =>
@@ -212,6 +212,8 @@ public sealed class ProfilerService : IAsyncDisposable
         IsStreaming = true;
         IsPaused = false;
         IsDemoMode = true;
+        ActiveDatabaseName = "Demo (AdventureWorks)";
+        ActiveServerName = "localhost (Demo)";
 
         // Launch simulation generator
         _streamingTask = Task.Run(async () =>
@@ -291,6 +293,8 @@ public sealed class ProfilerService : IAsyncDisposable
         IsStreaming = false;
         IsPaused = false;
         IsDemoMode = false;
+        ActiveDatabaseName = null;
+        ActiveServerName = null;
 
         // Flush any remaining UI batch
         FlushPendingUiBatch();
@@ -411,10 +415,6 @@ public sealed class ProfilerService : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_connectionService != null)
-        {
-            _connectionService.OnConnectionChanged -= HandleConnectionChanged;
-        }
         await StopAsync();
         await _sessionManager.DisposeAsync();
     }
