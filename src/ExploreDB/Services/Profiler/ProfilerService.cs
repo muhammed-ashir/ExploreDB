@@ -107,6 +107,11 @@ public sealed class ProfilerService : IAsyncDisposable
 
         string? targetDatabase = config.Filters.DatabaseName;
 
+        if (string.IsNullOrWhiteSpace(targetDatabase))
+        {
+            return (false, "A specific database must be selected to start tracing. Server-wide profiling is not supported.");
+        }
+
         // Pre-check permissions: check Database-level permissions on targetDatabase first,
         // then fall back to server-level permissions
         var (hasPerms, isDbScope, permError) = await XEventSessionManager.CheckPermissionsAsync(
