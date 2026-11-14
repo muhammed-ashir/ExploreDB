@@ -457,8 +457,8 @@ else
                          </button>
                          <button class="btn btn-sm btn-primary fw-semibold d-flex align-items-center gap-1 shadow-sm px-3" 
                                  @onclick="OpenQueryModal" 
-                                 disabled="@(TotalSelectedTablesCount <= 1)"
-                                 title="@(TotalSelectedTablesCount <= 1 ? "Select at least 2 tables to view query" : "View generated SQL query")">
+                                 disabled="@(TotalSelectedTablesCount == 0)"
+                                 title="@(TotalSelectedTablesCount == 0 ? "Select at least 1 table to view query" : "View generated SQL query")">
                              <i class="bi bi-code-slash"></i>
                              <span>Show Query</span>
                          </button>
