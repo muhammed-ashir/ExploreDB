@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
@@ -161,6 +164,9 @@ public sealed class XEventSessionManager : IAsyncDisposable
         await using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync(ct);
 
+        // 0. Clean up any orphaned sessions from previous crashes or force-closed instances on this machine
+        await CleanupOrphanedSessionsAsync(conn, isDatabaseScope, ct);
+
         // 1. Generate & Execute Create Script
         string createSql = XEventScriptGenerator.GenerateCreateSessionScript(config, isDatabaseScope);
         await using (var cmd = new SqlCommand(createSql, conn))
@@ -222,10 +228,137 @@ public sealed class XEventSessionManager : IAsyncDisposable
             {
                 // Ignore if already dropped
             }
+
+            // Clean up any lingering orphaned sessions from this machine
+            await CleanupOrphanedSessionsAsync(conn, isDbScope, ct);
         }
         catch
         {
             // Suppress teardown errors
+        }
+    }
+
+    public static async Task CleanupOrphanedSessionsAsync(SqlConnection conn, bool isDatabaseScope, CancellationToken ct = default)
+    {
+        try
+        {
+            string catalogView = isDatabaseScope ? "sys.database_event_sessions" : "sys.server_event_sessions";
+            string scopeKeyword = isDatabaseScope ? "DATABASE" : "SERVER";
+            string currentMachine = new string(Environment.MachineName.Where(char.IsLetterOrDigit).ToArray());
+            if (currentMachine.Length > 24) currentMachine = currentMachine[..24];
+
+            string currentUser = new string(Environment.UserName.Where(char.IsLetterOrDigit).ToArray());
+            if (currentUser.Length > 24) currentUser = currentUser[..24];
+
+            var sessionsToDrop = new List<string>();
+
+            string query = $"SELECT name FROM {catalogView} WHERE name LIKE 'ExploreDB_Profiler_%'";
+            await using (var cmd = new SqlCommand(query, conn))
+            {
+                cmd.CommandTimeout = 10;
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                {
+                    string sessName = reader.GetString(0);
+                    if (IsSessionOrphaned(sessName, currentMachine, currentUser))
+                    {
+                        sessionsToDrop.Add(sessName);
+                    }
+                }
+            }
+
+            foreach (var sess in sessionsToDrop)
+            {
+                try
+                {
+                    string stopSql = $"ALTER EVENT SESSION {XEventScriptGenerator.EscapeIdentifier(sess)} ON {scopeKeyword} STATE = STOP;";
+                    await using var cmdStop = new SqlCommand(stopSql, conn);
+                    cmdStop.CommandTimeout = 10;
+                    await cmdStop.ExecuteNonQueryAsync(ct);
+                }
+                catch { }
+
+                try
+                {
+                    string dropSql = $"DROP EVENT SESSION {XEventScriptGenerator.EscapeIdentifier(sess)} ON {scopeKeyword};";
+                    await using var cmdDrop = new SqlCommand(dropSql, conn);
+                    cmdDrop.CommandTimeout = 10;
+                    await cmdDrop.ExecuteNonQueryAsync(ct);
+                }
+                catch { }
+            }
+        }
+        catch
+        {
+            // Suppress cleanup exceptions so trace startup is not blocked if metadata catalog read fails
+        }
+    }
+
+    private static bool IsSessionOrphaned(string sessionName, string currentMachine, string currentUser)
+    {
+        // Expected formats:
+        // 1. ExploreDB_Profiler_{Machine}_{User}_{PID} (5 parts)
+        // 2. ExploreDB_Profiler_{Machine}_{PID} (4 parts)
+        // 3. ExploreDB_Profiler_{PID} (3 parts - legacy)
+        var parts = sessionName.Split('_');
+        if (parts.Length < 3) return false;
+
+        string pidStr;
+        if (parts.Length >= 5)
+        {
+            string machinePart = parts[2];
+            string userPart = parts[3];
+            // Only clean up sessions originating from this machine AND this user
+            if (!string.Equals(machinePart, currentMachine, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(userPart, currentUser, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            pidStr = parts[4];
+        }
+        else if (parts.Length == 4)
+        {
+            string machinePart = parts[2];
+            if (!string.Equals(machinePart, currentMachine, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            pidStr = parts[3];
+        }
+        else
+        {
+            // Legacy format: ExploreDB_Profiler_{PID}
+            pidStr = parts[2];
+        }
+
+        if (!int.TryParse(pidStr, out int pid))
+        {
+            return false;
+        }
+
+        // If it's this current process, it's a leftover from a previous restart within the same process
+        if (pid == Environment.ProcessId)
+        {
+            return true;
+        }
+
+        // Check if the PID is currently running as ExploreDB
+        try
+        {
+            var proc = Process.GetProcessById(pid);
+            if (proc.HasExited) return true;
+
+            // If the process name does not contain "ExploreDB", the PID was recycled by another app
+            return !proc.ProcessName.Contains("ExploreDB", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            // Process does not exist -> definitely orphaned from a crash
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

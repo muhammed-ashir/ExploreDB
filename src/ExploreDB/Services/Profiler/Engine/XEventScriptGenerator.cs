@@ -144,6 +144,6 @@ public static class XEventScriptGenerator
                $"    DROP EVENT SESSION {EscapeIdentifier(sessionName)} ON {scopeKeyword};";
     }
 
-    private static string EscapeIdentifier(string name) => $"[{name.Replace("]", "]]")}]";
-    private static string EscapeString(string value) => value.Replace("'", "''");
+    public static string EscapeIdentifier(string name) => $"[{name.Replace("]", "]]")}]";
+    public static string EscapeString(string value) => value.Replace("'", "''");
 }
