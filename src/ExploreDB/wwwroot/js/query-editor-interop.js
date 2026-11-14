@@ -2024,19 +2024,18 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 };
 
 window.readClipboardText = async function() {
-    try {
-        if (navigator.clipboard && navigator.clipboard.readText) {
-            var text = await navigator.clipboard.readText();
-            if (text) return text;
-        }
-    } catch (e) { }
-
     if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
         try {
             var text = await window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('GetClipboardTextAsync');
             if (text) return text;
         } catch (e) { }
     }
+    try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            var text = await navigator.clipboard.readText();
+            if (text) return text;
+        }
+    } catch (e) { }
     return '';
 };
 

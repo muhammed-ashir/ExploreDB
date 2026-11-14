@@ -18,6 +18,15 @@ public static class WebView2Helper
                 var coreWebView = args.WebView?.CoreWebView2;
                 if (coreWebView != null)
                 {
+                    coreWebView.PermissionRequested += (s, e) =>
+                    {
+                        if (e.PermissionKind == CoreWebView2PermissionKind.ClipboardRead)
+                        {
+                            e.State = CoreWebView2PermissionState.Allow;
+                            e.Handled = true;
+                        }
+                    };
+
                     coreWebView.ProcessFailed += (s, e) =>
                     {
                         Log.Error(
