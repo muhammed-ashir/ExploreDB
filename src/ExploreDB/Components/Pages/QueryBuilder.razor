@@ -449,12 +449,32 @@ else
                  <!-- Header: Join Path Routing & Action Buttons -->
                  <div class="card-header d-flex justify-content-between align-items-center py-2 px-3" style="position: sticky; top: 0; z-index: 30; background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border) !important;">
                      <div class="d-flex align-items-center">
-                         <span class="fw-bold" style="color: var(--app-text);">Join Path Routing</span>
+                         <span class="fw-bold" style="color: var(--app-text);">@(TotalSelectedTablesCount == 1 ? "Generated SQL" : "Join Path Routing")</span>
                      </div>
                      <div class="d-flex align-items-center gap-2">
                          <button class="btn btn-sm btn-outline-warning" @onclick="() => ShowClearConfirmation = true" title="Clear all selections">
                              <i class="bi bi-eraser-fill me-1"></i> Clear
                          </button>
+                                                  @if (TotalSelectedTablesCount == 1)
+                         {
+                             <button class="btn btn-sm @(SingleTableCopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary") d-flex align-items-center gap-1 shadow-sm px-2" 
+                                     @onclick="CopySingleTableSql" 
+                                     title="Copy query to clipboard">
+                                 @if (SingleTableCopyLabel == "Copy")
+                                 {
+                                     <i class="bi bi-clipboard"></i>
+                                 }
+                                 <span>@SingleTableCopyLabel</span>
+                             </button>
+                             <button class="btn btn-sm btn-primary fw-semibold d-flex align-items-center gap-1 shadow-sm px-3" 
+                                     @onclick="RunInRunner" 
+                                     title="Open in Query editor">
+                                 <i class="bi bi-play-fill"></i>
+                                 <span>Open in Editor</span>
+                             </button>
+                         }
+                         else
+                         {
                          <button class="btn btn-sm btn-primary fw-semibold d-flex align-items-center gap-1 shadow-sm px-3" 
                                  @onclick="OpenQueryModal" 
                                  disabled="@(TotalSelectedTablesCount == 0)"
@@ -462,6 +482,7 @@ else
                              <i class="bi bi-code-slash"></i>
                              <span>Show Query</span>
                          </button>
+                         }
                      </div>
                  </div>
                  @{
@@ -492,16 +513,24 @@ else
                          }
                          else if (totalTablesCount == 1)
                          {
-                             <!-- Single table selected state -->
-                             <div class="d-flex flex-column align-items-center justify-content-center flex-grow-1 text-center p-4 my-auto">
-                                 <div class="d-flex align-items-center justify-content-center rounded-circle mb-3" style="width: 72px; height: 72px; background: rgba(13, 202, 240, 0.1); color: #0dcaf0;">
-                                     <i class="bi bi-table" style="font-size: 2.2rem; line-height: 1;"></i>
-                                 </div>
-                                 <h6 class="fw-bold mb-2" style="color: var(--app-text);">Single Table Selected</h6>
-                                 <p class="text-muted small mb-0" style="max-width: 420px;">
-                                     No join paths are needed for a single table. Select another table to discover relationships.
-                                 </p>
 
+                             if (string.IsNullOrWhiteSpace(GeneratedSql))
+                             {
+                                 GenerateSqlInternal();
+                             }
+
+                             <!-- Single table selected state: Direct Inline Query Preview -->
+                             <div class="d-flex flex-column flex-grow-1 overflow-hidden">
+
+
+                                 <div class="card p-3 shadow-sm flex-grow-1 overflow-auto custom-scrollbar-light mb-2" style="background: var(--app-surface-secondary); border: 1px solid var(--app-border);">
+                                     <pre class="m-0 user-select-text" style="color: var(--app-text); font-size: 0.88rem; line-height: 1.5; font-family: Consolas, 'Cascadia Code', 'Courier New', monospace; white-space: pre-wrap; word-break: break-word;">@GeneratedSql</pre>
+                                 </div>
+
+                                 <div class="d-flex align-items-center text-muted small flex-shrink-0 pt-2 border-top" style="border-color: var(--app-border) !important;">
+                                     <i class="bi bi-info-circle me-2 text-info"></i>
+                                     <span>No join paths are needed for a single table. Select another table to discover relationships and configure joins.</span>
+                                 </div>
                              </div>
                          }
                          else
@@ -711,11 +740,29 @@ else
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <div class="modal-header" style="border-bottom: 1px solid var(--app-border);">
-                    <h5 class="modal-title fw-bold text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i> Duplication Warning</h5>
+                    <h5 class="modal-title fw-bold text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i> @(CurrentMode == QueryMode.Update ? "Update Warning" : (CurrentMode == QueryMode.Delete ? "Delete Warning" : "Duplication Warning"))</h5>
                     <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowWarningModal = false"></button>
                 </div>
                 <div class="modal-body p-4">
-                    @if (OptimalTableOrder != null)
+                    @if (CurrentMode == QueryMode.Update)
+                    {
+                        <div class="mt-2">
+                            <h5 class="fw-bold mb-2" style="color: var(--app-text);">Non-Deterministic Update Warning</h5>
+                            <p class="mb-0" style="font-size: 0.95rem; line-height: 1.6; color: var(--app-text); opacity: 0.85;">
+                                Multiple matching rows exist in joined tables for a single target row. Hence will update the target row multiple times non-deterministically with arbitrary matching child rows.
+                            </p>
+                        </div>
+                    }
+                    else if (CurrentMode == QueryMode.Delete)
+                    {
+                        <div class="mt-2">
+                            <h5 class="fw-bold mb-2" style="color: var(--app-text);">One-to-Many Join Detected</h5>
+                            <p class="mb-0" style="font-size: 0.95rem; line-height: 1.6; color: var(--app-text); opacity: 0.85;">
+                                Multiple matching rows exist in joined tables for a single target row. Matching target rows will be deleted if at least one join condition is satisfied.
+                            </p>
+                        </div>
+                    }
+                    else if (OptimalTableOrder != null)
                     {
                         <!-- Main Warning Header -->
                         <div class="mb-4">
@@ -1392,6 +1439,10 @@ else
             HasOneToMany = false;
             LastJoinPlan = null;
             AlternativeRoutes.Clear();
+            if (tables.Count == 1)
+            {
+                GenerateSqlInternal();
+            }
             return;
         }
 
@@ -1836,6 +1887,32 @@ else
         StateHasChanged();
         await Task.Delay(1500);
         CopyLabel = "Copy";
+        StateHasChanged();
+    }
+
+    private string SingleTableCopyLabel = "Copy";
+
+    private async Task CopySingleTableSql()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(GeneratedSql))
+            {
+                System.Windows.Clipboard.SetDataObject(GeneratedSql, true);
+            }
+        }
+        catch { }
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", GeneratedSql);
+        }
+        catch { }
+
+        SingleTableCopyLabel = "Copied! ✓";
+        StateHasChanged();
+        await Task.Delay(1500);
+        SingleTableCopyLabel = "Copy";
         StateHasChanged();
     }
 
