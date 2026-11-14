@@ -130,6 +130,101 @@ public class ConnectionService
         OnConnectionChanged?.Invoke();
     }
 
+    public void DisconnectConnection(string connString)
+    {
+        if (string.IsNullOrWhiteSpace(connString)) return;
+
+        string server = "";
+        string userId = "";
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connString);
+            server = builder.DataSource;
+            userId = builder.UserID ?? "";
+        }
+        catch { }
+
+        var toRemove = ActiveSessionConnections.Where(c => 
+            string.Equals(c.ConnectionString, connString, StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrEmpty(server) && 
+             string.Equals(c.Server, server, StringComparison.OrdinalIgnoreCase) && 
+             string.Equals(c.Username ?? "", userId, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        foreach (var item in toRemove)
+        {
+            ActiveSessionConnections.Remove(item);
+        }
+
+        try
+        {
+            using var conn = new SqlConnection(connString);
+            SqlConnection.ClearPool(conn);
+        }
+        catch { }
+
+        bool isCurrent = false;
+        if (!string.IsNullOrEmpty(ConnectionString))
+        {
+            if (string.Equals(ConnectionString, connString, StringComparison.OrdinalIgnoreCase))
+            {
+                isCurrent = true;
+            }
+            else if (!string.IsNullOrEmpty(server))
+            {
+                try
+                {
+                    var currentBuilder = new SqlConnectionStringBuilder(ConnectionString);
+                    if (string.Equals(currentBuilder.DataSource, server, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(currentBuilder.UserID ?? "", userId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        isCurrent = true;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        if (isCurrent)
+        {
+            var next = ActiveSessionConnections.LastOrDefault();
+            if (next != null && !string.IsNullOrEmpty(next.ConnectionString))
+            {
+                SaveActiveConnection(next.ConnectionString);
+            }
+            else
+            {
+                ConnectionString = string.Empty;
+                SaveToDisk();
+                OnConnectionChanged?.Invoke();
+            }
+        }
+        else
+        {
+            OnConnectionChanged?.Invoke();
+        }
+    }
+
+    public void DisconnectActiveServer()
+    {
+        if (!string.IsNullOrEmpty(ConnectionString))
+        {
+            DisconnectConnection(ConnectionString);
+        }
+    }
+
+    public void DisconnectAll()
+    {
+        ActiveSessionConnections.Clear();
+        try
+        {
+            SqlConnection.ClearAllPools();
+        }
+        catch { }
+        ConnectionString = string.Empty;
+        SaveToDisk();
+        OnConnectionChanged?.Invoke();
+    }
+
     public void UpsertConnection(string id, string name, string server, string authType, string username, string password, string database, string connString)
     {
         if (authType == "Windows")

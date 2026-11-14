@@ -37,9 +37,14 @@
                                         @foreach (var c in filteredConns)
                                         {
                                             string displayName = string.IsNullOrWhiteSpace(c.Name) ? c.Server : $"{c.Server} ({c.Name})";
-                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate" style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: transparent; color: var(--app-text);" data-bs-tooltip="true" data-bs-placement="right" data-bs-html="true" data-bs-title="@GetConnectionTooltipHtml(c)" @onclick="() => OnConnectionSelected(c.ConnectionString)">
-                                                @displayName
-                                            </button>
+                                            <div class="list-group-item list-group-item-action border-0 py-2 px-3 small d-flex justify-content-between align-items-center" style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: transparent; color: var(--app-text); cursor: pointer;" @onclick="() => OnConnectionSelected(c.ConnectionString)">
+                                                <span class="text-truncate flex-grow-1" data-bs-tooltip="true" data-bs-placement="right" data-bs-html="true" data-bs-title="@GetConnectionTooltipHtml(c)">
+                                                    @displayName
+                                                </span>
+                                                <button class="btn p-0 text-danger ms-2 shadow-none bg-transparent border-0 flex-shrink-0" title="Disconnect this server" @onclick="() => OnDisconnectClick(c.ConnectionString)" @onclick:stopPropagation>
+                                                    <i class="bi bi-power" style="font-size: 0.95rem;"></i>
+                                                </button>
+                                            </div>
                                         }
                                     </div>
                                 }
@@ -362,6 +367,13 @@
         IsConnectionDropdownOpen = false;
         ConnectionService.SaveActiveConnection(connString);
         ConnectionSearch = GetActiveConnectionDisplayName();
+    }
+
+    private void OnDisconnectClick(string connString)
+    {
+        ConnectionService.DisconnectConnection(connString);
+        IsConnectionDropdownOpen = false;
+        StateHasChanged();
     }
 
     private void OnConnectionDropdownChanged(ChangeEventArgs e)

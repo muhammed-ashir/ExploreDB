@@ -338,7 +338,17 @@ public class SchemaService
 
     public Task LoadSchemaAsync(bool forceRefresh = false)
     {
-        if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return Task.CompletedTask;
+        if (string.IsNullOrEmpty(_connectionService.ConnectionString))
+        {
+            Tables = new(); Views = new(); Functions = new(); StoredProcedures = new(); Types = new();
+            AreTablesLoaded = false; AreViewsLoaded = false; AreFunctionsLoaded = false; AreStoredProceduresLoaded = false; AreTypesLoaded = false;
+            OnTablesLoaded?.Invoke();
+            OnViewsLoaded?.Invoke();
+            OnFunctionsLoaded?.Invoke();
+            OnStoredProceduresLoaded?.Invoke();
+            OnTypesLoaded?.Invoke();
+            return Task.CompletedTask;
+        }
         
         var builder = new SqlConnectionStringBuilder(_connectionService.ConnectionString);
         

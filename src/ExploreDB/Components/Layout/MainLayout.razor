@@ -177,14 +177,24 @@
                 </button>
                 @{
                     string connDisplay = "";
+                    bool hasDatabase = false;
                     if (!string.IsNullOrEmpty(ConnectionService.ConnectionString))
                     {
                         try
                         {
                             var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
-                            if (!string.IsNullOrEmpty(builder.DataSource) && !string.IsNullOrEmpty(builder.InitialCatalog))
+                            if (!string.IsNullOrEmpty(builder.DataSource))
                             {
-                                connDisplay = $"{builder.DataSource} ➔ {builder.InitialCatalog}";
+                                if (!string.IsNullOrEmpty(builder.InitialCatalog))
+                                {
+                                    connDisplay = $"{builder.DataSource} ➔ {builder.InitialCatalog}";
+                                    hasDatabase = true;
+                                }
+                                else
+                                {
+                                    connDisplay = builder.DataSource;
+                                    hasDatabase = false;
+                                }
                             }
                         }
                         catch { }
@@ -194,18 +204,24 @@
                 {
                     <div class="d-flex align-items-center gap-2 me-3" style="min-width: 0;">
                         <div class="d-flex align-items-center px-2 py-1 rounded border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; font-size: 0.85rem; min-width: 0;" title="@connDisplay">
-                            <i class="bi bi-database me-2 text-info flex-shrink-0"></i>
+                            <i class="bi @(hasDatabase ? "bi-database text-info" : "bi-hdd-network text-warning") me-2 flex-shrink-0"></i>
                             <span class="fw-medium text-truncate" style="color: var(--app-text);">@connDisplay</span>
                         </div>
-                        <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="Refresh Schema" data-bs-tooltip="true" data-bs-placement="bottom" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
-                            @if (IsRefreshingSchema)
-                            {
-                                <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
-                            }
-                            else
-                            {
-                                <i class="bi bi-arrow-clockwise text-secondary" style="font-size: 1.35rem; line-height: 1;"></i>
-                            }
+                        @if (hasDatabase)
+                        {
+                            <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="Refresh Schema" data-bs-tooltip="true" data-bs-placement="bottom" @onclick="RefreshSchema" disabled="@IsRefreshingSchema">
+                                @if (IsRefreshingSchema)
+                                {
+                                    <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-arrow-clockwise text-secondary" style="font-size: 1.35rem; line-height: 1;"></i>
+                                }
+                            </button>
+                        }
+                        <button class="btn btn-sm border-0 p-0 rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px; background: transparent; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="Disconnect Active Server" data-bs-tooltip="true" data-bs-placement="bottom" @onclick="PromptDisconnect">
+                            <i class="bi bi-power text-danger" style="font-size: 1.25rem; line-height: 1;"></i>
                         </button>
                     </div>
                 }
@@ -274,6 +290,12 @@
                                 <button class="btn btn-sm btn-outline-info text-nowrap d-flex align-items-center gap-1" @onclick="NewConnection">
                                     <i class="bi bi-plus-lg"></i> New
                                 </button>
+                                @if (ConnectionService.ActiveSessionConnections.Count > 1)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger text-nowrap d-flex align-items-center gap-1" @onclick="DisconnectAllServers" title="Disconnect all active server sessions">
+                                        <i class="bi bi-power"></i> Disconnect All (@ConnectionService.ActiveSessionConnections.Count)
+                                    </button>
+                                }
                             </div>
                             <div class="flex-grow-1 overflow-auto p-2 custom-scrollbar-light" style="overscroll-behavior: contain;">
                                 @if (!FilteredConnections.Any())
@@ -286,10 +308,26 @@
                                         @foreach (var c in FilteredConnections)
                                         {
                                             bool isActive = ActiveConnId == c.Id;
+                                            bool isConnected = ConnectionService.ActiveSessionConnections.Any(ac => 
+                                                string.Equals(ac.Server, c.Server, StringComparison.OrdinalIgnoreCase) && 
+                                                string.Equals(ac.Username ?? "", c.Username ?? "", StringComparison.OrdinalIgnoreCase));
+                                            bool isCurrentlyFocused = isConnected && !string.IsNullOrEmpty(ConnectionService.ConnectionString) && 
+                                                string.Equals(GetServerFromConnString(c.ConnectionString), GetServerFromConnString(ConnectionService.ConnectionString), StringComparison.OrdinalIgnoreCase);
+
                                             <div class="list-group-item conn-mgr-item p-2 @(isActive ? "conn-mgr-item-active" : "")" @onclick="() => LoadConnection(c)">
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <div class="flex-grow-1 pe-2 overflow-hidden">
-                                                        <div class="fw-bold mb-1 conn-mgr-item-title" style="font-size: 0.9em;">@(string.IsNullOrWhiteSpace(c.Name) ? "Unnamed Connection" : c.Name)</div>
+                                                <div class="d-flex justify-content-between align-items-center" style="min-width: 0;">
+                                                    <div class="flex-grow-1 pe-2 overflow-hidden" style="min-width: 0;">
+                                                        <div class="d-flex align-items-center gap-2 mb-1" style="min-width: 0;">
+                                                            <span class="fw-bold conn-mgr-item-title text-truncate" style="font-size: 0.9em; min-width: 0;" title="@(string.IsNullOrWhiteSpace(c.Name) ? "Unnamed Connection" : c.Name)">@(string.IsNullOrWhiteSpace(c.Name) ? "Unnamed Connection" : c.Name)</span>
+                                                            @if (isCurrentlyFocused)
+                                                            {
+                                                                <span class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-25 flex-shrink-0" style="font-size: 0.65rem; padding: 2px 6px;">Active</span>
+                                                            }
+                                                            else if (isConnected)
+                                                            {
+                                                                <span class="badge bg-info bg-opacity-25 text-info border border-info border-opacity-25 flex-shrink-0" style="font-size: 0.65rem; padding: 2px 6px;">Connected</span>
+                                                            }
+                                                        </div>
                                                         <div style="font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--app-text-muted);">
                                                             @{
                                                                 string authType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType;
@@ -303,9 +341,25 @@
                                                             @coreDetails
                                                         </div>
                                                     </div>
-                                                    <button class="btn p-0 text-danger ms-2 shadow-none bg-transparent border-0" style="flex-shrink: 0;" title="Delete" @onclick="() => ConfirmDelete(c)" @onclick:stopPropagation>
-                                                        <i class="bi bi-trash3-fill" style="font-size: 1.15rem;"></i>
-                                                    </button>
+                                                    <div class="d-flex align-items-center gap-2 ms-2" style="flex-shrink: 0;">
+                                                        @if (isConnected)
+                                                        {
+                                                            <button class="btn p-0 text-danger shadow-none bg-transparent border-0 d-flex align-items-center justify-content-center" 
+                                                                    style="flex-shrink: 0; width: 24px; height: 24px;" 
+                                                                    title="Disconnect this server" 
+                                                                    @onclick="() => DisconnectSpecificServer(c)" 
+                                                                    @onclick:stopPropagation>
+                                                                <i class="bi bi-power" style="font-size: 1.15rem;"></i>
+                                                            </button>
+                                                        }
+                                                        <button class="btn p-0 text-danger shadow-none bg-transparent border-0 d-flex align-items-center justify-content-center" 
+                                                                style="flex-shrink: 0; width: 24px; height: 24px;" 
+                                                                title="Delete" 
+                                                                @onclick="() => ConfirmDelete(c)" 
+                                                                @onclick:stopPropagation>
+                                                            <i class="bi bi-trash3-fill" style="font-size: 1.15rem;"></i>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         }
@@ -413,7 +467,7 @@
                             <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i>
                         </div>
                         <h5 class="fw-bold mb-2">Delete Connection?</h5>
-                        <p class="small text-muted mb-4">Are you sure you want to delete <strong>@(string.IsNullOrWhiteSpace(ConnectionToDelete.Name) ? "Unnamed Connection" : ConnectionToDelete.Name)</strong>? This action cannot be undone.</p>
+                        <p class="small text-muted mb-4 text-break" style="word-break: break-word; overflow-wrap: anywhere;">Are you sure you want to delete <strong class="text-break" style="word-break: break-all;">@(string.IsNullOrWhiteSpace(ConnectionToDelete.Name) ? "Unnamed Connection" : ConnectionToDelete.Name)</strong>? This action cannot be undone.</p>
                         <div class="d-flex justify-content-center gap-3">
                             <button class="btn btn-outline-secondary px-4 rounded-pill" @onclick="CancelDelete">Cancel</button>
                             <button class="btn btn-danger px-4 rounded-pill fw-bold shadow" @onclick="ExecuteDelete">Delete</button>
@@ -445,17 +499,27 @@
 
     @if (ShowDisconnectPrompt)
     {
-        <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); z-index: 1070;">
-            <div class="modal-dialog modal-dialog-centered modal-sm">
-                <div class="modal-content glass-card border-info shadow-lg text-center p-4" style="background-color: var(--app-surface-secondary); color: var(--app-text);">
-                    <div class="mb-3 text-info">
+        bool isDisconnectingActive = string.IsNullOrEmpty(TargetDisconnectConnString) || 
+            string.Equals(GetServerFromConnString(TargetDisconnectConnString), GetServerFromConnString(ConnectionService.ConnectionString), StringComparison.OrdinalIgnoreCase);
+
+        <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1070;">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: 440px; width: 92%;">
+                <div class="modal-content glass-card border-danger shadow-lg text-center p-4" style="background-color: var(--app-surface-secondary); color: var(--app-text); border: 1px solid rgba(220, 53, 69, 0.4) !important; border-radius: 14px;">
+                    <div class="mb-3 text-danger">
                         <i class="bi bi-power" style="font-size: 3rem;"></i>
                     </div>
-                    <h5 class="fw-bold mb-2">Disconnect?</h5>
-                    <p class="small text-muted mb-4">Are you sure you want to disconnect?</p>
-                    <div class="d-flex justify-content-center gap-3">
-                        <button class="btn btn-outline-secondary px-4 rounded-pill" @onclick="() => ShowDisconnectPrompt = false">Cancel</button>
-                        <button class="btn btn-info px-4 rounded-pill fw-bold shadow text-dark" @onclick="ConfirmDisconnect">Disconnect</button>
+                    <h5 class="fw-bold mb-2">Disconnect Server?</h5>
+                    <p class="small text-muted mb-2">Are you sure you want to disconnect from</p>
+                    <div class="px-3 py-2 mb-3 rounded border text-break font-monospace small" style="background-color: var(--app-input-bg); border-color: var(--app-border) !important; color: var(--app-text); word-break: break-all; overflow-wrap: anywhere; max-height: 85px; overflow-y: auto;">
+                        @(TargetDisconnectDisplayName ?? GetActiveServerDisplayName())
+                    </div>
+                    @if (isDisconnectingActive && GetOtherActiveServersCount() > 0)
+                    {
+                        <p class="text-info small mb-3">You will automatically switch to the next connected server.</p>
+                    }
+                    <div class="d-flex justify-content-center gap-3 mt-2">
+                        <button class="btn btn-outline-secondary px-4 rounded-pill" @onclick="CancelDisconnect">Cancel</button>
+                        <button class="btn btn-danger px-4 rounded-pill fw-bold shadow text-white" @onclick="ConfirmDisconnect">Disconnect</button>
                     </div>
                 </div>
             </div>
@@ -1034,9 +1098,26 @@
         StateHasChanged();
     }
 
+    private string? TargetDisconnectConnString = null;
+    private string? TargetDisconnectDisplayName = null;
+
     private void PromptDisconnect()
     {
+        PromptDisconnect(null, null);
+    }
+
+    private void PromptDisconnect(string? connString, string? displayName)
+    {
+        TargetDisconnectConnString = connString;
+        TargetDisconnectDisplayName = displayName;
         ShowDisconnectPrompt = true;
+    }
+
+    private void CancelDisconnect()
+    {
+        ShowDisconnectPrompt = false;
+        TargetDisconnectConnString = null;
+        TargetDisconnectDisplayName = null;
     }
 
     private void HandleSchemaError(string errorMsg)
@@ -1050,13 +1131,78 @@
     private void ConfirmDisconnect()
     {
         ShowDisconnectPrompt = false;
-        Disconnect();
+        if (!string.IsNullOrEmpty(TargetDisconnectConnString))
+        {
+            ConnectionService.DisconnectConnection(TargetDisconnectConnString);
+            if (ConnectionService.ActiveSessionConnections.Count == 0)
+            {
+                IsConnected = false;
+            }
+        }
+        else
+        {
+            Disconnect();
+        }
+        TargetDisconnectConnString = null;
+        TargetDisconnectDisplayName = null;
+        StateHasChanged();
     }
 
     private void Disconnect()
     {
+        ConnectionService.DisconnectActiveServer();
+        if (ConnectionService.ActiveSessionConnections.Count == 0)
+        {
+            IsConnected = false;
+            ShowConnectionManager = true;
+        }
+        StateHasChanged();
+    }
+
+    private void DisconnectSpecificServer(ConnectionService.SavedConnection c)
+    {
+        PromptDisconnect(c.ConnectionString, !string.IsNullOrWhiteSpace(c.Name) ? $"{c.Name} ({c.Server})" : c.Server);
+    }
+
+    private void DisconnectAllServers()
+    {
+        ConnectionService.DisconnectAll();
         IsConnected = false;
-        ShowConnectionManager = true;
+        StateHasChanged();
+    }
+
+    private string GetActiveServerDisplayName()
+    {
+        if (string.IsNullOrEmpty(ConnectionService.ConnectionString)) return "Server";
+        try
+        {
+            var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+            var saved = ConnectionService.SavedConnections.FirstOrDefault(c => string.Equals(c.Server, b.DataSource, StringComparison.OrdinalIgnoreCase));
+            return saved != null && !string.IsNullOrWhiteSpace(saved.Name) ? $"{saved.Name} ({b.DataSource})" : b.DataSource;
+        }
+        catch { return "Server"; }
+    }
+
+    private int GetOtherActiveServersCount()
+    {
+        if (string.IsNullOrEmpty(ConnectionService.ConnectionString)) return 0;
+        try
+        {
+            var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+            return ConnectionService.ActiveSessionConnections.Count(c => !string.Equals(c.Server, b.DataSource, StringComparison.OrdinalIgnoreCase));
+        }
+        catch { return 0; }
+    }
+
+    private static string GetServerFromConnString(string? connStr)
+    {
+        if (string.IsNullOrEmpty(connStr)) return "";
+        try
+        {
+            var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connStr);
+            return b.DataSource;
+        }
+        catch { return ""; }
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
