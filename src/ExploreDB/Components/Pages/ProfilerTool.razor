@@ -161,74 +161,91 @@
             </div>
         </div>
 
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            @if (!Profiler.IsStreaming)
-            {
-                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
-                        @onclick="StartTraceAsync"
-                        disabled="@(!CanStartLiveTrace)">
-                    <i class="bi bi-play-fill fs-6"></i>
-                    <span>Start Trace</span>
-                </button>
-            }
-            else
-            {
-                if (Profiler.IsPaused)
+        <div class="d-flex flex-column align-items-end">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                @if (!Profiler.IsStreaming)
                 {
-                    <button class="btn btn-sm btn-warning d-inline-flex align-items-center gap-1 shadow-sm"
-                            @onclick="ResumeTrace">
+                    <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
+                            @onclick="StartTraceAsync"
+                            disabled="@(!CanStartLiveTrace)">
                         <i class="bi bi-play-fill fs-6"></i>
-                        <span>Resume</span>
+                        <span>Start Trace</span>
                     </button>
                 }
                 else
                 {
-                    <button class="btn btn-sm btn-outline-warning d-inline-flex align-items-center gap-1 shadow-sm"
-                            @onclick="PauseTrace">
-                        <i class="bi bi-pause-fill fs-6"></i>
-                        <span>Pause</span>
+                    if (Profiler.IsPaused)
+                    {
+                        <button class="btn btn-sm btn-warning d-inline-flex align-items-center gap-1 shadow-sm"
+                                @onclick="ResumeTrace">
+                            <i class="bi bi-play-fill fs-6"></i>
+                            <span>Resume</span>
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-outline-warning d-inline-flex align-items-center gap-1 shadow-sm"
+                                @onclick="PauseTrace">
+                            <i class="bi bi-pause-fill fs-6"></i>
+                            <span>Pause</span>
+                        </button>
+                    }
+
+                    <button class="btn btn-sm btn-danger d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="StopTraceAsync">
+                        <i class="bi bi-stop-fill fs-6"></i>
+                        <span>Stop Trace</span>
                     </button>
                 }
 
-                <button class="btn btn-sm btn-danger d-inline-flex align-items-center gap-1 shadow-sm"
-                        @onclick="StopTraceAsync">
-                    <i class="bi bi-stop-fill fs-6"></i>
-                    <span>Stop Trace</span>
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="ClearEvents"
+                        title="Clear current event buffer and query aggregates">
+                    <i class="bi bi-trash3"></i>
+                    <span>Clear</span>
                 </button>
-            }
 
-            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                    @onclick="ClearEvents"
-                    title="Clear current event buffer and query aggregates">
-                <i class="bi bi-trash3"></i>
-                <span>Clear</span>
-            </button>
+                <!-- Settings Button -->
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="() => _showSettingsModal = true"
+                        title="Configure Trace Session & Filters">
+                    <i class="bi bi-gear"></i>
+                </button>
 
-            <!-- Settings Button -->
-            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                    @onclick="() => _showSettingsModal = true"
-                    title="Configure Trace Session & Filters">
-                <i class="bi bi-gear"></i>
-            </button>
+                @if (!IsPopout)
+                {
+                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="ToggleFullScreen"
+                            title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")">
+                        <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                    </button>
 
-            @if (!IsPopout)
+                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                            @onclick="PopoutWindow"
+                            title="Open SQL Profiler in dedicated window">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </button>
+
+                    <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm">
+                        <i class="bi bi-arrow-left"></i>
+                        <span>Tools Hub</span>
+                    </a>
+                }
+            </div>
+
+            @if (Profiler.IsStreaming && Profiler.AutoStopDeadline.HasValue)
             {
-                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                        @onclick="ToggleFullScreen"
-                        title="@(_isFullScreen ? "Restore Down" : "Expand to Full Screen")">
-                    <i class="bi @(_isFullScreen ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
-                </button>
-
-                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                        @onclick="PopoutWindow"
-                        title="Open SQL Profiler in dedicated window">
-                    <i class="bi bi-box-arrow-up-right"></i>
-                </button>
-
-                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm">
-                    <i class="bi bi-arrow-left"></i>
-                    <span>Tools Hub</span>
-                </a>
+                var remaining = Profiler.AutoStopDeadline.Value - DateTime.UtcNow;
+                if (remaining > TimeSpan.Zero)
+                {
+                    <div class="mt-1 d-flex align-items-center gap-1 text-muted small" style="font-size: 0.78rem;">
+                        <i class="bi bi-clock-history @(remaining.TotalMinutes < 2 ? "text-danger" : "text-warning")"></i>
+                        <span>Auto-stop in:</span>
+                        <strong class="@(remaining.TotalMinutes < 2 ? "text-danger fw-bold" : "text-warning")">
+                            @FormatTimeRemaining(remaining)
+                        </strong>
+                    </div>
+                }
             }
         </div>
     </div>
@@ -1005,6 +1022,24 @@
                         </select>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold d-inline-flex align-items-center gap-1">
+                            <span>Auto-Stop Duration</span>
+                            <i class="bi bi-info-circle text-info"
+                               data-bs-tooltip="true"
+                               data-bs-placement="top"
+                               data-bs-title="Automatically stops the trace session after the specified duration to prevent continuous server streaming if forgotten."
+                               style="cursor: help; font-size: 0.8rem;"></i>
+                        </label>
+                        <select class="form-select form-select-sm" @bind="_sessionConfig.AutoStopMinutes" disabled="@Profiler.IsStreaming">
+                            <option value="0">None (Run until manually stopped)</option>
+                            <option value="15">15 minutes</option>
+                            <option value="30">30 minutes (Recommended)</option>
+                            <option value="60">1 hour</option>
+                            <option value="120">2 hours</option>
+                        </select>
+                    </div>
+
                     <div class="form-check form-switch mb-2">
                         <input class="form-check-input" type="checkbox" id="excludeSelfCheck" @bind="_sessionConfig.Filters.ExcludeSelf" disabled="@Profiler.IsStreaming" />
                         <label class="form-check-label small" for="excludeSelfCheck">
@@ -1289,6 +1324,16 @@
             return conn.Server ?? "Unknown Server";
         }
         return $"{conn.Server} ({conn.Name})";
+    }
+
+    private static string FormatTimeRemaining(TimeSpan ts)
+    {
+        if (ts <= TimeSpan.Zero) return "00:00";
+        if (ts.TotalHours >= 1)
+        {
+            return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+        }
+        return $"{ts.Minutes:D2}:{ts.Seconds:D2}";
     }
 
     private static string GetServerDisplayName(string? connStr)

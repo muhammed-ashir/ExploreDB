@@ -25,6 +25,7 @@ public sealed class TraceSessionConfig
     public int MaxMemoryKb { get; set; } = 8192;
     public int MaxDispatchLatencySeconds { get; set; } = 1;
     public int MaxEventBufferSize { get; set; } = 100_000;
+    public int AutoStopMinutes { get; set; } = 30;
 
     public TraceFilterCriteria Filters { get; set; } = new();
 

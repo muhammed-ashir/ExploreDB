@@ -52,6 +52,8 @@ public sealed class ProfilerService : IAsyncDisposable
     public string? ActiveSessionName => _sessionManager.ActiveSessionName;
     public string? ActiveDatabaseName { get; private set; }
     public string? ActiveServerName { get; private set; }
+    public DateTime? AutoStopDeadline { get; private set; }
+    public int AutoStopMinutes { get; private set; } = 30;
 
     public int TotalBufferedEvents => _eventBuffer.Count;
     public int BufferCapacity => _eventBuffer.Capacity;
@@ -144,6 +146,8 @@ public sealed class ProfilerService : IAsyncDisposable
             IsPaused = false;
             IsDemoMode = false;
             ActiveDatabaseName = targetDatabase;
+            AutoStopMinutes = config.AutoStopMinutes;
+            AutoStopDeadline = config.AutoStopMinutes > 0 ? DateTime.UtcNow.AddMinutes(config.AutoStopMinutes) : null;
             try
             {
                 var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(config.ConnectionString);
@@ -214,6 +218,8 @@ public sealed class ProfilerService : IAsyncDisposable
         IsDemoMode = true;
         ActiveDatabaseName = "Demo (AdventureWorks)";
         ActiveServerName = "localhost (Demo)";
+        AutoStopMinutes = 15;
+        AutoStopDeadline = DateTime.UtcNow.AddMinutes(15);
 
         // Launch simulation generator
         _streamingTask = Task.Run(async () =>
@@ -295,6 +301,7 @@ public sealed class ProfilerService : IAsyncDisposable
         IsDemoMode = false;
         ActiveDatabaseName = null;
         ActiveServerName = null;
+        AutoStopDeadline = null;
 
         // Flush any remaining UI batch
         FlushPendingUiBatch();
@@ -408,6 +415,22 @@ public sealed class ProfilerService : IAsyncDisposable
                 var snapshot = _metricsCollector.Sample();
                 CurrentMetrics = snapshot;
                 MetricsUpdated?.Invoke(snapshot);
+
+                // Auto-stop deadline check
+                if (AutoStopDeadline.HasValue)
+                {
+                    if (IsPaused)
+                    {
+                        // Slide deadline so paused time does not consume the active trace window
+                        AutoStopDeadline = AutoStopDeadline.Value.AddSeconds(1);
+                    }
+                    else if (DateTime.UtcNow >= AutoStopDeadline.Value)
+                    {
+                        StatusChanged?.Invoke($"Trace completed automatically ({AutoStopMinutes}-minute limit reached).");
+                        _ = StopAsync();
+                        break;
+                    }
+                }
             }
         }
         catch (OperationCanceledException) { }
