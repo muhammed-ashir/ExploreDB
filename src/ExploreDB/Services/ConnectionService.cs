@@ -1,4 +1,6 @@
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 
@@ -346,6 +348,7 @@ public class ConnectionService
         public string Version { get; set; } = "1.0";
         public DateTime ExportedAt { get; set; } = DateTime.UtcNow;
         public bool IncludesPasswords { get; set; }
+        public bool PasswordsEncrypted { get; set; } = true;
         public int ConnectionCount { get; set; }
         public List<ExportedConnectionItem> Connections { get; set; } = new();
     }
@@ -361,6 +364,76 @@ public class ConnectionService
         public string Database { get; set; } = string.Empty;
     }
 
+    private static readonly byte[] ExportKey = SHA256.HashData(Encoding.UTF8.GetBytes("ExploreDB::SecureConnectionProfileExportKey::2026!#@"));
+
+    public static string EncryptPassword(string plainText)
+    {
+        if (string.IsNullOrEmpty(plainText)) return string.Empty;
+
+        try
+        {
+            using var aes = Aes.Create();
+            aes.Key = ExportKey;
+            aes.GenerateIV();
+            byte[] iv = aes.IV;
+
+            using var encryptor = aes.CreateEncryptor(aes.Key, iv);
+            byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
+            byte[] cipherBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
+
+            byte[] combined = new byte[iv.Length + cipherBytes.Length];
+            Buffer.BlockCopy(iv, 0, combined, 0, iv.Length);
+            Buffer.BlockCopy(cipherBytes, 0, combined, iv.Length, cipherBytes.Length);
+
+            return "ENC:v1:" + Convert.ToBase64String(combined);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error encrypting password: {ex.Message}");
+            return plainText;
+        }
+    }
+
+    public static string DecryptPassword(string encryptedText)
+    {
+        if (string.IsNullOrEmpty(encryptedText)) return string.Empty;
+
+        if (!encryptedText.StartsWith("ENC:v1:"))
+        {
+            return encryptedText;
+        }
+
+        try
+        {
+            string base64 = encryptedText.Substring("ENC:v1:".Length);
+            byte[] combined = Convert.FromBase64String(base64);
+
+            if (combined.Length <= 16)
+            {
+                return string.Empty;
+            }
+
+            byte[] iv = new byte[16];
+            byte[] cipherBytes = new byte[combined.Length - 16];
+            Buffer.BlockCopy(combined, 0, iv, 0, 16);
+            Buffer.BlockCopy(combined, 16, cipherBytes, 0, cipherBytes.Length);
+
+            using var aes = Aes.Create();
+            aes.Key = ExportKey;
+            aes.IV = iv;
+
+            using var decryptor = aes.CreateDecryptor(aes.Key, aes.IV);
+            byte[] plainBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
+
+            return Encoding.UTF8.GetString(plainBytes);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error decrypting password: {ex.Message}");
+            return string.Empty;
+        }
+    }
+
     public string ExportConnections(IEnumerable<string> connectionIds, bool includePasswords)
     {
         var idSet = new HashSet<string>(connectionIds);
@@ -372,6 +445,7 @@ public class ConnectionService
             Version = "1.0",
             ExportedAt = DateTime.UtcNow,
             IncludesPasswords = includePasswords,
+            PasswordsEncrypted = includePasswords,
             ConnectionCount = toExport.Count,
             Connections = toExport.Select(c => new ExportedConnectionItem
             {
@@ -380,7 +454,7 @@ public class ConnectionService
                 AuthType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType,
                 UseWindowsAuth = c.UseWindowsAuth,
                 Username = c.Username,
-                Password = includePasswords ? c.Password : string.Empty,
+                Password = includePasswords ? EncryptPassword(c.Password) : string.Empty,
                 Database = c.Database
             }).ToList()
         };
@@ -473,7 +547,7 @@ public class ConnectionService
             string server = item.Server?.Trim() ?? string.Empty;
             string authType = string.IsNullOrWhiteSpace(item.AuthType) ? (item.UseWindowsAuth ? "Windows" : "SqlServer") : item.AuthType.Trim();
             string username = item.Username?.Trim() ?? string.Empty;
-            string password = item.Password ?? string.Empty;
+            string password = DecryptPassword(item.Password ?? string.Empty);
             string database = item.Database?.Trim() ?? string.Empty;
 
             var existing = SavedConnections.FirstOrDefault(c => 

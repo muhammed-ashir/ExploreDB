@@ -187,10 +187,7 @@
 
                         <!-- Application UI Font Size -->
                         <div class="mb-4">
-                            <div class="d-flex align-items-center justify-content-between mb-1">
-                                <label class="fw-bold d-block mb-0">Application UI Font Size</label>
-                                <span class="badge bg-secondary-subtle text-secondary border">Active: @UserSettingsService.Settings.AppFontSize</span>
-                            </div>
+                            <label class="fw-bold d-block mb-1">Application UI Font Size</label>
                             <span class="text-muted small d-block mb-3">Scales navigation menus, toolbars, dialogs, and result data tables proportionally across the entire app.</span>
                             
                             <div class="row g-2">
@@ -225,10 +222,7 @@
 
                         <!-- SQL Query Editor Font Size -->
                         <div class="mb-4">
-                            <div class="d-flex align-items-center justify-content-between mb-1">
-                                <label class="fw-bold d-block mb-0">SQL Query Editor Font Size (Monaco)</label>
-                                <span class="badge bg-secondary-subtle text-secondary border">Active: @(UserSettingsService.Settings.EditorFontSize)px</span>
-                            </div>
+                            <label class="fw-bold d-block mb-1">Query Editor Font Size</label>
                             <span class="text-muted small d-block mb-3">Independent font size control for the SQL query editor.</span>
 
                             <div class="d-flex flex-wrap gap-2">
@@ -242,40 +236,6 @@
                                         @(edSize)px @(edSize == 14 ? "(Default)" : "")
                                     </button>
                                 }
-                            </div>
-                        </div>
-
-                        <hr style="border-color: var(--app-border);" />
-
-                        <!-- Live Visual Preview -->
-                        <div>
-                            <label class="fw-bold d-block mb-1">Live Interface Preview</label>
-                            <span class="text-muted small d-block mb-2">Preview how UI controls and code snippets render at your selected font sizes.</span>
-                            
-                            <div class="p-3 rounded border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
-                                <div class="d-flex align-items-center justify-content-between pb-2 mb-2 border-bottom" style="border-color: var(--app-border) !important;">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <button class="btn btn-sm btn-primary shadow-sm d-inline-flex align-items-center gap-1" style="height: 28px;">
-                                            <i class="bi bi-play-fill"></i>
-                                            <span>Execute (F5)</span>
-                                        </button>
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
-                                            <i class="bi bi-check2 me-1"></i>Connected
-                                        </span>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2 text-muted small">
-                                        <i class="bi bi-stopwatch"></i>
-                                        <span>Total: 0.8s</span>
-                                        <span>&bull;</span>
-                                        <i class="bi bi-list"></i>
-                                        <span>4,500 rows</span>
-                                    </div>
-                                </div>
-
-                                <div class="rounded p-2.5 font-monospace" style="background-color: var(--app-editor-preview-bg); color: var(--app-editor-preview-text); font-size: @(UserSettingsService.Settings.EditorFontSize)px; border: 1px solid var(--app-border); line-height: 1.5;">
-                                    <span style="color: var(--app-editor-keyword); font-weight: bold;">SELECT</span> TOP 10 CustomerID, CompanyName, City<br/>
-                                    <span style="color: var(--app-editor-keyword); font-weight: bold;">FROM</span> [dbo].[Customers] <span style="color: var(--app-editor-keyword); font-weight: bold;">WITH</span> (NOLOCK);
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -481,13 +441,15 @@
                             <div class="d-flex align-items-center gap-2">
                                 <div class="form-check form-switch d-flex align-items-center gap-2 mb-0 ps-0">
                                     <input class="form-check-input cursor-pointer ms-0 me-1" type="checkbox" id="includePasswordsSwitch" style="transform: scale(1.15);" @bind="IncludePasswordsInExport" />
-                                    <label class="form-check-label cursor-pointer small fw-medium user-select-none" for="includePasswordsSwitch">
+                                    <label class="form-check-label cursor-pointer small fw-medium user-select-none" for="includePasswordsSwitch" title="Passwords are encrypted using AES-256">
                                         Include Passwords
                                     </label>
                                 </div>
                                 @if (IncludePasswordsInExport)
                                 {
-                                    <span class="badge bg-warning text-dark border border-warning-subtle" style="font-size: 0.68rem;" title="Passwords will be saved unencrypted in export">Plaintext</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle d-inline-flex align-items-center gap-1" style="font-size: 0.68rem;" title="Passwords are encrypted using AES-256 in the export file">
+                                        <i class="bi bi-shield-lock-fill"></i> Encrypted
+                                    </span>
                                 }
                             </div>
                         </div>
