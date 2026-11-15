@@ -29,6 +29,13 @@ public class SpTempTableInfo
     }
 }
 
+public class SpExecParamArg
+{
+    public string? ParameterName { get; set; }
+    public string ExpressionText { get; set; } = string.Empty;
+    public bool IsOutput { get; set; }
+}
+
 public class SpStatementStep
 {
     public int StepIndex { get; set; }
@@ -37,6 +44,10 @@ public class SpStatementStep
     public int Column { get; set; }
     public string StatementText { get; set; } = string.Empty;
     public string StatementType { get; set; } = "STATEMENT";
+    public string? ExecChildSchema { get; set; }
+    public string? ExecChildProcedureName { get; set; }
+    public List<SpExecParamArg> ExecChildArgs { get; set; } = new();
+    public bool IsExecCall => !string.IsNullOrEmpty(ExecChildProcedureName);
 }
 
 public class SpResultSetInfo
@@ -103,6 +114,23 @@ public class SpPreFlightWarning
     public string Severity { get; set; } = "Warning"; // "Warning", "Danger", "Info"
 }
 
+public class SpDebugCallFrame
+{
+    public string ProcedureName { get; set; } = string.Empty;
+    public string Schema { get; set; } = "dbo";
+    public string FullName => string.IsNullOrWhiteSpace(Schema) ? ProcedureName : $"{Schema}.{ProcedureName}";
+    public string ProcedureDefinition { get; set; } = string.Empty;
+    public List<SpStatementStep> Statements { get; set; } = new();
+    public List<SpDebugStepSnapshot> RecordedSteps { get; set; } = new();
+    public Dictionary<int, SpDebugStepSnapshot> StepSnapshots { get; set; } = new();
+    public List<SpParameterInput> Parameters { get; set; } = new();
+    public HashSet<int> BreakpointLines { get; set; } = new();
+    public int CurrentStepIndex { get; set; }
+    public int CallingLineNumber { get; set; }
+    public string CallingStatementText { get; set; } = string.Empty;
+    public SpStatementStep? CallingStatement { get; set; }
+}
+
 public class SpDebugSessionState : IDisposable
 {
     public string Database { get; set; } = string.Empty;
@@ -110,6 +138,9 @@ public class SpDebugSessionState : IDisposable
     public string ProcedureName { get; set; } = string.Empty;
     public string FullName => string.IsNullOrWhiteSpace(Schema) ? ProcedureName : $"{Schema}.{ProcedureName}";
     public string ProcedureDefinition { get; set; } = string.Empty;
+
+    public Stack<SpDebugCallFrame> CallStack { get; set; } = new();
+    public bool CanStepOut => CallStack.Count > 0;
 
     public List<SpParameterInput> Parameters { get; set; } = new();
     public List<SpStatementStep> Statements { get; set; } = new();
@@ -144,13 +175,18 @@ public class SpDebugSessionState : IDisposable
             {
                 var snap = RecordedSteps[CurrentStepIndex];
                 if (snap.StatementType == "COMPLETED") return null;
+                var matchingStmt = Statements.FirstOrDefault(s => s.StepIndex == snap.StepIndex)
+                                   ?? Statements.FirstOrDefault(s => s.LineNumber == snap.LineNumber);
                 return new SpStatementStep
                 {
                     StepIndex = snap.StepIndex,
                     LineNumber = snap.LineNumber,
                     EndLineNumber = snap.EndLineNumber,
                     StatementText = snap.StatementText,
-                    StatementType = snap.StatementType
+                    StatementType = snap.StatementType,
+                    ExecChildSchema = matchingStmt?.ExecChildSchema,
+                    ExecChildProcedureName = matchingStmt?.ExecChildProcedureName,
+                    ExecChildArgs = matchingStmt?.ExecChildArgs ?? new()
                 };
             }
             return CurrentStepIndex >= 0 && CurrentStepIndex < Statements.Count ? Statements[CurrentStepIndex] : null;
@@ -159,6 +195,7 @@ public class SpDebugSessionState : IDisposable
 
     public void ClearMemory()
     {
+        CallStack.Clear();
         foreach (var snap in StepSnapshots.Values)
         {
             snap.Clear();

@@ -47,14 +47,21 @@
 
                 @if (_session.IsRecorded)
                 {
-                    <!-- Stepping Controls (F10 Step, F9 Back, Restart) -->
+                    <!-- Stepping Controls (F10 Step, F11 Step Into, F9 Back, Restart) -->
                     <div class="btn-group btn-group-sm shadow-sm" role="group">
                         <button class="btn btn-outline-primary d-inline-flex align-items-center gap-1"
                                 @onclick="StepForwardAsync"
-                                disabled="@(_session.IsAtCompletion || _isRecording)"
-                                title="Step Over / Next statement (F10)">
+                                disabled="@((_session.IsAtCompletion && _session.CallStack.Count == 0) || _isRecording)"
+                                title="@(_session.CallStack.Count > 0 && _session.IsAtCompletion ? "Step Out to Caller (F10 / Shift+F11)" : "Step Over / Next statement (F10)")">
                             <i class="bi bi-arrow-right"></i>
                             <span>Step (F10)</span>
+                        </button>
+                        <button class="btn btn-outline-primary d-inline-flex align-items-center gap-1"
+                                @onclick="StepIntoAsync"
+                                disabled="@(!CanStepIntoCurrentStatement || _isRecording)"
+                                title="@(CanStepIntoCurrentStatement ? $"Step Into {_session.CurrentStatement?.ExecChildProcedureName} (F11)" : "Step Into (F11) - Available when paused on an EXEC statement")">
+                            <i class="bi bi-box-arrow-in-down-right"></i>
+                            <span>Step Into (F11)</span>
                         </button>
                         <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
                                 @onclick="StepBack"
@@ -171,11 +178,21 @@
             <div class="col-auto ms-auto d-flex align-items-center gap-2">
                 @if (_breakpointLines.Count > 0)
                 {
-                    <button class="btn btn-sm btn-outline-danger shadow-sm px-2.5"
-                            @onclick="ClearAllBreakpointsAsync"
-                            title="Clear all breakpoints">
-                        <span>@(_breakpointLines.Count) Breakpoint@(_breakpointLines.Count > 1 ? "s" : "")</span>
-                    </button>
+                    <div class="d-inline-flex align-items-center rounded px-2 py-0.5 shadow-sm"
+                         style="background-color: var(--app-input-bg); border: 1px solid rgba(220, 53, 69, 0.6); height: 31px; font-size: 0.82rem;">
+                        <span class="text-danger fw-semibold me-1 user-select-none" style="cursor: default;">
+                            @(_breakpointLines.Count) Breakpoint@(_breakpointLines.Count > 1 ? "s" : "")
+                        </span>
+                        <button type="button"
+                                class="btn btn-link p-0 text-danger d-inline-flex align-items-center justify-content-center"
+                                style="width: 18px; height: 18px; text-decoration: none; border-radius: 3px; opacity: 0.85;"
+                                onmouseover="this.style.opacity='1'; this.style.backgroundColor='rgba(220, 53, 69, 0.15)';"
+                                onmouseout="this.style.opacity='0.85'; this.style.backgroundColor='transparent';"
+                                @onclick="ClearAllBreakpointsAsync"
+                                title="Clear all breakpoints">
+                            <i class="bi bi-x" style="font-size: 1.1rem; line-height: 1;"></i>
+                        </button>
+                    </div>
                 }
                 <button class="btn btn-sm btn-outline-danger shadow-sm px-2.5"
                         @onclick="ClearProcedureAsync"
@@ -251,16 +268,44 @@
         <div class="@CodeColumnClass">
             <div class="card h-100 d-flex flex-column shadow-sm overflow-hidden"
                  style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
-                <!-- Code Header -->
+                <!-- Code Header & Call Stack Breadcrumb -->
                 <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between"
                      style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
-                    <div class="d-flex align-items-center gap-2 text-truncate">
+                    <div class="d-flex align-items-center gap-1.5 text-truncate flex-grow-1 me-2">
+                        @if (_session?.CallStack.Count > 0)
+                        {
+                            <span class="text-muted small d-inline-flex align-items-center gap-1 me-1" title="Active Call Stack">
+                                <i class="bi bi-layers text-primary"></i>
+                            </span>
+                            @foreach (var frame in _session.CallStack.Reverse())
+                            {
+                                <button type="button"
+                                        class="btn btn-sm btn-link p-0 text-decoration-none badge border py-1 px-2 font-monospace"
+                                        style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-border) !important; font-size: 0.76rem;"
+                                        @onclick="() => StepOutToFrameAsync(frame)"
+                                        title="Step Out to @frame.FullName (Line @frame.CallingLineNumber)">
+                                    @frame.FullName (@frame.CallingLineNumber)
+                                </button>
+                                <i class="bi bi-chevron-right text-muted" style="font-size: 0.65rem;"></i>
+                            }
+                        }
                         <span class="fw-semibold small text-truncate" style="color: var(--app-text);" title="@(!string.IsNullOrEmpty(_session?.FullName) ? _session.FullName : (!string.IsNullOrEmpty(_selectedSpName) ? _selectedSpName : "Procedure"))">
                             <i class="bi bi-code-slash me-1 text-primary"></i>@(!string.IsNullOrEmpty(_session?.FullName) ? _session.FullName : (!string.IsNullOrEmpty(_selectedSpName) ? _selectedSpName : "Procedure"))
                         </span>
                     </div>
 
                     <div class="d-flex align-items-center gap-2">
+                        @if (_session?.CallStack.Count > 0)
+                        {
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary py-0 px-2 d-inline-flex align-items-center gap-1 shadow-sm"
+                                    style="font-size: 0.75rem; height: 26px;"
+                                    @onclick="StepOutAsync"
+                                    title="Step Out to caller procedure (Shift+F11)">
+                                <i class="bi bi-box-arrow-up-left"></i>
+                                <span>Step Out (Shift+F11)</span>
+                            </button>
+                        }
                         @if (_session?.IsRecorded == true && _session.IsAtCompletion)
                         {
                             <span class="badge bg-success-subtle text-success" style="font-weight: 600;">
@@ -698,10 +743,16 @@
                                 </div>
 
                                 <div class="card shadow-sm flex-grow-1 d-flex flex-column" style="background-color: var(--app-surface); border: 1px solid var(--app-border); overflow: hidden; min-height: 0;">
-                                    <div class="card-body p-3 font-monospace small overflow-auto flex-grow-1" style="line-height: 1.6; font-size: 0.8rem; color: var(--app-text); user-select: text;">
-                                        @foreach (var msg in CurrentSnapshotMessages)
+                                    <div class="card-body p-2.5 font-monospace small overflow-auto flex-grow-1 d-flex flex-column gap-2" style="font-size: 0.82rem; user-select: text;">
+                                        @for (int mIdx = 0; mIdx < CurrentSnapshotMessages.Count; mIdx++)
                                         {
-                                            <div class="py-0.5" style="white-space: pre-wrap; word-break: break-word;">@msg</div>
+                                            var msg = CurrentSnapshotMessages[mIdx];
+                                            var isErr = msg.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || msg.StartsWith("Msg ", StringComparison.OrdinalIgnoreCase);
+                                            <div class="p-2 rounded border shadow-sm d-flex align-items-start gap-2"
+                                                 style="background-color: var(--app-surface-secondary); border-color: @(isErr ? "rgba(239, 68, 68, 0.4)" : "var(--app-border)") !important; border-left: 3px solid @(isErr ? "#ef4444" : "#3b82f6") !important;">
+                                                <span class="text-muted small user-select-none mt-0.5 font-monospace fw-semibold" style="font-size: 0.72rem; min-width: 22px;">#@(mIdx + 1)</span>
+                                                <span class="@(isErr ? "text-danger fw-semibold" : "") flex-grow-1" style="white-space: pre-wrap; word-break: break-word; line-height: 1.5; color: @(isErr ? "" : "var(--app-text)");">@msg</span>
+                                            </div>
                                         }
                                     </div>
                                     <div class="card-footer py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2 text-muted" style="background-color: var(--app-surface-secondary); border-top: 1px solid var(--app-border); font-size: 0.75rem;">
@@ -1254,11 +1305,248 @@
 
     private async Task StepForwardAsync()
     {
-        if (_session == null || !_session.IsRecorded || _session.IsAtCompletion) return;
+        if (_session == null || !_session.IsRecorded) return;
+
+        if (_session.IsAtCompletion)
+        {
+            if (_session.CallStack.Count > 0)
+            {
+                await StepOutAsync();
+            }
+            return;
+        }
 
         _session.CurrentStepIndex++;
         await HighlightCurrentStepAsync();
         StateHasChanged();
+    }
+
+    private bool CanStepIntoCurrentStatement
+    {
+        get
+        {
+            if (_session == null || !_session.IsRecorded || _session.IsAtCompletion) return false;
+            var stmt = _session.CurrentStatement;
+            if (stmt == null || !stmt.IsExecCall) return false;
+
+            return SchemaService.StoredProcedures.Any(p =>
+                p.Name.Equals(stmt.ExecChildProcedureName, StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrEmpty(stmt.ExecChildSchema) || p.Schema.Equals(stmt.ExecChildSchema, StringComparison.OrdinalIgnoreCase)));
+        }
+    }
+
+    private async Task StepIntoAsync()
+    {
+        if (_session == null || !CanStepIntoCurrentStatement || _isRecording) return;
+        var stmt = _session.CurrentStatement;
+        if (stmt == null || !stmt.IsExecCall) return;
+
+        var childSp = SchemaService.StoredProcedures.FirstOrDefault(p =>
+            p.Name.Equals(stmt.ExecChildProcedureName, StringComparison.OrdinalIgnoreCase) &&
+            (string.IsNullOrEmpty(stmt.ExecChildSchema) || p.Schema.Equals(stmt.ExecChildSchema, StringComparison.OrdinalIgnoreCase)));
+
+        if (childSp == null) return;
+
+        var connStr = ConnectionService.ConnectionString;
+        if (string.IsNullOrEmpty(connStr)) return;
+
+        _isRecording = true;
+        StateHasChanged();
+
+        try
+        {
+            if (!childSp.IsDefinitionLoaded)
+            {
+                await SchemaService.LoadDefinitionAsync(childSp.FullName);
+            }
+
+            var childDef = childSp.Definition ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(childDef)) return;
+
+            // 1. Save parent frame onto CallStack
+            var parentFrame = new SpDebugCallFrame
+            {
+                ProcedureName = _session.ProcedureName,
+                Schema = _session.Schema,
+                ProcedureDefinition = _session.ProcedureDefinition,
+                Statements = new List<SpStatementStep>(_session.Statements),
+                RecordedSteps = new List<SpDebugStepSnapshot>(_session.RecordedSteps),
+                StepSnapshots = new Dictionary<int, SpDebugStepSnapshot>(_session.StepSnapshots),
+                Parameters = _session.Parameters.Select(p => new SpParameterInput
+                {
+                    Name = p.Name,
+                    DataType = p.DataType,
+                    Value = p.Value,
+                    IsOutput = p.IsOutput,
+                    HasDefault = p.HasDefault,
+                    DefaultValue = p.DefaultValue
+                }).ToList(),
+                BreakpointLines = new HashSet<int>(_breakpointLines),
+                CurrentStepIndex = _session.CurrentStepIndex,
+                CallingLineNumber = stmt.LineNumber,
+                CallingStatementText = stmt.StatementText,
+                CallingStatement = stmt
+            };
+            _session.CallStack.Push(parentFrame);
+
+            // 2. Map parent runtime snapshot variables to child input parameters
+            var currentParentVars = _session.CurrentSnapshot?.Variables ?? new Dictionary<string, SpVariableInfo>(StringComparer.OrdinalIgnoreCase);
+
+            // Prepare child session
+            _session.ProcedureName = childSp.Name;
+            _session.Schema = childSp.Schema;
+            _session.ProcedureDefinition = childDef;
+            _selectedSpName = childSp.FullName;
+            _spFilter = childSp.FullName;
+            _session.Statements.Clear();
+            _session.RecordedSteps.Clear();
+            _session.StepSnapshots.Clear();
+            _session.ExecutionMessages.Clear();
+            _session.Warnings.Clear();
+            _breakpointLines.Clear();
+
+            DebuggerService.ParseAndPrepareSession(_session);
+
+            // Map passed arguments to child parameters
+            for (int i = 0; i < _session.Parameters.Count; i++)
+            {
+                var p = _session.Parameters[i];
+                var matchingArg = stmt.ExecChildArgs.FirstOrDefault(a =>
+                    !string.IsNullOrEmpty(a.ParameterName) &&
+                    a.ParameterName.TrimStart('@').Equals(p.Name.TrimStart('@'), StringComparison.OrdinalIgnoreCase));
+
+                if (matchingArg == null && i < stmt.ExecChildArgs.Count && string.IsNullOrEmpty(stmt.ExecChildArgs[i].ParameterName))
+                {
+                    matchingArg = stmt.ExecChildArgs[i];
+                }
+
+                if (matchingArg != null)
+                {
+                    var rawExpr = matchingArg.ExpressionText?.Trim() ?? "";
+                    if (rawExpr.StartsWith("@") && currentParentVars.TryGetValue(rawExpr, out var parentVar))
+                    {
+                        p.Value = parentVar.Value;
+                    }
+                    else if (!string.IsNullOrEmpty(rawExpr))
+                    {
+                        p.Value = rawExpr.Trim('\'');
+                    }
+                }
+            }
+
+            // 3. Record debug session for child SP
+            var success = await DebuggerService.RecordDebugSessionAsync(connStr, _session);
+            if (success && _editor != null)
+            {
+                await _editor.SetValue(childDef);
+                _stepDecorationIds = await _editor.DeltaDecorations(_stepDecorationIds, Array.Empty<ModelDeltaDecoration>());
+                _breakpointDecorationIds = await _editor.DeltaDecorations(_breakpointDecorationIds, Array.Empty<ModelDeltaDecoration>());
+                _session.CurrentStepIndex = Math.Min(1, _session.RecordedSteps.Count - 1);
+                await HighlightCurrentStepAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _session.ErrorMessage = $"Failed to step into procedure: {ex.Message}";
+        }
+        finally
+        {
+            _isRecording = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StepOutToFrameAsync(SpDebugCallFrame targetFrame)
+    {
+        while (_session?.CallStack.Count > 0)
+        {
+            var topFrame = _session.CallStack.Peek();
+            await StepOutAsync();
+            if (topFrame == targetFrame)
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task StepOutAsync()
+    {
+        if (_session == null || _session.CallStack.Count == 0 || _isRecording) return;
+
+        _isRecording = true;
+        StateHasChanged();
+
+        try
+        {
+            // 1. Sync child output parameters back to parent
+            var childFinalSnapshot = _session.RecordedSteps.Count > 0 ? _session.RecordedSteps[^1] : null;
+            var childParams = _session.Parameters.ToList();
+            var parentFrame = _session.CallStack.Pop();
+
+            if (childFinalSnapshot != null && parentFrame.CallingStatement != null)
+            {
+                for (int argIdx = 0; argIdx < parentFrame.CallingStatement.ExecChildArgs.Count; argIdx++)
+                {
+                    var arg = parentFrame.CallingStatement.ExecChildArgs[argIdx];
+                    if (!arg.IsOutput) continue;
+
+                    string? childVarName = arg.ParameterName;
+                    if (string.IsNullOrEmpty(childVarName) && argIdx < childParams.Count)
+                    {
+                        childVarName = childParams[argIdx].Name;
+                    }
+
+                    if (!string.IsNullOrEmpty(childVarName))
+                    {
+                        if (!childVarName.StartsWith("@")) childVarName = "@" + childVarName;
+
+                        if (childFinalSnapshot.Variables.TryGetValue(childVarName, out var childOutputVar))
+                        {
+                            var parentTargetVar = arg.ExpressionText?.Trim() ?? "";
+                            for (int stepIdx = Math.Max(0, parentFrame.CurrentStepIndex); stepIdx < parentFrame.RecordedSteps.Count; stepIdx++)
+                            {
+                                if (parentFrame.RecordedSteps[stepIdx].Variables.TryGetValue(parentTargetVar, out var parentVar))
+                                {
+                                    parentVar.Value = childOutputVar.Value;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Restore parent state
+            _session.ProcedureName = parentFrame.ProcedureName;
+            _session.Schema = parentFrame.Schema;
+            _session.ProcedureDefinition = parentFrame.ProcedureDefinition;
+            _session.Statements = parentFrame.Statements;
+            _session.RecordedSteps = parentFrame.RecordedSteps;
+            _session.StepSnapshots = parentFrame.StepSnapshots;
+            _session.Parameters = parentFrame.Parameters;
+            _breakpointLines = parentFrame.BreakpointLines;
+            _selectedSpName = parentFrame.FullName;
+            _spFilter = parentFrame.FullName;
+
+            // Advance to the step right after the EXEC call in the parent
+            _session.CurrentStepIndex = Math.Min(parentFrame.CurrentStepIndex + 1, _session.RecordedSteps.Count - 1);
+
+            // 3. Update editor
+            if (_editor != null)
+            {
+                await _editor.SetValue(parentFrame.ProcedureDefinition);
+                await UpdateBreakpointDecorationsAsync();
+                await HighlightCurrentStepAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _session.ErrorMessage = $"Failed to step out: {ex.Message}";
+        }
+        finally
+        {
+            _isRecording = false;
+            StateHasChanged();
+        }
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -1266,6 +1554,17 @@
         if (e.Key == "F10")
         {
             await StepForwardAsync();
+        }
+        else if (e.Key == "F11")
+        {
+            if (e.ShiftKey)
+            {
+                await StepOutAsync();
+            }
+            else if (CanStepIntoCurrentStatement)
+            {
+                await StepIntoAsync();
+            }
         }
         else if (e.Key == "F9")
         {
@@ -1298,6 +1597,20 @@
     {
         if (_session == null) return;
 
+        // If stopped while inside a nested procedure, restore the root parent frame
+        while (_session.CallStack.Count > 0)
+        {
+            var rootFrame = _session.CallStack.Pop();
+            _session.ProcedureName = rootFrame.ProcedureName;
+            _session.Schema = rootFrame.Schema;
+            _session.ProcedureDefinition = rootFrame.ProcedureDefinition;
+            _session.Statements = rootFrame.Statements;
+            _session.Parameters = rootFrame.Parameters;
+            _breakpointLines = rootFrame.BreakpointLines;
+            _selectedSpName = rootFrame.FullName;
+            _spFilter = rootFrame.FullName;
+        }
+
         _session.IsRecorded = false;
         _session.RecordedSteps.Clear();
         _session.StepSnapshots.Clear();
@@ -1307,7 +1620,9 @@
 
         if (_editor != null)
         {
+            await _editor.SetValue(_session.ProcedureDefinition);
             _stepDecorationIds = await _editor.DeltaDecorations(_stepDecorationIds, Array.Empty<ModelDeltaDecoration>());
+            await UpdateBreakpointDecorationsAsync();
         }
 
         _collapsedResultSets.Clear();

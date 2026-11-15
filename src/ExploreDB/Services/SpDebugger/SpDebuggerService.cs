@@ -959,6 +959,35 @@ internal class ProcedureAstVisitor : TSqlFragmentVisitor
         var endLine = startLine + lineCount;
         var stmtType = SpDebuggerService.GetStatementTypeName(stmt);
 
+        string? childSchema = null;
+        string? childProcName = null;
+        var childArgs = new List<SpExecParamArg>();
+
+        if (stmt is ExecuteStatement execStmt && execStmt.ExecuteSpecification?.ExecutableEntity is ExecutableProcedureReference procRef)
+        {
+            var procObj = procRef.ProcedureReference?.ProcedureReference?.Name;
+            if (procObj != null)
+            {
+                childSchema = procObj.SchemaIdentifier?.Value;
+                childProcName = procObj.BaseIdentifier?.Value ?? "";
+
+                if (procRef.Parameters != null)
+                {
+                    foreach (var p in procRef.Parameters)
+                    {
+                        var argName = p.Variable?.Name;
+                        var argVal = p.ParameterValue != null ? ExtractFragmentText(p.ParameterValue) : string.Empty;
+                        childArgs.Add(new SpExecParamArg
+                        {
+                            ParameterName = argName,
+                            ExpressionText = argVal,
+                            IsOutput = p.IsOutput
+                        });
+                    }
+                }
+            }
+        }
+
         Statements.Add(new SpStatementStep
         {
             StepIndex = Statements.Count,
@@ -966,7 +995,10 @@ internal class ProcedureAstVisitor : TSqlFragmentVisitor
             EndLineNumber = endLine,
             Column = stmt.StartColumn,
             StatementText = text,
-            StatementType = stmtType
+            StatementType = stmtType,
+            ExecChildSchema = childSchema,
+            ExecChildProcedureName = childProcName,
+            ExecChildArgs = childArgs
         });
     }
 
