@@ -126,29 +126,34 @@ public class SpDebuggerService : IDisposable
             int currentStepId = -1;
             SpDebugStepSnapshot? currentSnapshot = null;
             var currentVars = new Dictionary<string, SpVariableInfo>(StringComparer.OrdinalIgnoreCase);
+            var pendingMessages = new List<string>();
 
             conn.InfoMessage += (s, e) =>
             {
-                foreach (SqlError err in e.Errors)
+                void RecordMsg(string msg)
                 {
-                    if (!string.IsNullOrWhiteSpace(err.Message))
+                    if (string.IsNullOrWhiteSpace(msg)) return;
+                    session.ExecutionMessages.Add(msg);
+                    if (currentSnapshot != null)
                     {
-                        session.ExecutionMessages.Add(err.Message);
-                        var snap = currentSnapshot ?? (session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : null);
-                        if (snap != null && !snap.Messages.Contains(err.Message))
+                        if (!currentSnapshot.Messages.Contains(msg))
                         {
-                            snap.Messages.Add(err.Message);
+                            currentSnapshot.Messages.Add(msg);
                         }
                     }
+                    else
+                    {
+                        pendingMessages.Add(msg);
+                    }
+                }
+
+                foreach (SqlError err in e.Errors)
+                {
+                    RecordMsg(err.Message);
                 }
                 if (e.Errors.Count == 0 && !string.IsNullOrWhiteSpace(e.Message))
                 {
-                    session.ExecutionMessages.Add(e.Message);
-                    var snap = currentSnapshot ?? (session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : null);
-                    if (snap != null && !snap.Messages.Contains(e.Message))
-                    {
-                        snap.Messages.Add(e.Message);
-                    }
+                    RecordMsg(e.Message);
                 }
             };
 
@@ -170,7 +175,8 @@ public class SpDebuggerService : IDisposable
                     Name = p.Name,
                     DataType = p.DataType,
                     Value = p.Value ?? "NULL",
-                    IsParameter = true
+                    IsParameter = true,
+                    IsOutput = p.IsOutput
                 };
             }
 
@@ -193,12 +199,13 @@ public class SpDebuggerService : IDisposable
                     DataType = kv.Value.DataType,
                     Value = kv.Value.Value,
                     PreviousValue = null,
-                    IsParameter = kv.Value.IsParameter
+                    IsParameter = kv.Value.IsParameter,
+                    IsOutput = kv.Value.IsOutput
                 };
             }
             session.RecordedSteps.Add(snap0);
             session.StepSnapshots[0] = snap0;
-            currentSnapshot = snap0;
+            currentSnapshot = null; // Baseline snap0 remains clean with 0 messages
 
             using (ct.Register(() =>
             {
@@ -237,6 +244,18 @@ public class SpDebuggerService : IDisposable
                         };
 
                         CloneSnapshotState(prevSnap, newSnap);
+
+                        if (pendingMessages.Count > 0)
+                        {
+                            foreach (var pMsg in pendingMessages)
+                            {
+                                if (!newSnap.Messages.Contains(pMsg))
+                                {
+                                    newSnap.Messages.Add(pMsg);
+                                }
+                            }
+                            pendingMessages.Clear();
+                        }
 
                         session.RecordedSteps.Add(newSnap);
                         session.StepSnapshots[currentStepId] = newSnap;
@@ -299,13 +318,15 @@ public class SpDebuggerService : IDisposable
                             var vVal = reader.FieldCount > 2 && !reader.IsDBNull(2) ? reader.GetString(2) : "NULL";
 
                             var prevVal = currentVars.TryGetValue(vName, out var existingVar) ? existingVar.Value : null;
+                            var matchingParam = session.Parameters.FirstOrDefault(p => p.Name.Equals(vName, StringComparison.OrdinalIgnoreCase));
                             var updatedVar = new SpVariableInfo
                             {
                                 Name = vName,
                                 DataType = vType,
                                 Value = vVal,
                                 PreviousValue = prevVal,
-                                IsParameter = session.Parameters.Any(p => p.Name.Equals(vName, StringComparison.OrdinalIgnoreCase))
+                                IsParameter = matchingParam != null,
+                                IsOutput = matchingParam?.IsOutput ?? false
                             };
                             currentVars[vName] = updatedVar;
                             targetSnap.Variables[vName] = updatedVar;
@@ -365,6 +386,9 @@ public class SpDebuggerService : IDisposable
             CloneSnapshotState(lastSnap, snapCompleted);
             session.RecordedSteps.Add(snapCompleted);
 
+            // Pre-execution baseline must never have messages
+            snap0.Messages.Clear();
+
             session.IsRecorded = true;
             session.CurrentStepIndex = 0;
             stopwatch.Stop();
@@ -399,7 +423,8 @@ public class SpDebuggerService : IDisposable
                 DataType = kv.Value.DataType,
                 Value = kv.Value.Value,
                 PreviousValue = kv.Value.Value,
-                IsParameter = kv.Value.IsParameter
+                IsParameter = kv.Value.IsParameter,
+                IsOutput = kv.Value.IsOutput
             };
         }
 
@@ -429,6 +454,14 @@ public class SpDebuggerService : IDisposable
                 Rows = new List<IDictionary<string, object?>>(rs.Rows)
             };
             target.ResultSets.Add(cloneRs);
+        }
+
+        foreach (var msg in source.Messages)
+        {
+            if (!target.Messages.Contains(msg))
+            {
+                target.Messages.Add(msg);
+            }
         }
     }
 
@@ -469,11 +502,12 @@ public class SpDebuggerService : IDisposable
         }
 
         var allTempTables = new List<string>();
+        var allTableVars = new List<string>();
 
         // 3. Emit statements with AST branch nesting
         if (session.BodyStatementList != null)
         {
-            EmitStatements(sb, session.BodyStatementList, session, varTypes, allTempTables);
+            EmitStatements(sb, session.BodyStatementList, session, varTypes, allTempTables, allTableVars);
         }
         else
         {
@@ -482,6 +516,7 @@ public class SpDebuggerService : IDisposable
                 var stmt = session.Statements[i];
                 ExtractDeclaredVarsWithTypes(stmt.StatementText, varTypes);
                 TrackTempTables(stmt.StatementText, allTempTables);
+                TrackTableVariables(stmt.StatementText, allTableVars);
 
                 sb.AppendLine($"-- STEP {stmt.StepIndex}: Line {stmt.LineNumber}");
                 sb.AppendLine($"SELECT {stmt.StepIndex} AS [__EXPLOREDB_STEP__];");
@@ -491,7 +526,7 @@ public class SpDebuggerService : IDisposable
                 sb.AppendLine(";");
                 sb.AppendLine();
 
-                EmitProbes(sb, varTypes, allTempTables);
+                EmitProbes(sb, varTypes, allTempTables, allTableVars);
             }
         }
 
@@ -505,21 +540,21 @@ public class SpDebuggerService : IDisposable
         return sb.ToString();
     }
 
-    private void EmitStatements(StringBuilder sb, StatementList? statementList, SpDebugSessionState session, Dictionary<string, string> varTypes, List<string> allTempTables)
+    private void EmitStatements(StringBuilder sb, StatementList? statementList, SpDebugSessionState session, Dictionary<string, string> varTypes, List<string> allTempTables, List<string> allTableVars)
     {
         if (statementList == null || statementList.Statements == null) return;
         foreach (var stmt in statementList.Statements)
         {
-            EmitStatementOrBlock(sb, stmt, session, varTypes, allTempTables);
+            EmitStatementOrBlock(sb, stmt, session, varTypes, allTempTables, allTableVars);
         }
     }
 
-    private void EmitStatementOrBlock(StringBuilder sb, TSqlStatement stmt, SpDebugSessionState session, Dictionary<string, string> varTypes, List<string> allTempTables)
+    private void EmitStatementOrBlock(StringBuilder sb, TSqlStatement stmt, SpDebugSessionState session, Dictionary<string, string> varTypes, List<string> allTempTables, List<string> allTableVars)
     {
         if (stmt is BeginEndBlockStatement block)
         {
             sb.AppendLine("BEGIN");
-            EmitStatements(sb, block.StatementList, session, varTypes, allTempTables);
+            EmitStatements(sb, block.StatementList, session, varTypes, allTempTables, allTableVars);
             sb.AppendLine("END;");
             return;
         }
@@ -527,10 +562,10 @@ public class SpDebuggerService : IDisposable
         if (stmt is TryCatchStatement tc)
         {
             sb.AppendLine("BEGIN TRY");
-            EmitStatements(sb, tc.TryStatements, session, varTypes, allTempTables);
+            EmitStatements(sb, tc.TryStatements, session, varTypes, allTempTables, allTableVars);
             sb.AppendLine("END TRY");
             sb.AppendLine("BEGIN CATCH");
-            EmitStatements(sb, tc.CatchStatements, session, varTypes, allTempTables);
+            EmitStatements(sb, tc.CatchStatements, session, varTypes, allTempTables, allTableVars);
             sb.AppendLine("END CATCH;");
             return;
         }
@@ -550,11 +585,11 @@ public class SpDebuggerService : IDisposable
 
             if (ifStmt.ThenStatement is BeginEndBlockStatement thenBlock)
             {
-                EmitStatements(sb, thenBlock.StatementList, session, varTypes, allTempTables);
+                EmitStatements(sb, thenBlock.StatementList, session, varTypes, allTempTables, allTableVars);
             }
             else if (ifStmt.ThenStatement != null)
             {
-                EmitStatementOrBlock(sb, ifStmt.ThenStatement, session, varTypes, allTempTables);
+                EmitStatementOrBlock(sb, ifStmt.ThenStatement, session, varTypes, allTempTables, allTableVars);
             }
 
             sb.AppendLine("END");
@@ -566,11 +601,11 @@ public class SpDebuggerService : IDisposable
 
                 if (ifStmt.ElseStatement is BeginEndBlockStatement elseBlock)
                 {
-                    EmitStatements(sb, elseBlock.StatementList, session, varTypes, allTempTables);
+                    EmitStatements(sb, elseBlock.StatementList, session, varTypes, allTempTables, allTableVars);
                 }
                 else if (ifStmt.ElseStatement != null)
                 {
-                    EmitStatementOrBlock(sb, ifStmt.ElseStatement, session, varTypes, allTempTables);
+                    EmitStatementOrBlock(sb, ifStmt.ElseStatement, session, varTypes, allTempTables, allTableVars);
                 }
 
                 sb.AppendLine("END");
@@ -585,6 +620,7 @@ public class SpDebuggerService : IDisposable
 
         ExtractDeclaredVarsWithTypes(stmtText, varTypes);
         TrackTempTables(stmtText, allTempTables);
+        TrackTableVariables(stmtText, allTableVars);
 
         var stmtType = SpDebuggerService.GetStatementTypeName(stmt);
         var step = session.Statements.FirstOrDefault(s => s.LineNumber == stmt.StartLine && s.StatementType == stmtType);
@@ -598,7 +634,7 @@ public class SpDebuggerService : IDisposable
         sb.AppendLine(";");
         sb.AppendLine();
 
-        EmitProbes(sb, varTypes, allTempTables);
+        EmitProbes(sb, varTypes, allTempTables, allTableVars);
     }
 
     private static void TrackTempTables(string text, List<string> allTempTables)
@@ -613,7 +649,23 @@ public class SpDebuggerService : IDisposable
         }
     }
 
-    private static void EmitProbes(StringBuilder sb, Dictionary<string, string> varTypes, List<string> allTempTables)
+    private static void TrackTableVariables(string text, List<string> allTableVars)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        var matches = System.Text.RegularExpressions.Regex.Matches(
+            text,
+            @"(?i)(?:DECLARE\s+|,)\s*(@[a-zA-Z0-9_]+)\s+TABLE\b");
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            var varName = match.Groups[1].Value;
+            if (!allTableVars.Contains(varName, StringComparer.OrdinalIgnoreCase))
+            {
+                allTableVars.Add(varName);
+            }
+        }
+    }
+
+    private static void EmitProbes(StringBuilder sb, Dictionary<string, string> varTypes, List<string> allTempTables, List<string> allTableVars)
     {
         if (varTypes.Count > 0)
         {
@@ -637,6 +689,12 @@ public class SpDebuggerService : IDisposable
             sb.AppendLine($"    SELECT '{tt}' AS [__EXPLOREDB_TEMP_NAME__], COUNT_BIG(*) AS [TotalRows] FROM {tt};");
             sb.AppendLine($"    SELECT TOP 500 * FROM {tt};");
             sb.AppendLine("END;");
+        }
+
+        foreach (var tv in allTableVars)
+        {
+            sb.AppendLine($"SELECT '{tv}' AS [__EXPLOREDB_TEMP_NAME__], COUNT_BIG(*) AS [TotalRows] FROM {tv};");
+            sb.AppendLine($"SELECT TOP 500 * FROM {tv};");
         }
 
         sb.AppendLine();

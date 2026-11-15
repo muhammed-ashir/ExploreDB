@@ -12,6 +12,7 @@ public class SpVariableInfo
     public string? PreviousValue { get; set; }
     public bool HasChanged => PreviousValue != null && PreviousValue != Value;
     public bool IsParameter { get; set; }
+    public bool IsOutput { get; set; }
 }
 
 public class SpTempTableInfo

@@ -19,14 +19,15 @@
             <h4 class="fw-bold mb-0" style="font-size: 1.15rem; line-height: 1.2;">SP Debugger</h4>
         </div>
 
-        <!-- Action & Navigation Controls -->
+        <!-- Action & Navigation Controls (Visual Studio Style Hybrid) -->
         <div class="d-flex align-items-center gap-2 flex-wrap">
             @if (_session != null && _session.Statements.Count > 0)
             {
-                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3"
+                <!-- Run / Continue (F5) -->
+                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
                         @onclick="RunAndRecordAsync"
                         disabled="@(_isRecording || _isLoadingDef)"
-                        title="Execute dry-run on SQL Server and record all step states (F5)">
+                        title="Run / Start Debugging (F5)">
                     @if (_isRecording)
                     {
                         <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -39,40 +40,37 @@
                     }
                 </button>
 
+                <!-- Stepping Controls (F10 Step, F9 Back, Restart) -->
                 <div class="btn-group btn-group-sm shadow-sm" role="group">
-                    <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
-                            @onclick="StepBack"
-                            disabled="@(!_session.IsRecorded || _session.CurrentStepIndex <= 0 || _isRecording)"
-                            title="Step to previous statement (F9)">
-                        <i class="bi bi-arrow-left"></i>
-                        <span>Step Back</span>
-                    </button>
                     <button class="btn btn-outline-primary d-inline-flex align-items-center gap-1"
                             @onclick="StepForwardAsync"
                             disabled="@(!_session.IsRecorded || _session.IsAtCompletion || _isRecording)"
-                            title="Step to next statement (F10)">
-                        <span>Step</span>
+                            title="Step Over / Next statement (F10)">
                         <i class="bi bi-arrow-right"></i>
+                        <span>Step (F10)</span>
+                    </button>
+                    <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+                            @onclick="StepBack"
+                            disabled="@(!_session.IsRecorded || _session.CurrentStepIndex <= 0 || _isRecording)"
+                            title="Step Back / Previous statement (F9)">
+                        <i class="bi bi-arrow-left"></i>
+                        <span>Back (F9)</span>
                     </button>
                     <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
                             @onclick="ResetToFirstStepAsync"
                             disabled="@(!_session.IsRecorded || _session.CurrentStepIndex == 0 || _isRecording)"
-                            title="Rewind to Step 1">
-                        <i class="bi bi-skip-start"></i>
+                            title="Restart Debugging / Rewind to Statement 1">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        <span>Restart</span>
                     </button>
                 </div>
 
-                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                        @onclick="OpenParametersModal"
-                        title="Configure input parameters">
-                    <i class="bi bi-sliders"></i>
-                    <span>Parameters @(_session.Parameters.Count > 0 ? $"({_session.Parameters.Count})" : "")</span>
-                </button>
-
-                <button class="btn btn-sm btn-outline-danger shadow-sm px-2"
+                <!-- Stop Debugging (Shift+F5) -->
+                <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
                         @onclick="ClearSession"
-                        title="Reset session and release memory">
-                    <span>Clear</span>
+                        title="Stop Debugging and clear session (Shift+F5)">
+                    <i class="bi bi-stop-fill"></i>
+                    <span>Stop</span>
                 </button>
             }
 
@@ -149,19 +147,18 @@
             }
         </div>
 
-        <!-- Right-Aligned View Logs Button -->
-        <div class="col text-end">
-            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
-                    @onclick="() => _showLogsModal = true"
-                    title="View execution messages and session diagnostics">
-                <i class="bi bi-journal-text"></i>
-                <span>View Logs</span>
-                @if (AllRecordedMessages.Count > 0)
-                {
-                    <span class="badge bg-secondary ms-1" style="font-size: 0.68rem;">@AllRecordedMessages.Count</span>
-                }
-            </button>
-        </div>
+        <!-- Parameters Button (beside SP selector) -->
+        @if (_session != null && _session.Statements.Count > 0)
+        {
+            <div class="col-auto">
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        @onclick="OpenParametersModal"
+                        title="Configure input parameters for this stored procedure">
+                    <i class="bi bi-sliders"></i>
+                    <span>Parameters @(_session.Parameters.Count > 0 ? $"({_session.Parameters.Count})" : "")</span>
+                </button>
+            </div>
+        }
     </div>
 
     <!-- SAFETY & HOW-IT-WORKS NOTICE BANNER -->
@@ -226,7 +223,7 @@
     <!-- MAIN DEBUGGER WORKSPACE (SPLIT LAYOUT) -->
     <div class="row g-2 flex-grow-1 mt-1 overflow-hidden" style="min-height: 400px;">
         <!-- LEFT COLUMN: MONACO CODE VIEWER -->
-        <div class="col-12 col-lg-7 d-flex flex-column h-100">
+        <div class="@CodeColumnClass">
             <div class="card h-100 d-flex flex-column shadow-sm overflow-hidden"
                  style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
                 <!-- Code Header -->
@@ -238,14 +235,21 @@
                         </span>
                     </div>
 
-                    @if (_session?.IsRecorded == true && _session.IsAtCompletion)
-                    {
-                        <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        @if (_session?.IsRecorded == true && _session.IsAtCompletion)
+                        {
                             <span class="badge bg-success-subtle text-success" style="font-weight: 600;">
                                 <i class="bi bi-check-circle me-1"></i>All Statements Executed
                             </span>
-                        </div>
-                    }
+                        }
+                        <button type="button"
+                                class="btn btn-sm btn-link text-muted p-0 d-inline-flex align-items-center justify-content-center"
+                                style="width: 26px; height: 26px; text-decoration: none; border-radius: 4px;"
+                                @onclick="ToggleMaximizeCodeAsync"
+                                title="@(_workspaceLayout == SpWorkspaceLayout.MaximizeCode ? "Restore Split View (Esc)" : "Maximize Code View")">
+                            <i class="bi @(_workspaceLayout == SpWorkspaceLayout.MaximizeCode ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")" style="font-size: 0.85rem;"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Monaco Editor Body -->
@@ -279,12 +283,12 @@
         </div>
 
         <!-- RIGHT COLUMN: STATE INSPECTOR (TABS) -->
-        <div class="col-12 col-lg-5 d-flex flex-column h-100">
+        <div class="@InspectorColumnClass">
             <div class="card h-100 d-flex flex-column shadow-sm overflow-hidden"
                  style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
                 <!-- Inspector Tab Header -->
-                <div class="card-header p-0" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
-                    <ul class="nav nav-tabs border-0 px-2 pt-1" role="tablist">
+                <div class="card-header p-0 d-flex align-items-center justify-content-between" style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                    <ul class="nav nav-tabs border-0 px-2 pt-1 flex-grow-1" role="tablist">
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(_activeInspectorTab == "Variables" ? "active fw-semibold" : "text-muted")"
                                     style="padding: 0.28rem 0.65rem; font-size: 0.8rem; @(_activeInspectorTab == "Variables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
@@ -302,7 +306,7 @@
                             <button class="nav-link @(_activeInspectorTab == "TempTables" ? "active fw-semibold" : "text-muted")"
                                     style="padding: 0.28rem 0.65rem; font-size: 0.8rem; @(_activeInspectorTab == "TempTables" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
                                     @onclick='() => _activeInspectorTab = "TempTables"'>
-                                Temp Tables
+                                Tables (# / @@)
                                 @if (CurrentSnapshotTempTables.Count > 0)
                                 {
                                     <span class="badge bg-warning-subtle text-warning ms-1" style="font-size: 0.65rem; padding: 0.15em 0.4em;">
@@ -324,7 +328,29 @@
                                 }
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(_activeInspectorTab == "Messages" ? "active fw-semibold" : "text-muted")"
+                                    style="padding: 0.28rem 0.65rem; font-size: 0.8rem; @(_activeInspectorTab == "Messages" ? "background-color: var(--app-surface); border-color: var(--app-border) var(--app-border) var(--app-surface); color: var(--app-text);" : "")"
+                                    @onclick='() => _activeInspectorTab = "Messages"'>
+                                Messages
+                                @if (CurrentSnapshotMessages.Count > 0)
+                                {
+                                    <span class="badge bg-info-subtle text-info ms-1" style="font-size: 0.65rem; padding: 0.15em 0.4em;">
+                                        @CurrentSnapshotMessages.Count
+                                    </span>
+                                }
+                            </button>
+                        </li>
                     </ul>
+                    <div class="pe-2 py-1">
+                        <button type="button"
+                                class="btn btn-sm btn-link text-muted p-0 d-inline-flex align-items-center justify-content-center"
+                                style="width: 26px; height: 26px; text-decoration: none; border-radius: 4px;"
+                                @onclick="ToggleMaximizeInspectorAsync"
+                                title="@(_workspaceLayout == SpWorkspaceLayout.MaximizeInspector ? "Restore Split View (Esc)" : "Maximize Inspector View")">
+                            <i class="bi @(_workspaceLayout == SpWorkspaceLayout.MaximizeInspector ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")" style="font-size: 0.85rem;"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Inspector Tab Content Body -->
@@ -378,7 +404,14 @@
                                                         @v.Name
                                                         @if (v.IsParameter)
                                                         {
-                                                            <span class="badge bg-secondary-subtle text-muted ms-1" style="font-size: 0.65rem;">PARAM</span>
+                                                            if (v.IsOutput)
+                                                            {
+                                                                <span class="badge bg-info-subtle text-info ms-1" style="font-size: 0.65rem;">OUTPUT</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="badge bg-secondary-subtle text-muted ms-1" style="font-size: 0.65rem;">PARAM</span>
+                                                            }
                                                         }
                                                     </td>
                                                     <td class="py-2 text-muted font-monospace">@v.DataType</td>
@@ -414,11 +447,8 @@
                             @if (CurrentSnapshotTempTables.Count == 0)
                             {
                                 <div class="d-flex flex-column align-items-center justify-content-center h-100 p-4 text-center">
-                                    <i class="bi bi-table text-muted" style="font-size: 2rem; opacity: 0.5;"></i>
-                                    <h6 class="fw-bold text-muted mt-2 mb-1">No Active Temp Tables</h6>
-                                    <p class="text-muted small mb-0" style="max-width: 320px;">
-                                        No `#temp` tables are active at statement #@(_session.CurrentStepIndex + 1). As statements create `#tables`, they will appear here.
-                                    </p>
+                                    <i class="bi bi-table text-muted mb-2" style="font-size: 1.8rem; opacity: 0.4;"></i>
+                                    <span class="text-muted small">No active tables</span>
                                 </div>
                             }
                             else
@@ -427,14 +457,14 @@
                                 {
                                     <div class="d-flex justify-content-between align-items-center mb-2 px-1">
                                         <span class="text-muted small fw-semibold" style="font-size: 0.75rem;">
-                                            @CurrentSnapshotTempTables.Count temp table@(CurrentSnapshotTempTables.Count > 1 ? "s" : "")
+                                            @CurrentSnapshotTempTables.Count tables (# / @@)
                                         </span>
                                         <div class="d-flex gap-2">
-                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-muted" style="font-size: 0.75rem;" @onclick="ExpandAllTempTables" title="Expand all temp tables">
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-muted" style="font-size: 0.75rem;" @onclick="ExpandAllTempTables" title="Expand all tables">
                                                 <i class="bi bi-arrows-expand me-1"></i>Expand All
                                             </button>
                                             <span class="text-muted small">|</span>
-                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-muted" style="font-size: 0.75rem;" @onclick="CollapseAllTempTables" title="Collapse all temp tables">
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-muted" style="font-size: 0.75rem;" @onclick="CollapseAllTempTables" title="Collapse all tables">
                                                 <i class="bi bi-arrows-collapse me-1"></i>Collapse All
                                             </button>
                                         </div>
@@ -453,6 +483,14 @@
                                             <div class="d-flex align-items-center gap-2">
                                                 <i class="bi @(isCollapsed ? "bi-chevron-right" : "bi-chevron-down") text-muted" style="font-size: 0.75rem;"></i>
                                                 <span class="font-monospace fw-bold" style="color: var(--app-text);">@tt.Name</span>
+                                                @if (tt.Name.StartsWith("@"))
+                                                {
+                                                    <span class="badge bg-info-subtle text-info" style="font-size: 0.65rem;">TABLE VAR</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning-subtle text-warning" style="font-size: 0.65rem;">TEMP TABLE</span>
+                                                }
                                             </div>
                                             <span class="badge @(tt.TotalRowCount > 0 ? "bg-primary-subtle text-primary" : "bg-secondary-subtle text-muted")">
                                                 @(tt.TotalRowCount == tt.Rows.Count ? $"{tt.TotalRowCount} rows" : $"{tt.Rows.Count} of {tt.TotalRowCount} rows")
@@ -515,11 +553,8 @@
                             @if (CurrentSnapshotResults.Count == 0)
                             {
                                 <div class="d-flex flex-column align-items-center justify-content-center h-100 p-4 text-center">
-                                    <i class="bi bi-grid-3x3 text-muted" style="font-size: 2rem; opacity: 0.5;"></i>
-                                    <h6 class="fw-bold text-muted mt-2 mb-1">No Result Sets Emitted</h6>
-                                    <p class="text-muted small mb-0" style="max-width: 320px;">
-                                        No `SELECT` statements have produced query output up to this step.
-                                    </p>
+                                    <i class="bi bi-grid-3x3 text-muted mb-2" style="font-size: 1.8rem; opacity: 0.4;"></i>
+                                    <span class="text-muted small">No result sets</span>
                                 </div>
                             }
                             else
@@ -613,6 +648,51 @@
                             }
                         </div>
                     }
+                    else if (_activeInspectorTab == "Messages")
+                    {
+                        <!-- MESSAGES TAB (SSMS / DataGrip Style) -->
+                        <div class="d-flex flex-column h-100 p-2 overflow-auto">
+                            @if (CurrentSnapshotMessages.Count == 0)
+                            {
+                                <div class="d-flex flex-column align-items-center justify-content-center h-100 p-4 text-center">
+                                    <i class="bi bi-chat-left-text text-muted mb-2" style="font-size: 1.8rem; opacity: 0.4;"></i>
+                                    <span class="text-muted small">No messages</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                                    <span class="text-muted small fw-semibold" style="font-size: 0.75rem;">
+                                        @CurrentSnapshotMessages.Count message@(CurrentSnapshotMessages.Count > 1 ? "s" : "")
+                                    </span>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 d-inline-flex align-items-center gap-1" style="font-size: 0.75rem;" @onclick="CopyMessagesToClipboard" title="Copy messages to clipboard">
+                                        <i class="bi bi-clipboard"></i>
+                                        <span>Copy</span>
+                                    </button>
+                                </div>
+
+                                <div class="card shadow-sm flex-grow-1 d-flex flex-column" style="background-color: var(--app-surface); border: 1px solid var(--app-border); overflow: hidden; min-height: 0;">
+                                    <div class="card-body p-3 font-monospace small overflow-auto flex-grow-1" style="line-height: 1.6; font-size: 0.8rem; color: var(--app-text); user-select: text;">
+                                        @foreach (var msg in CurrentSnapshotMessages)
+                                        {
+                                            <div class="py-0.5" style="white-space: pre-wrap; word-break: break-word;">@msg</div>
+                                        }
+                                    </div>
+                                    <div class="card-footer py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2 text-muted" style="background-color: var(--app-surface-secondary); border-top: 1px solid var(--app-border); font-size: 0.75rem;">
+                                        <div class="d-flex align-items-center gap-1">
+                                            <i class="bi bi-stopwatch text-muted"></i>
+                                            <span>Server Time:</span>
+                                            <strong class="font-monospace" style="color: var(--app-text);">@(_session?.TotalServerExecutionMs ?? 0) ms</strong>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-1 text-success fw-semibold">
+                                            <i class="bi bi-shield-check"></i>
+                                            <span>Transaction Rolled Back (0 locks)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
             </div>
         </div>
@@ -688,71 +768,7 @@
     </div>
 }
 
-<!-- LOGS & DIAGNOSTICS MODAL -->
-@if (_showLogsModal)
-{
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.65); backdrop-filter: blur(4px); z-index: 2000;">
-        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-            <div class="modal-content shadow-lg" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
-                <div class="modal-header py-2 px-3" style="border-bottom: 1px solid var(--app-border);">
-                    <h5 class="modal-title fs-6 fw-bold">
-                        <i class="bi bi-journal-text me-2 text-primary"></i>Execution Logs & Diagnostics
-                    </h5>
-                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => _showLogsModal = false"></button>
-                </div>
-                <div class="modal-body py-3 px-4">
-                    <!-- Execution Messages / PRINT statements -->
-                    <h6 class="fw-bold mb-2 small" style="color: var(--app-text);">Server Messages & Print Output</h6>
-                    @if (AllRecordedMessages.Count > 0)
-                    {
-                        <div class="p-3 rounded font-monospace small mb-3" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border); white-space: pre-wrap; max-height: 250px; overflow-y: auto;">
-                            @foreach (var msg in AllRecordedMessages)
-                            {
-                                <div>@msg</div>
-                            }
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="p-3 rounded text-muted small mb-3" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border);">
-                            No PRINT or diagnostic output messages recorded. Click [Run] to execute and capture logs.
-                        </div>
-                    }
 
-                    <!-- Session Diagnostics -->
-                    <h6 class="fw-bold mb-2 small" style="color: var(--app-text);">Session Diagnostics</h6>
-                    <div class="p-3 rounded small" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border);">
-                        <div class="row g-2">
-                            <div class="col-sm-6">
-                                <span class="text-muted">Target Procedure:</span>
-                                <strong class="ms-1">@(!string.IsNullOrEmpty(_session?.FullName) ? _session.FullName : (!string.IsNullOrEmpty(_selectedSpName) ? _selectedSpName : "None selected"))</strong>
-                            </div>
-                            <div class="col-sm-6">
-                                <span class="text-muted">Server:</span>
-                                <strong class="ms-1">@(!string.IsNullOrEmpty(ConnectionService.ActiveServer) ? ConnectionService.ActiveServer : "None")</strong>
-                            </div>
-                            <div class="col-sm-6">
-                                <span class="text-muted">Database:</span>
-                                <strong class="ms-1">@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)</strong>
-                            </div>
-                            <div class="col-sm-6">
-                                <span class="text-muted">Server Execution Time:</span>
-                                <strong class="ms-1">@(_session?.TotalServerExecutionMs ?? 0) ms</strong>
-                            </div>
-                            <div class="col-sm-12">
-                                <span class="text-muted">Transaction State:</span>
-                                <strong class="ms-1 text-success">Rolled Back (Zero locks held)</strong>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer py-2 px-3" style="border-top: 1px solid var(--app-border);">
-                    <button type="button" class="btn btn-sm btn-secondary px-3" @onclick="() => _showLogsModal = false">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
 
 <style>
     .sp-debugger-container {
@@ -790,7 +806,6 @@
     private bool _showSpDropdown = false;
     private bool _showSafetyAlert = true;
     private bool _showParametersModal = false;
-    private bool _showLogsModal = false;
     private bool _showWarningsBanner = true;
     private bool _isLoadingDef = false;
     private bool _isRecording = false;
@@ -799,6 +814,57 @@
     private string _varFilter = string.Empty;
     private HashSet<int> _collapsedResultSets = new();
     private HashSet<string> _collapsedTempTables = new(StringComparer.OrdinalIgnoreCase);
+
+    private enum SpWorkspaceLayout
+    {
+        Split,
+        MaximizeCode,
+        MaximizeInspector
+    }
+
+    private SpWorkspaceLayout _workspaceLayout = SpWorkspaceLayout.Split;
+
+    private string CodeColumnClass => _workspaceLayout switch
+    {
+        SpWorkspaceLayout.MaximizeCode => "col-12 d-flex flex-column h-100",
+        SpWorkspaceLayout.MaximizeInspector => "d-none",
+        _ => "col-12 col-lg-7 d-flex flex-column h-100"
+    };
+
+    private string InspectorColumnClass => _workspaceLayout switch
+    {
+        SpWorkspaceLayout.MaximizeInspector => "col-12 d-flex flex-column h-100",
+        SpWorkspaceLayout.MaximizeCode => "d-none",
+        _ => "col-12 col-lg-5 d-flex flex-column h-100"
+    };
+
+    private async Task ToggleMaximizeCodeAsync()
+    {
+        _workspaceLayout = _workspaceLayout == SpWorkspaceLayout.MaximizeCode
+            ? SpWorkspaceLayout.Split
+            : SpWorkspaceLayout.MaximizeCode;
+
+        StateHasChanged();
+        await Task.Delay(50);
+        if (_editor != null)
+        {
+            try { await _editor.Layout(); } catch { }
+        }
+    }
+
+    private async Task ToggleMaximizeInspectorAsync()
+    {
+        _workspaceLayout = _workspaceLayout == SpWorkspaceLayout.MaximizeInspector
+            ? SpWorkspaceLayout.Split
+            : SpWorkspaceLayout.MaximizeInspector;
+
+        StateHasChanged();
+        await Task.Delay(50);
+        if (_editor != null)
+        {
+            try { await _editor.Layout(); } catch { }
+        }
+    }
 
     private void ToggleResultSet(int index)
     {
@@ -842,6 +908,16 @@
         _collapsedTempTables.Clear();
     }
 
+    private async Task CopyMessagesToClipboard()
+    {
+        try
+        {
+            var text = string.Join("\n", CurrentSnapshotMessages);
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        }
+        catch { }
+    }
+
     private IEnumerable<SpInfo> FilteredProcedures => SchemaService.StoredProcedures.Where(p =>
     {
         if (string.IsNullOrWhiteSpace(_spFilter)) return true;
@@ -863,6 +939,9 @@
 
     private List<SpResultSetInfo> CurrentSnapshotResults =>
         _session?.CurrentSnapshot?.ResultSets ?? new List<SpResultSetInfo>();
+
+    private List<string> CurrentSnapshotMessages =>
+        _session?.CurrentSnapshot?.Messages ?? new List<string>();
 
     private List<string> AllRecordedMessages
     {
@@ -1021,7 +1100,24 @@
         }
         else if (e.Key == "F5")
         {
-            await RunAndRecordAsync();
+            if (e.ShiftKey)
+            {
+                ClearSession();
+            }
+            else
+            {
+                await RunAndRecordAsync();
+            }
+        }
+        else if (e.Key == "Escape" && _workspaceLayout != SpWorkspaceLayout.Split)
+        {
+            _workspaceLayout = SpWorkspaceLayout.Split;
+            StateHasChanged();
+            await Task.Delay(50);
+            if (_editor != null)
+            {
+                try { await _editor.Layout(); } catch { }
+            }
         }
     }
 
@@ -1052,6 +1148,7 @@
         _collapsedResultSets.Clear();
         _collapsedTempTables.Clear();
         _showWarningsBanner = true;
+        _workspaceLayout = SpWorkspaceLayout.Split;
         StateHasChanged();
     }
 

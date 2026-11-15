@@ -1052,6 +1052,196 @@ BEGIN
 END
 GO
 
+-- =======================================================================================
+-- ADVANCED FULL-SPECTRUM STORED PROCEDURE DEBUGGER TEST
+-- =======================================================================================
+-- Comprehensive scenario coverage for the SP Debugger:
+--  1. Recursive / Projection Common Table Expression (CTE)
+--  2. Nested inner stored procedure execution (EXEC dbo.sp_CalculateCompoundInterest)
+--  3. Parameterized dynamic SQL string execution (sp_executesql with INPUT & OUTPUT params)
+--  4. Direct SQL string query execution (EXEC string)
+--  5. Table variables (@AuditMetrics) vs Temp tables (#ProjectedGrowth, #DirectSqlResults)
+--  6. Structured exception handling (BEGIN TRY ... BEGIN CATCH with ERROR_MESSAGE())
+--  7. Diagnostic PRINT output messages
+--  8. Multiple intermediate & final result sets (collapsible cards verification)
+--  9. Conditional logic & branch stepping (IF ... ELSE)
+-- 10. Scalar variable transformations & mathematical calculations
+-- =======================================================================================
+CREATE PROCEDURE dbo.sp_ExploreDB_ComprehensiveCoverageTest
+    @DepartmentId INT = 1,
+    @BaseAmount DECIMAL(18, 2) = 1000.00,
+    @AnnualRate DECIMAL(5, 4) = 0.0750,
+    @InvestmentYears INT = 3,
+    @CategoryFilter NVARCHAR(50) = 'Hardware',
+    @SimulateError BIT = 0,
+    @TotalProjectedOutput DECIMAL(18, 2) = 0.00 OUTPUT,
+    @ExecutionStatusOutput NVARCHAR(200) = 'PENDING' OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- 1. SCALAR & STRING VARIABLES
+    DECLARE @StatusMsg NVARCHAR(200) = 'Initializing Comprehensive Test...';
+    DECLARE @CalculatedInterest DECIMAL(18, 2) = 0.00;
+    DECLARE @DynamicSql NVARCHAR(MAX);
+    DECLARE @ParamDefinition NVARCHAR(500);
+    DECLARE @DynamicTotalAmount DECIMAL(18, 2) = 0.00;
+    DECLARE @DynamicRowCount INT = 0;
+    DECLARE @DirectSql NVARCHAR(500);
+    DECLARE @ErrorMessageCaptured NVARCHAR(500) = 'None';
+    DECLARE @CurrentStepDescription NVARCHAR(100) = 'Starting execution';
+
+    -- 2. VARIABLE MUTATION & PRINT
+    SET @StatusMsg = 'Running calculations for Category: ' + @CategoryFilter;
+    PRINT @StatusMsg;
+
+    -- 3. INNER STORED PROCEDURE CALL
+    -- Invokes dbo.sp_CalculateCompoundInterest to test nested procedure execution & result emission
+    PRINT 'Calling inner stored procedure: dbo.sp_CalculateCompoundInterest';
+    EXEC dbo.sp_CalculateCompoundInterest 
+        @PrincipalAmount = @BaseAmount,
+        @AnnualInterestRate = @AnnualRate,
+        @Years = @InvestmentYears,
+        @CompoundingFrequencyPerYear = 12;
+
+    -- 4. TABLE VARIABLE CREATION & POPULATION
+    DECLARE @AuditMetrics TABLE (
+        MetricId INT IDENTITY(1,1),
+        MetricCode VARCHAR(30),
+        MetricValue DECIMAL(18, 2),
+        LoggedAt DATETIME2
+    );
+
+    INSERT INTO @AuditMetrics (MetricCode, MetricValue, LoggedAt)
+    VALUES 
+        ('BASE_AMOUNT', @BaseAmount, SYSDATETIME()),
+        ('RATE_APPLIED', CAST(@AnnualRate * 100 AS DECIMAL(18,2)), SYSDATETIME()),
+        ('YEARS_HORIZON', CAST(@InvestmentYears AS DECIMAL(18,2)), SYSDATETIME());
+
+    -- 5. COMMON TABLE EXPRESSION (CTE) WITH RECURSIVE PROJECTION
+    -- Multi-month growth target projection generated via CTE
+    PRINT 'Calculating 6-Month Growth Projections via CTE...';
+    
+    ;WITH MonthlyProjectionCTE AS (
+        SELECT 
+            1 AS MonthIndex,
+            CAST(@BaseAmount AS DECIMAL(18, 2)) AS ProjectedBalance,
+            CAST(ROUND(@BaseAmount * (@AnnualRate / 12.0), 2) AS DECIMAL(18, 2)) AS MonthlyInterest
+        UNION ALL
+        SELECT 
+            MonthIndex + 1,
+            CAST(ROUND((ProjectedBalance + MonthlyInterest) * 1.02, 2) AS DECIMAL(18, 2)),
+            CAST(ROUND((ProjectedBalance + MonthlyInterest) * (@AnnualRate / 12.0), 2) AS DECIMAL(18, 2))
+        FROM MonthlyProjectionCTE
+        WHERE MonthIndex < 6
+    )
+    SELECT 
+        MonthIndex,
+        ProjectedBalance,
+        MonthlyInterest,
+        CAST(ProjectedBalance + MonthlyInterest AS DECIMAL(18, 2)) AS EndOfMonthTotal
+    INTO #ProjectedGrowth
+    FROM MonthlyProjectionCTE;
+
+    -- 6. INTERMEDIATE RESULT SET FROM CTE TEMP TABLE
+    SELECT 
+        MonthIndex,
+        ProjectedBalance,
+        MonthlyInterest,
+        EndOfMonthTotal
+    FROM #ProjectedGrowth
+    ORDER BY MonthIndex;
+
+    -- 7. PARAMETERIZED DYNAMIC SQL EXECUTION (sp_executesql)
+    -- Builds and executes dynamic SQL with INPUT and OUTPUT parameters
+    SET @CurrentStepDescription = 'Executing parameterized dynamic SQL probe';
+    PRINT @CurrentStepDescription;
+
+    SET @DynamicSql = N'
+        SELECT 
+            @SumOut = SUM(EndOfMonthTotal),
+            @CountOut = COUNT(*)
+        FROM #ProjectedGrowth
+        WHERE MonthIndex <= @MaxMonth;';
+
+    SET @ParamDefinition = N'@MaxMonth INT, @SumOut DECIMAL(18, 2) OUTPUT, @CountOut INT OUTPUT';
+
+    EXEC sp_executesql 
+        @stmt = @DynamicSql,
+        @params = @ParamDefinition,
+        @MaxMonth = 4,
+        @SumOut = @DynamicTotalAmount OUTPUT,
+        @CountOut = @DynamicRowCount OUTPUT;
+
+    -- 8. DIRECT DYNAMIC SQL STRING EXECUTION (EXEC string)
+    -- Creates a secondary temp table and executes direct dynamic string
+    CREATE TABLE #DirectSqlResults (
+        ResultTag VARCHAR(50),
+        ComputedTotal DECIMAL(18, 2),
+        RowsEvaluated INT
+    );
+
+    SET @DirectSql = 'INSERT INTO #DirectSqlResults (ResultTag, ComputedTotal, RowsEvaluated) VALUES (''DYNAMIC_PROBE'', ' 
+        + CAST(ISNULL(@DynamicTotalAmount, 0) AS VARCHAR(30)) + ', ' 
+        + CAST(ISNULL(@DynamicRowCount, 0) AS VARCHAR(10)) + ');';
+
+    EXEC (@DirectSql);
+
+    -- 9. CONDITIONAL BRANCHING (IF ... ELSE)
+    IF @DynamicTotalAmount > 3000.00
+    BEGIN
+        SET @StatusMsg = 'Growth threshold MET (Projected total: ' + CAST(@DynamicTotalAmount AS NVARCHAR(30)) + ')';
+        PRINT @StatusMsg;
+    END
+    ELSE
+    BEGIN
+        SET @StatusMsg = 'Growth threshold BELOW TARGET (Projected total: ' + CAST(@DynamicTotalAmount AS NVARCHAR(30)) + ')';
+        PRINT @StatusMsg;
+    END;
+
+    -- 10. ERROR HANDLING (TRY ... CATCH BLOCK)
+    BEGIN TRY
+        IF @SimulateError = 1
+        BEGIN
+            PRINT 'Simulating arithmetic divide-by-zero error...';
+            DECLARE @ZeroDivider INT = 0;
+            DECLARE @ErrResult INT = 100 / @ZeroDivider;
+        END
+        ELSE
+        BEGIN
+            SET @ErrorMessageCaptured = 'No errors simulated; clean execution pathway';
+        END
+    END TRY
+    BEGIN CATCH
+        SET @ErrorMessageCaptured = 'Caught Error ' + CAST(ERROR_NUMBER() AS NVARCHAR(10)) + ': ' + ERROR_MESSAGE();
+        PRINT 'Handled Catch: ' + @ErrorMessageCaptured;
+    END CATCH;
+
+    -- 11. ASSIGN OUTPUT PARAMETERS
+    SET @TotalProjectedOutput = @DynamicTotalAmount;
+    SET @ExecutionStatusOutput = @StatusMsg;
+    PRINT 'Output Parameter @TotalProjectedOutput: ' + CAST(@TotalProjectedOutput AS NVARCHAR(30));
+    PRINT 'Output Parameter @ExecutionStatusOutput: ' + @ExecutionStatusOutput;
+
+    -- 12. FINAL RESULT SET: CONSOLIDATED AUDIT SUMMARY
+    SELECT 
+        d.ResultTag,
+        d.ComputedTotal,
+        d.RowsEvaluated,
+        @TotalProjectedOutput AS TotalProjectedOutput,
+        @ExecutionStatusOutput AS ExecutionStatusOutput,
+        @ErrorMessageCaptured AS ErrorStatus,
+        @StatusMsg AS PipelineStatus
+    FROM #DirectSqlResults d;
+
+    -- 13. CLEANUP TEMP TABLES
+    IF OBJECT_ID('tempdb..#ProjectedGrowth') IS NOT NULL DROP TABLE #ProjectedGrowth;
+    IF OBJECT_ID('tempdb..#DirectSqlResults') IS NOT NULL DROP TABLE #DirectSqlResults;
+
+    PRINT 'dbo.sp_ExploreDB_ComprehensiveCoverageTest completed successfully.';
+END
+GO
+
 
 
 -- =======================================================================================
