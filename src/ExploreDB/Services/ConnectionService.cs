@@ -11,6 +11,7 @@ public class ConnectionService
     public List<SavedConnection> SavedConnections { get; private set; } = new();
 
     public event Action? OnConnectionChanged;
+    public event Action? OnSavedConnectionsChanged;
     public event Action<string>? OnDatabaseSwitching;
     public event Action? OnDatabaseSwitched;
 
@@ -22,16 +23,20 @@ public class ConnectionService
         LoadSettings();
     }
 
-    public async Task<(bool Success, string ErrorMessage)> TestConnectionAsync(string connString)
+    public async Task<(bool Success, string ErrorMessage)> TestConnectionAsync(string connString, CancellationToken cancellationToken = default)
     {
         try
         {
             using var conn = new SqlConnection(connString);
-            await conn.OpenAsync();
+            await conn.OpenAsync(cancellationToken);
             return (true, string.Empty);
         }
         catch (Exception ex)
         {
+            if (cancellationToken.IsCancellationRequested || ex is OperationCanceledException)
+            {
+                return (false, "Connection cancelled.");
+            }
             return (false, ex.Message);
         }
     }
@@ -261,6 +266,7 @@ public class ConnectionService
             });
         }
         SaveToDisk();
+        OnSavedConnectionsChanged?.Invoke();
     }
 
     public string BuildConnectionString(string server, string authType, string username, string password, string database = "")
@@ -269,17 +275,18 @@ public class ConnectionService
         {
             DataSource = server,
             TrustServerCertificate = true, // Helpful for local dev
-            ConnectTimeout = 60, // Increase connection timeout to 60 seconds
             PacketSize = 32767
         };
 
         if (authType == "Windows")
         {
             builder.IntegratedSecurity = true;
+            builder.ConnectTimeout = 15;
         }
         else if (authType == "EntraMfa")
         {
             builder.Authentication = SqlAuthenticationMethod.ActiveDirectoryInteractive;
+            builder.ConnectTimeout = 60;
             if (!string.IsNullOrWhiteSpace(username))
             {
                 builder.UserID = username;
@@ -289,6 +296,7 @@ public class ConnectionService
         {
             builder.UserID = username;
             builder.Password = password;
+            builder.ConnectTimeout = 15;
         }
 
         if (!string.IsNullOrWhiteSpace(database))
@@ -323,6 +331,218 @@ public class ConnectionService
         return databases;
     }
 
+    public enum ImportConflictPolicy
+    {
+        AddAsCopy,
+        Overwrite,
+        Skip
+    }
+
+    public record ImportResult(int TotalInFile, int Added, int Updated, int Skipped, string? ErrorMessage);
+
+    public class ExploreDbExportModel
+    {
+        public string App { get; set; } = "ExploreDB";
+        public string Version { get; set; } = "1.0";
+        public DateTime ExportedAt { get; set; } = DateTime.UtcNow;
+        public bool IncludesPasswords { get; set; }
+        public int ConnectionCount { get; set; }
+        public List<ExportedConnectionItem> Connections { get; set; } = new();
+    }
+
+    public class ExportedConnectionItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Server { get; set; } = string.Empty;
+        public string AuthType { get; set; } = "Windows";
+        public bool UseWindowsAuth { get; set; } = true;
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string Database { get; set; } = string.Empty;
+    }
+
+    public string ExportConnections(IEnumerable<string> connectionIds, bool includePasswords)
+    {
+        var idSet = new HashSet<string>(connectionIds);
+        var toExport = SavedConnections.Where(c => idSet.Contains(c.Id)).ToList();
+
+        var exportData = new ExploreDbExportModel
+        {
+            App = "ExploreDB",
+            Version = "1.0",
+            ExportedAt = DateTime.UtcNow,
+            IncludesPasswords = includePasswords,
+            ConnectionCount = toExport.Count,
+            Connections = toExport.Select(c => new ExportedConnectionItem
+            {
+                Name = c.Name,
+                Server = c.Server,
+                AuthType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType,
+                UseWindowsAuth = c.UseWindowsAuth,
+                Username = c.Username,
+                Password = includePasswords ? c.Password : string.Empty,
+                Database = c.Database
+            }).ToList()
+        };
+
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true
+        };
+
+        return JsonSerializer.Serialize(exportData, options);
+    }
+
+    public ImportResult ImportConnections(string jsonContent, ImportConflictPolicy policy)
+    {
+        if (string.IsNullOrWhiteSpace(jsonContent))
+        {
+            return new ImportResult(0, 0, 0, 0, "The imported file is empty.");
+        }
+
+        List<ExportedConnectionItem> itemsToImport = new();
+        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        try
+        {
+            // 1. Try parsing ExploreDbExportModel
+            try
+            {
+                var exportModel = JsonSerializer.Deserialize<ExploreDbExportModel>(jsonContent, jsonOptions);
+                if (exportModel?.Connections != null && exportModel.Connections.Count > 0)
+                {
+                    itemsToImport = exportModel.Connections;
+                }
+            }
+            catch (JsonException) { }
+
+            // 2. Try parsing direct list of ExportedConnectionItem
+            if (itemsToImport.Count == 0)
+            {
+                try
+                {
+                    var listItems = JsonSerializer.Deserialize<List<ExportedConnectionItem>>(jsonContent, jsonOptions);
+                    if (listItems != null && listItems.Count > 0)
+                    {
+                        itemsToImport = listItems;
+                    }
+                }
+                catch (JsonException) { }
+            }
+
+            // 3. Try parsing SettingsModel
+            if (itemsToImport.Count == 0)
+            {
+                try
+                {
+                    var settingsModel = JsonSerializer.Deserialize<SettingsModel>(jsonContent, jsonOptions);
+                    if (settingsModel?.SavedConnections != null && settingsModel.SavedConnections.Count > 0)
+                    {
+                        itemsToImport = settingsModel.SavedConnections.Select(c => new ExportedConnectionItem
+                        {
+                            Name = c.Name,
+                            Server = c.Server,
+                            AuthType = c.AuthType,
+                            UseWindowsAuth = c.UseWindowsAuth,
+                            Username = c.Username,
+                            Password = c.Password,
+                            Database = c.Database
+                        }).ToList();
+                    }
+                }
+                catch (JsonException) { }
+            }
+        }
+        catch (Exception ex)
+        {
+            return new ImportResult(0, 0, 0, 0, $"Failed to read file: {ex.Message}");
+        }
+
+        if (itemsToImport.Count == 0)
+        {
+            return new ImportResult(0, 0, 0, 0, "Invalid or corrupted file format. Please ensure you are importing a valid .exploredb file.");
+        }
+
+        int added = 0;
+        int updated = 0;
+        int skipped = 0;
+
+        foreach (var item in itemsToImport)
+        {
+            string name = string.IsNullOrWhiteSpace(item.Name) ? (string.IsNullOrWhiteSpace(item.Server) ? "Unnamed Connection" : item.Server) : item.Name.Trim();
+            string server = item.Server?.Trim() ?? string.Empty;
+            string authType = string.IsNullOrWhiteSpace(item.AuthType) ? (item.UseWindowsAuth ? "Windows" : "SqlServer") : item.AuthType.Trim();
+            string username = item.Username?.Trim() ?? string.Empty;
+            string password = item.Password ?? string.Empty;
+            string database = item.Database?.Trim() ?? string.Empty;
+
+            var existing = SavedConnections.FirstOrDefault(c => 
+                string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase) ||
+                (string.Equals(c.Server, server, StringComparison.OrdinalIgnoreCase) && 
+                 string.Equals(c.Database, database, StringComparison.OrdinalIgnoreCase) &&
+                 string.Equals(c.Username, username, StringComparison.OrdinalIgnoreCase)));
+
+            if (existing != null)
+            {
+                if (policy == ImportConflictPolicy.Skip)
+                {
+                    skipped++;
+                    continue;
+                }
+                else if (policy == ImportConflictPolicy.Overwrite)
+                {
+                    existing.Server = server;
+                    existing.AuthType = authType;
+                    existing.UseWindowsAuth = authType == "Windows";
+                    existing.Username = username;
+                    if (!string.IsNullOrEmpty(password))
+                    {
+                        existing.Password = password;
+                    }
+                    existing.Database = database;
+                    existing.ConnectionString = BuildConnectionString(server, authType, username, existing.Password, database);
+                    existing.LastUsed = DateTime.Now;
+                    updated++;
+                    continue;
+                }
+                else // AddAsCopy
+                {
+                    string baseName = name;
+                    int copyIndex = 1;
+                    string candidateName = $"{baseName} (Imported)";
+                    while (SavedConnections.Any(c => string.Equals(c.Name, candidateName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        copyIndex++;
+                        candidateName = $"{baseName} (Imported {copyIndex})";
+                    }
+                    name = candidateName;
+                }
+            }
+
+            string connStr = BuildConnectionString(server, authType, username, password, database);
+            SavedConnections.Add(new SavedConnection
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = name,
+                Server = server,
+                AuthType = authType,
+                UseWindowsAuth = authType == "Windows",
+                Username = username,
+                Password = password,
+                Database = database,
+                ConnectionString = connStr,
+                LastUsed = DateTime.Now
+            });
+            added++;
+        }
+
+        SaveToDisk();
+        OnSavedConnectionsChanged?.Invoke();
+        OnConnectionChanged?.Invoke();
+
+        return new ImportResult(itemsToImport.Count, added, updated, skipped, null);
+    }
+
     public void DeleteConnection(string id)
     {
         var existing = SavedConnections.FirstOrDefault(c => c.Id == id);
@@ -330,6 +550,7 @@ public class ConnectionService
         {
             SavedConnections.Remove(existing);
             SaveToDisk();
+            OnSavedConnectionsChanged?.Invoke();
         }
     }
 
@@ -362,6 +583,10 @@ public class ConnectionService
                     
                     if (data.SavedConnections != null)
                     {
+                        foreach (var c in data.SavedConnections)
+                        {
+                            if (string.IsNullOrEmpty(c.Id)) c.Id = Guid.NewGuid().ToString();
+                        }
                         SavedConnections = data.SavedConnections;
                     }
                     else if (!string.IsNullOrEmpty(data.ConnectionString))

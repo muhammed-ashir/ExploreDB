@@ -23,6 +23,7 @@
         <ApplicationDisplayVersion>2.2.7.0</ApplicationDisplayVersion>
         <Version>2.2.7.0</Version>
         <PublishReadyToRun>false</PublishReadyToRun>
+        <!-- <EmitCompilerGeneratedFiles>false</EmitCompilerGeneratedFiles> -->
         <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
         <ApplicationIcon>Platforms\Windows\Images\app.ico</ApplicationIcon>
 		<StoreBuild>true</StoreBuild>

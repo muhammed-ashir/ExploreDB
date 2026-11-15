@@ -1,4 +1,5 @@
 @page "/app-center"
+@using System.IO
 @using ExploreDB.Services
 @using Microsoft.Extensions.Logging
 @inject UserSettingsService UserSettingsService
@@ -8,6 +9,8 @@
 @inject ThemeService ThemeService
 @inject NavigationManager Nav
 @inject Microsoft.Extensions.Logging.ILogger<AppCenter> Logger
+@inject ConnectionService ConnectionService
+@inject WindowManagerService WindowManager
 @implements IDisposable
 
 <div class="container-fluid h-100 d-flex flex-column pb-5" style="color: var(--app-text);">
@@ -43,9 +46,17 @@
                     <button type="button" 
                             class="list-group-item list-group-item-action d-flex align-items-center gap-3 border-0 py-2.5 px-3 rounded-2 @(ActiveTab == "license" ? "active" : "")"
                             style="display: none !important; @(ActiveTab == "license" ? "background-color: var(--app-surface-secondary); color: var(--app-text); font-weight: 600; border-left: 3px solid #0d6efd !important;" : "background: transparent; color: var(--app-text);")"
-                            @* @onclick='() => ActiveTab = "license"' *@>
+                            >
                         @* <i class="bi bi-key text-warning fs-5"></i> *@
                         @* <span class="fw-semibold">License</span> *@
+                    </button>
+
+                    <button type="button" 
+                            class="list-group-item list-group-item-action d-flex align-items-center gap-3 border-0 py-2.5 px-3 rounded-2 @(ActiveTab == "connections" ? "active" : "")"
+                            style="@(ActiveTab == "connections" ? "background-color: var(--app-surface-secondary); color: var(--app-text); font-weight: 600; border-left: 3px solid #0d6efd !important;" : "background: transparent; color: var(--app-text);")"
+                            @onclick='() => ActiveTab = "connections"'>
+                        <i class="bi bi-hdd-network text-info fs-5"></i>
+                        <span class="fw-semibold">Connections</span>
                     </button>
 
                     <button type="button" 
@@ -424,6 +435,261 @@
                     </div>
                 </div>
             }
+            else if (ActiveTab == "connections")
+            {
+                <!-- Export Connections Card -->
+                <div class="card shadow-sm border mb-4" style="background-color: var(--app-surface); border-color: var(--app-border) !important; border-radius: 10px;">
+                    <div class="card-header py-3 px-4 border-bottom" style="background: transparent; border-color: var(--app-border) !important;">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-box-arrow-up-right text-primary fs-5"></i>
+                            <div>
+                                <h5 class="fw-bold mb-0">Export Connections</h5>
+                                <small class="text-muted">Export selected connection profiles to a portable <code>.exploredb</code> backup file.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-4">
+                        <!-- Toolbar: Search, Selection Badge & Passwords Switch -->
+                        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-3">
+                            <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 480px;">
+                                <div class="input-group input-group-sm flex-grow-1" style="max-width: 300px;">
+                                    <span class="input-group-text border-end-0" style="background-color: var(--app-surface-secondary); color: var(--app-text-muted); border-color: var(--app-border);">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text"
+                                           class="form-control shadow-none border-start-0 ps-0 @(!string.IsNullOrEmpty(ConnectionSearchText) ? "border-end-0" : "")"
+                                           style="background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);"
+                                           placeholder="Filter connections..."
+                                           @bind="ConnectionSearchText"
+                                           @bind:event="oninput" />
+                                    @if (!string.IsNullOrEmpty(ConnectionSearchText))
+                                    {
+                                        <button class="btn btn-outline-secondary border-start-0"
+                                                style="background-color: var(--app-surface-secondary); color: var(--app-text-muted); border-color: var(--app-border);"
+                                                type="button"
+                                                title="Clear filter"
+                                                @onclick="() => ConnectionSearchText = string.Empty">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    }
+                                </div>
+                                <span class="badge bg-secondary-subtle text-secondary border fw-normal" style="font-size: 0.75rem; white-space: nowrap;">
+                                    @SelectedCount of @ConnectionService.SavedConnections.Count selected
+                                </span>
+                            </div>
+
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="form-check form-switch d-flex align-items-center gap-2 mb-0 ps-0">
+                                    <input class="form-check-input cursor-pointer ms-0 me-1" type="checkbox" id="includePasswordsSwitch" style="transform: scale(1.15);" @bind="IncludePasswordsInExport" />
+                                    <label class="form-check-label cursor-pointer small fw-medium user-select-none" for="includePasswordsSwitch">
+                                        Include Passwords
+                                    </label>
+                                </div>
+                                @if (IncludePasswordsInExport)
+                                {
+                                    <span class="badge bg-warning text-dark border border-warning-subtle" style="font-size: 0.68rem;" title="Passwords will be saved unencrypted in export">Plaintext</span>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Table / List of Saved Connections -->
+                        @if (!FilteredConnectionsForExport.Any())
+                        {
+                            <div class="text-center py-4 text-muted small border rounded-3" style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary);">
+                                @(ConnectionService.SavedConnections.Count == 0 ? "No saved connections found in ExploreDB." : "No connections match your filter.")
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="border rounded-3 overflow-hidden custom-scrollbar-light" style="border-color: var(--app-border) !important; max-height: 260px; overflow-y: auto;">
+                                <table class="table table-sm table-hover mb-0 align-middle" style="color: var(--app-text); table-layout: fixed; width: 100%;">
+                                    <thead style="background-color: var(--app-surface-secondary); position: sticky; top: 0; z-index: 2;">
+                                        <tr class="small text-muted border-bottom" style="border-color: var(--app-border) !important;">
+                                            <th style="width: 44px;" class="text-center">
+                                                <input class="form-check-input cursor-pointer" type="checkbox" checked="@AreAllFilteredSelected" @onchange="ToggleSelectAllFiltered" />
+                                            </th>
+                                            <th style="width: 48%;">Connection Name</th>
+                                            <th style="width: 36%;">Server</th>
+                                            <th style="width: 16%;">Auth Type</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var conn in FilteredConnectionsForExport)
+                                        {
+                                            bool isSelected = !string.IsNullOrEmpty(conn.Id) && SelectedConnectionIds.Contains(conn.Id);
+                                            string authType = string.IsNullOrEmpty(conn.AuthType) ? (conn.UseWindowsAuth ? "Windows" : "SqlServer") : conn.AuthType;
+                                            string authBadgeClass = authType == "Windows"
+                                                ? "bg-primary-subtle text-primary-emphasis border border-primary-subtle"
+                                                : authType == "EntraMfa"
+                                                    ? "bg-info-subtle text-info-emphasis border border-info-subtle"
+                                                    : "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
+                                            string authDisplayName = authType == "Windows" ? "Windows" : authType == "EntraMfa" ? "Entra MFA" : "SQL Auth";
+
+                                            <tr class="cursor-pointer @(isSelected ? "table-active" : "")" @onclick="() => ToggleConnectionSelection(conn.Id)">
+                                                <td class="text-center" @onclick:stopPropagation>
+                                                    <input class="form-check-input cursor-pointer" type="checkbox" checked="@isSelected" @onchange="() => ToggleConnectionSelection(conn.Id)" />
+                                                </td>
+                                                <td class="text-truncate pe-2" title="@(string.IsNullOrWhiteSpace(conn.Name) ? "Unnamed Connection" : conn.Name)">
+                                                    <span class="fw-semibold" style="font-size: 0.88rem;">@(string.IsNullOrWhiteSpace(conn.Name) ? "Unnamed Connection" : conn.Name)</span>
+                                                    @if (!string.IsNullOrEmpty(conn.Username))
+                                                    {
+                                                        <span class="text-muted ms-2 small">(@conn.Username)</span>
+                                                    }
+                                                </td>
+                                                <td class="small font-monospace text-muted text-truncate pe-2" title="@conn.Server">@conn.Server</td>
+                                                <td>
+                                                    <span class="badge @authBadgeClass" style="font-size: 0.72rem; font-weight: 600;">@authDisplayName</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(ExportSuccessMessage))
+                        {
+                            <div class="alert alert-success mt-3 mb-0 py-2 px-3 small d-flex align-items-start justify-content-between gap-2" style="border-radius: 8px;">
+                                <div class="d-flex align-items-start gap-2 flex-grow-1 overflow-hidden" style="word-break: break-word;">
+                                    <i class="bi bi-check-circle-fill text-success flex-shrink-0 mt-1"></i>
+                                    <span class="text-break">@ExportSuccessMessage</span>
+                                </div>
+                                <button type="button" class="btn-close btn-close-sm flex-shrink-0 mt-1" @onclick="() => ExportSuccessMessage = null"></button>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(ExportErrorMessage))
+                        {
+                            <div class="alert alert-danger mt-3 mb-0 py-2 px-3 small d-flex align-items-start justify-content-between gap-2" style="border-radius: 8px;">
+                                <div class="d-flex align-items-start gap-2 flex-grow-1 overflow-hidden" style="word-break: break-word;">
+                                    <i class="bi bi-exclamation-octagon-fill text-danger flex-shrink-0 mt-1"></i>
+                                    <span class="text-break">@ExportErrorMessage</span>
+                                </div>
+                                <button type="button" class="btn-close btn-close-sm flex-shrink-0 mt-1" @onclick="() => ExportErrorMessage = null"></button>
+                            </div>
+                        }
+                    </div>
+                    <div class="card-footer bg-transparent py-3 px-4 border-top d-flex justify-content-end align-items-center" style="border-color: var(--app-border) !important;">
+                        <button class="btn btn-primary px-4 py-2 fw-semibold shadow-sm d-inline-flex align-items-center gap-2"
+                                disabled="@(SelectedCount == 0 || IsProcessingFile)"
+                                @onclick="ExportSelectedConnectionsAsync">
+                            <i class="bi bi-download"></i>
+                            <span>Export Selected (@SelectedCount)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Import Connections Card -->
+                <div class="card shadow-sm border mb-4" style="background-color: var(--app-surface); border-color: var(--app-border) !important; border-radius: 10px;">
+                    <div class="card-header py-3 px-4 border-bottom" style="background: transparent; border-color: var(--app-border) !important;">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-box-arrow-in-down text-success fs-5"></i>
+                            <div>
+                                <h5 class="fw-bold mb-0">Import Connections</h5>
+                                <small class="text-muted">Restore or merge connection profiles from an exported <code>.exploredb</code> backup file.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-4">
+                        <!-- Duplicate Handling Policy Options -->
+                        <div class="mb-2">
+                            <label class="fw-bold d-block mb-2 small text-uppercase text-muted" style="letter-spacing: 0.5px; font-size: 0.72rem;">
+                                If an imported connection already exists:
+                            </label>
+                            <div class="row g-3">
+                                <div class="col-12 col-md-4">
+                                    <div class="card p-3 cursor-pointer h-100 border transition-all @(SelectedConflictPolicy == ConnectionService.ImportConflictPolicy.AddAsCopy ? "border-primary shadow-sm" : "")"
+                                         style="background-color: var(--app-surface-secondary); border-color: var(--app-border); border-radius: 8px;"
+                                         @onclick="() => SelectedConflictPolicy = ConnectionService.ImportConflictPolicy.AddAsCopy">
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <i class="bi bi-copy text-primary fs-5"></i>
+                                                <span class="fw-bold" style="font-size: 0.9rem;">Keep Both</span>
+                                            </div>
+                                            <input class="form-check-input cursor-pointer m-0" type="radio" name="conflictPolicy"
+                                                   checked="@(SelectedConflictPolicy == ConnectionService.ImportConflictPolicy.AddAsCopy)"
+                                                   @onchange="() => SelectedConflictPolicy = ConnectionService.ImportConflictPolicy.AddAsCopy" />
+                                        </div>
+                                        <small class="text-muted d-block" style="font-size: 0.78rem;">Adds profile with <code>(Imported)</code> suffix. Safest option.</small>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-4">
+                                    <div class="card p-3 cursor-pointer h-100 border transition-all @(SelectedConflictPolicy == ConnectionService.ImportConflictPolicy.Overwrite ? "border-warning shadow-sm" : "")"
+                                         style="background-color: var(--app-surface-secondary); border-color: var(--app-border); border-radius: 8px;"
+                                         @onclick="() => SelectedConflictPolicy = ConnectionService.ImportConflictPolicy.Overwrite">
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <i class="bi bi-arrow-repeat text-warning fs-5"></i>
+                                                <span class="fw-bold" style="font-size: 0.9rem;">Overwrite</span>
+                                            </div>
+                                            <input class="form-check-input cursor-pointer m-0" type="radio" name="conflictPolicy"
+                                                   checked="@(SelectedConflictPolicy == ConnectionService.ImportConflictPolicy.Overwrite)"
+                                                   @onchange="() => SelectedConflictPolicy = ConnectionService.ImportConflictPolicy.Overwrite" />
+                                        </div>
+                                        <small class="text-muted d-block" style="font-size: 0.78rem;">Updates existing profile settings with imported data.</small>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-4">
+                                    <div class="card p-3 cursor-pointer h-100 border transition-all @(SelectedConflictPolicy == ConnectionService.ImportConflictPolicy.Skip ? "border-secondary shadow-sm" : "")"
+                                         style="background-color: var(--app-surface-secondary); border-color: var(--app-border); border-radius: 8px;"
+                                         @onclick="() => SelectedConflictPolicy = ConnectionService.ImportConflictPolicy.Skip">
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <i class="bi bi-skip-forward text-secondary fs-5"></i>
+                                                <span class="fw-bold" style="font-size: 0.9rem;">Skip Duplicates</span>
+                                            </div>
+                                            <input class="form-check-input cursor-pointer m-0" type="radio" name="conflictPolicy"
+                                                   checked="@(SelectedConflictPolicy == ConnectionService.ImportConflictPolicy.Skip)"
+                                                   @onchange="() => SelectedConflictPolicy = ConnectionService.ImportConflictPolicy.Skip" />
+                                        </div>
+                                        <small class="text-muted d-block" style="font-size: 0.78rem;">Keeps current connection unchanged; only adds new ones.</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(ImportSuccessMessage))
+                        {
+                            <div class="alert alert-success mt-3 mb-0 py-2 px-3 small d-flex align-items-start justify-content-between gap-2" style="border-radius: 8px;">
+                                <div class="d-flex align-items-start gap-2 flex-grow-1 overflow-hidden" style="word-break: break-word;">
+                                    <i class="bi bi-check-circle-fill text-success flex-shrink-0 mt-1"></i>
+                                    <span class="text-break">@ImportSuccessMessage</span>
+                                </div>
+                                <button type="button" class="btn-close btn-close-sm flex-shrink-0 mt-1" @onclick="() => ImportSuccessMessage = null"></button>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(ImportErrorMessage))
+                        {
+                            <div class="alert alert-danger mt-3 mb-0 py-2 px-3 small d-flex align-items-start justify-content-between gap-2" style="border-radius: 8px;">
+                                <div class="d-flex align-items-start gap-2 flex-grow-1 overflow-hidden" style="word-break: break-word;">
+                                    <i class="bi bi-exclamation-octagon-fill text-danger flex-shrink-0 mt-1"></i>
+                                    <span class="text-break">@ImportErrorMessage</span>
+                                </div>
+                                <button type="button" class="btn-close btn-close-sm flex-shrink-0 mt-1" @onclick="() => ImportErrorMessage = null"></button>
+                            </div>
+                        }
+                    </div>
+                    <div class="card-footer bg-transparent py-3 px-4 border-top d-flex justify-content-end align-items-center" style="border-color: var(--app-border) !important;">
+                        <button class="btn btn-success px-4 py-2 fw-semibold shadow-sm d-inline-flex align-items-center gap-2"
+                                disabled="@IsProcessingFile"
+                                @onclick="ImportConnectionsFileAsync">
+                            @if (IsProcessingFile)
+                            {
+                                <span class="spinner-border spinner-border-sm"></span>
+                                <span>Importing...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-folder2-open"></i>
+                                <span>Select .exploredb File...</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
             else if (ActiveTab == "about")
             {
                 <div class="card shadow-sm border mb-4" style="background-color: var(--app-surface); border-color: var(--app-border) !important; border-radius: 10px;">
@@ -578,10 +844,205 @@
     private bool LicenseSuccess = false;
     private string ProfileName = "";
 
+    // Connections Tab State
+    private HashSet<string> SelectedConnectionIds = new();
+    private bool IncludePasswordsInExport = false;
+    private string ConnectionSearchText = "";
+    private string? ExportSuccessMessage;
+    private string? ExportErrorMessage;
+    private ConnectionService.ImportConflictPolicy SelectedConflictPolicy = ConnectionService.ImportConflictPolicy.AddAsCopy;
+    private string? ImportSuccessMessage;
+    private string? ImportErrorMessage;
+    private bool IsProcessingFile = false;
+
+    private IEnumerable<ConnectionService.SavedConnection> FilteredConnectionsForExport
+    {
+        get
+        {
+            var list = ConnectionService.SavedConnections.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(ConnectionSearchText))
+            {
+                list = list.Where(c => 
+                    (c.Name?.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (c.Server?.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (c.Database?.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (c.Username?.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ?? false)
+                );
+            }
+            return list;
+        }
+    }
+
+    private int SelectedCount => ConnectionService.SavedConnections.Count(c => !string.IsNullOrEmpty(c.Id) && SelectedConnectionIds.Contains(c.Id));
+
+    private bool AreAllFilteredSelected
+    {
+        get
+        {
+            var filteredList = FilteredConnectionsForExport.Where(c => !string.IsNullOrEmpty(c.Id)).ToList();
+            return filteredList.Count > 0 && filteredList.All(c => SelectedConnectionIds.Contains(c.Id));
+        }
+    }
+
+    private void HandleConnectionChanged()
+    {
+        var validIds = ConnectionService.SavedConnections.Where(c => !string.IsNullOrEmpty(c.Id)).Select(c => c.Id).ToHashSet();
+        SelectedConnectionIds.IntersectWith(validIds);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void InitializeConnectionSelection()
+    {
+        SelectedConnectionIds = new HashSet<string>(ConnectionService.SavedConnections.Where(c => !string.IsNullOrEmpty(c.Id)).Select(c => c.Id));
+    }
+
+    private void ToggleConnectionSelection(string id)
+    {
+        if (SelectedConnectionIds.Contains(id))
+        {
+            SelectedConnectionIds.Remove(id);
+        }
+        else
+        {
+            SelectedConnectionIds.Add(id);
+        }
+    }
+
+    private void SelectAllConnections()
+    {
+        foreach (var c in ConnectionService.SavedConnections)
+        {
+            if (!string.IsNullOrEmpty(c.Id))
+            {
+                SelectedConnectionIds.Add(c.Id);
+            }
+        }
+    }
+
+    private void DeselectAllConnections()
+    {
+        SelectedConnectionIds.Clear();
+    }
+
+    private void ToggleSelectAllFiltered(ChangeEventArgs e)
+    {
+        bool selectAll = (bool)(e.Value ?? false);
+        var filteredIds = FilteredConnectionsForExport.Where(c => !string.IsNullOrEmpty(c.Id)).Select(c => c.Id).ToList();
+        if (selectAll)
+        {
+            foreach (var id in filteredIds)
+            {
+                SelectedConnectionIds.Add(id);
+            }
+        }
+        else
+        {
+            foreach (var id in filteredIds)
+            {
+                SelectedConnectionIds.Remove(id);
+            }
+        }
+    }
+
+    private async Task ExportSelectedConnectionsAsync()
+    {
+        ExportSuccessMessage = null;
+        ExportErrorMessage = null;
+
+        var validIds = SelectedConnectionIds.Where(id => ConnectionService.SavedConnections.Any(c => c.Id == id)).ToList();
+        if (validIds.Count == 0)
+        {
+            ExportErrorMessage = "Please select at least one connection to export.";
+            return;
+        }
+
+        try
+        {
+            string defaultFileName = $"ExploreDB_Connections_{DateTime.Now:yyyyMMdd_HHmm}.exploredb";
+            string filter = "ExploreDB Connections (*.exploredb)|*.exploredb|All Files (*.*)|*.*";
+            
+            var filePath = await WindowManager.ShowSaveFileDialogAsync(defaultFileName, filter, ".exploredb");
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return; // User cancelled
+            }
+
+            string json = ConnectionService.ExportConnections(validIds, IncludePasswordsInExport);
+            await File.WriteAllTextAsync(filePath, json, System.Text.Encoding.UTF8);
+
+            ExportSuccessMessage = $"Successfully exported {validIds.Count} connection(s) to: {Path.GetFileName(filePath)}";
+        }
+        catch (Exception ex)
+        {
+            ExportErrorMessage = $"Export failed: {ex.Message}";
+            Logger.LogError(ex, "AppCenter: Failed to export connections.");
+        }
+    }
+
+    private async Task ImportConnectionsFileAsync()
+    {
+        ImportSuccessMessage = null;
+        ImportErrorMessage = null;
+        IsProcessingFile = true;
+
+        try
+        {
+            string filter = "ExploreDB Connections (*.exploredb)|*.exploredb|All Files (*.*)|*.*";
+            var filePath = await WindowManager.ShowOpenFileDialogAsync(filter, "Import ExploreDB Connections", ".exploredb");
+
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return; // User cancelled
+            }
+
+            if (!File.Exists(filePath))
+            {
+                ImportErrorMessage = "Selected file does not exist.";
+                return;
+            }
+
+            string json = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8);
+            var result = ConnectionService.ImportConnections(json, SelectedConflictPolicy);
+
+            if (!string.IsNullOrEmpty(result.ErrorMessage))
+            {
+                ImportErrorMessage = result.ErrorMessage;
+                return;
+            }
+
+            var parts = new List<string>();
+            if (result.Added > 0) parts.Add($"{result.Added} added");
+            if (result.Updated > 0) parts.Add($"{result.Updated} updated");
+            if (result.Skipped > 0) parts.Add($"{result.Skipped} skipped (duplicate)");
+
+            string details = parts.Count > 0 ? string.Join(", ", parts) : "0 changes";
+            ImportSuccessMessage = $"Successfully imported {result.TotalInFile} connection(s) from '{Path.GetFileName(filePath)}' ({details}).";
+
+            InitializeConnectionSelection();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            ImportErrorMessage = "Invalid or corrupted file format. Please ensure you are importing a valid .exploredb file.";
+        }
+        catch (Exception ex)
+        {
+            ImportErrorMessage = $"Import failed: {ex.Message}";
+            Logger.LogError(ex, "AppCenter: Failed to import connections.");
+        }
+        finally
+        {
+            IsProcessingFile = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
         UserSettingsService.OnSettingsChanged += HandleSettingsChanged;
+        ConnectionService.OnSavedConnectionsChanged += HandleConnectionChanged;
+        ConnectionService.OnConnectionChanged += HandleConnectionChanged;
+        InitializeConnectionSelection();
         ProfileName = !string.IsNullOrWhiteSpace(UserSettingsService.Settings.DisplayName)
             ? UserSettingsService.Settings.DisplayName
             : Environment.UserName;
@@ -904,5 +1365,7 @@
     {
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
+        ConnectionService.OnSavedConnectionsChanged -= HandleConnectionChanged;
+        ConnectionService.OnConnectionChanged -= HandleConnectionChanged;
     }
 }

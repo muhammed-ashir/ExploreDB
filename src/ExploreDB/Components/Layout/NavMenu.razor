@@ -222,6 +222,7 @@
     {
         Nav.LocationChanged += OnLocationChanged;
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
+        ConnectionService.OnSavedConnectionsChanged += OnSavedConnectionsChangedHandler;
         ThemeService.OnThemeChanged += HandleThemeChanged;
         CurrentUrl = Nav.Uri;
         if (IsAnyExplorerActive)
@@ -449,10 +450,17 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private void OnSavedConnectionsChangedHandler()
+    {
+        ConnectionSearch = GetActiveConnectionDisplayName();
+        InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
         Nav.LocationChanged -= OnLocationChanged;
         ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
+        ConnectionService.OnSavedConnectionsChanged -= OnSavedConnectionsChangedHandler;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
     }
 }

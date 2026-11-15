@@ -177,7 +177,7 @@ public class WindowManagerService
         });
     }
 
-    public async Task<string?> ShowSaveFileDialogAsync(string defaultFileName, string filter = "SQL Script (*.sql)|*.sql|Plain Text (*.txt)|*.txt|All Files (*.*)|*.*")
+    public async Task<string?> ShowSaveFileDialogAsync(string defaultFileName, string filter = "SQL Script (*.sql)|*.sql|Plain Text (*.txt)|*.txt|All Files (*.*)|*.*", string defaultExt = ".sql")
     {
         await Task.Yield();
         return await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -186,7 +186,7 @@ public class WindowManagerService
             {
                 FileName = defaultFileName,
                 Filter = filter,
-                DefaultExt = ".sql"
+                DefaultExt = defaultExt
             };
 
             var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) 
@@ -195,7 +195,7 @@ public class WindowManagerService
         }, DispatcherPriority.Background);
     }
 
-    public async Task<string?> ShowOpenFileDialogAsync(string filter = "SQL Script (*.sql)|*.sql|All Files (*.*)|*.*", string? title = null)
+    public async Task<string?> ShowOpenFileDialogAsync(string filter = "SQL Script (*.sql)|*.sql|All Files (*.*)|*.*", string? title = null, string defaultExt = ".sql")
     {
         await Task.Yield();
         return await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -203,7 +203,7 @@ public class WindowManagerService
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = filter,
-                DefaultExt = ".sql"
+                DefaultExt = defaultExt
             };
 
             if (!string.IsNullOrEmpty(title))

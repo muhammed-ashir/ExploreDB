@@ -264,7 +264,7 @@
                 <div class="modal-content glass-card border-0" style="background-color: var(--app-surface-secondary); color: var(--app-text);">
                     <div class="modal-header border-bottom border-secondary">
                         <h5 class="modal-title fw-bold mb-0">Connection Manager</h5>
-                        <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => ShowConnectionManager = false" style="font-size: 0.8rem;"></button>
+                        <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="CloseConnectionManager" style="font-size: 0.8rem;"></button>
                     </div>
                     <div class="modal-body p-0">
                         <div class="d-flex flex-column" style="height: 450px;">
@@ -379,18 +379,18 @@
                     <div class="modal-content glass-card border-secondary shadow-lg" style="background-color: var(--app-surface-secondary); color: var(--app-text);">
                         <div class="modal-header border-bottom border-secondary">
                             <h6 class="modal-title fw-bold text-info mb-0">@(string.IsNullOrEmpty(ActiveConnId) ? "New Connection" : "Edit Connection")</h6>
-                            <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="() => IsDetailsVisible = false" style="font-size: 0.8rem;"></button>
+                            <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="CloseDetailsModal" style="font-size: 0.8rem;"></button>
                         </div>
                         <div class="modal-body p-4">
                                 
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Connection Name</label>
-                                    <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="ConnName" placeholder="e.g. Production DB" />
+                                    <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="ConnName" @bind:event="oninput" placeholder="e.g. Production DB" />
                                 </div>
                                 
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Server Name / IP</label>
-                                    <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Server" placeholder="e.g. server.database.windows.net or 192.168.1.50" />
+                                    <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Server" @bind:event="oninput" placeholder="e.g. server.database.windows.net or 192.168.1.50" />
                                 </div>
 
                                 <div class="mb-3">
@@ -421,13 +421,13 @@
                                     <div class="row mb-3">
                                         <div class="@(AuthType == "EntraMfa" ? "col-12" : "col-6")">
                                             <label class="form-label small text-muted">@(AuthType == "EntraMfa" ? "Email Address" : "Username")</label>
-                                            <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Username" placeholder="@(AuthType == "EntraMfa" ? "email@domain.com" : "")" />
+                                            <input type="text" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Username" @bind:event="oninput" placeholder="@(AuthType == "EntraMfa" ? "email@domain.com" : "")" />
                                         </div>
                                         @if (AuthType == "SqlServer")
                                         {
                                             <div class="col-6">
                                                 <label class="form-label small text-muted">Password</label>
-                                                <input type="password" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Password" />
+                                                <input type="password" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Password" @bind:event="oninput" />
                                             </div>
                                         }
                                     </div>
@@ -446,11 +446,19 @@
                                 }
 
                                 <div class="d-flex gap-2 mt-4">
-                                    <button class="btn btn-outline-success flex-grow-1 @(string.IsNullOrWhiteSpace(Server) ? "opacity-50" : "")" style="@(string.IsNullOrWhiteSpace(Server) ? "cursor: not-allowed;" : "")" @onclick="SaveCurrentConnection">Save Profile</button>
-                                    <button class="btn btn-primary flex-grow-1 fw-bold @(string.IsNullOrWhiteSpace(Server) ? "opacity-50" : "")" style="@(string.IsNullOrWhiteSpace(Server) ? "cursor: not-allowed;" : "")" @onclick="Connect" disabled="@(IsBusy)">
-                                        @if(IsBusy) { <span class="spinner-border spinner-border-sm me-2"></span> }
-                                        @(IsBusy ? "Connecting..." : "Connect")
-                                    </button>
+                                    @if (IsBusy)
+                                    {
+                                        <button type="button" class="btn btn-outline-danger flex-grow-1" @onclick="CancelConnecting">Cancel</button>
+                                        <button type="button" class="btn btn-primary flex-grow-1 fw-bold d-inline-flex align-items-center justify-content-center" disabled>
+                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                            <span>Connecting...</span>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn btn-outline-success flex-grow-1 @(string.IsNullOrWhiteSpace(Server) ? "opacity-50" : "")" style="@(string.IsNullOrWhiteSpace(Server) ? "cursor: not-allowed;" : "")" @onclick="SaveCurrentConnection" disabled="@(string.IsNullOrWhiteSpace(Server))">Save Profile</button>
+                                        <button type="button" class="btn btn-primary flex-grow-1 fw-bold @(string.IsNullOrWhiteSpace(Server) ? "opacity-50" : "")" style="@(string.IsNullOrWhiteSpace(Server) ? "cursor: not-allowed;" : "")" @onclick="Connect" disabled="@(string.IsNullOrWhiteSpace(Server))">Connect</button>
+                                    }
                                 </div>
                         </div>
                     </div>
@@ -568,6 +576,7 @@
     private bool ShowConnectionManager = false;
     private ExploreDB.Components.Layout.FloatingSchemaLoader? _schemaLoader;
     private bool IsBusy = false;
+    private CancellationTokenSource? _connectCts;
     private bool SidebarCollapsed = false;
     private bool IsDetailsVisible = false;
     private bool ShowSavePrompt = false;
@@ -766,6 +775,8 @@
         SchemaService.OnError -= HandleSchemaError;
         Nav.LocationChanged -= OnLocationChanged;
         _updateTimer?.Dispose();
+        _connectCts?.Cancel();
+        _connectCts?.Dispose();
     }
 
     private void HandleNavigateMainWindowRequested(string route)
@@ -940,6 +951,37 @@
         IsDetailsVisible = true;
     }
 
+    private void CancelConnecting()
+    {
+        if (_connectCts != null && !_connectCts.IsCancellationRequested)
+        {
+            try
+            {
+                _connectCts.Cancel();
+            }
+            catch { }
+        }
+    }
+
+    private void CloseDetailsModal()
+    {
+        if (IsBusy)
+        {
+            CancelConnecting();
+        }
+        IsDetailsVisible = false;
+    }
+
+    private void CloseConnectionManager()
+    {
+        if (IsBusy)
+        {
+            CancelConnecting();
+        }
+        IsDetailsVisible = false;
+        ShowConnectionManager = false;
+    }
+
     private async Task SaveCurrentConnection()
     {
         if (string.IsNullOrWhiteSpace(Server))
@@ -1017,9 +1059,26 @@
         }
         ConnString = ConnectionService.BuildConnectionString(Server, AuthType, Username, Password, "");
 
+        _connectCts?.Cancel();
+        _connectCts?.Dispose();
+        _connectCts = new CancellationTokenSource();
+        var token = _connectCts.Token;
+
         IsBusy = true;
-        var result = await ConnectionService.TestConnectionAsync(ConnString);
-        IsBusy = false;
+        (bool Success, string ErrorMessage) result;
+        try
+        {
+            result = await ConnectionService.TestConnectionAsync(ConnString, token);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
 
         if (result.Success)
         {
