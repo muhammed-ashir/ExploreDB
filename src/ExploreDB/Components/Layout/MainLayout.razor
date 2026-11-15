@@ -555,14 +555,21 @@
 
     @if (ShowToast)
     {
-        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
-            <div class="toast show align-items-center border-0 shadow-lg" role="alert" style="animation: slideInUp 0.3s ease; background-color: var(--app-surface-secondary); color: var(--app-text); border-left: 4px solid var(--bs-@ToastThemeClass) !important;">
-                <div class="d-flex">
-                    <div class="toast-body d-flex align-items-center flex-grow-1 overflow-hidden" title="@ToastMessage">
-                        <i class="bi @ToastIconClass me-3 fs-5 text-@ToastThemeClass flex-shrink-0"></i>
-                        <span class="text-truncate">@ToastMessage</span>
-                    </div>
-                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") me-3 m-auto flex-shrink-0" @onclick="() => ShowToast = false"></button>
+        <div class="global-snackbar-container">
+            <div class="global-snackbar-card d-flex align-items-start gap-3" role="alert">
+                <div class="snackbar-accent-bar bg-@ToastThemeClass"></div>
+                <i class="bi @ToastIconClass text-@ToastThemeClass fs-5 flex-shrink-0" style="margin-top: 1px; line-height: 1;"></i>
+                <div class="flex-grow-1 overflow-hidden" style="font-size: 0.88rem; line-height: 1.45; word-break: break-word;">
+                    <span class="text-break" style="white-space: pre-wrap;">@ToastMessage</span>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-shrink-0" style="margin-top: 1px;">
+                    @if (ToastThemeClass == "danger")
+                    {
+                        <button type="button" class="btn btn-sm btn-link text-muted p-0 text-decoration-none d-flex align-items-center justify-content-center" title="Copy error" @onclick="CopyToastMessage" style="width: 22px; height: 22px;">
+                            <i class="bi @(_toastCopied ? "bi-check2 text-success" : "bi-clipboard")" style="font-size: 0.95rem;"></i>
+                        </button>
+                    }
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" title="Close" aria-label="Close" style="font-size: 0.72rem; padding: 4px;" @onclick="() => ShowToast = false"></button>
                 </div>
             </div>
         </div>
@@ -1098,7 +1105,7 @@
         }
         else
         {
-            await TriggerToast($"Connection failed: {result.ErrorMessage}", "danger", "bi-exclamation-triangle-fill");
+            await TriggerToast($"Connection failed: {result.ErrorMessage}", "danger", "bi-exclamation-triangle-fill", 6000);
         }
     }
 
@@ -1123,20 +1130,33 @@
         IsBusy = false;
     }
 
-    private async Task TriggerToast(string message, string themeClass, string iconClass, int? autoCloseDelay = 3000)
+    private bool _toastCopied = false;
+
+    private async Task CopyToastMessage()
     {
+        if (!string.IsNullOrEmpty(ToastMessage))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("navigator.clipboard.writeText", ToastMessage);
+                _toastCopied = true;
+                StateHasChanged();
+                await Task.Delay(1500);
+                _toastCopied = false;
+                StateHasChanged();
+            }
+            catch { }
+        }
+    }
+
+    private Task TriggerToast(string message, string themeClass, string iconClass, int? autoCloseDelay = null)
+    {
+        _toastCopied = false;
         ToastMessage = message;
         ToastThemeClass = themeClass;
         ToastIconClass = iconClass;
         ShowToast = true;
-        StateHasChanged();
-        
-        if (autoCloseDelay.HasValue)
-        {
-            await Task.Delay(autoCloseDelay.Value);
-            ShowToast = false;
-            StateHasChanged();
-        }
+        return InvokeAsync(StateHasChanged);
     }
 
     private void RefreshSchema()

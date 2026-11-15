@@ -1764,3 +1764,58 @@ a.card.glow-highlight:hover,
     min-height: 0;
     position: relative;
 }
+
+/* ==========================================================
+   Global Floating Snackbar (Bottom Centered)
+   ========================================================== */
+@keyframes snackbarSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.global-snackbar-container {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2200;
+    max-width: min(720px, 92vw);
+    width: max-content;
+    min-width: 320px;
+    pointer-events: none;
+}
+
+.global-snackbar-card {
+    position: relative;
+    overflow: hidden;
+    pointer-events: auto;
+    animation: snackbarSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    background-color: var(--app-surface-secondary);
+    color: var(--app-text);
+    border: 1px solid var(--app-border);
+    border-radius: 10px;
+    padding: 14px 16px 14px 18px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.global-snackbar-card .snackbar-accent-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+}
+
+[data-bs-theme="light"] .global-snackbar-card {
+    background-color: var(--app-surface);
+    border: 1px solid var(--app-border);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
