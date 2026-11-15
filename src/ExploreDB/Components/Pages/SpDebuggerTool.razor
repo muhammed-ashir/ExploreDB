@@ -16,31 +16,7 @@
     <!-- TOP TOOLBAR -->
     <div class="d-flex align-items-center justify-content-between py-2 flex-wrap gap-2 border-bottom" style="border-color: var(--app-border) !important;">
         <div class="d-flex align-items-center gap-2">
-            <div>
-                <h4 class="fw-bold mb-0" style="font-size: 1.15rem; line-height: 1.2;">SP Debugger</h4>
-                @if (_session != null && _session.IsRecorded)
-                {
-                    <div class="d-flex align-items-center gap-2 mt-1">
-                        @if (!_session.IsAtCompletion)
-                        {
-                            <span class="text-muted small" style="font-size: 0.75rem;">
-                                Step @(_session.CurrentStepIndex + 1) of @_session.TotalExecutionSteps
-                                @if (_session.CurrentStatement != null)
-                                {
-                                    <span>(Line @_session.CurrentStatement.LineNumber@(_session.CurrentStatement.EndLineNumber > _session.CurrentStatement.LineNumber ? $"-{_session.CurrentStatement.EndLineNumber}" : "")) • Next: <strong class="text-primary">@_session.CurrentStatement.StatementType</strong></span>
-                                }
-                                • Recorded in @(_session.TotalServerExecutionMs)ms
-                            </span>
-                        }
-                        else
-                        {
-                            <span class="text-success small fw-semibold" style="font-size: 0.75rem;">
-                                <i class="bi bi-check-circle-fill me-1"></i>Completed (All @_session.TotalExecutionSteps statements executed) • Recorded in @(_session.TotalServerExecutionMs)ms
-                            </span>
-                        }
-                    </div>
-                }
-            </div>
+            <h4 class="fw-bold mb-0" style="font-size: 1.15rem; line-height: 1.2;">SP Debugger</h4>
         </div>
 
         <!-- Action & Navigation Controls -->
@@ -116,7 +92,7 @@
         <div class="col-auto">
             <span class="badge border py-1 px-2 font-monospace"
                   style="background-color: var(--app-input-bg); color: var(--app-text); border-color: var(--app-border) !important; font-size: 0.82rem;"
-                  title="Target Database">
+                  title="@GetDatabaseTooltip()">
                 <i class="bi bi-database me-1 text-primary"></i>@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)
             </span>
         </div>
@@ -256,30 +232,19 @@
                 <!-- Code Header -->
                 <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between"
                      style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
-                    <div class="d-flex align-items-center gap-2 text-truncate" style="max-width: 60%;">
+                    <div class="d-flex align-items-center gap-2 text-truncate">
                         <span class="fw-semibold small text-truncate" style="color: var(--app-text);" title="@(!string.IsNullOrEmpty(_session?.FullName) ? _session.FullName : (!string.IsNullOrEmpty(_selectedSpName) ? _selectedSpName : "Procedure"))">
                             <i class="bi bi-code-slash me-1 text-primary"></i>@(!string.IsNullOrEmpty(_session?.FullName) ? _session.FullName : (!string.IsNullOrEmpty(_selectedSpName) ? _selectedSpName : "Procedure"))
                         </span>
                     </div>
 
-                    @if (_session?.IsRecorded == true)
+                    @if (_session?.IsRecorded == true && _session.IsAtCompletion)
                     {
-                        @if (_session.CurrentStatement != null)
-                        {
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="badge" style="background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 600;">
-                                    ▶ Next: @_session.CurrentStatement.StatementType (Line @_session.CurrentStatement.LineNumber@(_session.CurrentStatement.EndLineNumber > _session.CurrentStatement.LineNumber ? $"-{_session.CurrentStatement.EndLineNumber}" : ""))
-                                </span>
-                            </div>
-                        }
-                        else if (_session.IsAtCompletion)
-                        {
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="badge bg-success-subtle text-success" style="font-weight: 600;">
-                                    <i class="bi bi-check-circle me-1"></i>All Statements Executed
-                                </span>
-                            </div>
-                        }
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-success-subtle text-success" style="font-weight: 600;">
+                                <i class="bi bi-check-circle me-1"></i>All Statements Executed
+                            </span>
+                        </div>
                     }
                 </div>
 
@@ -445,7 +410,7 @@
                     else if (_activeInspectorTab == "TempTables")
                     {
                         <!-- TEMP TABLES TAB -->
-                        <div class="d-flex flex-column h-100">
+                        <div class="d-flex flex-column h-100 p-2 overflow-auto">
                             @if (CurrentSnapshotTempTables.Count == 0)
                             {
                                 <div class="d-flex flex-column align-items-center justify-content-center h-100 p-4 text-center">
@@ -458,73 +423,87 @@
                             }
                             else
                             {
-                                <!-- Temp Table Picker Bar -->
-                                <div class="d-flex align-items-center justify-content-between p-2 border-bottom flex-wrap gap-2"
-                                     style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary);">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <label class="form-label small mb-0 text-muted">Table:</label>
-                                        <select class="form-select form-select-sm shadow-none"
-                                                style="width: auto; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
-                                                @bind="_selectedTempTableName">
-                                            @foreach (var tt in CurrentSnapshotTempTables)
-                                            {
-                                                <option value="@tt.Name">@tt.Name (@tt.TotalRowCount rows)</option>
-                                            }
-                                        </select>
-                                    </div>
-
-                                    @if (ActiveTempTable != null)
-                                    {
-                                        <span class="badge bg-secondary-subtle text-muted" style="font-size: 0.75rem;">
-                                            Showing @ActiveTempTable.Rows.Count preview of @ActiveTempTable.TotalRowCount total rows
-                                        </span>
-                                    }
-                                </div>
-
-                                <!-- Temp Table Grid -->
-                                @if (ActiveTempTable != null && ActiveTempTable.Columns.Count > 0)
+                                @if (CurrentSnapshotTempTables.Count > 1)
                                 {
-                                    <div class="table-responsive flex-grow-1 m-0">
-                                        <table class="table table-sm table-bordered table-hover mb-0" style="font-size: 0.8rem; color: var(--app-text);">
-                                            <thead class="sticky-top" style="background-color: var(--app-surface-secondary); border-color: var(--app-border);">
-                                                <tr>
-                                                    <th class="py-2 text-center text-muted" style="width: 40px;">#</th>
-                                                    @foreach (var col in ActiveTempTable.Columns)
-                                                    {
-                                                        <th class="py-2 font-monospace">@col</th>
-                                                    }
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @if (ActiveTempTable.Rows.Count == 0)
-                                                {
-                                                    <tr>
-                                                        <td colspan="@(ActiveTempTable.Columns.Count + 1)" class="text-center py-4 text-muted small">
-                                                            Temp table is empty (0 rows).
-                                                        </td>
-                                                    </tr>
-                                                }
-                                                else
-                                                {
-                                                    int rIdx = 1;
-                                                    @foreach (var row in ActiveTempTable.Rows)
-                                                    {
+                                    <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                                        <span class="text-muted small fw-semibold" style="font-size: 0.75rem;">
+                                            @CurrentSnapshotTempTables.Count temp table@(CurrentSnapshotTempTables.Count > 1 ? "s" : "")
+                                        </span>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-muted" style="font-size: 0.75rem;" @onclick="ExpandAllTempTables" title="Expand all temp tables">
+                                                <i class="bi bi-arrows-expand me-1"></i>Expand All
+                                            </button>
+                                            <span class="text-muted small">|</span>
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-muted" style="font-size: 0.75rem;" @onclick="CollapseAllTempTables" title="Collapse all temp tables">
+                                                <i class="bi bi-arrows-collapse me-1"></i>Collapse All
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                                int ttIndex = 1;
+                                @foreach (var tt in CurrentSnapshotTempTables)
+                                {
+                                    var currentTtKey = tt.Name;
+                                    var isCollapsed = _collapsedTempTables.Contains(currentTtKey);
+                                    <div class="card mb-2 shadow-sm" style="background-color: var(--app-surface); border: 1px solid var(--app-border); overflow: hidden;">
+                                        <div class="card-header py-1 px-3 d-flex align-items-center justify-content-between"
+                                             style="background-color: var(--app-surface-secondary); font-size: 0.8rem; cursor: pointer; user-select: none; @(isCollapsed ? "border-bottom: 0;" : "")"
+                                             @onclick="() => ToggleTempTable(currentTtKey)"
+                                             title="@(isCollapsed ? "Click to expand" : "Click to collapse")">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <i class="bi @(isCollapsed ? "bi-chevron-right" : "bi-chevron-down") text-muted" style="font-size: 0.75rem;"></i>
+                                                <span class="font-monospace fw-bold" style="color: var(--app-text);">@tt.Name</span>
+                                            </div>
+                                            <span class="badge @(tt.TotalRowCount > 0 ? "bg-primary-subtle text-primary" : "bg-secondary-subtle text-muted")">
+                                                @(tt.TotalRowCount == tt.Rows.Count ? $"{tt.TotalRowCount} rows" : $"{tt.Rows.Count} of {tt.TotalRowCount} rows")
+                                            </span>
+                                        </div>
+                                        @if (!isCollapsed)
+                                        {
+                                            <div class="card-body p-0 table-responsive" style="max-height: 280px;">
+                                                <table class="table table-sm table-hover mb-0" style="font-size: 0.78rem; color: var(--app-text);">
+                                                    <thead class="sticky-top" style="background-color: var(--app-surface-secondary);">
                                                         <tr>
-                                                            <td class="text-center text-muted small">@rIdx</td>
-                                                            @foreach (var col in ActiveTempTable.Columns)
+                                                            <th class="py-1 text-center text-muted" style="width: 35px;">#</th>
+                                                            @foreach (var col in tt.Columns)
                                                             {
-                                                                var val = row.TryGetValue(col, out var raw) ? raw?.ToString() : null;
-                                                                <td class="font-monospace text-truncate" style="max-width: 250px;">
-                                                                    @(val ?? "NULL")
-                                                                </td>
+                                                                <th class="py-1 font-monospace">@col</th>
                                                             }
                                                         </tr>
-                                                        rIdx++;
-                                                    }
-                                                }
-                                            </tbody>
-                                        </table>
+                                                    </thead>
+                                                    <tbody>
+                                                        @if (tt.Rows.Count == 0)
+                                                        {
+                                                            <tr>
+                                                                <td colspan="@(tt.Columns.Count + 1)" class="text-center py-3 text-muted small">
+                                                                    <i class="bi bi-info-circle me-1"></i>Temp table is empty (0 rows)
+                                                                </td>
+                                                            </tr>
+                                                        }
+                                                        else
+                                                        {
+                                                            int rNum = 1;
+                                                            @foreach (var r in tt.Rows)
+                                                            {
+                                                                <tr>
+                                                                    <td class="text-center text-muted small">@rNum</td>
+                                                                    @foreach (var col in tt.Columns)
+                                                                    {
+                                                                        var cellVal = r.TryGetValue(col, out var raw) ? raw?.ToString() : null;
+                                                                        <td class="font-monospace text-truncate" style="max-width: 220px;" title="@cellVal">
+                                                                            @(cellVal ?? "NULL")
+                                                                        </td>
+                                                                    }
+                                                                </tr>
+                                                                rNum++;
+                                                            }
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        }
                                     </div>
+                                    ttIndex++;
                                 }
                             }
                         </div>
@@ -545,14 +524,36 @@
                             }
                             else
                             {
+                                @if (CurrentSnapshotResults.Count > 1)
+                                {
+                                    <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                                        <span class="text-muted small fw-semibold" style="font-size: 0.75rem;">
+                                            @CurrentSnapshotResults.Count result sets
+                                        </span>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-muted" style="font-size: 0.75rem;" @onclick="ExpandAllResultSets" title="Expand all result sets">
+                                                <i class="bi bi-arrows-expand me-1"></i>Expand All
+                                            </button>
+                                            <span class="text-muted small">|</span>
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-muted" style="font-size: 0.75rem;" @onclick="CollapseAllResultSets" title="Collapse all result sets">
+                                                <i class="bi bi-arrows-collapse me-1"></i>Collapse All
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
                                 int rsIndex = 1;
                                 @foreach (var rs in CurrentSnapshotResults)
                                 {
-                                    <div class="card mb-3 shadow-sm" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                                    var currentRsIndex = rsIndex;
+                                    var isCollapsed = _collapsedResultSets.Contains(currentRsIndex);
+                                    <div class="card mb-2 shadow-sm" style="background-color: var(--app-surface); border: 1px solid var(--app-border); overflow: hidden;">
                                         <div class="card-header py-1 px-3 d-flex align-items-center justify-content-between"
-                                             style="background-color: var(--app-surface-secondary); font-size: 0.8rem;">
+                                             style="background-color: var(--app-surface-secondary); font-size: 0.8rem; cursor: pointer; user-select: none; @(isCollapsed ? "border-bottom: 0;" : "")"
+                                             @onclick="() => ToggleResultSet(currentRsIndex)"
+                                             title="@(isCollapsed ? "Click to expand" : "Click to collapse")">
                                             <div class="d-flex align-items-center gap-2">
-                                                <strong>Result Set #@rsIndex</strong>
+                                                <i class="bi @(isCollapsed ? "bi-chevron-right" : "bi-chevron-down") text-muted" style="font-size: 0.75rem;"></i>
+                                                <strong>Result Set #@currentRsIndex</strong>
                                                 @if (rs.LineNumber > 0)
                                                 {
                                                     <span class="text-muted small">(Line @rs.LineNumber)</span>
@@ -562,47 +563,50 @@
                                                 @rs.Rows.Count rows
                                             </span>
                                         </div>
-                                        <div class="card-body p-0 table-responsive" style="max-height: 280px;">
-                                            <table class="table table-sm table-hover mb-0" style="font-size: 0.78rem; color: var(--app-text);">
-                                                <thead class="sticky-top" style="background-color: var(--app-surface-secondary);">
-                                                    <tr>
-                                                        <th class="py-1 text-center text-muted" style="width: 35px;">#</th>
-                                                        @foreach (var col in rs.Columns)
-                                                        {
-                                                            <th class="py-1 font-monospace">@col</th>
-                                                        }
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @if (rs.Rows.Count == 0)
-                                                    {
+                                        @if (!isCollapsed)
+                                        {
+                                            <div class="card-body p-0 table-responsive" style="max-height: 280px;">
+                                                <table class="table table-sm table-hover mb-0" style="font-size: 0.78rem; color: var(--app-text);">
+                                                    <thead class="sticky-top" style="background-color: var(--app-surface-secondary);">
                                                         <tr>
-                                                            <td colspan="@(rs.Columns.Count + 1)" class="text-center py-3 text-muted small">
-                                                                <i class="bi bi-info-circle me-1"></i>0 rows returned
-                                                            </td>
+                                                            <th class="py-1 text-center text-muted" style="width: 35px;">#</th>
+                                                            @foreach (var col in rs.Columns)
+                                                            {
+                                                                <th class="py-1 font-monospace">@col</th>
+                                                            }
                                                         </tr>
-                                                    }
-                                                    else
-                                                    {
-                                                        int rNum = 1;
-                                                        @foreach (var r in rs.Rows)
+                                                    </thead>
+                                                    <tbody>
+                                                        @if (rs.Rows.Count == 0)
                                                         {
                                                             <tr>
-                                                                <td class="text-center text-muted small">@rNum</td>
-                                                                @foreach (var col in rs.Columns)
-                                                                {
-                                                                    var cellVal = r.TryGetValue(col, out var raw) ? raw?.ToString() : null;
-                                                                    <td class="font-monospace text-truncate" style="max-width: 220px;" title="@cellVal">
-                                                                        @(cellVal ?? "NULL")
-                                                                    </td>
-                                                                }
+                                                                <td colspan="@(rs.Columns.Count + 1)" class="text-center py-3 text-muted small">
+                                                                    <i class="bi bi-info-circle me-1"></i>0 rows returned
+                                                                </td>
                                                             </tr>
-                                                            rNum++;
                                                         }
-                                                    }
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                                        else
+                                                        {
+                                                            int rNum = 1;
+                                                            @foreach (var r in rs.Rows)
+                                                            {
+                                                                <tr>
+                                                                    <td class="text-center text-muted small">@rNum</td>
+                                                                    @foreach (var col in rs.Columns)
+                                                                    {
+                                                                        var cellVal = r.TryGetValue(col, out var raw) ? raw?.ToString() : null;
+                                                                        <td class="font-monospace text-truncate" style="max-width: 220px;" title="@cellVal">
+                                                                            @(cellVal ?? "NULL")
+                                                                        </td>
+                                                                    }
+                                                                </tr>
+                                                                rNum++;
+                                                            }
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        }
                                     </div>
                                     rsIndex++;
                                 }
@@ -724,6 +728,10 @@
                                 <strong class="ms-1">@(!string.IsNullOrEmpty(_session?.FullName) ? _session.FullName : (!string.IsNullOrEmpty(_selectedSpName) ? _selectedSpName : "None selected"))</strong>
                             </div>
                             <div class="col-sm-6">
+                                <span class="text-muted">Server:</span>
+                                <strong class="ms-1">@(!string.IsNullOrEmpty(ConnectionService.ActiveServer) ? ConnectionService.ActiveServer : "None")</strong>
+                            </div>
+                            <div class="col-sm-6">
                                 <span class="text-muted">Database:</span>
                                 <strong class="ms-1">@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)</strong>
                             </div>
@@ -731,7 +739,7 @@
                                 <span class="text-muted">Server Execution Time:</span>
                                 <strong class="ms-1">@(_session?.TotalServerExecutionMs ?? 0) ms</strong>
                             </div>
-                            <div class="col-sm-6">
+                            <div class="col-sm-12">
                                 <span class="text-muted">Transaction State:</span>
                                 <strong class="ms-1 text-success">Rolled Back (Zero locks held)</strong>
                             </div>
@@ -789,7 +797,50 @@
 
     private string _activeInspectorTab = "Variables";
     private string _varFilter = string.Empty;
-    private string? _selectedTempTableName;
+    private HashSet<int> _collapsedResultSets = new();
+    private HashSet<string> _collapsedTempTables = new(StringComparer.OrdinalIgnoreCase);
+
+    private void ToggleResultSet(int index)
+    {
+        if (!_collapsedResultSets.Add(index))
+        {
+            _collapsedResultSets.Remove(index);
+        }
+    }
+
+    private void CollapseAllResultSets()
+    {
+        for (int i = 1; i <= CurrentSnapshotResults.Count; i++)
+        {
+            _collapsedResultSets.Add(i);
+        }
+    }
+
+    private void ExpandAllResultSets()
+    {
+        _collapsedResultSets.Clear();
+    }
+
+    private void ToggleTempTable(string tableName)
+    {
+        if (!_collapsedTempTables.Add(tableName))
+        {
+            _collapsedTempTables.Remove(tableName);
+        }
+    }
+
+    private void CollapseAllTempTables()
+    {
+        foreach (var tt in CurrentSnapshotTempTables)
+        {
+            _collapsedTempTables.Add(tt.Name);
+        }
+    }
+
+    private void ExpandAllTempTables()
+    {
+        _collapsedTempTables.Clear();
+    }
 
     private IEnumerable<SpInfo> FilteredProcedures => SchemaService.StoredProcedures.Where(p =>
     {
@@ -810,21 +861,6 @@
     private List<SpTempTableInfo> CurrentSnapshotTempTables =>
         _session?.CurrentSnapshot?.TempTables ?? new List<SpTempTableInfo>();
 
-    private SpTempTableInfo? ActiveTempTable
-    {
-        get
-        {
-            var list = CurrentSnapshotTempTables;
-            if (list.Count == 0) return null;
-            if (!string.IsNullOrEmpty(_selectedTempTableName))
-            {
-                var match = list.FirstOrDefault(t => t.Name.Equals(_selectedTempTableName, StringComparison.OrdinalIgnoreCase));
-                if (match != null) return match;
-            }
-            return list[0];
-        }
-    }
-
     private List<SpResultSetInfo> CurrentSnapshotResults =>
         _session?.CurrentSnapshot?.ResultSets ?? new List<SpResultSetInfo>();
 
@@ -833,6 +869,7 @@
         get
         {
             if (_session == null) return new List<string>();
+            if (_session.ExecutionMessages.Count > 0) return _session.ExecutionMessages;
             var list = new List<string>();
             foreach (var step in _session.RecordedSteps)
             {
@@ -843,6 +880,17 @@
             }
             return list;
         }
+    }
+
+    private string GetDatabaseTooltip()
+    {
+        var db = !string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? SchemaService.ActiveDatabase : "None";
+        var server = ConnectionService.ActiveServer;
+        if (!string.IsNullOrEmpty(server))
+        {
+            return $"Server: {server}\nDatabase: {db}";
+        }
+        return $"Database: {db}";
     }
 
     protected override async Task OnInitializedAsync()
@@ -1001,6 +1049,8 @@
         DebuggerService.DisposeActiveSession();
         _session = null;
         _decorationIds = Array.Empty<string>();
+        _collapsedResultSets.Clear();
+        _collapsedTempTables.Clear();
         _showWarningsBanner = true;
         StateHasChanged();
     }

@@ -10,6 +10,22 @@ public class ConnectionService
 {
     private const string SettingsFile = "settings.json";
     public string ConnectionString { get; private set; } = string.Empty;
+    public string ActiveServer
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(ConnectionString)) return string.Empty;
+            try
+            {
+                var builder = new SqlConnectionStringBuilder(ConnectionString);
+                return builder.DataSource ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+    }
     public List<SavedConnection> SavedConnections { get; private set; } = new();
 
     public event Action? OnConnectionChanged;

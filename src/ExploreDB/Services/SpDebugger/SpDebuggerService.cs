@@ -119,18 +119,36 @@ public class SpDebuggerService : IDisposable
         {
             using var conn = new SqlConnection(connectionString);
             _activeConnection = conn;
+            conn.FireInfoMessageEventOnUserErrors = true;
             await conn.OpenAsync(ct);
 
-            var messages = new List<string>();
+            session.ExecutionMessages.Clear();
+            int currentStepId = -1;
+            SpDebugStepSnapshot? currentSnapshot = null;
+            var currentVars = new Dictionary<string, SpVariableInfo>(StringComparer.OrdinalIgnoreCase);
+
             conn.InfoMessage += (s, e) =>
             {
                 foreach (SqlError err in e.Errors)
                 {
-                    messages.Add(err.Message);
+                    if (!string.IsNullOrWhiteSpace(err.Message))
+                    {
+                        session.ExecutionMessages.Add(err.Message);
+                        var snap = currentSnapshot ?? (session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : null);
+                        if (snap != null && !snap.Messages.Contains(err.Message))
+                        {
+                            snap.Messages.Add(err.Message);
+                        }
+                    }
                 }
-                if (e.Errors.Count == 0 && !string.IsNullOrEmpty(e.Message))
+                if (e.Errors.Count == 0 && !string.IsNullOrWhiteSpace(e.Message))
                 {
-                    messages.Add(e.Message);
+                    session.ExecutionMessages.Add(e.Message);
+                    var snap = currentSnapshot ?? (session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : null);
+                    if (snap != null && !snap.Messages.Contains(e.Message))
+                    {
+                        snap.Messages.Add(e.Message);
+                    }
                 }
             };
 
@@ -143,10 +161,6 @@ public class SpDebuggerService : IDisposable
 
             session.RecordedSteps.Clear();
             session.StepSnapshots.Clear();
-
-            int currentStepId = -1;
-            SpDebugStepSnapshot? currentSnapshot = null;
-            var currentVars = new Dictionary<string, SpVariableInfo>(StringComparer.OrdinalIgnoreCase);
 
             // Initialize variables with input parameter values
             foreach (var p in session.Parameters)
@@ -219,7 +233,7 @@ public class SpDebuggerService : IDisposable
                             StatementText = stmt?.StatementText ?? "",
                             StatementType = stmt?.StatementType ?? "STATEMENT",
                             DurationMs = stopwatch.ElapsedMilliseconds,
-                            Messages = new List<string>(messages)
+                            Messages = new List<string>()
                         };
 
                         CloneSnapshotState(prevSnap, newSnap);
@@ -297,7 +311,6 @@ public class SpDebuggerService : IDisposable
                             targetSnap.Variables[vName] = updatedVar;
                         }
 
-                        messages.Clear();
                         continue;
                     }
 
@@ -347,7 +360,7 @@ public class SpDebuggerService : IDisposable
                 StatementText = "Execution Completed",
                 StatementType = "COMPLETED",
                 DurationMs = stopwatch.ElapsedMilliseconds,
-                Messages = new List<string>(messages)
+                Messages = new List<string>(session.ExecutionMessages)
             };
             CloneSnapshotState(lastSnap, snapCompleted);
             session.RecordedSteps.Add(snapCompleted);
@@ -652,6 +665,7 @@ public class SpDebuggerService : IDisposable
         IfStatement => "IF",
         WhileStatement => "WHILE",
         BeginEndBlockStatement => "BLOCK",
+        PrintStatement => "PRINT",
         _ => "STATEMENT"
     };
 

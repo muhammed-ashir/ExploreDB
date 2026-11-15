@@ -115,6 +115,7 @@ public class SpDebugSessionState : IDisposable
     public List<SpPreFlightWarning> Warnings { get; set; } = new();
     public Dictionary<int, SpDebugStepSnapshot> StepSnapshots { get; set; } = new();
     public List<SpDebugStepSnapshot> RecordedSteps { get; set; } = new();
+    public List<string> ExecutionMessages { get; set; } = new();
     public StatementList? BodyStatementList { get; set; }
 
     public int CurrentStepIndex { get; set; } = -1;
@@ -172,6 +173,7 @@ public class SpDebugSessionState : IDisposable
         Statements.Clear();
         Parameters.Clear();
         Warnings.Clear();
+        ExecutionMessages.Clear();
         BodyStatementList = null;
         ProcedureDefinition = string.Empty;
         ErrorMessage = null;
