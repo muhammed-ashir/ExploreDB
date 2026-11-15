@@ -42,10 +42,10 @@
 
                     <button type="button" 
                             class="list-group-item list-group-item-action d-flex align-items-center gap-3 border-0 py-2.5 px-3 rounded-2 @(ActiveTab == "license" ? "active" : "")"
-                            style="@(ActiveTab == "license" ? "background-color: var(--app-surface-secondary); color: var(--app-text); font-weight: 600; border-left: 3px solid #0d6efd !important;" : "background: transparent; color: var(--app-text);")"
-                            @onclick='() => ActiveTab = "license"'>
-                        <i class="bi bi-key text-warning fs-5"></i>
-                        <span class="fw-semibold">License</span>
+                            style="display: none !important; @(ActiveTab == "license" ? "background-color: var(--app-surface-secondary); color: var(--app-text); font-weight: 600; border-left: 3px solid #0d6efd !important;" : "background: transparent; color: var(--app-text);")"
+                            @* @onclick='() => ActiveTab = "license"' *@>
+                        @* <i class="bi bi-key text-warning fs-5"></i> *@
+                        @* <span class="fw-semibold">License</span> *@
                     </button>
 
                     <button type="button" 
@@ -270,6 +270,7 @@
                     </div>
                 </div>
             }
+            @*
             else if (ActiveTab == "license")
             {
                 <div class="card shadow-sm border mb-4" style="background-color: var(--app-surface); border-color: var(--app-border) !important; border-radius: 10px;">
@@ -384,6 +385,7 @@
                     </div>
                 </div>
             }
+            *@
             else if (ActiveTab == "profile")
             {
                 <div class="card shadow-sm border mb-4" style="background-color: var(--app-surface); border-color: var(--app-border) !important; border-radius: 10px;">

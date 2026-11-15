@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +19,8 @@ public class TableInfo
     // Views that reference this table
     public List<Dependency> ReferencedByViews { get; set; } = new();
     // Stored Procedures that reference this table
+    public string? Definition { get; set; }
+    public bool IsDefinitionLoaded { get; set; } = false;
     public List<Dependency> ReferencedBySPs { get; set; } = new();
 
     public bool AreDependenciesLoaded { get; set; } = false;
@@ -1464,9 +1467,342 @@ public class SchemaService
         }
     }
 
+    public async Task<string> GenerateTableDdlAsync(string fullName)
+    {
+        if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return string.Empty;
+
+        try
+        {
+            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+-- 1. Columns & Defaults & Computed & Identities
+SELECT 
+    c.name AS ColumnName,
+    c.column_id AS ColumnId,
+    t.name AS TypeName,
+    c.max_length AS MaxLength,
+    c.precision AS Precision,
+    c.scale AS Scale,
+    c.is_nullable AS IsNullable,
+    c.is_identity AS IsIdentity,
+    ISNULL(CAST(ic.seed_value AS VARCHAR(50)), '1') AS IdentitySeed,
+    ISNULL(CAST(ic.increment_value AS VARCHAR(50)), '1') AS IdentityIncrement,
+    c.is_computed AS IsComputed,
+    ISNULL(cc.definition, '') AS ComputedDefinition,
+    ISNULL(cc.is_persisted, 0) AS IsPersisted,
+    ISNULL(dc.name, '') AS DefaultConstraintName,
+    ISNULL(dc.definition, '') AS DefaultDefinition
+FROM sys.columns c
+JOIN sys.types t ON c.user_type_id = t.user_type_id
+LEFT JOIN sys.identity_columns ic ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+LEFT JOIN sys.computed_columns cc ON c.object_id = cc.object_id AND c.column_id = cc.column_id
+LEFT JOIN sys.default_constraints dc ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+WHERE c.object_id = OBJECT_ID(@FullName)
+ORDER BY c.column_id;
+
+-- 2. Primary Key & Unique Constraints
+SELECT 
+    kc.name AS ConstraintName,
+    kc.type AS ConstraintType,
+    i.type_desc AS IndexTypeDesc,
+    c.name AS ColumnName,
+    ic.key_ordinal AS KeyOrdinal,
+    ic.is_descending_key AS IsDescending
+FROM sys.key_constraints kc
+JOIN sys.indexes i ON kc.parent_object_id = i.object_id AND kc.unique_index_id = i.index_id
+JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+WHERE kc.parent_object_id = OBJECT_ID(@FullName)
+ORDER BY kc.name, ic.key_ordinal;
+
+-- 3. Foreign Key Constraints
+SELECT 
+    fk.name AS ForeignKeyName,
+    SCHEMA_NAME(pt.schema_id) AS ParentSchema,
+    pt.name AS ParentTable,
+    pc.name AS ParentColumn,
+    SCHEMA_NAME(rt.schema_id) AS ReferencedSchema,
+    rt.name AS ReferencedTable,
+    rc.name AS ReferencedColumn,
+    fkc.constraint_column_id AS ColumnOrdinal,
+    fk.delete_referential_action_desc AS DeleteAction,
+    fk.update_referential_action_desc AS UpdateAction
+FROM sys.foreign_keys fk
+JOIN sys.tables pt ON fk.parent_object_id = pt.object_id
+JOIN sys.tables rt ON fk.referenced_object_id = rt.object_id
+JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+JOIN sys.columns pc ON fkc.parent_object_id = pc.object_id AND fkc.parent_column_id = pc.column_id
+JOIN sys.columns rc ON fkc.referenced_object_id = rc.object_id AND fkc.referenced_column_id = rc.column_id
+WHERE fk.parent_object_id = OBJECT_ID(@FullName)
+ORDER BY fk.name, fkc.constraint_column_id;
+
+-- 4. Check Constraints
+SELECT 
+    ck.name AS ConstraintName,
+    ck.definition AS CheckDefinition
+FROM sys.check_constraints ck
+WHERE ck.parent_object_id = OBJECT_ID(@FullName);
+
+-- 5. Secondary Indexes (Non-PK, Non-UQ)
+SELECT 
+    i.name AS IndexName,
+    i.is_unique AS IsUnique,
+    i.type_desc AS IndexType,
+    ISNULL(i.filter_definition, '') AS FilterDefinition,
+    c.name AS ColumnName,
+    ic.key_ordinal AS KeyOrdinal,
+    ic.is_descending_key AS IsDescending,
+    ic.is_included_column AS IsIncluded
+FROM sys.indexes i
+JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+WHERE i.object_id = OBJECT_ID(@FullName)
+  AND i.is_primary_key = 0
+  AND i.is_unique_constraint = 0
+  AND i.type > 0
+ORDER BY i.name, ic.is_included_column, ic.key_ordinal;
+";
+            cmd.Parameters.AddWithValue("@FullName", fullName);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            var colDefinitions = new List<string>();
+
+            // 1. Process Columns
+            while (await reader.ReadAsync())
+            {
+                string colName = reader["ColumnName"].ToString()!;
+                string typeName = reader["TypeName"].ToString()!;
+                short maxLength = Convert.ToInt16(reader["MaxLength"]);
+                byte precision = Convert.ToByte(reader["Precision"]);
+                byte scale = Convert.ToByte(reader["Scale"]);
+                bool isNullable = Convert.ToBoolean(reader["IsNullable"]);
+                bool isIdentity = Convert.ToBoolean(reader["IsIdentity"]);
+                string seed = reader["IdentitySeed"].ToString()!;
+                string inc = reader["IdentityIncrement"].ToString()!;
+                bool isComputed = Convert.ToBoolean(reader["IsComputed"]);
+                string compDef = reader["ComputedDefinition"].ToString()!;
+                bool isPersisted = Convert.ToBoolean(reader["IsPersisted"]);
+                string defConstName = reader["DefaultConstraintName"].ToString()!;
+                string defVal = reader["DefaultDefinition"].ToString()!;
+
+                if (isComputed)
+                {
+                    string persistedStr = isPersisted ? " PERSISTED" : "";
+                    colDefinitions.Add($"    [{colName}] AS {compDef}{persistedStr}");
+                    continue;
+                }
+
+                string formattedType = FormatSqlType(typeName, maxLength, precision, scale);
+                var parts = new List<string> { $"    [{colName}] {formattedType}" };
+
+                if (isIdentity)
+                {
+                    parts.Add($"IDENTITY({seed},{inc})");
+                }
+
+                if (!string.IsNullOrEmpty(defVal))
+                {
+                    if (!string.IsNullOrEmpty(defConstName))
+                    {
+                        parts.Add($"CONSTRAINT [{defConstName}] DEFAULT {defVal}");
+                    }
+                    else
+                    {
+                        parts.Add($"DEFAULT {defVal}");
+                    }
+                }
+
+                parts.Add(isNullable ? "NULL" : "NOT NULL");
+                colDefinitions.Add(string.Join(" ", parts));
+            }
+
+            // 2. Primary Key & Unique Constraints
+            await reader.NextResultAsync();
+            var keyConstraints = new Dictionary<string, (string Type, string IndexDesc, List<(string Col, bool IsDesc)> Cols)>();
+            while (await reader.ReadAsync())
+            {
+                string name = reader["ConstraintName"].ToString()!;
+                string type = reader["ConstraintType"].ToString()!;
+                string idxDesc = reader["IndexTypeDesc"].ToString()!;
+                string col = reader["ColumnName"].ToString()!;
+                bool isDesc = Convert.ToBoolean(reader["IsDescending"]);
+
+                if (!keyConstraints.TryGetValue(name, out var entry))
+                {
+                    entry = (type, idxDesc, new List<(string Col, bool IsDesc)>());
+                    keyConstraints[name] = entry;
+                }
+                entry.Cols.Add((col, isDesc));
+            }
+
+            foreach (var (name, entry) in keyConstraints)
+            {
+                string typeLabel = entry.Type.Trim().Equals("PK", StringComparison.OrdinalIgnoreCase) ? "PRIMARY KEY" : "UNIQUE";
+                string colsStr = string.Join(", ", entry.Cols.Select(c => $"[{c.Col}]" + (c.IsDesc ? " DESC" : " ASC")));
+                colDefinitions.Add($"    CONSTRAINT [{name}] {typeLabel} {entry.IndexDesc} ({colsStr})");
+            }
+
+            // 3. Foreign Key Constraints
+            await reader.NextResultAsync();
+            var fks = new Dictionary<string, (string ParentSchema, string ParentTable, string RefSchema, string RefTable, string DelAction, string UpdAction, List<(string FromCol, string ToCol)> Cols)>();
+            while (await reader.ReadAsync())
+            {
+                string fkName = reader["ForeignKeyName"].ToString()!;
+                string parentSchema = reader["ParentSchema"].ToString()!;
+                string parentTable = reader["ParentTable"].ToString()!;
+                string fromCol = reader["ParentColumn"].ToString()!;
+                string refSchema = reader["ReferencedSchema"].ToString()!;
+                string refTable = reader["ReferencedTable"].ToString()!;
+                string toCol = reader["ReferencedColumn"].ToString()!;
+                string delAction = reader["DeleteAction"].ToString()!;
+                string updAction = reader["UpdateAction"].ToString()!;
+
+                if (!fks.TryGetValue(fkName, out var entry))
+                {
+                    entry = (parentSchema, parentTable, refSchema, refTable, delAction, updAction, new List<(string, string)>());
+                    fks[fkName] = entry;
+                }
+                entry.Cols.Add((fromCol, toCol));
+            }
+
+            foreach (var (fkName, entry) in fks)
+            {
+                string fromCols = string.Join(", ", entry.Cols.Select(c => $"[{c.FromCol}]"));
+                string toCols = string.Join(", ", entry.Cols.Select(c => $"[{c.ToCol}]"));
+                var sbFk = new StringBuilder();
+                sbFk.Append($"    CONSTRAINT [{fkName}] FOREIGN KEY ({fromCols}) REFERENCES [{entry.RefSchema}].[{entry.RefTable}] ({toCols})");
+                if (!string.Equals(entry.DelAction, "NO_ACTION", StringComparison.OrdinalIgnoreCase))
+                {
+                    sbFk.Append($" ON DELETE {entry.DelAction.Replace("_", " ")}");
+                }
+                if (!string.Equals(entry.UpdAction, "NO_ACTION", StringComparison.OrdinalIgnoreCase))
+                {
+                    sbFk.Append($" ON UPDATE {entry.UpdAction.Replace("_", " ")}");
+                }
+                colDefinitions.Add(sbFk.ToString());
+            }
+
+            // 4. Check Constraints
+            await reader.NextResultAsync();
+            while (await reader.ReadAsync())
+            {
+                string name = reader["ConstraintName"].ToString()!;
+                string def = reader["CheckDefinition"].ToString()!;
+                colDefinitions.Add($"    CONSTRAINT [{name}] CHECK {def}");
+            }
+
+            // 5. Secondary Indexes
+            await reader.NextResultAsync();
+            var indexes = new Dictionary<string, (bool IsUnique, string IndexType, string Filter, List<(string Col, bool IsDesc)> Keys, List<string> Includes)>();
+            while (await reader.ReadAsync())
+            {
+                string idxName = reader["IndexName"].ToString()!;
+                bool isUnique = Convert.ToBoolean(reader["IsUnique"]);
+                string idxType = reader["IndexType"].ToString()!;
+                string filter = reader["FilterDefinition"].ToString()!;
+                string col = reader["ColumnName"].ToString()!;
+                bool isDesc = Convert.ToBoolean(reader["IsDescending"]);
+                bool isInc = Convert.ToBoolean(reader["IsIncluded"]);
+
+                if (!indexes.TryGetValue(idxName, out var entry))
+                {
+                    entry = (isUnique, idxType, filter, new List<(string, bool)>(), new List<string>());
+                    indexes[idxName] = entry;
+                }
+                if (isInc)
+                    entry.Includes.Add(col);
+                else
+                    entry.Keys.Add((col, isDesc));
+            }
+
+            if (colDefinitions.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var sb = new StringBuilder();
+
+
+
+            sb.AppendLine($"CREATE TABLE {fullName} (");
+            sb.AppendLine(string.Join(",\r\n", colDefinitions));
+            sb.AppendLine(");");
+            sb.AppendLine("GO");
+
+            if (indexes.Count > 0)
+            {
+    
+                sb.AppendLine();
+                foreach (var (idxName, entry) in indexes)
+                {
+                    string uqStr = entry.IsUnique ? "UNIQUE " : "";
+                    string keyCols = string.Join(", ", entry.Keys.Select(k => $"[{k.Col}]" + (k.IsDesc ? " DESC" : " ASC")));
+                    sb.Append($"CREATE {uqStr}{entry.IndexType} INDEX [{idxName}] ON {fullName} ({keyCols})");
+                    if (entry.Includes.Count > 0)
+                    {
+                        sb.Append($" INCLUDE ({string.Join(", ", entry.Includes.Select(c => $"[{c}]"))})");
+                    }
+                    if (!string.IsNullOrEmpty(entry.Filter))
+                    {
+                        sb.Append($" WHERE {entry.Filter}");
+                    }
+                    sb.AppendLine(";");
+                    sb.AppendLine("GO");
+                }
+            }
+
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating Table DDL for {FullName}", fullName);
+            return $"-- Error generating Table DDL: {ex.Message}";
+        }
+    }
+
+    private static string FormatSqlType(string typeName, short maxLength, byte precision, byte scale)
+    {
+        string lower = typeName.ToLowerInvariant();
+        switch (lower)
+        {
+            case "varchar":
+            case "varbinary":
+                return maxLength == -1 ? $"{typeName.ToUpperInvariant()}(MAX)" : $"{typeName.ToUpperInvariant()}({maxLength})";
+            case "nvarchar":
+                return maxLength == -1 ? $"{typeName.ToUpperInvariant()}(MAX)" : $"{typeName.ToUpperInvariant()}({maxLength / 2})";
+            case "char":
+            case "binary":
+                return $"{typeName.ToUpperInvariant()}({maxLength})";
+            case "nchar":
+                return $"{typeName.ToUpperInvariant()}({maxLength / 2})";
+            case "decimal":
+            case "numeric":
+                return $"{typeName.ToUpperInvariant()}({precision}, {scale})";
+            case "datetime2":
+            case "time":
+            case "datetimeoffset":
+                return $"{typeName.ToUpperInvariant()}({scale})";
+            default:
+                return typeName.ToUpperInvariant();
+        }
+    }
+
     public async Task LoadDefinitionAsync(string fullName)
     {
         if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return;
+
+        // Try to match against table first (generate DDL)
+        var table = Tables.FirstOrDefault(t => t.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
+        if (table != null)
+        {
+            table.Definition = await GenerateTableDdlAsync(fullName);
+            table.IsDefinitionLoaded = true;
+            return;
+        }
 
         try
         {

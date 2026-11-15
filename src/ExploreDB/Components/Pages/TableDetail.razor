@@ -1,5 +1,7 @@
 @page "/table/{FullName}"
 @using ExploreDB.Services
+@using BlazorMonaco
+@using BlazorMonaco.Editor
 @implements IDisposable
 @inject SchemaService SchemaService
 @inject PathfinderService PathfinderService
@@ -103,10 +105,69 @@
                     Query
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link @(ActiveTab == "Definition" ? "active bg-transparent border-secondary border-bottom-0 fw-bold" : "text-muted border-transparent")"
+                   @onclick='() => SetActiveTab("Definition")' style="cursor:pointer; @(ActiveTab == "Definition" ? "color: var(--app-text) !important;" : "")">
+                    Definition
+                </a>
+            </li>
         </ul>
 
         <div class="tab-content pb-5">
-            @if (ActiveTab == "Columns")
+            @if (ActiveTab == "Definition")
+            {
+                <div class="card glass-card @(IsDefinitionExpanded ? "position-fixed top-0 start-0 w-100 h-100 m-0 rounded-0" : "mb-4")" 
+                     style="@(IsDefinitionExpanded ? "z-index: 2100; height: 100vh; background-color: var(--app-bg);" : "border: 1px solid var(--app-border); color: var(--app-text);")"
+                     @onkeydown="HandleDefinitionKeyDown" tabindex="@(IsDefinitionExpanded ? "0" : "-1")">
+                    <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center detail-card-header" style="border-bottom: 1px solid var(--app-border);">
+                        <span class="fw-bold" style="font-size: 0.95rem;">
+                            @(IsDefinitionExpanded ? $"{Table.Schema}.{Table.Name} — Table Definition (DDL)" : "Table Definition (DDL)")
+                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            @if (!IsDefinitionLoading && !string.IsNullOrEmpty(Table?.Definition))
+                            {
+                                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 @(DefinitionCopied ? "btn-success text-white" : "")"
+                                        @onclick="CopyDefinition" title="Copy to clipboard">
+                                    <i class="bi @(DefinitionCopied ? "bi-check2" : "bi-clipboard")"></i> @(DefinitionCopied ? "Copied" : "Copy")
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 shadow-sm"
+                                        @onclick="@(() => LoadAndRunQuery(Table.Definition, $"{Table.Name}_DDL.sql"))" title="Open in Query Runner">
+                                    <i class="bi bi-box-arrow-up-right"></i> <span>Open in Editor</span>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center"
+                                        @onclick="ToggleExpandDefinition" 
+                                        title="@(IsDefinitionExpanded ? "Restore down (Esc)" : "Expand to full screen")">
+                                    <i class="bi @(IsDefinitionExpanded ? "bi-fullscreen-exit" : "bi-arrows-fullscreen")"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <div class="card-body p-0 position-relative" style="@(IsDefinitionExpanded ? "height: calc(100vh - 49px);" : "")">
+                        @if (IsDefinitionLoading)
+                        {
+                            <div class="d-flex justify-content-center align-items-center" style="padding: 4rem 1rem;">
+                                <div class="spinner-border text-secondary" role="status" style="width: 1.5rem; height: 1.5rem;">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span class="ms-3 text-muted small">Generating table DDL definition...</span>
+                            </div>
+                        }
+                        else if (string.IsNullOrEmpty(Table?.Definition))
+                        {
+                            <div class="d-flex justify-content-center align-items-center" style="padding: 4rem 1rem;">
+                                <span class="text-muted">Definition not available. You may not have VIEW DEFINITION permission.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="@(IsDefinitionExpanded ? "height: 100%;" : "height: 500px; min-height: 300px; resize: vertical;") overflow: hidden;">
+                                <StandaloneCodeEditor @ref="_definitionEditor" Id="table-definition-editor" CssClass="w-100 h-100" ConstructionOptions="DefinitionEditorOptions" />
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (ActiveTab == "Columns")
             {
                 <!-- Columns Tab -->
                 <div class="card glass-card text-white">
@@ -722,6 +783,10 @@
     private bool ShowPopoutLimitAlert = false;
     private bool IsLoading = true;
     private TableInfo? Table;
+    private bool IsDefinitionLoading = false;
+    private bool DefinitionCopied = false;
+    private bool IsDefinitionExpanded = false;
+    private StandaloneCodeEditor? _definitionEditor;
     private HashSet<string> SelectedUpdateColumns = new(StringComparer.OrdinalIgnoreCase);
     private string TableColumnSearchTerm = string.Empty;
     private bool ColumnSearchCaseSensitive;
@@ -859,6 +924,11 @@
         else
             ActiveTab = "Columns";
 
+        if (ActiveTab == "Definition" && Table != null && !Table.IsDefinitionLoaded)
+        {
+            await SchemaService.LoadDefinitionAsync(Table.FullName);
+        }
+
         if (_schemaLastClickedCache.TryGetValue(decoded, out _glowTarget))
             _hasScrolledToGlow = false;
         else
@@ -891,9 +961,72 @@
         }
     }
 
-    private void SetActiveTab(string tab)
+    private async Task SetActiveTab(string tab)
     {
         ActiveTab = tab;
+        if (tab != "Definition")
+        {
+            IsDefinitionExpanded = false;
+        }
+        if (tab == "Definition" && Table != null && !Table.IsDefinitionLoaded && !IsDefinitionLoading)
+        {
+            IsDefinitionLoading = true;
+            await SchemaService.LoadDefinitionAsync(Table.FullName);
+            IsDefinitionLoading = false;
+        }
+        if (tab == "Definition" && _definitionEditor != null && Table?.Definition != null)
+        {
+            await _definitionEditor.SetValue(Table.Definition);
+        }
+    }
+
+    private async Task ToggleExpandDefinition()
+    {
+        IsDefinitionExpanded = !IsDefinitionExpanded;
+        StateHasChanged();
+        await Task.Delay(50);
+        if (_definitionEditor != null)
+        {
+            await _definitionEditor.Layout();
+        }
+    }
+
+    private async Task HandleDefinitionKeyDown(KeyboardEventArgs e)
+    {
+        if (IsDefinitionExpanded && e.Key == "Escape")
+        {
+            await ToggleExpandDefinition();
+        }
+    }
+
+    private StandaloneEditorConstructionOptions DefinitionEditorOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "sql",
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
+            Value = Table?.Definition ?? "",
+            AutomaticLayout = true,
+            ReadOnly = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            LineNumbers = "on",
+            ScrollBeyondLastLine = false,
+            FontSize = 14,
+            OverviewRulerBorder = false,
+            HideCursorInOverviewRuler = true,
+            FixedOverflowWidgets = true,
+            Scrollbar = new EditorScrollbarOptions { UseShadows = false }
+        };
+    }
+
+    private async Task CopyDefinition()
+    {
+        if (string.IsNullOrEmpty(Table?.Definition)) return;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", Table.Definition);
+        DefinitionCopied = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        DefinitionCopied = false;
     }
 
     private async Task LoadAndRunQuery(string queryText, string tabName)
@@ -1070,7 +1203,7 @@
             return $"-- No columns found for {QuotedTableName(Table)}.";
         }
 
-        var newLine = Environment.NewLine;
+        var newLine = System.Environment.NewLine;
         var columnLines = string.Join($",{newLine}    ", Table.Columns.Select(c => QuoteIdentifier(c.Name)));
         var valueLines = string.Join($",{newLine}    ", Table.Columns.Select(c => BuildParameterName("p", c.Name)));
 
@@ -1099,7 +1232,7 @@
             return "-- Select at least one column to generate an UPDATE query.";
         }
 
-        var newLine = Environment.NewLine;
+        var newLine = System.Environment.NewLine;
         var setLines = string.Join(
             $",{newLine}",
             selectedColumns.Select(c => $"    {QuoteIdentifier(c.Name)} = {BuildParameterName("set", c.Name)}"));
