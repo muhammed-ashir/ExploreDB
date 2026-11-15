@@ -438,19 +438,15 @@
                                 </span>
                             </div>
 
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="form-check form-switch d-flex align-items-center gap-2 mb-0 ps-0">
-                                    <input class="form-check-input cursor-pointer ms-0 me-1" type="checkbox" id="includePasswordsSwitch" style="transform: scale(1.15);" @bind="IncludePasswordsInExport" />
-                                    <label class="form-check-label cursor-pointer small fw-medium user-select-none" for="includePasswordsSwitch" title="Passwords are encrypted using AES-256">
-                                        Include Passwords
-                                    </label>
-                                </div>
-                                @if (IncludePasswordsInExport)
-                                {
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle d-inline-flex align-items-center gap-1" style="font-size: 0.68rem;" title="Passwords are encrypted using AES-256 in the export file">
-                                        <i class="bi bi-shield-lock-fill"></i> Encrypted
-                                    </span>
-                                }
+                            <div class="form-check form-switch d-flex align-items-center mb-0 ps-0">
+                                <input class="form-check-input cursor-pointer ms-0 me-2" type="checkbox" id="includePasswordsSwitch" style="width: 2.2em; height: 1.15em;" @bind="IncludePasswordsInExport" />
+                                <label class="form-check-label cursor-pointer small fw-medium user-select-none d-inline-flex align-items-center" for="includePasswordsSwitch" title="Export saved passwords (encrypted with AES-256)">
+                                    <span>Passwords</span>
+                                    @if (IncludePasswordsInExport)
+                                    {
+                                        <i class="bi bi-shield-lock-fill text-success ms-1.5" title="Encrypted with AES-256" style="font-size: 0.88rem; margin-left: 6px;"></i>
+                                    }
+                                </label>
                             </div>
                         </div>
 

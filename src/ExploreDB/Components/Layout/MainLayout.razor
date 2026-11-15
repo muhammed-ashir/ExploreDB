@@ -427,7 +427,21 @@
                                         {
                                             <div class="col-6">
                                                 <label class="form-label small text-muted">Password</label>
-                                                <input type="password" class="form-control border-secondary" style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" @bind="Password" @bind:event="oninput" />
+                                                <div class="position-relative">
+                                                    <input type="@(_showPassword ? "text" : "password")" 
+                                                           class="form-control border-secondary pe-5" 
+                                                           style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" 
+                                                           @bind="Password" 
+                                                           @bind:event="oninput" />
+                                                    <button type="button" 
+                                                            class="btn btn-link position-absolute top-50 end-0 translate-middle-y text-muted p-0 me-2 d-flex align-items-center justify-content-center" 
+                                                            style="width: 28px; height: 28px; text-decoration: none; border: none; background: transparent; z-index: 5;"
+                                                            title="@(_showPassword ? "Hide password" : "Show password")"
+                                                            tabindex="-1"
+                                                            @onclick="() => _showPassword = !_showPassword">
+                                                        <i class="bi @(_showPassword ? "bi-eye-slash" : "bi-eye")" style="font-size: 0.95rem;"></i>
+                                                    </button>
+                                                </div>
                                             </div>
                                         }
                                     </div>
@@ -601,6 +615,7 @@
     private string AuthType = "Windows";
     private string Username = "";
     private string Password = "";
+    private bool _showPassword = false;
     private bool IsAuthDropdownOpen = false;
 
     private bool IsSwitchingDatabaseGlobal = false;
@@ -916,6 +931,7 @@
         AuthType = string.IsNullOrEmpty(c.AuthType) ? (c.UseWindowsAuth ? "Windows" : "SqlServer") : c.AuthType;
         Username = c.Username;
         Password = c.Password;
+        _showPassword = false;
         ConnString = c.ConnectionString;
         ErrorMsg = "";
         IsDetailsVisible = true;
@@ -953,6 +969,7 @@
         AuthType = "Windows";
         Username = "";
         Password = "";
+        _showPassword = false;
         ConnString = "";
         ErrorMsg = "";
         IsDetailsVisible = true;
@@ -976,6 +993,7 @@
         {
             CancelConnecting();
         }
+        _showPassword = false;
         IsDetailsVisible = false;
     }
 
