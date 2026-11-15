@@ -390,7 +390,7 @@
                                 <i class="bi @(Copied ? "bi-check2" : "bi-clipboard")"></i> @(Copied ? "Copied" : "Copy")
                             </button>
                             <button type="button" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1 shadow-sm" @onclick="@(() => LoadAndRunQuery(ExecStatement, $"Exec_{Fn.Name}.sql"))">
-                                <i class="bi bi-play-fill"></i> Run
+                                <i class="bi bi-play-fill"></i> Open in Editor
                             </button>
                         </div>
                     </div>
@@ -414,6 +414,10 @@
                                 <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 @(DefinitionCopied ? "btn-success text-white" : "")"
                                         @onclick="CopyDefinition" title="Copy to clipboard">
                                     <i class="bi @(DefinitionCopied ? "bi-check2" : "bi-clipboard")"></i> @(DefinitionCopied ? "Copied" : "Copy")
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 shadow-sm"
+                                        @onclick="@(() => LoadAndRunQuery(Fn.Definition, $"{Fn.Name}_Def.sql"))" title="Open in Query Runner">
+                                    <i class="bi bi-box-arrow-up-right"></i> <span>Open in Editor</span>
                                 </button>
                                 <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center"
                                         @onclick="ToggleExpandDefinition" 

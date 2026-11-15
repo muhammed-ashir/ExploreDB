@@ -604,7 +604,7 @@
                                     <i class="bi @(SelectCopied ? "bi-check2" : "bi-clipboard")"></i> @(SelectCopied ? "Copied!" : "Copy")
                                 </button>
                                 <button type="button" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick="@(() => LoadAndRunQuery(SelectQuery, $"Select_{Table.Name}.sql"))" @onclick:stopPropagation="true">
-                                    <i class="bi bi-play-fill"></i> Run
+                                    <i class="bi bi-play-fill"></i> Open in Editor
                                 </button>
                             </span>
                         </h2>
@@ -628,13 +628,81 @@
                                     <i class="bi @(InsertCopied ? "bi-check2" : "bi-clipboard")"></i> @(InsertCopied ? "Copied!" : "Copy")
                                 </button>
                                 <button type="button" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick="@(() => LoadAndRunQuery(InsertQuery, $"Insert_{Table.Name}.sql"))" @onclick:stopPropagation="true">
-                                    <i class="bi bi-play-fill"></i> Run
+                                    <i class="bi bi-play-fill"></i> Open in Editor
                                 </button>
                             </span>
                         </h2>
                         <div id="collapseInsertQuery" class="accordion-collapse collapse" aria-labelledby="headingInsertQuery" data-bs-parent="#queryAccordion">
                             <div class="accordion-body text-white pt-3">
-                                <pre class="query-preview mb-0">@InsertQuery</pre>
+                                @if (Table.Columns.Count == 0)
+                                {
+                                    <span class="text-muted">No columns available for query generation.</span>
+                                }
+                                else
+                                {
+                                    <div class="d-flex gap-2 mb-3">
+                                        <div class="input-group input-group-sm flex-grow-1" style="min-width: 0;">
+                                            <input type="text"
+                                                   class="form-control bg-dark text-white border-secondary shadow-none @(!string.IsNullOrEmpty(InsertColumnSearchTerm) ? "border-end-0" : "")" style="min-width: 200px;"
+                                                   placeholder="Search insert columns..."
+                                                   @bind="InsertColumnSearchTerm"
+                                                   @bind:event="oninput" />
+                                            @if (!string.IsNullOrEmpty(InsertColumnSearchTerm))
+                                            {
+                                                <button class="btn btn-outline-secondary bg-dark text-muted border-secondary border-start-0" title="Clear filter" @onclick="() => InsertColumnSearchTerm = string.Empty">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            }
+                                            <button class="btn @(InsertColumnSearchCaseSensitive ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Case" @onclick="() => InsertColumnSearchCaseSensitive = !InsertColumnSearchCaseSensitive">
+                                                <span style="font-family: Georgia, serif; font-weight: bold; font-size: 0.9em; letter-spacing: 0.5px;">Aa</span>
+                                            </button>
+                                            <button class="btn @(InsertColumnSearchMatchWholeWord ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Match Whole Word" @onclick="() => { InsertColumnSearchMatchWholeWord = !InsertColumnSearchMatchWholeWord; if (InsertColumnSearchMatchWholeWord) InsertColumnSearchExactMatch = false; }">
+                                                <span style="font-family: monospace; font-weight: bold; font-size: 0.9em;">[ab]</span>
+                                            </button>
+                                            <button class="btn @(InsertColumnSearchExactMatch ? "btn-primary" : "btn-outline-secondary bg-dark text-muted") border-secondary px-3" style="z-index: 0;" title="Exact Match" @onclick="() => { InsertColumnSearchExactMatch = !InsertColumnSearchExactMatch; if (InsertColumnSearchExactMatch) InsertColumnSearchMatchWholeWord = false; }">
+                                                <i class="bi bi-bullseye fs-6"></i>
+                                            </button>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-light text-nowrap px-3" @onclick="SelectAllInsertColumns">Select All</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap px-3" @onclick="ClearInsertColumns">Clear</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap px-3" @onclick="ResetInsertValues" title="Reset all input values to default parameters">Reset Values</button>
+                                    </div>
+
+                                    <div class="query-option-list mb-3 custom-scrollbar-light" style="max-height: 250px; overflow-y: auto;">
+                                        @if (VisibleInsertColumns.Count == 0)
+                                        {
+                                            <div class="text-muted small">No matching columns found.</div>
+                                        }
+                                        else
+                                        {
+                                            <div class="d-grid gap-2">
+                                                @foreach (var col in VisibleInsertColumns)
+                                                {
+                                                    <div class="query-option-item d-flex align-items-center justify-content-between gap-3 px-3 py-2" style="@(!IsInsertColumnSelected(col.Name) ? "opacity: 0.6;" : "")">
+                                                        <div class="d-flex align-items-center gap-2" style="min-width: 140px; max-width: 250px; flex: 1 1 0;">
+                                                            <input type="checkbox" id="@($"chk_ins_{col.Name}")"
+                                                                   class="form-check-input mt-0 cursor-pointer"
+                                                                   checked="@IsInsertColumnSelected(col.Name)"
+                                                                   @onchange="args => SetInsertColumnSelection(col.Name, args.Value)" />
+                                                            <label class="fw-semibold query-option-name cursor-pointer mb-0 text-truncate user-select-none" for="@($"chk_ins_{col.Name}")" title="@col.Name">@col.Name</label>
+                                                        </div>
+                                                        <div class="flex-grow-1" style="min-width: 140px; max-width: 450px;">
+                                                            <input type="text"
+                                                                   class="form-control form-control-sm shadow-none"
+                                                                   style="background: var(--app-input-bg); color: var(--app-input-text); border: 1px solid var(--app-input-border); font-family: monospace; font-size: 0.85rem;"
+                                                                   placeholder="@BuildParameterName("p", col.Name)"
+                                                                   value="@GetInsertColumnValue(col.Name)"
+                                                                   @oninput="args => SetInsertColumnValue(col.Name, args.Value?.ToString())" />
+                                                        </div>
+                                                        <span class="badge bg-dark border border-secondary text-muted ms-auto flex-shrink-0 font-monospace">@col.DataType</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+
+                                    <pre class="query-preview mb-0">@InsertQuery</pre>
+                                }
                             </div>
                         </div>
                     </div>
@@ -652,7 +720,7 @@
                                     <i class="bi @(UpdateCopied ? "bi-check2" : "bi-clipboard")"></i> @(UpdateCopied ? "Copied!" : "Copy")
                                 </button>
                                 <button type="button" class="btn btn-primary btn-sm fw-bold shadow d-flex align-items-center gap-2" @onclick="@(() => LoadAndRunQuery(UpdateQuery, $"Update_{Table.Name}.sql"))" @onclick:stopPropagation="true">
-                                    <i class="bi bi-play-fill"></i> Run
+                                    <i class="bi bi-play-fill"></i> Open in Editor
                                 </button>
                             </span>
                         </h2>
@@ -690,6 +758,7 @@
                                         </div>
                                         <button type="button" class="btn btn-sm btn-outline-light text-nowrap px-3" @onclick="SelectAllUpdateColumns">Select All</button>
                                         <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap px-3" @onclick="ClearUpdateColumns">Clear</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap px-3" @onclick="ResetUpdateValues" title="Reset all input values to default parameters">Reset Values</button>
                                     </div>
 
                                     <div class="query-option-list mb-3 custom-scrollbar-light" style="max-height: 250px; overflow-y: auto;">
@@ -702,16 +771,24 @@
                                             <div class="d-grid gap-2">
                                                 @foreach (var col in VisibleUpdateColumns)
                                                 {
-                                                    <label class="query-option-item">
-                                                        <span class="query-option-meta">
-                                                            <input type="checkbox"
+                                                    <div class="query-option-item d-flex align-items-center justify-content-between gap-3 px-3 py-2" style="@(!IsUpdateColumnSelected(col.Name) ? "opacity: 0.6;" : "")">
+                                                        <div class="d-flex align-items-center gap-2" style="min-width: 140px; max-width: 250px; flex: 1 1 0;">
+                                                            <input type="checkbox" id="@($"chk_upd_{col.Name}")"
                                                                    class="form-check-input"
                                                                    checked="@IsUpdateColumnSelected(col.Name)"
                                                                    @onchange="args => SetUpdateColumnSelection(col.Name, args.Value)" />
-                                                            <span class="fw-semibold query-option-name">@col.Name</span>
-                                                        </span>
-                                                        <span class="badge bg-dark border border-secondary text-muted">@col.DataType</span>
-                                                    </label>
+                                                            <label class="fw-semibold query-option-name cursor-pointer mb-0 text-truncate user-select-none" for="@($"chk_upd_{col.Name}")" title="@col.Name">@col.Name</label>
+                                                        </div>
+                                                        <div class="flex-grow-1" style="min-width: 140px; max-width: 450px;">
+                                                            <input type="text"
+                                                                   class="form-control form-control-sm shadow-none"
+                                                                   style="background: var(--app-input-bg); color: var(--app-input-text); border: 1px solid var(--app-input-border); font-family: monospace; font-size: 0.85rem;"
+                                                                   placeholder="@BuildParameterName("set", col.Name)"
+                                                                   value="@GetUpdateColumnValue(col.Name)"
+                                                                   @oninput="args => SetUpdateColumnValue(col.Name, args.Value?.ToString())" />
+                                                        </div>
+                                                        <span class="badge bg-dark border border-secondary text-muted ms-auto flex-shrink-0 font-monospace">@col.DataType</span>
+                                                    </div>
                                                 }
                                             </div>
                                         }
@@ -788,6 +865,7 @@
     private bool IsDefinitionExpanded = false;
     private StandaloneCodeEditor? _definitionEditor;
     private HashSet<string> SelectedUpdateColumns = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> UpdateColumnValues = new(StringComparer.OrdinalIgnoreCase);
     private string TableColumnSearchTerm = string.Empty;
     private bool ColumnSearchCaseSensitive;
     private bool ColumnSearchMatchWholeWord;
@@ -796,6 +874,12 @@
     private bool UpdateColumnSearchCaseSensitive = false;
     private bool UpdateColumnSearchMatchWholeWord = false;
     private bool UpdateColumnSearchExactMatch = false;
+    private HashSet<string> SelectedInsertColumns = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> InsertColumnValues = new(StringComparer.OrdinalIgnoreCase);
+    private string InsertColumnSearchTerm = string.Empty;
+    private bool InsertColumnSearchCaseSensitive = false;
+    private bool InsertColumnSearchMatchWholeWord = false;
+    private bool InsertColumnSearchExactMatch = false;
     private bool SelectCopied;
     private bool InsertCopied;
     private bool UpdateCopied;
@@ -887,6 +971,7 @@
 
     private List<ColumnInfo> VisibleTableColumns => FilterColumns(TableColumnSearchTerm, ColumnSearchCaseSensitive, ColumnSearchMatchWholeWord, ColumnSearchExactMatch);
     private List<ColumnInfo> VisibleUpdateColumns => FilterColumns(UpdateColumnSearchTerm, UpdateColumnSearchCaseSensitive, UpdateColumnSearchMatchWholeWord, UpdateColumnSearchExactMatch);
+    private List<ColumnInfo> VisibleInsertColumns => FilterColumns(InsertColumnSearchTerm, InsertColumnSearchCaseSensitive, InsertColumnSearchMatchWholeWord, InsertColumnSearchExactMatch);
     private string SelectQuery => $"SELECT TOP 100 * FROM {QuotedTableName(Table!)};";
     private string InsertQuery => BuildInsertQuery();
     private string UpdateQuery => BuildUpdateQuery();
@@ -914,6 +999,13 @@
         SelectedUpdateColumns = Table?.Columns
             .Select(c => c.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        UpdateColumnValues.Clear();
+        SelectedInsertColumns = Table?.Columns
+            .Where(c => !c.IsIdentity && !c.IsComputed)
+            .Select(c => c.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        InsertColumnValues.Clear();
+        InsertColumnSearchTerm = string.Empty;
         TableColumnSearchTerm = string.Empty;
         UpdateColumnSearchTerm = string.Empty;
         RelationshipSearchTerm = string.Empty;
@@ -1198,14 +1290,23 @@
             return string.Empty;
         }
 
-        if (Table.Columns.Count == 0)
+        var selectedColumns = Table.Columns.Where(c => SelectedInsertColumns.Contains(c.Name)).ToList();
+        if (selectedColumns.Count == 0)
         {
-            return $"-- No columns found for {QuotedTableName(Table)}.";
+            return "-- Select at least one column to generate an INSERT query.";
         }
 
         var newLine = System.Environment.NewLine;
-        var columnLines = string.Join($",{newLine}    ", Table.Columns.Select(c => QuoteIdentifier(c.Name)));
-        var valueLines = string.Join($",{newLine}    ", Table.Columns.Select(c => BuildParameterName("p", c.Name)));
+        var columnLines = string.Join($",{newLine}    ", selectedColumns.Select(c => QuoteIdentifier(c.Name)));
+        var valueLines = string.Join(
+            $",{newLine}    ",
+            selectedColumns.Select(c => 
+            {
+                var val = InsertColumnValues.TryGetValue(c.Name, out var customVal) && !string.IsNullOrWhiteSpace(customVal)
+                    ? customVal.Trim()
+                    : BuildParameterName("p", c.Name);
+                return val;
+            }));
 
         return
             $"INSERT INTO {QuotedTableName(Table)} ({newLine}" +
@@ -1235,7 +1336,13 @@
         var newLine = System.Environment.NewLine;
         var setLines = string.Join(
             $",{newLine}",
-            selectedColumns.Select(c => $"    {QuoteIdentifier(c.Name)} = {BuildParameterName("set", c.Name)}"));
+            selectedColumns.Select(c => 
+            {
+                var val = UpdateColumnValues.TryGetValue(c.Name, out var customVal) && !string.IsNullOrWhiteSpace(customVal)
+                    ? customVal.Trim()
+                    : BuildParameterName("set", c.Name);
+                return $"    {QuoteIdentifier(c.Name)} = {val}";
+            }));
 
         return
             $"UPDATE {QuotedTableName(Table)}{newLine}" +
@@ -1336,6 +1443,79 @@
         SelectedUpdateColumns = Table.Columns
             .Select(c => c.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void SetUpdateColumnValue(string columnName, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            UpdateColumnValues.Remove(columnName);
+        }
+        else
+        {
+            UpdateColumnValues[columnName] = value;
+            SelectedUpdateColumns.Add(columnName);
+        }
+    }
+
+    private string GetUpdateColumnValue(string columnName)
+    {
+        return UpdateColumnValues.TryGetValue(columnName, out var val) ? val : string.Empty;
+    }
+
+    private bool IsInsertColumnSelected(string columnName)
+    {
+        return SelectedInsertColumns.Contains(columnName);
+    }
+
+    private void SetInsertColumnSelection(string columnName, object? value)
+    {
+        if (ParseCheckboxValue(value))
+        {
+            SelectedInsertColumns.Add(columnName);
+            return;
+        }
+
+        SelectedInsertColumns.Remove(columnName);
+    }
+
+    private void SetInsertColumnValue(string columnName, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            InsertColumnValues.Remove(columnName);
+        }
+        else
+        {
+            InsertColumnValues[columnName] = value;
+            SelectedInsertColumns.Add(columnName);
+        }
+    }
+
+    private string GetInsertColumnValue(string columnName)
+    {
+        return InsertColumnValues.TryGetValue(columnName, out var val) ? val : string.Empty;
+    }
+
+    private void SelectAllInsertColumns()
+    {
+        if (Table == null) return;
+        SelectedInsertColumns = Table.Columns.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void ClearInsertColumns()
+    {
+        SelectedInsertColumns.Clear();
+    }
+
+    private void ResetInsertValues()
+    {
+        InsertColumnValues.Clear();
+    }
+
+    private void ResetUpdateValues()
+    {
+        UpdateColumnValues.Clear();
     }
 
     private void ClearUpdateColumns()
