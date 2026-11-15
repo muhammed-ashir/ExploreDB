@@ -25,13 +25,18 @@
             {
                 <!-- Run / Continue (F5) -->
                 <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
-                        @onclick="RunAndRecordAsync"
+                        @onclick="RunOrContinueAsync"
                         disabled="@(_isRecording || _isLoadingDef)"
-                        title="Run / Start Debugging (F5)">
+                        title="@(_session.IsRecorded ? "Continue to next breakpoint (F5)" : "Run / Start Debugging (F5)")">
                     @if (_isRecording)
                     {
                         <span class="spinner-border spinner-border-sm" role="status"></span>
                         <span>Running...</span>
+                    }
+                    else if (_session.IsRecorded)
+                    {
+                        <i class="bi bi-play-fill fs-6"></i>
+                        <span>Continue</span>
                     }
                     else
                     {
@@ -40,38 +45,41 @@
                     }
                 </button>
 
-                <!-- Stepping Controls (F10 Step, F9 Back, Restart) -->
-                <div class="btn-group btn-group-sm shadow-sm" role="group">
-                    <button class="btn btn-outline-primary d-inline-flex align-items-center gap-1"
-                            @onclick="StepForwardAsync"
-                            disabled="@(!_session.IsRecorded || _session.IsAtCompletion || _isRecording)"
-                            title="Step Over / Next statement (F10)">
-                        <i class="bi bi-arrow-right"></i>
-                        <span>Step (F10)</span>
-                    </button>
-                    <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
-                            @onclick="StepBack"
-                            disabled="@(!_session.IsRecorded || _session.CurrentStepIndex <= 0 || _isRecording)"
-                            title="Step Back / Previous statement (F9)">
-                        <i class="bi bi-arrow-left"></i>
-                        <span>Back (F9)</span>
-                    </button>
-                    <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
-                            @onclick="ResetToFirstStepAsync"
-                            disabled="@(!_session.IsRecorded || _session.CurrentStepIndex == 0 || _isRecording)"
-                            title="Restart Debugging / Rewind to Statement 1">
-                        <i class="bi bi-arrow-clockwise"></i>
-                        <span>Restart</span>
-                    </button>
-                </div>
+                @if (_session.IsRecorded)
+                {
+                    <!-- Stepping Controls (F10 Step, F9 Back, Restart) -->
+                    <div class="btn-group btn-group-sm shadow-sm" role="group">
+                        <button class="btn btn-outline-primary d-inline-flex align-items-center gap-1"
+                                @onclick="StepForwardAsync"
+                                disabled="@(_session.IsAtCompletion || _isRecording)"
+                                title="Step Over / Next statement (F10)">
+                            <i class="bi bi-arrow-right"></i>
+                            <span>Step (F10)</span>
+                        </button>
+                        <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+                                @onclick="StepBack"
+                                disabled="@(_session.CurrentStepIndex <= 0 || _isRecording)"
+                                title="Step Back / Previous statement (F9)">
+                            <i class="bi bi-arrow-left"></i>
+                            <span>Back (F9)</span>
+                        </button>
+                        <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+                                @onclick="ResetToFirstStepAsync"
+                                disabled="@(_session.CurrentStepIndex == 0 || _isRecording)"
+                                title="Restart Debugging / Rewind to Statement 1">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            <span>Restart</span>
+                        </button>
+                    </div>
 
-                <!-- Stop Debugging (Shift+F5) -->
-                <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
-                        @onclick="ClearSession"
-                        title="Stop Debugging and clear session (Shift+F5)">
-                    <i class="bi bi-stop-fill"></i>
-                    <span>Stop</span>
-                </button>
+                    <!-- Stop Debugging (Shift+F5) -->
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
+                            @onclick="StopDebuggingAsync"
+                            title="Stop Debugging (Shift+F5)">
+                        <i class="bi bi-stop-fill"></i>
+                        <span>Stop</span>
+                    </button>
+                }
             }
 
             @if (!IsPopout)
@@ -147,7 +155,7 @@
             }
         </div>
 
-        <!-- Parameters Button (beside SP selector) -->
+        <!-- Parameters & Clear Buttons (beside SP selector) -->
         @if (_session != null && _session.Statements.Count > 0)
         {
             <div class="col-auto">
@@ -156,6 +164,23 @@
                         title="Configure input parameters for this stored procedure">
                     <i class="bi bi-sliders"></i>
                     <span>Parameters @(_session.Parameters.Count > 0 ? $"({_session.Parameters.Count})" : "")</span>
+                </button>
+            </div>
+
+            <!-- Right-Aligned Actions: Breakpoints & Clear -->
+            <div class="col-auto ms-auto d-flex align-items-center gap-2">
+                @if (_breakpointLines.Count > 0)
+                {
+                    <button class="btn btn-sm btn-outline-danger shadow-sm px-2.5"
+                            @onclick="ClearAllBreakpointsAsync"
+                            title="Clear all breakpoints">
+                        <span>@(_breakpointLines.Count) Breakpoint@(_breakpointLines.Count > 1 ? "s" : "")</span>
+                    </button>
+                }
+                <button class="btn btn-sm btn-outline-danger shadow-sm px-2.5"
+                        @onclick="ClearProcedureAsync"
+                        title="Clear selected procedure and reset workspace">
+                    <span>Clear</span>
                 </button>
             </div>
         }
@@ -276,7 +301,8 @@
                         <StandaloneCodeEditor @ref="_editor"
                                               Id="sp-debugger-editor"
                                               CssClass="w-100 h-100"
-                                              ConstructionOptions="EditorOptions" />
+                                              ConstructionOptions="EditorOptions"
+                                              OnDidInit="EditorOnDidInit" />
                     }
                 </div>
             </div>
@@ -784,6 +810,16 @@
     .active-statement-glyph {
         color: #10b981 !important;
     }
+    .breakpoint-glyph {
+        background-color: #ef4444 !important;
+        border-radius: 50% !important;
+        width: 10px !important;
+        height: 10px !important;
+        margin-left: 6px !important;
+        margin-top: 4px !important;
+        box-shadow: 0 0 6px rgba(239, 68, 68, 0.75);
+        cursor: pointer;
+    }
     .var-changed-row {
         --bs-table-bg: rgba(245, 158, 11, 0.14) !important;
         background-color: rgba(245, 158, 11, 0.14) !important;
@@ -799,7 +835,10 @@
 
     private SpDebugSessionState? _session;
     private StandaloneCodeEditor? _editor;
-    private string[] _decorationIds = Array.Empty<string>();
+    private DotNetObjectReference<SpDebuggerTool>? _dotNetHelper;
+    private string[] _stepDecorationIds = Array.Empty<string>();
+    private string[] _breakpointDecorationIds = Array.Empty<string>();
+    private HashSet<int> _breakpointLines = new();
 
     private string _selectedSpName = string.Empty;
     private string _spFilter = string.Empty;
@@ -1049,34 +1088,168 @@
         }
     }
 
-    private async Task RunAndRecordAsync()
+    private async Task EditorOnDidInit()
+    {
+        try
+        {
+            _dotNetHelper = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("initSpDebuggerGutter", "sp-debugger-editor", _dotNetHelper);
+            if (_breakpointLines.Count > 0)
+            {
+                await UpdateBreakpointDecorationsAsync();
+            }
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public async Task OnGutterBreakpointClick(int lineNumber)
+    {
+        await ToggleBreakpointAsync(lineNumber);
+    }
+
+    private async Task ToggleBreakpointAsync(int lineNumber)
+    {
+        if (_editor == null) return;
+
+        int targetLine = lineNumber;
+
+        // If statements are parsed, snap to the statement's starting line
+        if (_session?.Statements.Count > 0)
+        {
+            var stmt = _session.Statements.FirstOrDefault(s => lineNumber >= s.LineNumber && lineNumber <= (s.EndLineNumber >= s.LineNumber ? s.EndLineNumber : s.LineNumber))
+                       ?? _session.Statements.FirstOrDefault(s => s.LineNumber >= lineNumber);
+            if (stmt != null)
+            {
+                targetLine = stmt.LineNumber;
+            }
+        }
+
+        if (_breakpointLines.Contains(targetLine))
+        {
+            _breakpointLines.Remove(targetLine);
+        }
+        else
+        {
+            _breakpointLines.Add(targetLine);
+        }
+
+        await UpdateBreakpointDecorationsAsync();
+        StateHasChanged();
+    }
+
+    private async Task UpdateBreakpointDecorationsAsync()
+    {
+        if (_editor == null) return;
+
+        var newDecorations = _breakpointLines.Select(line => new ModelDeltaDecoration
+        {
+            Range = new BlazorMonaco.Range(line, 1, line, 1),
+            Options = new ModelDecorationOptions
+            {
+                IsWholeLine = false,
+                GlyphMarginClassName = "breakpoint-glyph",
+                GlyphMarginHoverMessage = new[] { new MarkdownString { Value = $"Breakpoint on Line {line}" } }
+            }
+        }).ToArray();
+
+        _breakpointDecorationIds = await _editor.DeltaDecorations(_breakpointDecorationIds, newDecorations);
+    }
+
+    private async Task ClearAllBreakpointsAsync()
+    {
+        _breakpointLines.Clear();
+        if (_editor != null)
+        {
+            _breakpointDecorationIds = await _editor.DeltaDecorations(_breakpointDecorationIds, Array.Empty<ModelDeltaDecoration>());
+        }
+        StateHasChanged();
+    }
+
+    private async Task RunOrContinueAsync()
     {
         if (_session == null || _isRecording) return;
 
-        var connStr = ConnectionService.ConnectionString;
-        if (string.IsNullOrEmpty(connStr))
+        if (!_session.IsRecorded)
         {
-            _session.ErrorMessage = "No active database connection string found.";
-            return;
-        }
-
-        _isRecording = true;
-        StateHasChanged();
-
-        try
-        {
-            var success = await DebuggerService.RecordDebugSessionAsync(connStr, _session);
-            if (success)
+            var connStr = ConnectionService.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
             {
-                _session.CurrentStepIndex = 0;
-                await HighlightCurrentStepAsync();
+                _session.ErrorMessage = "No active database connection string found.";
+                return;
+            }
+
+            _isRecording = true;
+            StateHasChanged();
+
+            try
+            {
+                var success = await DebuggerService.RecordDebugSessionAsync(connStr, _session);
+                if (success)
+                {
+                    int initialStep = 0;
+                    if (_breakpointLines.Count > 0)
+                    {
+                        int bpStep = FindNextBreakpointStep(-1);
+                        if (bpStep != -1)
+                        {
+                            initialStep = bpStep;
+                        }
+                    }
+
+                    _session.CurrentStepIndex = initialStep;
+                    await HighlightCurrentStepAsync();
+                }
+            }
+            finally
+            {
+                _isRecording = false;
+                StateHasChanged();
             }
         }
-        finally
+        else
         {
-            _isRecording = false;
-            StateHasChanged();
+            await ContinueToNextBreakpointAsync();
         }
+    }
+
+    private int FindNextBreakpointStep(int fromStepIndex)
+    {
+        if (_session == null || _session.RecordedSteps.Count == 0 || _breakpointLines.Count == 0)
+            return -1;
+
+        int startIndex = Math.Max(1, fromStepIndex + 1);
+        for (int i = startIndex; i < _session.RecordedSteps.Count; i++)
+        {
+            var snap = _session.RecordedSteps[i];
+            if (snap.StatementType == "COMPLETED") continue;
+            int end = snap.EndLineNumber >= snap.LineNumber ? snap.EndLineNumber : snap.LineNumber;
+            if (_breakpointLines.Any(b => b >= snap.LineNumber && b <= end))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private async Task ContinueToNextBreakpointAsync()
+    {
+        if (_session == null || !_session.IsRecorded || _session.IsAtCompletion) return;
+
+        var nextStep = FindNextBreakpointStep(_session.CurrentStepIndex);
+        if (nextStep != -1)
+        {
+            _session.CurrentStepIndex = nextStep;
+        }
+        else
+        {
+            _session.CurrentStepIndex = _session.RecordedSteps.Count > 0
+                ? _session.RecordedSteps.Count - 1
+                : _session.Statements.Count;
+        }
+
+        await HighlightCurrentStepAsync();
+        StateHasChanged();
     }
 
     private async Task StepForwardAsync()
@@ -1102,11 +1275,11 @@
         {
             if (e.ShiftKey)
             {
-                ClearSession();
+                await StopDebuggingAsync();
             }
             else
             {
-                await RunAndRecordAsync();
+                await RunOrContinueAsync();
             }
         }
         else if (e.Key == "Escape" && _workspaceLayout != SpWorkspaceLayout.Split)
@@ -1119,6 +1292,42 @@
                 try { await _editor.Layout(); } catch { }
             }
         }
+    }
+
+    private async Task StopDebuggingAsync()
+    {
+        if (_session == null) return;
+
+        _session.IsRecorded = false;
+        _session.RecordedSteps.Clear();
+        _session.StepSnapshots.Clear();
+        _session.ExecutionMessages.Clear();
+        _session.CurrentStepIndex = -1;
+        _session.TotalServerExecutionMs = 0;
+
+        if (_editor != null)
+        {
+            _stepDecorationIds = await _editor.DeltaDecorations(_stepDecorationIds, Array.Empty<ModelDeltaDecoration>());
+        }
+
+        _collapsedResultSets.Clear();
+        _collapsedTempTables.Clear();
+        _activeInspectorTab = "Variables";
+        StateHasChanged();
+    }
+
+    private async Task ClearProcedureAsync()
+    {
+        ClearSession();
+        _selectedSpName = string.Empty;
+        _spFilter = string.Empty;
+        if (_editor != null)
+        {
+            _stepDecorationIds = await _editor.DeltaDecorations(_stepDecorationIds, Array.Empty<ModelDeltaDecoration>());
+            _breakpointDecorationIds = await _editor.DeltaDecorations(_breakpointDecorationIds, Array.Empty<ModelDeltaDecoration>());
+            await _editor.SetValue(string.Empty);
+        }
+        StateHasChanged();
     }
 
     private async Task StepBack()
@@ -1144,7 +1353,9 @@
         _session?.ClearMemory();
         DebuggerService.DisposeActiveSession();
         _session = null;
-        _decorationIds = Array.Empty<string>();
+        _stepDecorationIds = Array.Empty<string>();
+        _breakpointDecorationIds = Array.Empty<string>();
+        _breakpointLines.Clear();
         _collapsedResultSets.Clear();
         _collapsedTempTables.Clear();
         _showWarningsBanner = true;
@@ -1159,7 +1370,7 @@
         var stmt = _session.CurrentStatement;
         if (stmt == null)
         {
-            _decorationIds = await _editor.DeltaDecorations(_decorationIds, Array.Empty<ModelDeltaDecoration>());
+            _stepDecorationIds = await _editor.DeltaDecorations(_stepDecorationIds, Array.Empty<ModelDeltaDecoration>());
             return;
         }
 
@@ -1181,7 +1392,7 @@
             }
         };
 
-        _decorationIds = await _editor.DeltaDecorations(_decorationIds, newDecorations);
+        _stepDecorationIds = await _editor.DeltaDecorations(_stepDecorationIds, newDecorations);
         await _editor.RevealLineInCenter(startLine);
     }
 
@@ -1230,6 +1441,9 @@
     public void Dispose()
     {
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
+
+        _dotNetHelper?.Dispose();
+        _dotNetHelper = null;
 
         // Guaranteed memory cleanup to ensure 0 MB memory leak
         _session?.ClearMemory();

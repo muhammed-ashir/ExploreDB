@@ -3092,3 +3092,35 @@ window.positionContextMenu = function (elOrId, x, y) {
     el.style.left = Math.round(left) + 'px';
     el.style.visibility = 'visible';
 };
+
+window.initSpDebuggerGutter = function (editorId, dotNetHelper) {
+    function tryAttach() {
+        var editors = (window.blazorMonaco && window.blazorMonaco.editors) ? window.blazorMonaco.editors : [];
+        var holder = editors.find(function (h) { return h.id === editorId; });
+        if (!holder || !holder.editor) {
+            return false;
+        }
+        var editor = holder.editor;
+        if (editor._spGutterAttached) return true;
+        editor._spGutterAttached = true;
+
+        editor.onMouseDown(function (e) {
+            if (e && e.target && (e.target.type === 2 || e.target.type === 3 || e.target.type === 4)) {
+                if (e.target.position && e.target.position.lineNumber) {
+                    dotNetHelper.invokeMethodAsync('OnGutterBreakpointClick', e.target.position.lineNumber);
+                }
+            }
+        });
+        return true;
+    }
+
+    if (!tryAttach()) {
+        var attempts = 0;
+        var interval = setInterval(function () {
+            attempts++;
+            if (tryAttach() || attempts > 20) {
+                clearInterval(interval);
+            }
+        }, 150);
+    }
+};
