@@ -1,5 +1,6 @@
 @page "/builder"
 @using ExploreDB.Services
+@using System.IO
 @using BlazorMonaco
 @using BlazorMonaco.Editor
 @inject SchemaService SchemaService
@@ -10,6 +11,8 @@
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject ThemeService ThemeService
 @inject ConnectionService ConnectionService
+@inject VirtualRelationshipService VirtualRelationshipService
+@inject WindowManagerService WindowManager
 @implements IDisposable
 
 <style>
@@ -452,35 +455,59 @@ else
                          <span class="fw-bold" style="color: var(--app-text);">@(TotalSelectedTablesCount == 1 ? "Generated SQL" : "Join Path Routing")</span>
                      </div>
                      <div class="d-flex align-items-center gap-2">
-                         <button class="btn btn-sm btn-outline-warning" @onclick="() => ShowClearConfirmation = true" title="Clear all selections">
-                             <i class="bi bi-eraser-fill me-1"></i> Clear
+                         <button class="btn btn-sm btn-outline-info d-flex align-items-center gap-1 shadow-sm px-2" 
+                                 @onclick="OpenManageRelationshipsModal" 
+                                 data-bs-tooltip="true" 
+                                 data-bs-placement="bottom" 
+                                 data-bs-title="Manage Relationships" 
+                                 title="Manage Relationships">
+                             <i class="bi bi-link-45deg fs-6"></i>
+                             @if (ActiveVirtualCount > 0)
+                             {
+                                 <span class="badge bg-info text-dark rounded-pill" style="font-size: 0.65rem; padding: 0.15rem 0.35rem;" title="@ActiveVirtualCount active virtual relationships">@ActiveVirtualCount</span>
+                             }
+                             @if (SuggestedCount > 0)
+                             {
+                                 <span class="badge bg-warning text-dark rounded-pill" style="font-size: 0.65rem; padding: 0.15rem 0.35rem;" title="@SuggestedCount suggested relationships need review">@SuggestedCount</span>
+                             }
+                         </button>
+                         <button class="btn btn-sm btn-outline-warning d-flex align-items-center justify-content-center shadow-sm px-2" 
+                                 @onclick="() => ShowClearConfirmation = true" 
+                                 data-bs-tooltip="true" 
+                                 data-bs-placement="bottom" 
+                                 data-bs-title="Clear all selections" 
+                                 title="Clear all selections">
+                             <i class="bi bi-eraser-fill"></i>
                          </button>
                                                   @if (TotalSelectedTablesCount == 1)
                          {
                              <button class="btn btn-sm @(SingleTableCopyLabel == "Copied! ✓" ? "btn-success" : "btn-outline-secondary") d-flex align-items-center gap-1 shadow-sm px-2" 
                                      @onclick="CopySingleTableSql" 
-                                     title="Copy query to clipboard">
+                                     title="Copy SQL query" data-bs-tooltip="true" data-bs-placement="bottom" data-bs-title="Copy SQL query">
                                  @if (SingleTableCopyLabel == "Copy")
                                  {
                                      <i class="bi bi-clipboard"></i>
                                  }
-                                 <span>@SingleTableCopyLabel</span>
+                                 
                              </button>
-                             <button class="btn btn-sm btn-primary fw-semibold d-flex align-items-center gap-1 shadow-sm px-3" 
+                             <button class="btn btn-sm btn-primary d-flex align-items-center justify-content-center shadow-sm px-2" 
                                      @onclick="RunInRunner" 
-                                     title="Open in Query editor">
+                                     title="Open in Query Editor" data-bs-tooltip="true" data-bs-placement="bottom" data-bs-title="Open in Query Editor">
                                  <i class="bi bi-play-fill"></i>
-                                 <span>Open in Editor</span>
+                                 
                              </button>
                          }
                          else
                          {
-                         <button class="btn btn-sm btn-primary fw-semibold d-flex align-items-center gap-1 shadow-sm px-3" 
+                         <button class="btn btn-sm btn-primary d-flex align-items-center justify-content-center shadow-sm px-2" 
                                  @onclick="OpenQueryModal" 
                                  disabled="@(TotalSelectedTablesCount == 0)"
-                                 title="@(TotalSelectedTablesCount == 0 ? "Select at least 1 table to view query" : "View generated SQL query")">
+                                 data-bs-tooltip="true"
+                                 data-bs-placement="bottom"
+                                 data-bs-title="@(TotalSelectedTablesCount == 0 ? "Select at least 1 table to view query" : "Show Query")"
+                                 title="@(TotalSelectedTablesCount == 0 ? "Select at least 1 table to view query" : "Show Query")">
                              <i class="bi bi-code-slash"></i>
-                             <span>Show Query</span>
+                             
                          </button>
                          }
                      </div>
@@ -590,6 +617,14 @@ else
                                                  <div class="btn-group btn-group-sm shadow-sm @(!step.IsSelectedTable ? "dropdown" : "")">
                                                      <span class="btn btn-sm py-1 fw-bold cursor-pointer text-truncate d-inline-block align-middle join-path-badge" style="max-width: 300px;" data-bs-tooltip="true" data-bs-html="true" data-bs-title="@GetTooltipHtml(step.FullName)" data-bs-placement="bottom" @onclick="() => NavigateToDetails(step.FullName)">
                                                          @step.FullName.Split('.').Last().Replace("[", "").Replace("]", "")
+                                                         @if (step.RelationshipType == RelationshipType.Inferred)
+                                                         {
+                                                             <span class="badge bg-info text-dark ms-1 px-1 py-0" style="font-size: 0.62rem; vertical-align: middle;" title="@(step.MatchReason ?? "Inferred relationship")">~Inferred</span>
+                                                         }
+                                                         else if (step.RelationshipType == RelationshipType.UserDefined)
+                                                         {
+                                                             <span class="badge bg-primary text-white ms-1 px-1 py-0" style="font-size: 0.62rem; vertical-align: middle;" title="User defined custom relationship">Custom</span>
+                                                         }
                                                      </span>
                                                      @if (!step.IsSelectedTable)
                                                      {
@@ -985,7 +1020,2025 @@ else
     </div>
 }
 
+@if (ShowManageRelationshipsModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" @onclick="CloseManageRelationshipsModal" style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation style="width: 94vw; max-width: 95vw; height: 88vh; max-height: 90vh; min-height: 480px; margin: auto;">
+            <div class="modal-content shadow-lg d-flex flex-column h-100 rounded-3 overflow-hidden position-relative" style="background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); box-shadow: 0 20px 60px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.06);">
+                <!-- Header -->
+                <div class="modal-header py-3 px-4 d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-diagram-3-fill text-info fs-5"></i>
+                        <h6 class="modal-title fw-bold mb-0" style="color: var(--app-text);">Manage Virtual & Inferred Relationships</h6>
+                    </div>
+                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" @onclick="CloseManageRelationshipsModal"></button>
+                </div>
+
+                <!-- Relation Profile Toolbar -->
+                <div class="px-4 py-2 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2" style="background: var(--app-surface); border-color: var(--app-border) !important;">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <span class="text-muted small fw-semibold d-flex align-items-center gap-1.5">
+                            <i class="bi bi-collection-fill text-primary"></i> Relation Profile:
+                        </span>
+
+                        <div class="dropdown position-relative">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-2 py-1 px-2.5" 
+                                    type="button" 
+                                    @onclick="ToggleProfileDropdown">
+                                @if (string.IsNullOrEmpty(ActiveProfileName))
+                                {
+                                    <i class="bi bi-hdd text-secondary"></i>
+                                    <span>Local <span class="text-muted fw-normal">(@SchemaService.ActiveDatabase)</span></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-collection-fill text-primary"></i>
+                                    <span class="fw-bold text-primary">@ActiveProfileName</span>
+                                }
+                            </button>
+
+                            @if (IsProfileDropdownOpen)
+                            {
+                                <div class="dropdown-menu show shadow-lg py-1 mt-1 position-absolute" 
+                                     style="min-width: 300px; z-index: 1070; background: var(--app-surface); border: 1px solid var(--app-border);">
+                                    <div class="px-3 py-1.5 text-muted small fw-bold text-uppercase border-bottom" style="font-size: 0.7rem; border-color: var(--app-border) !important;">
+                                        Select Relation Profile
+                                    </div>
+                                    <button class="dropdown-item d-flex align-items-center justify-content-between py-2 px-3 small @(string.IsNullOrEmpty(ActiveProfileName) ? "active bg-primary text-white" : "")"
+                                            @onclick="InitiateSwitchToLocal">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="bi bi-hdd @(string.IsNullOrEmpty(ActiveProfileName) ? "text-white" : "text-secondary")"></i>
+                                            <div>
+                                                <div class="fw-semibold">Local (Isolated to this DB)</div>
+                                                <div class="@(string.IsNullOrEmpty(ActiveProfileName) ? "text-white-50" : "text-muted")" style="font-size: 0.72rem;">Changes stay only in this database</div>
+                                            </div>
+                                        </div>
+                                        @if (string.IsNullOrEmpty(ActiveProfileName))
+                                        {
+                                            <i class="bi bi-check-lg"></i>
+                                        }
+                                    </button>
+
+                                    @if (AvailableProfiles.Count > 0)
+                                    {
+                                        <div class="dropdown-divider my-1" style="border-color: var(--app-border);"></div>
+                                        <div class="px-3 py-1 text-muted small fw-bold text-uppercase" style="font-size: 0.68rem;">
+                                            Shared Profiles
+                                        </div>
+                                        @foreach (var prof in AvailableProfiles)
+                                        {
+                                            var isCurrent = string.Equals(ActiveProfileName, prof.Name, StringComparison.OrdinalIgnoreCase);
+                                            <div class="d-flex align-items-center justify-content-between px-2 py-0.5 dropdown-item-container">
+                                                <button class="btn btn-sm text-start flex-grow-1 border-0 d-flex align-items-center justify-content-between p-1.5 @(isCurrent ? "fw-bold text-primary" : "")"
+                                                        style="background: transparent; color: var(--app-text);"
+                                                        @onclick="() => SwitchToProfile(prof.Name)">
+                                                    <div>
+                                                        <div>@prof.Name</div>
+                                                        <div class="text-muted small" style="font-size: 0.7rem;">@prof.EntryCount relations &bull; @prof.LastModified.ToString("g")</div>
+                                                    </div>
+                                                    @if (isCurrent)
+                                                    {
+                                                        <i class="bi bi-check-lg text-primary ms-2"></i>
+                                                    }
+                                                </button>
+                                                <button class="btn btn-sm btn-link text-danger p-1 opacity-75 hover-opacity-100" 
+                                                        title="Delete profile" 
+                                                        @onclick="() => PromptDeleteProfile(prof.Name)" 
+                                                        @onclick:stopPropagation>
+                                                    <i class="bi bi-trash3"></i>
+                                                </button>
+                                            </div>
+                                        }
+                                    }
+
+                                    <div class="dropdown-divider my-1" style="border-color: var(--app-border);"></div>
+                                    <button class="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-success fw-semibold"
+                                            @onclick="OpenSaveAsProfileModal">
+                                        <i class="bi bi-plus-circle"></i> Save As New Profile...
+                                    </button>
+                                </div>
+                            }
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(ActiveProfileName))
+                        {
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.7rem;">
+                                <i class="bi bi-share me-1"></i>Shared Profile
+                            </span>
+                        }
+                    </div>
+
+                    <!-- Right actions: Save As Profile, Export, Import -->
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1.5 py-1 px-2.5" 
+                                @onclick="OpenSaveAsProfileModal" 
+                                title="Save current relationships as a reusable profile for other databases">
+                            <i class="bi bi-plus-circle"></i>
+                            <span>Save As Profile</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1.5 py-1 px-2.5" 
+                                @onclick="ExportActiveProfileAsync" 
+                                title="Export current relationships to a JSON file">
+                            <i class="bi bi-download"></i>
+                            <span>Export</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1.5 py-1 px-2.5" 
+                                @onclick="ImportProfileAsync" 
+                                title="Import relationships from a JSON file">
+                            <i class="bi bi-upload"></i>
+                            <span>Import</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sub-nav Tabs -->
+                <div class="px-4 pt-2 border-bottom d-flex gap-2" style="background: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                    <button class="btn btn-sm rounded-0 pb-2 pt-1 border-0 fw-semibold @(ActiveManageRelationshipsTab == "active" ? "text-primary border-bottom border-primary border-3" : "text-muted")"
+                            style="background: transparent;" @onclick='() => ActiveManageRelationshipsTab = "active"'>
+                        Active Relationships
+                        @if (ActiveVirtualCount > 0)
+                        {
+                            <span class="badge bg-info text-dark rounded-pill ms-1" style="font-size: 0.65rem;">@ActiveVirtualCount</span>
+                        }
+                    </button>
+                    <button class="btn btn-sm rounded-0 pb-2 pt-1 border-0 fw-semibold @(ActiveManageRelationshipsTab == "suggested" ? "text-warning border-bottom border-warning border-3" : "text-muted")"
+                            style="background: transparent;" @onclick='() => ActiveManageRelationshipsTab = "suggested"'>
+                        Suggested Keys
+                        @if (SuggestedCount > 0)
+                        {
+                            <span class="badge bg-warning text-dark rounded-pill ms-1" style="font-size: 0.65rem;">@SuggestedCount</span>
+                        }
+                    </button>
+                    <button class="btn btn-sm rounded-0 pb-2 pt-1 border-0 fw-semibold @(ActiveManageRelationshipsTab == "add" ? "text-success border-bottom border-success border-3" : "text-muted")"
+                            style="background: transparent;" @onclick='() => ActiveManageRelationshipsTab = "add"'>
+                        Add Custom Link
+                    </button>
+                    <button class="btn btn-sm rounded-0 pb-2 pt-1 border-0 fw-semibold @(ActiveManageRelationshipsTab == "blacklisted" ? "text-danger border-bottom border-danger border-3" : "text-muted")"
+                            style="background: transparent;" @onclick='() => ActiveManageRelationshipsTab = "blacklisted"'>
+                        Dismissed
+                        @if (BlacklistedCount > 0)
+                        {
+                            <span class="badge bg-secondary text-light rounded-pill ms-1" style="font-size: 0.65rem;">@BlacklistedCount</span>
+                        }
+                    </button>
+                </div>
+
+                <!-- Body -->
+                <div class="modal-body p-4 overflow-auto custom-scrollbar-light position-relative" style="flex: 1; min-height: 0;">
+                    @if (IsProcessingAction)
+                    {
+                        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center" 
+                             style="background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(2px); z-index: 1090; pointer-events: auto;">
+                            <div class="spinner-border text-info mb-3" role="status" style="width: 2.8rem; height: 2.8rem;"></div>
+                            <div class="text-light fw-bold fs-6">@ActionLoadingMessage</div>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(ProfileNotificationMessage))
+                    {
+                        <div class="alert @(IsProfileNotificationSuccess ? "alert-success" : "alert-danger") py-2 px-3 small d-flex justify-content-between align-items-center mb-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi @(IsProfileNotificationSuccess ? "bi-check-circle-fill text-success" : "bi-exclamation-triangle-fill text-danger") fs-6"></i>
+                                <span>@ProfileNotificationMessage</span>
+                            </div>
+                            <button type="button" class="btn-close btn-sm" @onclick="() => ProfileNotificationMessage = null"></button>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(VerificationStatusMessage))
+                    {
+                        <div class="alert @(IsVerificationSuccess ? "alert-success" : "alert-warning") py-2 px-3 small d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <i class="bi @(IsVerificationSuccess ? "bi-check-circle-fill text-success" : "bi-exclamation-triangle-fill text-warning") me-2"></i>
+                                @VerificationStatusMessage
+                            </div>
+                            <button type="button" class="btn-close btn-sm" @onclick="() => VerificationStatusMessage = null"></button>
+                        </div>
+                    }
+
+                    @if (ActiveManageRelationshipsTab == "active")
+                    {
+                        @if (ActiveVirtualCount == 0)
+                        {
+                            <div class="text-center py-5 text-muted">
+                                <i class="bi bi-diagram-3 fs-1 text-secondary opacity-50 mb-2 d-block"></i>
+                                <h6 class="fw-bold">No Active Virtual Relationships</h6>
+                                <p class="small mb-0">Tables without physical foreign key constraints will be automatically analyzed when loaded, or you can add custom links manually.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            var activeEntries = VirtualRelationshipService.GetActiveVirtualEntries();
+                            var filteredActive = activeEntries
+                                .Where(e => string.IsNullOrWhiteSpace(ActiveTabSearch) ||
+                                            e.FromTable.Contains(ActiveTabSearch, StringComparison.OrdinalIgnoreCase) ||
+                                            e.FromColumn.Contains(ActiveTabSearch, StringComparison.OrdinalIgnoreCase) ||
+                                            e.ToTable.Contains(ActiveTabSearch, StringComparison.OrdinalIgnoreCase) ||
+                                            e.ToColumn.Contains(ActiveTabSearch, StringComparison.OrdinalIgnoreCase) ||
+                                            (e.MatchReason != null && e.MatchReason.Contains(ActiveTabSearch, StringComparison.OrdinalIgnoreCase)))
+                                .ToList();
+
+                            var activeTotalCount = filteredActive.Count;
+                            var activeTotalPages = ActivePageSize > 0 ? Math.Max(1, (int)Math.Ceiling(activeTotalCount / (double)ActivePageSize)) : 1;
+                            if (ActiveCurrentPage > activeTotalPages) ActiveCurrentPage = activeTotalPages;
+                            if (ActiveCurrentPage < 1) ActiveCurrentPage = 1;
+
+                            var pagedActive = ActivePageSize > 0
+                                ? filteredActive.Skip((ActiveCurrentPage - 1) * ActivePageSize).Take(ActivePageSize).ToList()
+                                : filteredActive;
+
+                            var activeStartIdx = activeTotalCount == 0 ? 0 : ((ActiveCurrentPage - 1) * ActivePageSize) + 1;
+                            var activeEndIdx = Math.Min(ActiveCurrentPage * ActivePageSize, activeTotalCount);
+
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="position-relative" style="max-width: 400px; width: 100%;">
+                                    <input class="form-control form-control-sm pe-4" 
+                                           placeholder="Search active relationships..." 
+                                           @bind="ActiveTabSearch" 
+                                           @bind:event="oninput" 
+                                           style="background: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+                                    <i class="bi bi-search position-absolute text-muted" style="right: 12px; top: 8px; pointer-events: none; font-size: 0.8rem;"></i>
+                                </div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="text-muted small">Show:</span>
+                                        <select class="form-select form-select-sm py-0 px-2" style="width: auto; height: 26px; font-size: 0.75rem; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                                value="@ActivePageSize"
+                                                @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out var ps)) { ActivePageSize = ps; ActiveCurrentPage = 1; } }">
+                                            <option value="10">10</option>
+                                            <option value="25">25</option>
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                        </select>
+                                    </div>
+                                    <span class="text-muted small">
+                                        @if (activeTotalCount > 0)
+                                        {
+                                            <span>Showing @activeStartIdx-@activeEndIdx of @activeTotalCount</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Showing 0 relationships</span>
+                                        }
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle small mb-0" style="color: var(--app-text);">
+                                    <thead>
+                                        <tr class="text-muted" style="border-bottom: 2px solid var(--app-border);">
+                                            <th>Referencing (Child)</th>
+                                            <th>Referenced (Parent PK)</th>
+                                            <th>Type</th>
+                                            <th>Confidence</th>
+                                            <th>Reason</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var entry in pagedActive)
+                                        {
+                                            var key = entry.Key;
+                                            <tr style="border-bottom: 1px solid var(--app-border);">
+                                                <td>
+                                                    @{ var (fromSchema, fromTable) = SplitSchemaAndTable(entry.FromTable, SchemaService); }
+                                                    @if (!string.IsNullOrEmpty(fromSchema))
+                                                    {
+                                                        <span class="text-muted fw-normal opacity-75">@fromSchema.</span>
+                                                    }<span class="fw-bold text-info">@fromTable</span>
+                                                    <span class="text-muted">.</span>
+                                                    <span class="badge bg-secondary bg-opacity-25 text-light font-monospace">@entry.FromColumn</span>
+                                                </td>
+                                                <td>
+                                                    @{ var (toSchema, toTable) = SplitSchemaAndTable(entry.ToTable, SchemaService); }
+                                                    @if (!string.IsNullOrEmpty(toSchema))
+                                                    {
+                                                        <span class="text-muted fw-normal opacity-75">@toSchema.</span>
+                                                    }<span class="fw-bold text-success">@toTable</span>
+                                                    <span class="text-muted">.</span>
+                                                    <span class="badge bg-secondary bg-opacity-25 text-light font-monospace">@entry.ToColumn</span>
+                                                </td>
+                                                <td>
+                                                    @if (entry.Type == RelationshipType.Inferred)
+                                                    {
+                                                        <span class="badge bg-info bg-opacity-25 text-info border border-info border-opacity-50">Inferred</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-50">Custom</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <span class="badge @(entry.ConfidenceScore >= 90 ? "bg-success bg-opacity-25 text-success" : "bg-warning bg-opacity-25 text-warning")">
+                                                        @entry.ConfidenceScore%
+                                                    </span>
+                                                </td>
+                                                <td class="text-muted small text-truncate" style="max-width: 250px;" title="@entry.MatchReason">
+                                                    @entry.MatchReason
+                                                </td>
+                                                <td class="text-end">
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button class="btn btn-outline-info" 
+                                                                disabled="@(VerifyingKey == key)" 
+                                                                @onclick="() => VerifyEntry(entry)" 
+                                                                data-bs-tooltip="true" 
+                                                                data-bs-placement="bottom" 
+                                                                data-bs-title="Test row integrity with sample data" 
+                                                                title="Test row integrity with sample data">
+                                                            @if (VerifyingKey == key)
+                                                            {
+                                                                <span class="spinner-border spinner-border-sm" role="status"></span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <i class="bi bi-shield-check"></i>
+                                                            }
+                                                        </button>
+                                                        <button class="btn btn-outline-warning" 
+                                                                @onclick="() => BlacklistEntry(entry)" 
+                                                                data-bs-tooltip="true" 
+                                                                data-bs-placement="bottom" 
+                                                                data-bs-title="Dismiss this relationship" 
+                                                                title="Dismiss this relationship">
+                                                            <i class="bi bi-eye-slash"></i>
+                                                        </button>
+                                                        <button class="btn btn-outline-danger" 
+                                                                @onclick="() => DeleteVirtualEntry(entry)" 
+                                                                data-bs-tooltip="true" 
+                                                                data-bs-placement="bottom" 
+                                                                data-bs-title="Delete relationship" 
+                                                                title="Delete relationship">
+                                                            <i class="bi bi-trash3"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            @if (activeTotalPages > 1)
+                            {
+                                <div class="d-flex justify-content-between align-items-center mt-3 pt-2" style="border-top: 1px solid var(--app-border);">
+                                    <span class="text-muted small">Page @ActiveCurrentPage of @activeTotalPages</span>
+                                    <nav>
+                                        <ul class="pagination pagination-sm mb-0">
+                                            <li class="page-item @(ActiveCurrentPage == 1 ? "disabled" : "")">
+                                                <button class="page-link" style="background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);" @onclick="() => ActiveCurrentPage = Math.Max(1, ActiveCurrentPage - 1)">
+                                                    <i class="bi bi-chevron-left"></i>
+                                                </button>
+                                            </li>
+                                            @for (int i = 1; i <= activeTotalPages; i++)
+                                            {
+                                                var pageNum = i;
+                                                if (activeTotalPages > 8 && (pageNum > 2 && pageNum < activeTotalPages - 1 && Math.Abs(pageNum - ActiveCurrentPage) > 2))
+                                                {
+                                                    if (pageNum == ActiveCurrentPage - 3 || pageNum == ActiveCurrentPage + 3)
+                                                    {
+                                                        <li class="page-item disabled"><span class="page-link" style="background-color: var(--app-surface-secondary); color: var(--app-text-muted); border-color: var(--app-border);">...</span></li>
+                                                    }
+                                                    continue;
+                                                }
+                                                <li class="page-item @(pageNum == ActiveCurrentPage ? "active" : "")">
+                                                    <button class="page-link @(pageNum == ActiveCurrentPage ? "bg-primary border-primary text-white" : "")" style="@(pageNum == ActiveCurrentPage ? "" : "background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);")" @onclick="() => ActiveCurrentPage = pageNum">@pageNum</button>
+                                                </li>
+                                            }
+                                            <li class="page-item @(ActiveCurrentPage == activeTotalPages ? "disabled" : "")">
+                                                <button class="page-link" style="background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);" @onclick="() => ActiveCurrentPage = Math.Min(activeTotalPages, ActiveCurrentPage + 1)">
+                                                    <i class="bi bi-chevron-right"></i>
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </nav>
+                                </div>
+                            }
+                        }
+                    }
+                    else if (ActiveManageRelationshipsTab == "suggested")
+                    {
+                        @if (SuggestedCount == 0)
+                        {
+                            <div class="text-center py-5 text-muted">
+                                <i class="bi bi-check2-circle fs-1 text-success opacity-50 mb-2 d-block"></i>
+                                <h6 class="fw-bold">No Suggestions Needing Review</h6>
+                                <p class="small mb-0">All high-confidence relationships have already been approved.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            var suggestedEntries = VirtualRelationshipService.GetSuggestedRelationships();
+                            var filteredSuggested = suggestedEntries
+                                .Where(r => string.IsNullOrWhiteSpace(SuggestedTabSearch) ||
+                                            r.FromTable.Contains(SuggestedTabSearch, StringComparison.OrdinalIgnoreCase) ||
+                                            r.FromColumn.Contains(SuggestedTabSearch, StringComparison.OrdinalIgnoreCase) ||
+                                            r.ToTable.Contains(SuggestedTabSearch, StringComparison.OrdinalIgnoreCase) ||
+                                            r.ToColumn.Contains(SuggestedTabSearch, StringComparison.OrdinalIgnoreCase) ||
+                                            (r.MatchReason != null && r.MatchReason.Contains(SuggestedTabSearch, StringComparison.OrdinalIgnoreCase)))
+                                .ToList();
+
+                            var suggestedTotalCount = filteredSuggested.Count;
+                            var suggestedTotalPages = SuggestedPageSize > 0 ? Math.Max(1, (int)Math.Ceiling(suggestedTotalCount / (double)SuggestedPageSize)) : 1;
+                            if (SuggestedCurrentPage > suggestedTotalPages) SuggestedCurrentPage = suggestedTotalPages;
+                            if (SuggestedCurrentPage < 1) SuggestedCurrentPage = 1;
+
+                            var pagedSuggested = SuggestedPageSize > 0
+                                ? filteredSuggested.Skip((SuggestedCurrentPage - 1) * SuggestedPageSize).Take(SuggestedPageSize).ToList()
+                                : filteredSuggested;
+
+                            var suggestedStartIdx = suggestedTotalCount == 0 ? 0 : ((SuggestedCurrentPage - 1) * SuggestedPageSize) + 1;
+                            var suggestedEndIdx = Math.Min(SuggestedCurrentPage * SuggestedPageSize, suggestedTotalCount);
+
+                            <div class="alert alert-info py-2 px-3 small mb-3">
+                                <i class="bi bi-info-circle me-1"></i> These relationships were detected via naming patterns but have moderate confidence or multiple candidate matches. Review and approve them to enable automatic joins.
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="position-relative" style="max-width: 400px; width: 100%;">
+                                    <input class="form-control form-control-sm pe-4" 
+                                           placeholder="Search suggested relationships..." 
+                                           @bind="SuggestedTabSearch" 
+                                           @bind:event="oninput" 
+                                           style="background: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+                                    <i class="bi bi-search position-absolute text-muted" style="right: 12px; top: 8px; pointer-events: none; font-size: 0.8rem;"></i>
+                                </div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="text-muted small">Show:</span>
+                                        <select class="form-select form-select-sm py-0 px-2" style="width: auto; height: 26px; font-size: 0.75rem; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                                value="@SuggestedPageSize"
+                                                @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out var ps)) { SuggestedPageSize = ps; SuggestedCurrentPage = 1; } }">
+                                            <option value="10">10</option>
+                                            <option value="25">25</option>
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                        </select>
+                                    </div>
+                                    <span class="text-muted small">
+                                        @if (suggestedTotalCount > 0)
+                                        {
+                                            <span>Showing @suggestedStartIdx-@suggestedEndIdx of @suggestedTotalCount</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Showing 0 suggestions</span>
+                                        }
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle small mb-0" style="color: var(--app-text);">
+                                    <thead>
+                                        <tr class="text-muted" style="border-bottom: 2px solid var(--app-border);">
+                                            <th>Referencing (Child)</th>
+                                            <th>Referenced (Parent PK)</th>
+                                            <th>Confidence</th>
+                                            <th>Reason</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var rel in pagedSuggested)
+                                        {
+                                            var key = $"{rel.FromTable}|{rel.FromColumn}|{rel.ToTable}|{rel.ToColumn}";
+                                            <tr style="border-bottom: 1px solid var(--app-border);">
+                                                <td>
+                                                    @{ var (fromSchema, fromTable) = SplitSchemaAndTable(rel.FromTable, SchemaService); }
+                                                    @if (!string.IsNullOrEmpty(fromSchema))
+                                                    {
+                                                        <span class="text-muted fw-normal opacity-75">@fromSchema.</span>
+                                                    }<span class="fw-bold text-info">@fromTable</span>
+                                                    <span class="text-muted">.</span>
+                                                    <span class="badge bg-secondary bg-opacity-25 text-light font-monospace">@rel.FromColumn</span>
+                                                </td>
+                                                <td>
+                                                    @{ var (toSchema, toTable) = SplitSchemaAndTable(rel.ToTable, SchemaService); }
+                                                    @if (!string.IsNullOrEmpty(toSchema))
+                                                    {
+                                                        <span class="text-muted fw-normal opacity-75">@toSchema.</span>
+                                                    }<span class="fw-bold text-success">@toTable</span>
+                                                    <span class="text-muted">.</span>
+                                                    <span class="badge bg-secondary bg-opacity-25 text-light font-monospace">@rel.ToColumn</span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge @(rel.ConfidenceScore >= 80 ? "bg-info bg-opacity-25 text-info" : "bg-warning bg-opacity-25 text-warning")">
+                                                        @rel.ConfidenceScore%
+                                                    </span>
+                                                </td>
+                                                <td class="text-muted small" title="@rel.MatchReason">
+                                                    @rel.MatchReason
+                                                </td>
+                                                <td class="text-end">
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button class="btn btn-outline-info" 
+                                                                disabled="@(VerifyingKey == key)" 
+                                                                @onclick="() => VerifyRelationship(rel)" 
+                                                                data-bs-tooltip="true" 
+                                                                data-bs-placement="bottom" 
+                                                                data-bs-title="Test row integrity with sample data" 
+                                                                title="Test row integrity with sample data">
+                                                            @if (VerifyingKey == key)
+                                                            {
+                                                                <span class="spinner-border spinner-border-sm" role="status"></span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <i class="bi bi-shield-check"></i>
+                                                            }
+                                                        </button>
+                                                        <button class="btn btn-success" 
+                                                                @onclick="() => ApproveRelationship(rel)" 
+                                                                data-bs-tooltip="true" 
+                                                                data-bs-placement="bottom" 
+                                                                data-bs-title="Approve relationship" 
+                                                                title="Approve relationship">
+                                                            <i class="bi bi-check-lg"></i>
+                                                        </button>
+                                                        <button class="btn btn-outline-secondary" 
+                                                                @onclick="() => BlacklistRelationship(rel)" 
+                                                                data-bs-tooltip="true" 
+                                                                data-bs-placement="bottom" 
+                                                                data-bs-title="Dismiss candidate" 
+                                                                title="Dismiss candidate">
+                                                            <i class="bi bi-x-lg"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            @if (suggestedTotalPages > 1)
+                            {
+                                <div class="d-flex justify-content-between align-items-center mt-3 pt-2" style="border-top: 1px solid var(--app-border);">
+                                    <span class="text-muted small">Page @SuggestedCurrentPage of @suggestedTotalPages</span>
+                                    <nav>
+                                        <ul class="pagination pagination-sm mb-0">
+                                            <li class="page-item @(SuggestedCurrentPage == 1 ? "disabled" : "")">
+                                                <button class="page-link" style="background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SuggestedCurrentPage = Math.Max(1, SuggestedCurrentPage - 1)">
+                                                    <i class="bi bi-chevron-left"></i>
+                                                </button>
+                                            </li>
+                                            @for (int i = 1; i <= suggestedTotalPages; i++)
+                                            {
+                                                var pageNum = i;
+                                                if (suggestedTotalPages > 8 && (pageNum > 2 && pageNum < suggestedTotalPages - 1 && Math.Abs(pageNum - SuggestedCurrentPage) > 2))
+                                                {
+                                                    if (pageNum == SuggestedCurrentPage - 3 || pageNum == SuggestedCurrentPage + 3)
+                                                    {
+                                                        <li class="page-item disabled"><span class="page-link" style="background-color: var(--app-surface-secondary); color: var(--app-text-muted); border-color: var(--app-border);">...</span></li>
+                                                    }
+                                                    continue;
+                                                }
+                                                <li class="page-item @(pageNum == SuggestedCurrentPage ? "active" : "")">
+                                                    <button class="page-link @(pageNum == SuggestedCurrentPage ? "bg-primary border-primary text-white" : "")" style="@(pageNum == SuggestedCurrentPage ? "" : "background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);")" @onclick="() => SuggestedCurrentPage = pageNum">@pageNum</button>
+                                                </li>
+                                            }
+                                            <li class="page-item @(SuggestedCurrentPage == suggestedTotalPages ? "disabled" : "")">
+                                                <button class="page-link" style="background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);" @onclick="() => SuggestedCurrentPage = Math.Min(suggestedTotalPages, SuggestedCurrentPage + 1)">
+                                                    <i class="bi bi-chevron-right"></i>
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </nav>
+                                </div>
+                            }
+                        }
+                    }
+                    else if (ActiveManageRelationshipsTab == "add")
+                    {
+                        <div class="card p-4 shadow-sm" style="background: var(--app-surface-secondary); border: 1px solid var(--app-border);">
+                            <h6 class="fw-bold text-info mb-3">Create Custom Relationship</h6>
+                            <p class="text-muted small mb-3">Define a virtual relationship between any two tables in the database. Pathfinder will use this link to route joins automatically.</p>
+
+                            @if (!string.IsNullOrEmpty(CustomRelErrorMessage))
+                            {
+                                <div class="alert alert-danger py-2 px-3 small mb-3">@CustomRelErrorMessage</div>
+                            }
+
+                            <div class="row g-3">
+                                <!-- Source Table & Column -->
+                                <div class="col-md-6">
+                                    <!-- Source Table -->
+                                    <label class="form-label small fw-bold text-muted mb-1">Source (Child / Foreign Key Table)</label>
+                                    <div class="position-relative mb-3">
+                                        <input class="form-control form-control-sm pe-4 text-truncate"
+                                               @bind="CustomRelFromTableSearch"
+                                               @bind:event="oninput"
+                                               placeholder="Search source table..."
+                                               @onfocus="OpenFromTableDropdown"
+                                               @onkeydown="HandleFromTableKeyDown"
+                                               style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                                        @if (IsFromTableDropdownOpen)
+                                        {
+                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1070;" @onclick="CloseAllCustomDropdowns"></div>
+                                            <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1080; max-height: 200px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                                @{
+                                                    var filteredFromTables = SchemaService.Tables
+                                                        .Where(t => string.IsNullOrWhiteSpace(CustomRelFromTableSearch) ||
+                                                                    t.FullName.Contains(CustomRelFromTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                                                    t.Name.Contains(CustomRelFromTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                                                    (!string.IsNullOrEmpty(t.Schema) && $"{t.Schema}.{t.Name}".Contains(CustomRelFromTableSearch, StringComparison.OrdinalIgnoreCase)))
+                                                        .OrderBy(t => t.Name)
+                                                        .ToList();
+                                                }
+                                                @if (filteredFromTables.Any())
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var t in filteredFromTables)
+                                                        {
+                                                            var isSelected = t.FullName == CustomRelFromTable;
+                                                             <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small d-flex align-items-center"
+                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: @(isSelected ? "var(--app-accent)" : "transparent"); color: @(isSelected ? "#fff" : "var(--app-text)");"
+                                                                    @onclick="() => SelectFromTable(t)">
+                                                                <div class="text-truncate">
+                                                                    @if (!string.IsNullOrEmpty(t.Schema))
+                                                                    {
+                                                                        <span class="text-muted fw-normal opacity-75">@t.Schema.</span>
+                                                                    }<span class="fw-bold">@t.Name</span>
+                                                                </div>
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">No matching tables found.</div>
+                                                }
+                                            </div>
+                                        }
+
+                                        <div class="position-absolute h-100 d-flex align-items-center gap-1" style="right: 10px; top: 0;">
+                                            @if (!string.IsNullOrEmpty(CustomRelFromTable))
+                                            {
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted" style="text-decoration: none; font-size: 0.75rem;" title="Clear selection" @onclick="ClearFromTable">
+                                                    <i class="bi bi-x-circle-fill"></i>
+                                                </button>
+                                            }
+                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.8rem; pointer-events: none;"></i>
+                                        </div>
+                                    </div>
+
+                                    <!-- Source Column -->
+                                    <label class="form-label small fw-bold text-muted mb-1">Source Column (Foreign Key)</label>
+                                    <div class="position-relative">
+                                        <input class="form-control form-control-sm pe-4 text-truncate"
+                                               @bind="CustomRelFromColumnSearch"
+                                               @bind:event="oninput"
+                                               placeholder="@(string.IsNullOrEmpty(CustomRelFromTable) ? "Select source table first..." : "Search source column...")"
+                                               disabled="@(string.IsNullOrEmpty(CustomRelFromTable))"
+                                               @onfocus="OpenFromColumnDropdown"
+                                               @onkeydown="HandleFromColumnKeyDown"
+                                               style="cursor: @(string.IsNullOrEmpty(CustomRelFromTable) ? "not-allowed" : "pointer"); background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                                        @if (IsFromColumnDropdownOpen && !string.IsNullOrEmpty(CustomRelFromTable))
+                                        {
+                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1070;" @onclick="CloseAllCustomDropdowns"></div>
+                                            <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1080; max-height: 200px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                                @{
+                                                    var fromTableObj = SchemaService.Tables.FirstOrDefault(t => t.FullName == CustomRelFromTable);
+                                                    var filteredFromCols = (fromTableObj?.Columns ?? Enumerable.Empty<ColumnInfo>())
+                                                        .Where(c => string.IsNullOrWhiteSpace(CustomRelFromColumnSearch) ||
+                                                                    c.Name.Contains(CustomRelFromColumnSearch, StringComparison.OrdinalIgnoreCase) ||
+                                                                    c.DataType.Contains(CustomRelFromColumnSearch, StringComparison.OrdinalIgnoreCase))
+                                                        .ToList();
+                                                }
+                                                @if (filteredFromCols.Any())
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var c in filteredFromCols)
+                                                        {
+                                                            var isSelected = c.Name == CustomRelFromColumn;
+                                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small d-flex justify-content-between align-items-center"
+                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: @(isSelected ? "var(--app-accent)" : "transparent"); color: @(isSelected ? "#fff" : "var(--app-text)");"
+                                                                    @onclick="() => SelectFromColumn(c.Name)">
+                                                                <div class="text-truncate me-2">
+                                                                    <span class="fw-semibold">@c.Name</span>
+                                                                    @if (c.IsPrimaryKey)
+                                                                    {
+                                                                        <span class="badge bg-success bg-opacity-25 text-success ms-1" style="font-size: 0.65rem;">PK</span>
+                                                                    }
+                                                                </div>
+                                                                <span class="badge bg-secondary bg-opacity-25 text-info flex-shrink-0" style="font-size: 0.7rem;">@c.DataType</span>
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">No matching columns found.</div>
+                                                }
+                                            </div>
+                                        }
+
+                                        <div class="position-absolute h-100 d-flex align-items-center gap-1" style="right: 10px; top: 0;">
+                                            @if (!string.IsNullOrEmpty(CustomRelFromColumn))
+                                            {
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted" style="text-decoration: none; font-size: 0.75rem;" title="Clear selection" @onclick="ClearFromColumn">
+                                                    <i class="bi bi-x-circle-fill"></i>
+                                                </button>
+                                            }
+                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.8rem; pointer-events: none;"></i>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Target Table & Column -->
+                                <div class="col-md-6">
+                                    <!-- Target Table -->
+                                    <label class="form-label small fw-bold text-muted mb-1">Target (Parent / Referenced Table)</label>
+                                    <div class="position-relative mb-3">
+                                        <input class="form-control form-control-sm pe-4 text-truncate"
+                                               @bind="CustomRelToTableSearch"
+                                               @bind:event="oninput"
+                                               placeholder="Search target table..."
+                                               @onfocus="OpenToTableDropdown"
+                                               @onkeydown="HandleToTableKeyDown"
+                                               style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                                        @if (IsToTableDropdownOpen)
+                                        {
+                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1070;" @onclick="CloseAllCustomDropdowns"></div>
+                                            <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1080; max-height: 200px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                                @{
+                                                    var filteredToTables = SchemaService.Tables
+                                                        .Where(t => string.IsNullOrWhiteSpace(CustomRelToTableSearch) ||
+                                                                    t.FullName.Contains(CustomRelToTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                                                    t.Name.Contains(CustomRelToTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                                                    (!string.IsNullOrEmpty(t.Schema) && $"{t.Schema}.{t.Name}".Contains(CustomRelToTableSearch, StringComparison.OrdinalIgnoreCase)))
+                                                        .OrderBy(t => t.Name)
+                                                        .ToList();
+                                                }
+                                                @if (filteredToTables.Any())
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var t in filteredToTables)
+                                                        {
+                                                            var isSelected = t.FullName == CustomRelToTable;
+                                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small d-flex align-items-center"
+                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: @(isSelected ? "var(--app-accent)" : "transparent"); color: @(isSelected ? "#fff" : "var(--app-text)");"
+                                                                    @onclick="() => SelectToTable(t)">
+                                                                <div class="text-truncate">
+                                                                    @if (!string.IsNullOrEmpty(t.Schema))
+                                                                    {
+                                                                        <span class="text-muted fw-normal opacity-75">@t.Schema.</span>
+                                                                    }<span class="fw-bold">@t.Name</span>
+                                                                    @if (t.PrimaryKeyColumns.Count == 1)
+                                                                    {
+                                                                        <span class="badge bg-success bg-opacity-25 text-success ms-2" style="font-size: 0.65rem;">PK: @t.PrimaryKeyColumns[0]</span>
+                                                                    }
+                                                                </div>
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">No matching tables found.</div>
+                                                }
+                                            </div>
+                                        }
+
+                                        <div class="position-absolute h-100 d-flex align-items-center gap-1" style="right: 10px; top: 0;">
+                                            @if (!string.IsNullOrEmpty(CustomRelToTable))
+                                            {
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted" style="text-decoration: none; font-size: 0.75rem;" title="Clear selection" @onclick="ClearToTable">
+                                                    <i class="bi bi-x-circle-fill"></i>
+                                                </button>
+                                            }
+                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.8rem; pointer-events: none;"></i>
+                                        </div>
+                                    </div>
+
+                                    <!-- Target Column -->
+                                    <label class="form-label small fw-bold text-muted mb-1">Target Column (Primary / Unique Key)</label>
+                                    <div class="position-relative">
+                                        <input class="form-control form-control-sm pe-4 text-truncate"
+                                               @bind="CustomRelToColumnSearch"
+                                               @bind:event="oninput"
+                                               placeholder="@(string.IsNullOrEmpty(CustomRelToTable) ? "Select target table first..." : "Search target column...")"
+                                               disabled="@(string.IsNullOrEmpty(CustomRelToTable))"
+                                               @onfocus="OpenToColumnDropdown"
+                                               @onkeydown="HandleToColumnKeyDown"
+                                               style="cursor: @(string.IsNullOrEmpty(CustomRelToTable) ? "not-allowed" : "pointer"); background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                                        @if (IsToColumnDropdownOpen && !string.IsNullOrEmpty(CustomRelToTable))
+                                        {
+                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1070;" @onclick="CloseAllCustomDropdowns"></div>
+                                            <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1080; max-height: 200px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                                @{
+                                                    var toTableObj = SchemaService.Tables.FirstOrDefault(t => t.FullName == CustomRelToTable);
+                                                    var filteredToCols = (toTableObj?.Columns ?? Enumerable.Empty<ColumnInfo>())
+                                                        .Where(c => string.IsNullOrWhiteSpace(CustomRelToColumnSearch) ||
+                                                                    c.Name.Contains(CustomRelToColumnSearch, StringComparison.OrdinalIgnoreCase) ||
+                                                                    c.DataType.Contains(CustomRelToColumnSearch, StringComparison.OrdinalIgnoreCase))
+                                                        .ToList();
+                                                }
+                                                @if (filteredToCols.Any())
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var c in filteredToCols)
+                                                        {
+                                                            var isSelected = c.Name == CustomRelToColumn;
+                                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small d-flex justify-content-between align-items-center"
+                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: @(isSelected ? "var(--app-accent)" : "transparent"); color: @(isSelected ? "#fff" : "var(--app-text)");"
+                                                                    @onclick="() => SelectToColumn(c.Name)">
+                                                                <div class="text-truncate me-2">
+                                                                    <span class="fw-semibold">@c.Name</span>
+                                                                    @if (c.IsPrimaryKey)
+                                                                    {
+                                                                        <span class="badge bg-success bg-opacity-25 text-success ms-1" style="font-size: 0.65rem;">PK</span>
+                                                                    }
+                                                                    @if (c.IsUnique && !c.IsPrimaryKey)
+                                                                    {
+                                                                        <span class="badge bg-warning bg-opacity-25 text-warning ms-1" style="font-size: 0.65rem;">UQ</span>
+                                                                    }
+                                                                </div>
+                                                                <span class="badge bg-secondary bg-opacity-25 text-info flex-shrink-0" style="font-size: 0.7rem;">@c.DataType</span>
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">No matching columns found.</div>
+                                                }
+                                            </div>
+                                        }
+
+                                        <div class="position-absolute h-100 d-flex align-items-center gap-1" style="right: 10px; top: 0;">
+                                            @if (!string.IsNullOrEmpty(CustomRelToColumn))
+                                            {
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted" style="text-decoration: none; font-size: 0.75rem;" title="Clear selection" @onclick="ClearToColumn">
+                                                    <i class="bi bi-x-circle-fill"></i>
+                                                </button>
+                                            }
+                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.8rem; pointer-events: none;"></i>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 mt-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="chkCustomNullable" @bind="CustomRelIsNullable" />
+                                        <label class="form-check-label small" for="chkCustomNullable">
+                                            Allow NULL (Use LEFT JOIN instead of INNER JOIN by default)
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 mt-3 d-flex justify-content-end gap-2">
+                                    <button class="btn btn-sm btn-primary px-4 fw-semibold" @onclick="SaveCustomRelationship">
+                                        <i class="bi bi-plus-lg me-1"></i> Add Relationship
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else if (ActiveManageRelationshipsTab == "blacklisted")
+                    {
+                        @if (BlacklistedCount == 0)
+                        {
+                            <div class="text-center py-5 text-muted">
+                                <i class="bi bi-shield-slash fs-1 text-secondary opacity-50 mb-2 d-block"></i>
+                                <h6 class="fw-bold">No Dismissed Relationships</h6>
+                                <p class="small mb-0">Any candidate relationship you dismiss will appear here so you can restore it if needed.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            var blacklistedEntries = VirtualRelationshipService.GetBlacklistedEntries();
+                            var dismissedTotalCount = blacklistedEntries.Count;
+                            var dismissedTotalPages = DismissedPageSize > 0 ? Math.Max(1, (int)Math.Ceiling(dismissedTotalCount / (double)DismissedPageSize)) : 1;
+                            if (DismissedCurrentPage > dismissedTotalPages) DismissedCurrentPage = dismissedTotalPages;
+                            if (DismissedCurrentPage < 1) DismissedCurrentPage = 1;
+
+                            var pagedDismissed = DismissedPageSize > 0
+                                ? blacklistedEntries.Skip((DismissedCurrentPage - 1) * DismissedPageSize).Take(DismissedPageSize).ToList()
+                                : blacklistedEntries;
+
+                            var dismissedStartIdx = dismissedTotalCount == 0 ? 0 : ((DismissedCurrentPage - 1) * DismissedPageSize) + 1;
+                            var dismissedEndIdx = Math.Min(DismissedCurrentPage * DismissedPageSize, dismissedTotalCount);
+
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div></div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="text-muted small">Show:</span>
+                                        <select class="form-select form-select-sm py-0 px-2" style="width: auto; height: 26px; font-size: 0.75rem; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                                value="@DismissedPageSize"
+                                                @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out var ps)) { DismissedPageSize = ps; DismissedCurrentPage = 1; } }">
+                                            <option value="10">10</option>
+                                            <option value="25">25</option>
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                        </select>
+                                    </div>
+                                    <span class="text-muted small">
+                                        @if (dismissedTotalCount > 0)
+                                        {
+                                            <span>Showing @dismissedStartIdx-@dismissedEndIdx of @dismissedTotalCount</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Showing 0 dismissed</span>
+                                        }
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle small mb-0" style="color: var(--app-text);">
+                                    <thead>
+                                        <tr class="text-muted" style="border-bottom: 2px solid var(--app-border);">
+                                            <th>From (Child)</th>
+                                            <th>To (Parent)</th>
+                                            <th>Type</th>
+                                            <th>Reason</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var entry in pagedDismissed)
+                                        {
+                                            <tr style="border-bottom: 1px solid var(--app-border);">
+                                                <td>
+                                                    @{ var (fromSchema, fromTable) = SplitSchemaAndTable(entry.FromTable, SchemaService); }
+                                                    @if (!string.IsNullOrEmpty(fromSchema))
+                                                    {
+                                                        <span class="text-muted fw-normal opacity-75">@fromSchema.</span>
+                                                    }<span class="fw-bold text-info">@fromTable</span>
+                                                    <span class="text-muted">.</span>
+                                                    <span class="badge bg-secondary bg-opacity-25 text-light font-monospace">@entry.FromColumn</span>
+                                                </td>
+                                                <td>
+                                                    @{ var (toSchema, toTable) = SplitSchemaAndTable(entry.ToTable, SchemaService); }
+                                                    @if (!string.IsNullOrEmpty(toSchema))
+                                                    {
+                                                        <span class="text-muted fw-normal opacity-75">@toSchema.</span>
+                                                    }<span class="fw-bold text-success">@toTable</span>
+                                                    <span class="text-muted">.</span>
+                                                    <span class="badge bg-secondary bg-opacity-25 text-light font-monospace">@entry.ToColumn</span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-secondary">Dismissed</span>
+                                                </td>
+                                                <td class="text-muted small">@entry.MatchReason</td>
+                                                <td class="text-end">
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button class="btn btn-outline-success" 
+                                                                @onclick="() => RestoreVirtualEntry(entry)" 
+                                                                data-bs-tooltip="true" 
+                                                                data-bs-placement="bottom" 
+                                                                data-bs-title="Restore and re-enable relationship" 
+                                                                title="Restore and re-enable relationship">
+                                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                                        </button>
+                                                        <button class="btn btn-outline-danger" 
+                                                                @onclick="() => DeleteVirtualEntry(entry)" 
+                                                                data-bs-tooltip="true" 
+                                                                data-bs-placement="bottom" 
+                                                                data-bs-title="Delete permanently" 
+                                                                title="Delete permanently">
+                                                            <i class="bi bi-trash3"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            @if (dismissedTotalPages > 1)
+                            {
+                                <div class="d-flex justify-content-between align-items-center mt-3 pt-2" style="border-top: 1px solid var(--app-border);">
+                                    <span class="text-muted small">Page @DismissedCurrentPage of @dismissedTotalPages</span>
+                                    <nav>
+                                        <ul class="pagination pagination-sm mb-0">
+                                            <li class="page-item @(DismissedCurrentPage == 1 ? "disabled" : "")">
+                                                <button class="page-link" style="background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);" @onclick="() => DismissedCurrentPage = Math.Max(1, DismissedCurrentPage - 1)">
+                                                    <i class="bi bi-chevron-left"></i>
+                                                </button>
+                                            </li>
+                                            @for (int i = 1; i <= dismissedTotalPages; i++)
+                                            {
+                                                var pageNum = i;
+                                                if (dismissedTotalPages > 8 && (pageNum > 2 && pageNum < dismissedTotalPages - 1 && Math.Abs(pageNum - DismissedCurrentPage) > 2))
+                                                {
+                                                    if (pageNum == DismissedCurrentPage - 3 || pageNum == DismissedCurrentPage + 3)
+                                                    {
+                                                        <li class="page-item disabled"><span class="page-link" style="background-color: var(--app-surface-secondary); color: var(--app-text-muted); border-color: var(--app-border);">...</span></li>
+                                                    }
+                                                    continue;
+                                                }
+                                                <li class="page-item @(pageNum == DismissedCurrentPage ? "active" : "")">
+                                                    <button class="page-link @(pageNum == DismissedCurrentPage ? "bg-primary border-primary text-white" : "")" style="@(pageNum == DismissedCurrentPage ? "" : "background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);")" @onclick="() => DismissedCurrentPage = pageNum">@pageNum</button>
+                                                </li>
+                                            }
+                                            <li class="page-item @(DismissedCurrentPage == dismissedTotalPages ? "disabled" : "")">
+                                                <button class="page-link" style="background-color: var(--app-surface-secondary); color: var(--app-text); border-color: var(--app-border);" @onclick="() => DismissedCurrentPage = Math.Min(dismissedTotalPages, DismissedCurrentPage + 1)">
+                                                    <i class="bi bi-chevron-right"></i>
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </nav>
+                                </div>
+                            }
+                        }
+                    }
+                </div>
+
+                <!-- Footer -->
+                <div class="modal-footer py-2 px-4 d-flex align-items-center" style="background: var(--app-surface-secondary); border-top: 1px solid var(--app-border);">
+                    <span class="text-muted small">
+                        @if (!string.IsNullOrEmpty(ActiveProfileName))
+                        {
+                            <span><i class="bi bi-collection-fill text-primary me-1"></i> Virtual relationships are managed via shared profile: <strong class="text-primary">@ActiveProfileName</strong></span>
+                        }
+                        else
+                        {
+                            <span><i class="bi bi-hdd me-1"></i> Virtual relationships are stored locally for database: <strong>@SchemaService.ActiveDatabase</strong></span>
+                        }
+                    </span>
+                </div>
+
+                @if (ShowSaveAsProfileModal)
+                {
+                    <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                         style="background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(3px); z-index: 1080;">
+                        <div class="card shadow-lg rounded-3 overflow-hidden" style="width: 480px; max-width: 90vw; background: var(--app-surface); border: 1px solid var(--app-border);">
+                            <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                                <div class="d-flex align-items-center gap-2 fw-bold">
+                                    <i class="bi bi-collection-fill text-primary"></i>
+                                    <span>Save As Relation Profile</span>
+                                </div>
+                                <button type="button" class="btn-close btn-sm" @onclick="() => ShowSaveAsProfileModal = false"></button>
+                            </div>
+                            <div class="card-body p-4">
+                                <p class="small text-muted mb-3">
+                                    A Relation Profile saves all active and dismissed virtual relationships into a reusable profile that other databases sharing this schema can connect to.
+                                </p>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-semibold">Profile Name <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control form-control-sm" placeholder="e.g. ERP Standard, Tenant Core" @bind="NewProfileName" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-semibold">Description (Optional)</label>
+                                    <input type="text" class="form-control form-control-sm" placeholder="e.g. Standard mapping for customer databases" @bind="NewProfileDescription" />
+                                </div>
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" id="linkDbCheck" @bind="LinkCurrentDbToNewProfile">
+                                    <label class="form-check-label small" for="linkDbCheck">
+                                        Link current database (<strong>@SchemaService.ActiveDatabase</strong>) to this profile now
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="card-footer py-2.5 px-4 d-flex justify-content-end gap-2" style="background: var(--app-surface-secondary); border-top: 1px solid var(--app-border);">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ShowSaveAsProfileModal = false">Cancel</button>
+                                <button class="btn btn-sm btn-primary px-3" disabled="@string.IsNullOrWhiteSpace(NewProfileName)" @onclick="ConfirmSaveAsProfile">
+                                    <i class="bi bi-check-lg me-1"></i> Save Profile
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (ShowDetachConfirmationModal)
+                {
+                    <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                         style="background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(3px); z-index: 1080;">
+                        <div class="card shadow-lg rounded-3 overflow-hidden" style="width: 500px; max-width: 90vw; background: var(--app-surface); border: 1px solid var(--app-border);">
+                            <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                                <div class="d-flex align-items-center gap-2 fw-bold text-warning">
+                                    <i class="bi bi-exclamation-triangle-fill"></i>
+                                    <span>Switch to Local Profile</span>
+                                </div>
+                                <button type="button" class="btn-close btn-sm" @onclick="() => ShowDetachConfirmationModal = false"></button>
+                            </div>
+                            <div class="card-body p-4">
+                                <p class="small mb-3">
+                                    You are switching <strong>@SchemaService.ActiveDatabase</strong> from the shared profile <strong>'@ActiveProfileName'</strong> to its own isolated local profile.
+                                </p>
+                                <div class="alert alert-info py-2 px-3 small mb-0">
+                                    Would you like to keep the current relationships as an independent local copy, or start fresh from the database's previous local state?
+                                </div>
+                            </div>
+                            <div class="card-footer py-2.5 px-4 d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-top: 1px solid var(--app-border);">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ShowDetachConfirmationModal = false">Cancel</button>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDetachToLocal(keepCopy: false)">
+                                        Start Fresh
+                                    </button>
+                                    <button class="btn btn-sm btn-primary px-3" @onclick="() => ConfirmDetachToLocal(keepCopy: true)">
+                                        <i class="bi bi-files me-1"></i> Keep Copy
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (ShowImportPreviewModal && PendingImportSummary != null)
+                {
+                    <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                         style="background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(3px); z-index: 1080;">
+                        <div class="card shadow-lg rounded-3 overflow-hidden" style="width: 540px; max-width: 92vw; background: var(--app-surface); border: 1px solid var(--app-border);">
+                            <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                                <div class="d-flex align-items-center gap-2 fw-bold text-info">
+                                    <i class="bi bi-upload"></i>
+                                    <span>Import Relation Profile</span>
+                                </div>
+                                <button type="button" class="btn-close btn-sm" @onclick="() => ShowImportPreviewModal = false"></button>
+                            </div>
+                            <div class="card-body p-4">
+                                <div class="d-flex align-items-center justify-content-between mb-3 p-3 rounded-2" style="background: var(--app-surface-secondary); border: 1px solid var(--app-border);">
+                                    <div>
+                                        <div class="fw-bold fs-6">@PendingImportSummary.ProfileName</div>
+                                        <div class="text-muted small">@PendingImportSummary.TotalRelationships relationships in file</div>
+                                    </div>
+                                    <span class="badge bg-primary px-2.5 py-1.5 fs-6">@PendingImportSummary.TotalRelationships</span>
+                                </div>
+
+                                <div class="mb-3">
+                                    <div class="d-flex align-items-center gap-2 mb-1.5 small">
+                                        <i class="bi bi-check-circle-fill text-success"></i>
+                                        <span><strong>@PendingImportSummary.MatchingSchemaCount</strong> relationship(s) match tables in current database</span>
+                                    </div>
+                                    @if (PendingImportSummary.UnmatchedSchemaCount > 0)
+                                    {
+                                        <div class="d-flex align-items-start gap-2 small text-warning">
+                                            <i class="bi bi-exclamation-circle-fill mt-0.5"></i>
+                                            <div>
+                                                <strong>@PendingImportSummary.UnmatchedSchemaCount</strong> relationship(s) reference tables not in this database.
+                                                <div class="text-muted" style="font-size: 0.75rem;">(They will still be preserved in the profile for other databases sharing this profile)</div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+
+                                @if (PendingImportSummary.Warnings.Count > 0)
+                                {
+                                    <div class="alert alert-warning py-2 px-3 small mb-3">
+                                        @foreach (var w in PendingImportSummary.Warnings)
+                                        {
+                                            <div>&bull; @w</div>
+                                        }
+                                    </div>
+                                }
+
+                                <div class="mb-3">
+                                    <label class="form-label small fw-semibold">Import Destination:</label>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="radio" name="importMode" id="importAsNew" checked="@ImportAsNewProfile" @onchange="() => ImportAsNewProfile = true">
+                                        <label class="form-check-label small" for="importAsNew">
+                                            Save as a <strong>New Relation Profile</strong>
+                                        </label>
+                                    </div>
+                                    @if (ImportAsNewProfile)
+                                    {
+                                        <div class="ps-4 mb-2">
+                                            <input type="text" class="form-control form-control-sm" placeholder="Profile Name" @bind="ImportTargetProfileName" />
+                                        </div>
+                                    }
+
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="importMode" id="importMerge" checked="@(!ImportAsNewProfile)" @onchange="() => ImportAsNewProfile = false">
+                                        <label class="form-check-label small" for="importMerge">
+                                            Merge into active profile (<strong>@(ActiveProfileName ?? $"Local: {SchemaService.ActiveDatabase}")</strong>)
+                                        </label>
+                                    </div>
+                                </div>
+
+                                @if (ImportAsNewProfile)
+                                {
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" id="linkImportCheck" @bind="LinkCurrentDbAfterImport">
+                                        <label class="form-check-label small" for="linkImportCheck">
+                                            Link current database (<strong>@SchemaService.ActiveDatabase</strong>) to this imported profile
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                            <div class="card-footer py-2.5 px-4 d-flex justify-content-end gap-2" style="background: var(--app-surface-secondary); border-top: 1px solid var(--app-border);">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ShowImportPreviewModal = false">Cancel</button>
+                                <button class="btn btn-sm btn-primary px-3" @onclick="ConfirmImport">
+                                    <i class="bi bi-check-lg me-1"></i> Confirm Import
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (ShowDeleteProfileModal)
+                {
+                    <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                         style="background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(3px); z-index: 1080;">
+                        <div class="card shadow-lg rounded-3 overflow-hidden" style="width: 440px; max-width: 90vw; background: var(--app-surface); border: 1px solid var(--app-border);">
+                            <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center" style="background: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                                <div class="d-flex align-items-center gap-2 fw-bold text-danger">
+                                    <i class="bi bi-trash3-fill"></i>
+                                    <span>Delete Relation Profile</span>
+                                </div>
+                                <button type="button" class="btn-close btn-sm" @onclick="() => ShowDeleteProfileModal = false"></button>
+                            </div>
+                            <div class="card-body p-4">
+                                <p class="small mb-0">
+                                    Are you sure you want to delete profile <strong>'@ProfileNameToDelete'</strong>?
+                                    Databases linked to this profile will be reset to their local profiles.
+                                </p>
+                            </div>
+                            <div class="card-footer py-2.5 px-4 d-flex justify-content-end gap-2" style="background: var(--app-surface-secondary); border-top: 1px solid var(--app-border);">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ShowDeleteProfileModal = false">Cancel</button>
+                                <button class="btn btn-sm btn-danger px-3" @onclick="ConfirmDeleteProfile">
+                                    <i class="bi bi-trash3 me-1"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
 @code {
+    private static string FormatShortName(string fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return string.Empty;
+        var parts = fullName.Split('.');
+        return parts.Last().Replace("[", "").Replace("]", "");
+    }
+
+    private static (string Schema, string Table) SplitSchemaAndTable(string fullName, SchemaService? schemaService = null)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return (string.Empty, string.Empty);
+        var clean = fullName.Replace("[", "").Replace("]", "").Trim();
+        var parts = clean.Split('.');
+        if (parts.Length > 1)
+        {
+            return (parts[0], string.Join(".", parts.Skip(1)));
+        }
+        if (schemaService != null)
+        {
+            var matched = schemaService.Tables.FirstOrDefault(t =>
+                t.Name.Equals(clean, StringComparison.OrdinalIgnoreCase) ||
+                t.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
+            if (matched != null && !string.IsNullOrEmpty(matched.Schema))
+            {
+                return (matched.Schema, matched.Name);
+            }
+        }
+        return (string.Empty, clean);
+    }
+
+    private static string FormatTableDisplay(string fullName, SchemaService? schemaService = null)
+    {
+        var (schema, table) = SplitSchemaAndTable(fullName, schemaService);
+        return !string.IsNullOrEmpty(schema) ? $"{schema}.{table}" : table;
+    }
+
+    private bool ShowManageRelationshipsModal = false;
+    private string ActiveManageRelationshipsTab = "active";
+    private string? VerificationStatusMessage = null;
+    private bool IsVerificationSuccess = false;
+    private string? VerifyingKey = null;
+
+    private string CustomRelFromTable = "";
+    private string CustomRelFromColumn = "";
+    private string CustomRelToTable = "";
+    private string CustomRelToColumn = "";
+    private string CustomRelFromTableSearch = "";
+    private string CustomRelFromColumnSearch = "";
+    private string CustomRelToTableSearch = "";
+    private string CustomRelToColumnSearch = "";
+    private bool IsFromTableDropdownOpen = false;
+    private bool IsFromColumnDropdownOpen = false;
+    private bool IsToTableDropdownOpen = false;
+    private bool IsToColumnDropdownOpen = false;
+    private bool CustomRelIsNullable = true;
+    private string? CustomRelErrorMessage = null;
+    private bool IsProcessingAction = false;
+    private string ActionLoadingMessage = "Processing...";
+    private int ActiveCurrentPage = 1;
+    private int ActivePageSize = 10;
+    private int SuggestedCurrentPage = 1;
+    private int SuggestedPageSize = 10;
+    private int DismissedCurrentPage = 1;
+    private int DismissedPageSize = 10;
+
+    private string _activeTabSearch = "";
+    private string ActiveTabSearch
+    {
+        get => _activeTabSearch;
+        set
+        {
+            if (_activeTabSearch != value)
+            {
+                _activeTabSearch = value;
+                ActiveCurrentPage = 1;
+            }
+        }
+    }
+
+    private string _suggestedTabSearch = "";
+    private string SuggestedTabSearch
+    {
+        get => _suggestedTabSearch;
+        set
+        {
+            if (_suggestedTabSearch != value)
+            {
+                _suggestedTabSearch = value;
+                SuggestedCurrentPage = 1;
+            }
+        }
+    }
+
+    private int ActiveVirtualCount => VirtualRelationshipService?.GetActiveVirtualEntries().Count ?? 0;
+    private int SuggestedCount => VirtualRelationshipService?.GetSuggestedRelationships().Count ?? 0;
+    private int BlacklistedCount => VirtualRelationshipService?.GetBlacklistedEntries().Count ?? 0;
+
+    // Relation Profile state
+    private string? ActiveProfileName => VirtualRelationshipService?.ActiveProfileName;
+    private List<RelationProfileMetadata> AvailableProfiles = new();
+    private bool IsProfileDropdownOpen = false;
+
+    private bool ShowSaveAsProfileModal = false;
+    private string NewProfileName = string.Empty;
+    private string? NewProfileDescription = null;
+    private bool LinkCurrentDbToNewProfile = true;
+
+    private bool ShowDetachConfirmationModal = false;
+
+    private bool ShowDeleteProfileModal = false;
+    private string ProfileNameToDelete = string.Empty;
+
+    private bool ShowImportPreviewModal = false;
+    private RelationProfileImportSummary? PendingImportSummary = null;
+    private bool ImportAsNewProfile = true;
+    private string ImportTargetProfileName = string.Empty;
+    private bool LinkCurrentDbAfterImport = true;
+
+    private string? ProfileNotificationMessage = null;
+    private bool IsProfileNotificationSuccess = true;
+
+    private void RefreshAvailableProfiles()
+    {
+        AvailableProfiles = VirtualRelationshipService?.GetAvailableProfiles() ?? new List<RelationProfileMetadata>();
+    }
+
+    private void ToggleProfileDropdown()
+    {
+        IsProfileDropdownOpen = !IsProfileDropdownOpen;
+        if (IsProfileDropdownOpen)
+        {
+            RefreshAvailableProfiles();
+        }
+    }
+
+    private void SwitchToProfile(string profileName)
+    {
+        IsProfileDropdownOpen = false;
+        VirtualRelationshipService.SwitchToProfile(profileName);
+        ProfileNotificationMessage = $"Switched to Relation Profile '{profileName}'.";
+        IsProfileNotificationSuccess = true;
+        ResetPagination();
+    }
+
+    private void InitiateSwitchToLocal()
+    {
+        IsProfileDropdownOpen = false;
+        if (string.IsNullOrEmpty(ActiveProfileName)) return;
+
+        ShowDetachConfirmationModal = true;
+    }
+
+    private void ConfirmDetachToLocal(bool keepCopy)
+    {
+        ShowDetachConfirmationModal = false;
+        VirtualRelationshipService.DetachToLocal(keepCopy);
+        ProfileNotificationMessage = keepCopy 
+            ? "Detached to Local profile. Kept an independent copy of relationships." 
+            : "Detached to Local profile. Reset to local state.";
+        IsProfileNotificationSuccess = true;
+        ResetPagination();
+    }
+
+    private void OpenSaveAsProfileModal()
+    {
+        IsProfileDropdownOpen = false;
+        NewProfileName = string.Empty;
+        NewProfileDescription = null;
+        LinkCurrentDbToNewProfile = true;
+        ShowSaveAsProfileModal = true;
+    }
+
+    private void ConfirmSaveAsProfile()
+    {
+        if (string.IsNullOrWhiteSpace(NewProfileName)) return;
+        ShowSaveAsProfileModal = false;
+
+        bool success = VirtualRelationshipService.SaveAsNewProfile(NewProfileName, NewProfileDescription, LinkCurrentDbToNewProfile);
+        if (success)
+        {
+            ProfileNotificationMessage = $"Successfully created Relation Profile '{NewProfileName}'!";
+            IsProfileNotificationSuccess = true;
+            RefreshAvailableProfiles();
+        }
+        else
+        {
+            ProfileNotificationMessage = "Failed to create profile. Please check the profile name.";
+            IsProfileNotificationSuccess = false;
+        }
+    }
+
+    private void PromptDeleteProfile(string profileName)
+    {
+        IsProfileDropdownOpen = false;
+        ProfileNameToDelete = profileName;
+        ShowDeleteProfileModal = true;
+    }
+
+    private void ConfirmDeleteProfile()
+    {
+        ShowDeleteProfileModal = false;
+        if (string.IsNullOrEmpty(ProfileNameToDelete)) return;
+
+        VirtualRelationshipService.DeleteProfile(ProfileNameToDelete);
+        ProfileNotificationMessage = $"Deleted Relation Profile '{ProfileNameToDelete}'.";
+        IsProfileNotificationSuccess = true;
+        RefreshAvailableProfiles();
+        ResetPagination();
+    }
+
+    private async Task ExportActiveProfileAsync()
+    {
+        try
+        {
+            var profileName = ActiveProfileName ?? $"Local_{SchemaService.ActiveDatabase}";
+            var safeFileName = VirtualRelationshipService.GetSafeFileName(profileName) + "_RelationProfile.json";
+            string filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*";
+
+            var filePath = await WindowManager.ShowSaveFileDialogAsync(safeFileName, filter, ".json");
+            if (string.IsNullOrEmpty(filePath)) return;
+
+            var json = VirtualRelationshipService.ExportProfileJson();
+            await File.WriteAllTextAsync(filePath, json, System.Text.Encoding.UTF8);
+
+            ProfileNotificationMessage = $"Successfully exported {VirtualRelationshipService.GetActiveVirtualEntries().Count} relationships to '{Path.GetFileName(filePath)}'!";
+            IsProfileNotificationSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            ProfileNotificationMessage = $"Export failed: {ex.Message}";
+            IsProfileNotificationSuccess = false;
+        }
+    }
+
+    private async Task ImportProfileAsync()
+    {
+        try
+        {
+            string filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*";
+            var filePath = await WindowManager.ShowOpenFileDialogAsync(filter, "Import Relation Profile", ".json");
+            if (string.IsNullOrEmpty(filePath)) return;
+
+            if (!File.Exists(filePath))
+            {
+                ProfileNotificationMessage = "Selected file does not exist.";
+                IsProfileNotificationSuccess = false;
+                return;
+            }
+
+            var json = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8);
+            var summary = VirtualRelationshipService.AnalyzeImportJson(json);
+
+            if (summary.ImportedEntries.Count == 0)
+            {
+                ProfileNotificationMessage = summary.Warnings.Count > 0 
+                    ? string.Join(" ", summary.Warnings) 
+                    : "No valid relationships found in the selected file.";
+                IsProfileNotificationSuccess = false;
+                return;
+            }
+
+            PendingImportSummary = summary;
+            ImportTargetProfileName = summary.ProfileName;
+            ImportAsNewProfile = true;
+            LinkCurrentDbAfterImport = true;
+            ShowImportPreviewModal = true;
+        }
+        catch (Exception ex)
+        {
+            ProfileNotificationMessage = $"Failed to read import file: {ex.Message}";
+            IsProfileNotificationSuccess = false;
+        }
+    }
+
+    private void ConfirmImport()
+    {
+        ShowImportPreviewModal = false;
+        if (PendingImportSummary == null) return;
+
+        try
+        {
+            VirtualRelationshipService.ExecuteImport(
+                PendingImportSummary, 
+                ImportTargetProfileName, 
+                ImportAsNewProfile, 
+                LinkCurrentDbAfterImport);
+
+            ProfileNotificationMessage = $"Successfully imported {PendingImportSummary.TotalRelationships} relationship(s)!";
+            IsProfileNotificationSuccess = true;
+            RefreshAvailableProfiles();
+            ResetPagination();
+        }
+        catch (Exception ex)
+        {
+            ProfileNotificationMessage = $"Import failed: {ex.Message}";
+            IsProfileNotificationSuccess = false;
+        }
+    }
+
+    private void ResetPagination()
+    {
+        ActiveCurrentPage = 1;
+        SuggestedCurrentPage = 1;
+        DismissedCurrentPage = 1;
+    }
+
+    private void OpenManageRelationshipsModal()
+    {
+        ShowManageRelationshipsModal = true;
+        VerificationStatusMessage = null;
+        VerifyingKey = null;
+        CustomRelErrorMessage = null;
+        ProfileNotificationMessage = null;
+        IsProcessingAction = false;
+        ActiveTabSearch = "";
+        SuggestedTabSearch = "";
+        CloseAllCustomDropdowns();
+        RefreshAvailableProfiles();
+    }
+
+    private void CloseManageRelationshipsModal()
+    {
+        ShowManageRelationshipsModal = false;
+        VerificationStatusMessage = null;
+        VerifyingKey = null;
+        ProfileNotificationMessage = null;
+        IsProfileDropdownOpen = false;
+        ShowSaveAsProfileModal = false;
+        ShowDetachConfirmationModal = false;
+        ShowDeleteProfileModal = false;
+        ShowImportPreviewModal = false;
+        CloseAllCustomDropdowns();
+    }
+
+    private void CloseAllCustomDropdowns()
+    {
+        IsProfileDropdownOpen = false;
+        IsFromTableDropdownOpen = false;
+        IsFromColumnDropdownOpen = false;
+        IsToTableDropdownOpen = false;
+        IsToColumnDropdownOpen = false;
+        CustomRelFromTableSearch = !string.IsNullOrEmpty(CustomRelFromTable) ? FormatTableDisplay(CustomRelFromTable, SchemaService) : "";
+        CustomRelFromColumnSearch = CustomRelFromColumn;
+        CustomRelToTableSearch = !string.IsNullOrEmpty(CustomRelToTable) ? FormatTableDisplay(CustomRelToTable, SchemaService) : "";
+        CustomRelToColumnSearch = CustomRelToColumn;
+    }
+
+    private void ResetCustomRelForm()
+    {
+        CustomRelFromTable = "";
+        CustomRelFromColumn = "";
+        CustomRelToTable = "";
+        CustomRelToColumn = "";
+        CustomRelFromTableSearch = "";
+        CustomRelFromColumnSearch = "";
+        CustomRelToTableSearch = "";
+        CustomRelToColumnSearch = "";
+        CustomRelErrorMessage = null;
+        IsFromTableDropdownOpen = false;
+        IsFromColumnDropdownOpen = false;
+        IsToTableDropdownOpen = false;
+        IsToColumnDropdownOpen = false;
+    }
+
+    private void OpenFromTableDropdown()
+    {
+        IsFromColumnDropdownOpen = false;
+        IsToTableDropdownOpen = false;
+        IsToColumnDropdownOpen = false;
+        IsFromTableDropdownOpen = true;
+        CustomRelFromTableSearch = "";
+    }
+
+    private void CloseFromTableDropdown()
+    {
+        IsFromTableDropdownOpen = false;
+        CustomRelFromTableSearch = !string.IsNullOrEmpty(CustomRelFromTable) ? FormatTableDisplay(CustomRelFromTable, SchemaService) : "";
+    }
+
+    private void SelectFromTable(TableInfo table)
+    {
+        CustomRelFromTable = table.FullName;
+        CustomRelFromTableSearch = !string.IsNullOrEmpty(table.Schema) ? $"{table.Schema}.{table.Name}" : table.Name;
+        IsFromTableDropdownOpen = false;
+        CustomRelFromColumn = "";
+        CustomRelFromColumnSearch = "";
+    }
+
+    private void ClearFromTable()
+    {
+        CustomRelFromTable = "";
+        CustomRelFromTableSearch = "";
+        CustomRelFromColumn = "";
+        CustomRelFromColumnSearch = "";
+        IsFromTableDropdownOpen = false;
+    }
+
+    private void HandleFromTableKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var match = SchemaService.Tables
+                .FirstOrDefault(t => string.IsNullOrWhiteSpace(CustomRelFromTableSearch) ||
+                                     t.FullName.Contains(CustomRelFromTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                     t.Name.Contains(CustomRelFromTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                     (!string.IsNullOrEmpty(t.Schema) && $"{t.Schema}.{t.Name}".Contains(CustomRelFromTableSearch, StringComparison.OrdinalIgnoreCase)));
+            if (match != null) SelectFromTable(match);
+        }
+        else if (e.Key == "Escape")
+        {
+            CloseFromTableDropdown();
+        }
+    }
+
+    private void OpenFromColumnDropdown()
+    {
+        if (string.IsNullOrEmpty(CustomRelFromTable)) return;
+        IsFromTableDropdownOpen = false;
+        IsToTableDropdownOpen = false;
+        IsToColumnDropdownOpen = false;
+        IsFromColumnDropdownOpen = true;
+        CustomRelFromColumnSearch = "";
+    }
+
+    private void CloseFromColumnDropdown()
+    {
+        IsFromColumnDropdownOpen = false;
+        CustomRelFromColumnSearch = CustomRelFromColumn;
+    }
+
+    private void SelectFromColumn(string colName)
+    {
+        CustomRelFromColumn = colName;
+        CustomRelFromColumnSearch = colName;
+        IsFromColumnDropdownOpen = false;
+    }
+
+    private void ClearFromColumn()
+    {
+        CustomRelFromColumn = "";
+        CustomRelFromColumnSearch = "";
+        IsFromColumnDropdownOpen = false;
+    }
+
+    private void HandleFromColumnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var fromTableObj = SchemaService.Tables.FirstOrDefault(t => t.FullName == CustomRelFromTable);
+            if (fromTableObj != null)
+            {
+                var match = fromTableObj.Columns.FirstOrDefault(c =>
+                    string.IsNullOrWhiteSpace(CustomRelFromColumnSearch) ||
+                    c.Name.Contains(CustomRelFromColumnSearch, StringComparison.OrdinalIgnoreCase) ||
+                    c.DataType.Contains(CustomRelFromColumnSearch, StringComparison.OrdinalIgnoreCase));
+                if (match != null) SelectFromColumn(match.Name);
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            CloseFromColumnDropdown();
+        }
+    }
+
+    private void OpenToTableDropdown()
+    {
+        IsFromTableDropdownOpen = false;
+        IsFromColumnDropdownOpen = false;
+        IsToColumnDropdownOpen = false;
+        IsToTableDropdownOpen = true;
+        CustomRelToTableSearch = "";
+    }
+
+    private void CloseToTableDropdown()
+    {
+        IsToTableDropdownOpen = false;
+        CustomRelToTableSearch = !string.IsNullOrEmpty(CustomRelToTable) ? FormatTableDisplay(CustomRelToTable, SchemaService) : "";
+    }
+
+    private void SelectToTable(TableInfo table)
+    {
+        CustomRelToTable = table.FullName;
+        CustomRelToTableSearch = !string.IsNullOrEmpty(table.Schema) ? $"{table.Schema}.{table.Name}" : table.Name;
+        IsToTableDropdownOpen = false;
+
+        if (table.PrimaryKeyColumns.Count == 1)
+        {
+            CustomRelToColumn = table.PrimaryKeyColumns[0];
+            CustomRelToColumnSearch = table.PrimaryKeyColumns[0];
+        }
+        else
+        {
+            CustomRelToColumn = "";
+            CustomRelToColumnSearch = "";
+        }
+    }
+
+    private void ClearToTable()
+    {
+        CustomRelToTable = "";
+        CustomRelToTableSearch = "";
+        CustomRelToColumn = "";
+        CustomRelToColumnSearch = "";
+        IsToTableDropdownOpen = false;
+    }
+
+    private void HandleToTableKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var match = SchemaService.Tables
+                .FirstOrDefault(t => string.IsNullOrWhiteSpace(CustomRelToTableSearch) ||
+                                     t.FullName.Contains(CustomRelToTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                     t.Name.Contains(CustomRelToTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                     (!string.IsNullOrEmpty(t.Schema) && $"{t.Schema}.{t.Name}".Contains(CustomRelToTableSearch, StringComparison.OrdinalIgnoreCase)));
+            if (match != null) SelectToTable(match);
+        }
+        else if (e.Key == "Escape")
+        {
+            CloseToTableDropdown();
+        }
+    }
+
+    private void OpenToColumnDropdown()
+    {
+        if (string.IsNullOrEmpty(CustomRelToTable)) return;
+        IsFromTableDropdownOpen = false;
+        IsFromColumnDropdownOpen = false;
+        IsToTableDropdownOpen = false;
+        IsToColumnDropdownOpen = true;
+        CustomRelToColumnSearch = "";
+    }
+
+    private void CloseToColumnDropdown()
+    {
+        IsToColumnDropdownOpen = false;
+        CustomRelToColumnSearch = CustomRelToColumn;
+    }
+
+    private void SelectToColumn(string colName)
+    {
+        CustomRelToColumn = colName;
+        CustomRelToColumnSearch = colName;
+        IsToColumnDropdownOpen = false;
+    }
+
+    private void ClearToColumn()
+    {
+        CustomRelToColumn = "";
+        CustomRelToColumnSearch = "";
+        IsToColumnDropdownOpen = false;
+    }
+
+    private void HandleToColumnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            var toTableObj = SchemaService.Tables.FirstOrDefault(t => t.FullName == CustomRelToTable);
+            if (toTableObj != null)
+            {
+                var match = toTableObj.Columns.FirstOrDefault(c =>
+                    string.IsNullOrWhiteSpace(CustomRelToColumnSearch) ||
+                    c.Name.Contains(CustomRelToColumnSearch, StringComparison.OrdinalIgnoreCase) ||
+                    c.DataType.Contains(CustomRelToColumnSearch, StringComparison.OrdinalIgnoreCase));
+                if (match != null) SelectToColumn(match.Name);
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            CloseToColumnDropdown();
+        }
+    }
+
+    private async Task VerifyRelationship(Relationship rel)
+    {
+        var key = $"{rel.FromTable}|{rel.FromColumn}|{rel.ToTable}|{rel.ToColumn}";
+        VerifyingKey = key;
+        IsProcessingAction = true;
+        ActionLoadingMessage = $"Verifying data integrity between {FormatTableDisplay(rel.FromTable, SchemaService)} and {FormatTableDisplay(rel.ToTable, SchemaService)}...";
+        VerificationStatusMessage = null;
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            var result = await VirtualRelationshipService.VerifyRelationshipAsync(rel);
+            IsVerificationSuccess = result.Success && !result.HasOrphans;
+            VerificationStatusMessage = result.Message;
+        }
+        finally
+        {
+            VerifyingKey = null;
+            IsProcessingAction = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task VerifyEntry(VirtualRelationshipEntry entry)
+    {
+        var rel = new Relationship
+        {
+            FromTable = entry.FromTable,
+            FromColumn = entry.FromColumn,
+            ToTable = entry.ToTable,
+            ToColumn = entry.ToColumn,
+            IsNullable = entry.IsNullable,
+            Type = entry.Type,
+            ConfidenceScore = entry.ConfidenceScore,
+            MatchReason = entry.MatchReason
+        };
+        await VerifyRelationship(rel);
+    }
+
+    private async Task ApproveRelationship(Relationship rel)
+    {
+        IsProcessingAction = true;
+        ActionLoadingMessage = $"Approving relationship {FormatTableDisplay(rel.FromTable, SchemaService)}.{rel.FromColumn} -> {FormatTableDisplay(rel.ToTable, SchemaService)}.{rel.ToColumn}...";
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            VirtualRelationshipService.ApproveRelationship(rel);
+            VerificationStatusMessage = $"Approved relationship {FormatTableDisplay(rel.FromTable, SchemaService)}.{rel.FromColumn} -> {FormatTableDisplay(rel.ToTable, SchemaService)}.{rel.ToColumn}";
+            IsVerificationSuccess = true;
+            UpdateJoinPath();
+        }
+        finally
+        {
+            IsProcessingAction = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task BlacklistRelationship(Relationship rel)
+    {
+        IsProcessingAction = true;
+        ActionLoadingMessage = $"Dismissing relationship {FormatTableDisplay(rel.FromTable, SchemaService)}.{rel.FromColumn} -> {FormatTableDisplay(rel.ToTable, SchemaService)}.{rel.ToColumn}...";
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            VirtualRelationshipService.BlacklistRelationship(rel);
+            VerificationStatusMessage = $"Dismissed relationship {FormatTableDisplay(rel.FromTable, SchemaService)}.{rel.FromColumn} -> {FormatTableDisplay(rel.ToTable, SchemaService)}.{rel.ToColumn}";
+            IsVerificationSuccess = false;
+            UpdateJoinPath();
+        }
+        finally
+        {
+            IsProcessingAction = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task BlacklistEntry(VirtualRelationshipEntry entry)
+    {
+        var rel = new Relationship
+        {
+            FromTable = entry.FromTable,
+            FromColumn = entry.FromColumn,
+            ToTable = entry.ToTable,
+            ToColumn = entry.ToColumn,
+            IsNullable = entry.IsNullable,
+            Type = entry.Type
+        };
+        await BlacklistRelationship(rel);
+    }
+
+    private async Task DeleteVirtualEntry(VirtualRelationshipEntry entry)
+    {
+        IsProcessingAction = true;
+        ActionLoadingMessage = "Deleting relationship...";
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            VirtualRelationshipService.DeleteRelationship(entry);
+            VerificationStatusMessage = null;
+            UpdateJoinPath();
+        }
+        finally
+        {
+            IsProcessingAction = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RestoreVirtualEntry(VirtualRelationshipEntry entry)
+    {
+        IsProcessingAction = true;
+        ActionLoadingMessage = $"Restoring relationship {FormatTableDisplay(entry.FromTable, SchemaService)}.{entry.FromColumn} -> {FormatTableDisplay(entry.ToTable, SchemaService)}.{entry.ToColumn}...";
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            VirtualRelationshipService.UnblacklistRelationship(entry);
+            VerificationStatusMessage = $"Restored relationship {FormatTableDisplay(entry.FromTable, SchemaService)}.{entry.FromColumn} -> {FormatTableDisplay(entry.ToTable, SchemaService)}.{entry.ToColumn}";
+            IsVerificationSuccess = true;
+            UpdateJoinPath();
+        }
+        finally
+        {
+            IsProcessingAction = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveCustomRelationship()
+    {
+        CustomRelErrorMessage = null;
+        if (string.IsNullOrWhiteSpace(CustomRelFromTable) || string.IsNullOrWhiteSpace(CustomRelFromColumn) ||
+            string.IsNullOrWhiteSpace(CustomRelToTable) || string.IsNullOrWhiteSpace(CustomRelToColumn))
+        {
+            CustomRelErrorMessage = "Please select both source and target tables and columns.";
+            return;
+        }
+
+        if (string.Equals(CustomRelFromTable, CustomRelToTable, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(CustomRelFromColumn, CustomRelToColumn, StringComparison.OrdinalIgnoreCase))
+        {
+            CustomRelErrorMessage = "Cannot link a column to itself.";
+            return;
+        }
+
+        IsProcessingAction = true;
+        ActionLoadingMessage = "Saving custom relationship...";
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            var rel = new Relationship
+            {
+                FromTable = CustomRelFromTable,
+                FromColumn = CustomRelFromColumn,
+                ToTable = CustomRelToTable,
+                ToColumn = CustomRelToColumn,
+                IsNullable = CustomRelIsNullable,
+                Type = RelationshipType.UserDefined,
+                ConfidenceScore = 100,
+                MatchReason = "User defined custom relationship"
+            };
+
+            VirtualRelationshipService.AddCustomRelationship(rel);
+            ResetCustomRelForm();
+            ActiveManageRelationshipsTab = "active";
+            VerificationStatusMessage = "Custom relationship added successfully!";
+            IsVerificationSuccess = true;
+            UpdateJoinPath();
+        }
+        finally
+        {
+            IsProcessingAction = false;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleVirtualRelationshipsChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (SelectedColumns.Count > 0 || !string.IsNullOrEmpty(TargetTable))
+            {
+                UpdateJoinPath();
+            }
+            StateHasChanged();
+        });
+    }
+
     private int TotalSelectedTablesCount
     {
         get
@@ -1306,6 +3359,8 @@ else
         ThemeService.OnThemeChanged += HandleThemeChanged;
         SchemaService.OnTablesLoaded += Refresh;
         SchemaService.OnViewsLoaded += Refresh;
+        SchemaService.OnRelationshipsUpdated += HandleVirtualRelationshipsChanged;
+        VirtualRelationshipService.OnVirtualRelationshipsChanged += HandleVirtualRelationshipsChanged;
 
         if (SchemaService.IsDatabaseConnected && !SchemaService.AreTablesLoaded && !SchemaService.IsLoadingTables)
         {
@@ -1923,6 +3978,8 @@ else
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         SchemaService.OnTablesLoaded -= Refresh;
         SchemaService.OnViewsLoaded -= Refresh;
+        SchemaService.OnRelationshipsUpdated -= HandleVirtualRelationshipsChanged;
+        VirtualRelationshipService.OnVirtualRelationshipsChanged -= HandleVirtualRelationshipsChanged;
 
         _debounceCts?.Cancel();
         _debounceCts?.Dispose();

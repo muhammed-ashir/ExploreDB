@@ -91,6 +91,7 @@ public partial class App : Application
             // Register Business Services
             services.AddSingleton<ConnectionService>();
             services.AddSingleton<SchemaService>();
+            services.AddSingleton<VirtualRelationshipService>();
             services.AddSingleton<PathfinderService>();
             services.AddSingleton<QueryStateService>();
             services.AddSingleton<GitHubUpdateService>();

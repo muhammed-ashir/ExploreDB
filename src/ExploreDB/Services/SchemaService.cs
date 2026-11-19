@@ -15,6 +15,9 @@ public class TableInfo
     public List<Relationship> OutgoingKeys { get; set; } = new();
     // Relations where this table is referenced by another (is parent of child)
     public List<Relationship> IncomingKeys { get; set; } = new();
+
+    public List<string> PrimaryKeyColumns => Columns.Where(c => c.IsPrimaryKey).Select(c => c.Name).ToList();
+    public bool HasSinglePrimaryKey => PrimaryKeyColumns.Count == 1;
     
     // Views that reference this table
     public List<Dependency> ReferencedByViews { get; set; } = new();
@@ -34,11 +37,20 @@ public class ColumnInfo
     public string DataType { get; set; } = string.Empty;
     public bool IsIdentity { get; set; } = false;
     public bool IsComputed { get; set; } = false;
+    public bool IsPrimaryKey { get; set; } = false;
+    public bool IsUnique { get; set; } = false;
     
     // Lineage info (for views)
     public string? SourceSchema { get; set; }
     public string? SourceTable { get; set; }
     public string? SourceColumn { get; set; }
+}
+
+public enum RelationshipType
+{
+    Physical,     // Database constraint from sys.foreign_keys
+    Inferred,     // Automatically detected via naming & anchor heuristics
+    UserDefined   // Manually specified or confirmed by the user
 }
 
 public class Relationship
@@ -48,6 +60,9 @@ public class Relationship
     public string ToTable { get; set; } = string.Empty; // The table being referenced
     public string ToColumn { get; set; } = string.Empty;
     public bool IsNullable { get; set; } = false; // Whether the FK column allows NULL
+    public RelationshipType Type { get; set; } = RelationshipType.Physical;
+    public int ConfidenceScore { get; set; } = 100; // 0-100
+    public string? MatchReason { get; set; }
 }
 
 
@@ -497,6 +512,19 @@ public class SchemaService
                 INNER JOIN sys.columns cp ON fkc.parent_object_id = cp.object_id AND fkc.parent_column_id = cp.column_id
                 INNER JOIN sys.columns cr ON fkc.referenced_object_id = cr.object_id AND fkc.referenced_column_id = cr.column_id
                 OPTION (FORCE ORDER);
+
+                SELECT 
+                    s.name AS SchemaName,
+                    t.name AS TableName,
+                    c.name AS ColumnName,
+                    i.is_primary_key AS IsPrimaryKey,
+                    i.is_unique AS IsUnique
+                FROM sys.indexes i
+                INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+                INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+                INNER JOIN sys.tables t ON i.object_id = t.object_id
+                INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+                WHERE i.is_primary_key = 1 OR (i.is_unique = 1 AND i.is_unique_constraint = 1);
             ";
 
             using var cmd = conn.CreateCommand();
@@ -561,10 +589,36 @@ public class SchemaService
                             FromColumn = reader.GetString(1),
                             ToTable = refFull, 
                             ToColumn = reader.GetString(4),
-                            IsNullable = reader.GetBoolean(2)
+                            IsNullable = reader.GetBoolean(2),
+                            Type = RelationshipType.Physical,
+                            ConfidenceScore = 100
                         };
                         parent.OutgoingKeys.Add(rel);
                         reference.IncomingKeys.Add(rel);
+                    }
+                }
+            }
+
+            if (await reader.NextResultAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    if (++yieldCount % 5000 == 0) await Task.Delay(1);
+                    var schema = reader.GetString(0);
+                    var table = reader.GetString(1);
+                    var colName = reader.GetString(2);
+                    var isPk = reader.GetBoolean(3);
+                    var isUq = reader.GetBoolean(4);
+
+                    var key = $"[{schema}].[{table}]";
+                    if (tableDict.TryGetValue(key, out var t))
+                    {
+                        var col = t.Columns.FirstOrDefault(c => string.Equals(c.Name, colName, StringComparison.OrdinalIgnoreCase));
+                        if (col != null)
+                        {
+                            if (isPk) col.IsPrimaryKey = true;
+                            if (isUq) col.IsUnique = true;
+                        }
                     }
                 }
             }
@@ -582,6 +636,40 @@ public class SchemaService
             IsLoadingTables = false;
             OnTablesLoaded?.Invoke();
         }
+    }
+
+    public event Action? OnRelationshipsUpdated;
+
+    public void ApplyVirtualRelationships(IEnumerable<Relationship> virtualRelationships)
+    {
+        var tableDict = Tables.ToDictionary(t => t.FullName, StringComparer.OrdinalIgnoreCase);
+
+        // Remove existing non-physical relationships first
+        foreach (var table in Tables)
+        {
+            table.OutgoingKeys.RemoveAll(r => r.Type != RelationshipType.Physical);
+            table.IncomingKeys.RemoveAll(r => r.Type != RelationshipType.Physical);
+        }
+
+        foreach (var rel in virtualRelationships)
+        {
+            if (tableDict.TryGetValue(rel.FromTable, out var parent) && tableDict.TryGetValue(rel.ToTable, out var reference))
+            {
+                // Avoid duplicate if relationship already exists on the same columns
+                bool exists = parent.OutgoingKeys.Any(k =>
+                    string.Equals(k.ToTable, rel.ToTable, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(k.FromColumn, rel.FromColumn, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(k.ToColumn, rel.ToColumn, StringComparison.OrdinalIgnoreCase));
+
+                if (!exists)
+                {
+                    parent.OutgoingKeys.Add(rel);
+                    reference.IncomingKeys.Add(rel);
+                }
+            }
+        }
+
+        OnRelationshipsUpdated?.Invoke();
     }
 
     public async Task LoadViewsAsync()

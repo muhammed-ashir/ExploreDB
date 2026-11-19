@@ -403,7 +403,9 @@ public sealed class PathfinderService
                     OnClause = $"{sourceAlias}.{QuoteIdentifier(edge.SourceColumn)} = {targetAlias}.{QuoteIdentifier(edge.TargetColumn)}",
                     JoinType = edge.DefaultJoinType,
                     DefaultJoinType = edge.DefaultJoinType,
-                    IsOneToMany = edge.IsOneToMany
+                    IsOneToMany = edge.IsOneToMany,
+                    RelationshipType = edge.RelationshipType,
+                    MatchReason = edge.MatchReason
                 });
             }
         }
@@ -444,6 +446,13 @@ public sealed class PathfinderService
             {
                 graph.TryAdd(relationship.ToTable, new List<GraphEdge>());
 
+                int parentWeight = relationship.Type switch
+                {
+                    RelationshipType.Physical => relationship.IsNullable ? 2 : 1,
+                    RelationshipType.UserDefined => relationship.IsNullable ? 3 : 2,
+                    _ => relationship.IsNullable ? 4 : 3 // Inferred
+                };
+
                 graph[relationship.FromTable].Add(new GraphEdge
                 {
                     SourceTable = relationship.FromTable,
@@ -452,9 +461,18 @@ public sealed class PathfinderService
                     TargetColumn = relationship.ToColumn,
                     IsOneToMany = false,
                     DefaultJoinType = relationship.IsNullable ? "LEFT JOIN" : "INNER JOIN",
-                    Weight = relationship.IsNullable ? 2 : 1,
-                    DirectionLabel = $"Parent hop on {relationship.FromColumn} -> {relationship.ToColumn}"
+                    Weight = parentWeight,
+                    DirectionLabel = $"Parent hop on {relationship.FromColumn} -> {relationship.ToColumn}",
+                    RelationshipType = relationship.Type,
+                    MatchReason = relationship.MatchReason
                 });
+
+                int childWeight = relationship.Type switch
+                {
+                    RelationshipType.Physical => 5,
+                    RelationshipType.UserDefined => 6,
+                    _ => 7 // Inferred child hop
+                };
 
                 graph[relationship.ToTable].Add(new GraphEdge
                 {
@@ -464,8 +482,10 @@ public sealed class PathfinderService
                     TargetColumn = relationship.FromColumn,
                     IsOneToMany = true,
                     DefaultJoinType = "LEFT JOIN",
-                    Weight = 5,
-                    DirectionLabel = $"Child hop on {relationship.ToColumn} -> {relationship.FromColumn}"
+                    Weight = childWeight,
+                    DirectionLabel = $"Child hop on {relationship.ToColumn} -> {relationship.FromColumn}",
+                    RelationshipType = relationship.Type,
+                    MatchReason = relationship.MatchReason
                 });
             }
         }
@@ -623,6 +643,8 @@ public sealed class PathfinderService
         public string DirectionLabel { get; init; } = string.Empty;
         public int Weight { get; init; }
         public bool IsOneToMany { get; init; }
+        public RelationshipType RelationshipType { get; init; } = RelationshipType.Physical;
+        public string? MatchReason { get; init; }
     }
 
     private sealed class SelectedColumn
@@ -681,4 +703,6 @@ public sealed class PathfinderJoinStep
     public string DefaultJoinType { get; init; } = "INNER JOIN";
     public bool IsOneToMany { get; init; }
     public bool IsSelectedTable { get; set; }
+    public RelationshipType RelationshipType { get; set; } = RelationshipType.Physical;
+    public string? MatchReason { get; set; }
 }
