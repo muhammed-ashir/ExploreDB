@@ -642,7 +642,17 @@ public class SchemaService
 
     public void ApplyVirtualRelationships(IEnumerable<Relationship> virtualRelationships)
     {
-        var tableDict = Tables.ToDictionary(t => t.FullName, StringComparer.OrdinalIgnoreCase);
+        var tableDict = new Dictionary<string, TableInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in Tables)
+        {
+            tableDict[t.FullName] = t;
+            var clean = t.FullName.Replace("[", "").Replace("]", "").Trim();
+            tableDict[clean] = t;
+            if (clean.Contains('.'))
+            {
+                tableDict[clean.Substring(clean.LastIndexOf('.') + 1)] = t;
+            }
+        }
 
         // Remove existing non-physical relationships first
         foreach (var table in Tables)
@@ -653,11 +663,22 @@ public class SchemaService
 
         foreach (var rel in virtualRelationships)
         {
-            if (tableDict.TryGetValue(rel.FromTable, out var parent) && tableDict.TryGetValue(rel.ToTable, out var reference))
+            var cleanFrom = rel.FromTable.Replace("[", "").Replace("]", "").Trim();
+            var cleanTo = rel.ToTable.Replace("[", "").Replace("]", "").Trim();
+
+            if ((tableDict.TryGetValue(rel.FromTable, out var parent) || tableDict.TryGetValue(cleanFrom, out parent)) &&
+                (tableDict.TryGetValue(rel.ToTable, out var reference) || tableDict.TryGetValue(cleanTo, out reference)))
             {
+                // Disallow virtual relationship if this column already has a physical foreign key constraint
+                bool hasPhysicalFk = parent.OutgoingKeys.Any(k =>
+                    k.Type == RelationshipType.Physical &&
+                    string.Equals(k.FromColumn, rel.FromColumn, StringComparison.OrdinalIgnoreCase));
+
+                if (hasPhysicalFk) continue;
+
                 // Avoid duplicate if relationship already exists on the same columns
                 bool exists = parent.OutgoingKeys.Any(k =>
-                    string.Equals(k.ToTable, rel.ToTable, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(k.ToTable.Replace("[", "").Replace("]", ""), cleanTo, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(k.FromColumn, rel.FromColumn, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(k.ToColumn, rel.ToColumn, StringComparison.OrdinalIgnoreCase));
 

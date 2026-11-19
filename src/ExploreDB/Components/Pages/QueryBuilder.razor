@@ -455,22 +455,6 @@ else
                          <span class="fw-bold" style="color: var(--app-text);">@(TotalSelectedTablesCount == 1 ? "Generated SQL" : "Join Path Routing")</span>
                      </div>
                      <div class="d-flex align-items-center gap-2">
-                         <button class="btn btn-sm btn-outline-info d-flex align-items-center gap-1 shadow-sm px-2" 
-                                 @onclick="OpenManageRelationshipsModal" 
-                                 data-bs-tooltip="true" 
-                                 data-bs-placement="bottom" 
-                                 data-bs-title="Manage Relationships" 
-                                 title="Manage Relationships">
-                             <i class="bi bi-link-45deg fs-6"></i>
-                             @if (ActiveVirtualCount > 0)
-                             {
-                                 <span class="badge bg-info text-dark rounded-pill" style="font-size: 0.65rem; padding: 0.15rem 0.35rem;" title="@ActiveVirtualCount active virtual relationships">@ActiveVirtualCount</span>
-                             }
-                             @if (SuggestedCount > 0)
-                             {
-                                 <span class="badge bg-warning text-dark rounded-pill" style="font-size: 0.65rem; padding: 0.15rem 0.35rem;" title="@SuggestedCount suggested relationships need review">@SuggestedCount</span>
-                             }
-                         </button>
                          <button class="btn btn-sm btn-outline-warning d-flex align-items-center justify-content-center shadow-sm px-2" 
                                  @onclick="() => ShowClearConfirmation = true" 
                                  data-bs-tooltip="true" 
@@ -1037,22 +1021,23 @@ else
                 <!-- Relation Profile Toolbar -->
                 <div class="px-4 py-2 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2" style="background: var(--app-surface); border-color: var(--app-border) !important;">
                     <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <span class="text-muted small fw-semibold d-flex align-items-center gap-1.5">
-                            <i class="bi bi-collection-fill text-primary"></i> Relation Profile:
+                        <span class="text-muted small fw-semibold">
+                            Relation Profile:
                         </span>
 
                         <div class="dropdown position-relative">
-                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-2 py-1 px-2.5" 
+                            <button class="btn btn-sm dropdown-toggle d-flex align-items-center gap-2 py-1 px-2.5" 
                                     type="button" 
+                                    style="background: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); font-weight: 500;"
+                                    onmouseover="this.style.borderColor='var(--primary-color, #0d6efd)';"
+                                    onmouseout="this.style.borderColor='var(--app-border)';"
                                     @onclick="ToggleProfileDropdown">
                                 @if (string.IsNullOrEmpty(ActiveProfileName))
                                 {
-                                    <i class="bi bi-hdd text-secondary"></i>
                                     <span>Local <span class="text-muted fw-normal">(@SchemaService.ActiveDatabase)</span></span>
                                 }
                                 else
                                 {
-                                    <i class="bi bi-collection-fill text-primary"></i>
                                     <span class="fw-bold text-primary">@ActiveProfileName</span>
                                 }
                             </button>
@@ -1060,23 +1045,14 @@ else
                             @if (IsProfileDropdownOpen)
                             {
                                 <div class="dropdown-menu show shadow-lg py-1 mt-1 position-absolute" 
-                                     style="min-width: 300px; z-index: 1070; background: var(--app-surface); border: 1px solid var(--app-border);">
+                                     style="min-width: 280px; z-index: 1070; background: var(--app-surface); border: 1px solid var(--app-border);">
                                     <div class="px-3 py-1.5 text-muted small fw-bold text-uppercase border-bottom" style="font-size: 0.7rem; border-color: var(--app-border) !important;">
                                         Select Relation Profile
                                     </div>
-                                    <button class="dropdown-item d-flex align-items-center justify-content-between py-2 px-3 small @(string.IsNullOrEmpty(ActiveProfileName) ? "active bg-primary text-white" : "")"
+                                    <button class="dropdown-item py-2 px-3 small @(string.IsNullOrEmpty(ActiveProfileName) ? "active bg-primary text-white" : "")"
                                             @onclick="InitiateSwitchToLocal">
-                                        <div class="d-flex align-items-center gap-2">
-                                            <i class="bi bi-hdd @(string.IsNullOrEmpty(ActiveProfileName) ? "text-white" : "text-secondary")"></i>
-                                            <div>
-                                                <div class="fw-semibold">Local (Isolated to this DB)</div>
-                                                <div class="@(string.IsNullOrEmpty(ActiveProfileName) ? "text-white-50" : "text-muted")" style="font-size: 0.72rem;">Changes stay only in this database</div>
-                                            </div>
-                                        </div>
-                                        @if (string.IsNullOrEmpty(ActiveProfileName))
-                                        {
-                                            <i class="bi bi-check-lg"></i>
-                                        }
+                                        <div class="fw-semibold">Local (Isolated to this DB)</div>
+                                        <div class="@(string.IsNullOrEmpty(ActiveProfileName) ? "text-white-50" : "text-muted")" style="font-size: 0.72rem;">Changes stay only in this database</div>
                                     </button>
 
                                     @if (AvailableProfiles.Count > 0)
@@ -1089,17 +1065,11 @@ else
                                         {
                                             var isCurrent = string.Equals(ActiveProfileName, prof.Name, StringComparison.OrdinalIgnoreCase);
                                             <div class="d-flex align-items-center justify-content-between px-2 py-0.5 dropdown-item-container">
-                                                <button class="btn btn-sm text-start flex-grow-1 border-0 d-flex align-items-center justify-content-between p-1.5 @(isCurrent ? "fw-bold text-primary" : "")"
+                                                <button class="btn btn-sm text-start flex-grow-1 border-0 p-1.5 @(isCurrent ? "fw-bold text-primary" : "")"
                                                         style="background: transparent; color: var(--app-text);"
                                                         @onclick="() => SwitchToProfile(prof.Name)">
-                                                    <div>
-                                                        <div>@prof.Name</div>
-                                                        <div class="text-muted small" style="font-size: 0.7rem;">@prof.EntryCount relations &bull; @prof.LastModified.ToString("g")</div>
-                                                    </div>
-                                                    @if (isCurrent)
-                                                    {
-                                                        <i class="bi bi-check-lg text-primary ms-2"></i>
-                                                    }
+                                                    <div>@prof.Name</div>
+                                                    <div class="text-muted small" style="font-size: 0.7rem;">@prof.EntryCount relations &bull; @prof.LastModified.ToString("g")</div>
                                                 </button>
                                                 <button class="btn btn-sm btn-link text-danger p-1 opacity-75 hover-opacity-100" 
                                                         title="Delete profile" 
@@ -1110,42 +1080,29 @@ else
                                             </div>
                                         }
                                     }
-
-                                    <div class="dropdown-divider my-1" style="border-color: var(--app-border);"></div>
-                                    <button class="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-success fw-semibold"
-                                            @onclick="OpenSaveAsProfileModal">
-                                        <i class="bi bi-plus-circle"></i> Save As New Profile...
-                                    </button>
                                 </div>
                             }
                         </div>
-
-                        @if (!string.IsNullOrEmpty(ActiveProfileName))
-                        {
-                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.7rem;">
-                                <i class="bi bi-share me-1"></i>Shared Profile
-                            </span>
-                        }
                     </div>
 
                     <!-- Right actions: Save As Profile, Export, Import -->
                     <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1.5 py-1 px-2.5" 
+                        <button class="btn btn-sm btn-outline-primary d-flex align-items-center py-1 px-2.5" 
                                 @onclick="OpenSaveAsProfileModal" 
                                 title="Save current relationships as a reusable profile for other databases">
-                            <i class="bi bi-plus-circle"></i>
+                            <i class="bi bi-plus-circle me-2"></i>
                             <span>Save As Profile</span>
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1.5 py-1 px-2.5" 
+                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center py-1 px-2.5" 
                                 @onclick="ExportActiveProfileAsync" 
                                 title="Export current relationships to a JSON file">
-                            <i class="bi bi-download"></i>
+                            <i class="bi bi-download me-2"></i>
                             <span>Export</span>
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1.5 py-1 px-2.5" 
+                        <button class="btn btn-sm btn-outline-secondary d-flex align-items-center py-1 px-2.5" 
                                 @onclick="ImportProfileAsync" 
                                 title="Import relationships from a JSON file">
-                            <i class="bi bi-upload"></i>
+                            <i class="bi bi-upload me-2"></i>
                             <span>Import</span>
                         </button>
                     </div>
@@ -1262,7 +1219,7 @@ else
                                 <div class="d-flex align-items-center gap-3">
                                     <div class="d-flex align-items-center gap-1">
                                         <span class="text-muted small">Show:</span>
-                                        <select class="form-select form-select-sm py-0 px-2" style="width: auto; height: 26px; font-size: 0.75rem; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                        <select class="form-select form-select-sm" style="width: 72px; min-width: 72px; height: 28px; font-size: 0.75rem; padding: 2px 24px 2px 8px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); cursor: pointer;"
                                                 value="@ActivePageSize"
                                                 @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out var ps)) { ActivePageSize = ps; ActiveCurrentPage = 1; } }">
                                             <option value="10">10</option>
@@ -1466,7 +1423,7 @@ else
                                 <div class="d-flex align-items-center gap-3">
                                     <div class="d-flex align-items-center gap-1">
                                         <span class="text-muted small">Show:</span>
-                                        <select class="form-select form-select-sm py-0 px-2" style="width: auto; height: 26px; font-size: 0.75rem; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                        <select class="form-select form-select-sm" style="width: 72px; min-width: 72px; height: 28px; font-size: 0.75rem; padding: 2px 24px 2px 8px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); cursor: pointer;"
                                                 value="@SuggestedPageSize"
                                                 @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out var ps)) { SuggestedPageSize = ps; SuggestedCurrentPage = 1; } }">
                                             <option value="10">10</option>
@@ -1930,7 +1887,7 @@ else
                                 <div class="d-flex align-items-center gap-3">
                                     <div class="d-flex align-items-center gap-1">
                                         <span class="text-muted small">Show:</span>
-                                        <select class="form-select form-select-sm py-0 px-2" style="width: auto; height: 26px; font-size: 0.75rem; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                        <select class="form-select form-select-sm" style="width: 72px; min-width: 72px; height: 28px; font-size: 0.75rem; padding: 2px 24px 2px 8px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); cursor: pointer;"
                                                 value="@DismissedPageSize"
                                                 @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out var ps)) { DismissedPageSize = ps; DismissedCurrentPage = 1; } }">
                                             <option value="10">10</option>
@@ -2054,19 +2011,7 @@ else
                     }
                 </div>
 
-                <!-- Footer -->
-                <div class="modal-footer py-2 px-4 d-flex align-items-center" style="background: var(--app-surface-secondary); border-top: 1px solid var(--app-border);">
-                    <span class="text-muted small">
-                        @if (!string.IsNullOrEmpty(ActiveProfileName))
-                        {
-                            <span><i class="bi bi-collection-fill text-primary me-1"></i> Virtual relationships are managed via shared profile: <strong class="text-primary">@ActiveProfileName</strong></span>
-                        }
-                        else
-                        {
-                            <span><i class="bi bi-hdd me-1"></i> Virtual relationships are stored locally for database: <strong>@SchemaService.ActiveDatabase</strong></span>
-                        }
-                    </span>
-                </div>
+
 
                 @if (ShowSaveAsProfileModal)
                 {
@@ -2102,7 +2047,7 @@ else
                             <div class="card-footer py-2.5 px-4 d-flex justify-content-end gap-2" style="background: var(--app-surface-secondary); border-top: 1px solid var(--app-border);">
                                 <button class="btn btn-sm btn-outline-secondary" @onclick="() => ShowSaveAsProfileModal = false">Cancel</button>
                                 <button class="btn btn-sm btn-primary px-3" disabled="@string.IsNullOrWhiteSpace(NewProfileName)" @onclick="ConfirmSaveAsProfile">
-                                    <i class="bi bi-check-lg me-1"></i> Save Profile
+                                    Save Profile
                                 </button>
                             </div>
                         </div>
@@ -2482,10 +2427,10 @@ else
         try
         {
             var profileName = ActiveProfileName ?? $"Local_{SchemaService.ActiveDatabase}";
-            var safeFileName = VirtualRelationshipService.GetSafeFileName(profileName) + "_RelationProfile.json";
-            string filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*";
+            var safeFileName = VirtualRelationshipService.GetSafeFileName(profileName) + "_relations.exploredb";
+            string filter = "ExploreDB Relation Profile (*.exploredb)|*.exploredb|All Files (*.*)|*.*";
 
-            var filePath = await WindowManager.ShowSaveFileDialogAsync(safeFileName, filter, ".json");
+            var filePath = await WindowManager.ShowSaveFileDialogAsync(safeFileName, filter, ".exploredb");
             if (string.IsNullOrEmpty(filePath)) return;
 
             var json = VirtualRelationshipService.ExportProfileJson();
@@ -2505,8 +2450,8 @@ else
     {
         try
         {
-            string filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*";
-            var filePath = await WindowManager.ShowOpenFileDialogAsync(filter, "Import Relation Profile", ".json");
+            string filter = "ExploreDB Relation Profile (*.exploredb)|*.exploredb|All Files (*.*)|*.*";
+            var filePath = await WindowManager.ShowOpenFileDialogAsync(filter, "Import Relation Profile", ".exploredb");
             if (string.IsNullOrEmpty(filePath)) return;
 
             if (!File.Exists(filePath))

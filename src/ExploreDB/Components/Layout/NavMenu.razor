@@ -127,6 +127,11 @@
                 <span>Query Builder</span>
             </a>
 
+            <a href="relationships"
+               class="list-group-item list-group-item-action bg-transparent text-light border-0 py-3 sidebar-item @(IsRelationshipsActive ? "active" : "")">
+                <span>Relationships</span>
+            </a>
+
             <div class="sidebar-divider"></div>
 
             <button type="button" 
@@ -203,6 +208,7 @@
 
     private bool IsRunnerActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
     private bool IsPathfinderActive => CurrentUrl.Contains("/builder");
+    private bool IsRelationshipsActive => CurrentUrl.Contains("/relationships");
     private bool IsLearningActive => CurrentUrl.Contains("/learning");
     private bool IsToolsActive => CurrentUrl.Contains("/tools");
     private bool IsExplorerActive => CurrentUrl.Contains("/explorer");

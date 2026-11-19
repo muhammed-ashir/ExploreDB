@@ -87,18 +87,57 @@ public class VirtualRelationshipService
         _schemaService.OnTablesLoaded += HandleTablesLoaded;
     }
 
+    private bool _hasScannedSuggestions = false;
+    public bool HasScannedSuggestions => _hasScannedSuggestions;
+
     private void HandleConnectionOrDatabaseChanged()
     {
         _entries.Clear();
         _suggestedRelationships.Clear();
+        _hasScannedSuggestions = false;
         LoadCurrentDatabaseEntries();
+        SyncActiveToSchema();
     }
 
     private void HandleTablesLoaded()
     {
-        if (_schemaService.Tables.Count > 0)
+        SyncActiveToSchema();
+    }
+
+    public void EnsureSuggestionsScanned(bool forceRescan = false)
+    {
+        if (!_hasScannedSuggestions || forceRescan)
         {
             DetectAndSync();
+        }
+    }
+
+    private bool _isScanningSuggestions = false;
+    public bool IsScanningSuggestions => _isScanningSuggestions;
+    public event Action? OnScanningStateChanged;
+
+    public async Task EnsureSuggestionsScannedAsync(bool forceRescan = false)
+    {
+        if (_isScanningSuggestions) return;
+        if (!_hasScannedSuggestions || forceRescan)
+        {
+            _isScanningSuggestions = true;
+            OnScanningStateChanged?.Invoke();
+
+            try
+            {
+                await Task.Run(async () =>
+                {
+                    DetectAndSync();
+                    // Brief 250ms smoothing delay so the scan animation is perceived smoothly without flashing
+                    await Task.Delay(250);
+                });
+            }
+            finally
+            {
+                _isScanningSuggestions = false;
+                OnScanningStateChanged?.Invoke();
+            }
         }
     }
 
@@ -296,12 +335,21 @@ public class VirtualRelationshipService
         catch { }
     }
 
+    public static string NormalizeFullTableName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+        return name.Replace("[", "").Replace("]", "").Trim();
+    }
+
     /// <summary>
     /// Runs the 4-rule bulletproof inference engine against loaded tables,
     /// merges approved virtual relationships into SchemaService, and populates suggested list.
+    /// Columns that already participate in physical database foreign keys or active approved virtual keys
+    /// are strictly excluded from candidate suggestions.
     /// </summary>
     public void DetectAndSync()
     {
+        _hasScannedSuggestions = true;
         LoadCurrentDatabaseEntries();
         _suggestedRelationships.Clear();
 
@@ -312,13 +360,38 @@ public class VirtualRelationshipService
             _entries.Where(e => e.IsBlacklisted).Select(e => e.Key),
             StringComparer.OrdinalIgnoreCase);
 
-        // Pre-index existing physical foreign keys
+        // Pre-index existing physical foreign keys by both full key and source column
+        var existingPhysicalFkColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var existingPhysicalKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var t in tables)
         {
             foreach (var fk in t.OutgoingKeys.Where(k => k.Type == RelationshipType.Physical))
             {
+                var normFrom = NormalizeFullTableName(fk.FromTable);
+                var normTo = NormalizeFullTableName(fk.ToTable);
+
+                existingPhysicalFkColumns.Add($"{normFrom}|{fk.FromColumn}");
+                if (normFrom.Contains('.'))
+                {
+                    var dot = normFrom.LastIndexOf('.');
+                    existingPhysicalFkColumns.Add($"{normFrom.Substring(dot + 1)}|{fk.FromColumn}");
+                }
+
+                existingPhysicalKeys.Add($"{normFrom}|{fk.FromColumn}|{normTo}|{fk.ToColumn}");
                 existingPhysicalKeys.Add($"{fk.FromTable}|{fk.FromColumn}|{fk.ToTable}|{fk.ToColumn}");
+            }
+        }
+
+        // Pre-index active approved virtual relationship columns
+        var activeVirtualColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in _entries.Where(e => e.IsApproved && !e.IsBlacklisted))
+        {
+            var normFrom = NormalizeFullTableName(e.FromTable);
+            activeVirtualColumns.Add($"{normFrom}|{e.FromColumn}");
+            if (normFrom.Contains('.'))
+            {
+                var dot = normFrom.LastIndexOf('.');
+                activeVirtualColumns.Add($"{normFrom.Substring(dot + 1)}|{e.FromColumn}");
             }
         }
 
@@ -343,6 +416,37 @@ public class VirtualRelationshipService
 
         var detected = new List<Relationship>();
 
+        // Pre-populate detected with all approved virtual relationships from storage (both Inferred and UserDefined)
+        foreach (var approved in _entries.Where(e => e.IsApproved && !e.IsBlacklisted))
+        {
+            var normFrom = NormalizeFullTableName(approved.FromTable);
+            var normTo = NormalizeFullTableName(approved.ToTable);
+            var colKey = $"{normFrom}|{approved.FromColumn}";
+            var colKeyShort = normFrom.Contains('.') ? $"{normFrom.Substring(normFrom.LastIndexOf('.') + 1)}|{approved.FromColumn}" : colKey;
+            var fullKey = $"{normFrom}|{approved.FromColumn}|{normTo}|{approved.ToColumn}";
+
+            // Safety guard: If this column physically has a database FK constraint now, do not activate virtual key
+            if (existingPhysicalFkColumns.Contains(colKey) ||
+                existingPhysicalFkColumns.Contains(colKeyShort) ||
+                existingPhysicalKeys.Contains(fullKey) ||
+                existingPhysicalKeys.Contains(approved.Key))
+            {
+                continue;
+            }
+
+            detected.Add(new Relationship
+            {
+                FromTable = approved.FromTable,
+                FromColumn = approved.FromColumn,
+                ToTable = approved.ToTable,
+                ToColumn = approved.ToColumn,
+                IsNullable = approved.IsNullable,
+                Type = approved.Type,
+                ConfidenceScore = approved.ConfidenceScore,
+                MatchReason = approved.MatchReason ?? (approved.Type == RelationshipType.UserDefined ? "User Defined" : "Virtual")
+            });
+        }
+
         // Generic blacklist columns that must NEVER match across different tables unless entity name is prefixed
         var genericBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -353,10 +457,29 @@ public class VirtualRelationshipService
 
         foreach (var childTable in tables)
         {
+            var normChildTable = NormalizeFullTableName(childTable.FullName);
+
             foreach (var childCol in childTable.Columns)
             {
                 var colName = childCol.Name.Trim();
                 if (genericBlacklist.Contains(colName)) continue;
+
+                var colKey = $"{normChildTable}|{colName}";
+                var colKeyShort = $"{childTable.Name}|{colName}";
+
+                // 1. Skip if column already participates in a physical database foreign key constraint
+                if (childTable.OutgoingKeys.Any(k => k.Type == RelationshipType.Physical && string.Equals(k.FromColumn, colName, StringComparison.OrdinalIgnoreCase)) ||
+                    existingPhysicalFkColumns.Contains(colKey) ||
+                    existingPhysicalFkColumns.Contains(colKeyShort))
+                {
+                    continue;
+                }
+
+                // 2. Skip if column already has an active approved virtual relationship
+                if (activeVirtualColumns.Contains(colKey) || activeVirtualColumns.Contains(colKeyShort))
+                {
+                    continue;
+                }
 
                 // Match against candidate target tables
                 var matchesForColumn = new List<(TableInfo TargetTable, ColumnInfo TargetCol, int Confidence, string Reason)>();
@@ -364,7 +487,14 @@ public class VirtualRelationshipService
                 foreach (var (parentTable, parentCol, isPk) in targetCandidates)
                 {
                     // Do not self-match unless role column (e.g. ParentId, ManagerId)
-                    bool isSelf = string.Equals(childTable.FullName, parentTable.FullName, StringComparison.OrdinalIgnoreCase);
+                    bool isSelf = string.Equals(childTable.FullName, parentTable.FullName, StringComparison.OrdinalIgnoreCase) ||
+                                  string.Equals(normChildTable, NormalizeFullTableName(parentTable.FullName), StringComparison.OrdinalIgnoreCase);
+
+                    // A column can NEVER reference itself, and a table's primary key can NEVER be a foreign key to itself on the same table
+                    if (isSelf && (childCol.IsPrimaryKey || string.Equals(childCol.Name, parentCol.Name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
 
                     // Rule 2: Strict Data Type Match
                     if (!AreDataTypesCompatible(childCol.DataType, parentCol.DataType))
@@ -411,6 +541,13 @@ public class VirtualRelationshipService
                     topMatch.Reason += " (Note: Multiple candidate tables matched; user verification recommended)";
                 }
 
+                // A column can NEVER reference itself on the same table
+                if (string.Equals(childTable.FullName, topMatch.TargetTable.FullName, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(childCol.Name, topMatch.TargetCol.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var key = $"{childTable.FullName}|{childCol.Name}|{topMatch.TargetTable.FullName}|{topMatch.TargetCol.Name}";
 
                 // Skip if physical FK already exists
@@ -431,65 +568,8 @@ public class VirtualRelationshipService
                     MatchReason = topMatch.Reason
                 };
 
-                // Check if this was already recorded in persistent entries
-                var existingEntry = _entries.FirstOrDefault(e => string.Equals(e.Key, key, StringComparison.OrdinalIgnoreCase));
-                if (existingEntry != null)
-                {
-                    if (existingEntry.IsApproved && !existingEntry.IsBlacklisted)
-                    {
-                        rel.Type = existingEntry.Type;
-                        rel.ConfidenceScore = existingEntry.ConfidenceScore;
-                        rel.MatchReason = existingEntry.MatchReason ?? rel.MatchReason;
-                        detected.Add(rel);
-                    }
-                }
-                else
-                {
-                    // New inferred candidate
-                    if (topMatch.Confidence >= 85 && !isAmbiguous)
-                    {
-                        // High confidence: automatically eligible and recorded as approved inferred
-                        _entries.Add(new VirtualRelationshipEntry
-                        {
-                            FromTable = rel.FromTable,
-                            FromColumn = rel.FromColumn,
-                            ToTable = rel.ToTable,
-                            ToColumn = rel.ToColumn,
-                            IsNullable = rel.IsNullable,
-                            Type = RelationshipType.Inferred,
-                            ConfidenceScore = rel.ConfidenceScore,
-                            MatchReason = rel.MatchReason,
-                            IsApproved = true,
-                            IsBlacklisted = false
-                        });
-                        detected.Add(rel);
-                    }
-                    else
-                    {
-                        // Moderate confidence or ambiguous: queue for manual review in suggested list
-                        _suggestedRelationships.Add(rel);
-                    }
-                }
-            }
-        }
-
-        // Add user-defined relationships from persistent storage
-        foreach (var userDef in _entries.Where(e => e.Type == RelationshipType.UserDefined && e.IsApproved && !e.IsBlacklisted))
-        {
-            var key = userDef.Key;
-            if (!existingPhysicalKeys.Contains(key) && !detected.Any(d => string.Equals(d.FromTable + "|" + d.FromColumn + "|" + d.ToTable + "|" + d.ToColumn, key, StringComparison.OrdinalIgnoreCase)))
-            {
-                detected.Add(new Relationship
-                {
-                    FromTable = userDef.FromTable,
-                    FromColumn = userDef.FromColumn,
-                    ToTable = userDef.ToTable,
-                    ToColumn = userDef.ToColumn,
-                    IsNullable = userDef.IsNullable,
-                    Type = RelationshipType.UserDefined,
-                    ConfidenceScore = userDef.ConfidenceScore,
-                    MatchReason = userDef.MatchReason ?? "User Defined"
-                });
+                // Inferred candidate: queue for user review in suggested list (strict user control - never auto-approve)
+                _suggestedRelationships.Add(rel);
             }
         }
 
@@ -502,8 +582,34 @@ public class VirtualRelationshipService
 
     public void SyncActiveToSchema()
     {
+        var tables = _schemaService.Tables;
+        var existingPhysicalFkColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (tables != null)
+        {
+            foreach (var t in tables)
+            {
+                foreach (var fk in t.OutgoingKeys.Where(k => k.Type == RelationshipType.Physical))
+                {
+                    var normFrom = NormalizeFullTableName(fk.FromTable);
+                    existingPhysicalFkColumns.Add($"{normFrom}|{fk.FromColumn}");
+                    if (normFrom.Contains('.'))
+                    {
+                        var dot = normFrom.LastIndexOf('.');
+                        existingPhysicalFkColumns.Add($"{normFrom.Substring(dot + 1)}|{fk.FromColumn}");
+                    }
+                }
+            }
+        }
+
         var activeList = _entries
             .Where(e => e.IsApproved && !e.IsBlacklisted)
+            .Where(e =>
+            {
+                var normFrom = NormalizeFullTableName(e.FromTable);
+                var colKey = $"{normFrom}|{e.FromColumn}";
+                var colKeyShort = normFrom.Contains('.') ? $"{normFrom.Substring(normFrom.LastIndexOf('.') + 1)}|{e.FromColumn}" : colKey;
+                return !existingPhysicalFkColumns.Contains(colKey) && !existingPhysicalFkColumns.Contains(colKeyShort);
+            })
             .Select(e => new Relationship
             {
                 FromTable = e.FromTable,
@@ -537,16 +643,15 @@ public class VirtualRelationshipService
         var normParentTable = NormalizeIdentifier(cleanParentTable);
         var normSingularParent = NormalizeIdentifier(singularParent);
 
-        // Pattern 1: Exact match with Parent PK (e.g. child has Customer_Id and parent PK is Customer_Id)
-        if (!string.Equals(normParentCol, "id", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(normChildCol, normParentCol, StringComparison.OrdinalIgnoreCase))
-        {
-            return (true, 98, $"Column [{childColName}] directly matches primary key [{parentColName}] of {parentTableName}");
-        }
-
         // Pattern 2: Self-referential hierarchies
         if (isSelf)
         {
+            // A column can NEVER reference itself on the same table
+            if (string.Equals(normChildCol, normParentCol, StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, 0, string.Empty);
+            }
+
             if (normChildCol is "parentid" or "parent_id" or "managerid" or "manager_id" or "reportsto" or "reportstoid")
             {
                 return (true, 88, $"Self-referencing hierarchy column [{childColName}] referencing {parentTableName}.[{parentColName}]");
@@ -556,6 +661,14 @@ public class VirtualRelationshipService
                 return (true, 85, $"Self-referencing hierarchy column [{childColName}] referencing {parentTableName}.[{parentColName}]");
             }
             return (false, 0, string.Empty);
+        }
+
+        // Pattern 1: Exact match with Parent PK (e.g. child has Customer_Id and parent PK is Customer_Id)
+        // STRICT: Only across different tables!
+        if (!string.Equals(normParentCol, "id", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(normChildCol, normParentCol, StringComparison.OrdinalIgnoreCase))
+        {
+            return (true, 98, $"Column [{childColName}] directly matches primary key [{parentColName}] of {parentTableName}");
         }
 
         // Pattern 3: Singular parent + "id" (e.g. Customer_Id, CustomerId, customer_id, CUSTOMER_ID)
@@ -727,7 +840,11 @@ public class VirtualRelationshipService
 
     public IReadOnlyList<Relationship> GetSuggestedRelationships()
     {
-        return _suggestedRelationships;
+        return _suggestedRelationships
+            .OrderByDescending(r => r.ConfidenceScore)
+            .ThenBy(r => r.FromTable)
+            .ThenBy(r => r.FromColumn)
+            .ToList();
     }
 
     public IReadOnlyList<VirtualRelationshipEntry> GetBlacklistedEntries()
@@ -953,7 +1070,7 @@ public class VirtualRelationshipService
         catch { }
     }
 
-    public void DetachToLocal(bool keepCopy)
+    public void SwitchToLocal()
     {
         var key = GetDatabaseMappingKey();
         if (key != null)
@@ -964,33 +1081,27 @@ public class VirtualRelationshipService
         }
 
         _activeProfileName = null;
+        _entries.Clear();
 
-        if (keepCopy)
+        var localPath = GetStorageFilePath();
+        if (File.Exists(localPath))
         {
-            SaveLocalEntriesToFile();
-        }
-        else
-        {
-            _entries.Clear();
-            var localPath = GetStorageFilePath();
-            if (File.Exists(localPath))
+            try
             {
-                try
-                {
-                    var json = File.ReadAllText(localPath);
-                    var loaded = JsonSerializer.Deserialize<List<VirtualRelationshipEntry>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    if (loaded != null) _entries.AddRange(loaded);
-                }
-                catch { }
+                var json = File.ReadAllText(localPath);
+                var loaded = JsonSerializer.Deserialize<List<VirtualRelationshipEntry>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (loaded != null) _entries.AddRange(loaded);
             }
-            else
-            {
-                DetectAndSync();
-                return;
-            }
+            catch { }
         }
 
+        _suggestedRelationships.Clear();
         SyncActiveToSchema();
+    }
+
+    public void DetachToLocal(bool keepCopy = false)
+    {
+        SwitchToLocal();
     }
 
     public void DeleteProfile(string profileName)
@@ -1099,7 +1210,7 @@ public class VirtualRelationshipService
 
         if (entries == null || entries.Count == 0)
         {
-            summary.Warnings.Add("Could not recognize valid relationship entries in this JSON file.");
+            summary.Warnings.Add("Could not recognize valid relationship entries in this .exploredb file.");
             return summary;
         }
 
