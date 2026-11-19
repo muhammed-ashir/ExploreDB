@@ -23,11 +23,11 @@
         <div class="d-flex align-items-center gap-2 flex-wrap">
             @if (_session != null && _session.Statements.Count > 0)
             {
-                <!-- Run / Continue (F5) -->
+                <!-- Run / Continue / Re-run (F5) -->
                 <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
                         @onclick="RunOrContinueAsync"
                         disabled="@(_isRecording || _isLoadingDef)"
-                        title="@(_session.IsRecorded ? "Continue to next breakpoint (F5)" : "Run / Start Debugging (F5)")">
+                        title="@(_session.IsRecorded ? (_session.IsAtCompletion && _session.CallStack.Count == 0 ? "Re-run procedure from start (F5)" : "Continue to next breakpoint (F5)") : "Run / Start Debugging (F5)")">
                     @if (_isRecording)
                     {
                         <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -35,8 +35,16 @@
                     }
                     else if (_session.IsRecorded)
                     {
-                        <i class="bi bi-play-fill fs-6"></i>
-                        <span>Continue</span>
+                        if (_session.IsAtCompletion && _session.CallStack.Count == 0)
+                        {
+                            <i class="bi bi-arrow-repeat fs-6"></i>
+                            <span>Re-run</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-play-fill fs-6"></i>
+                            <span>Continue</span>
+                        }
                     }
                     else
                     {
@@ -45,7 +53,7 @@
                     }
                 </button>
 
-                @if (_session.IsRecorded)
+                @if (_session.IsRecorded && !(_session.IsAtCompletion && _session.CallStack.Count == 0))
                 {
                     <!-- Stepping Controls (F10 Step, F11 Step Into, F9 Back, Restart) -->
                     <div class="btn-group btn-group-sm shadow-sm" role="group">
@@ -1313,7 +1321,7 @@
     {
         if (_session == null || _isRecording) return;
 
-        if (!_session.IsRecorded)
+        if (!_session.IsRecorded || (_session.IsAtCompletion && _session.CallStack.Count == 0))
         {
             var connStr = ConnectionService.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
@@ -1323,6 +1331,8 @@
             }
 
             _isRecording = true;
+            _collapsedResultSets.Clear();
+            _collapsedTempTables.Clear();
             StateHasChanged();
 
             try
