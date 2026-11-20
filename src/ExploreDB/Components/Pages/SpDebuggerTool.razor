@@ -1441,15 +1441,29 @@
     {
         var list = new List<ConnectionService.SavedConnection>();
 
+        void AddIfNotPresent(ConnectionService.SavedConnection conn)
+        {
+            if (string.IsNullOrWhiteSpace(conn.ConnectionString)) return;
+            var existing = list.FirstOrDefault(x => IsSameServerConnection(x, conn));
+            if (existing == null)
+            {
+                list.Add(conn);
+            }
+            else
+            {
+                if ((string.IsNullOrWhiteSpace(existing.Name) || string.Equals(existing.Name, existing.Server, StringComparison.OrdinalIgnoreCase))
+                    && !string.IsNullOrWhiteSpace(conn.Name) && !string.Equals(conn.Name, conn.Server, StringComparison.OrdinalIgnoreCase))
+                {
+                    existing.Name = conn.Name;
+                }
+            }
+        }
+
         if (ConnectionService.ActiveSessionConnections != null)
         {
             foreach (var c in ConnectionService.ActiveSessionConnections)
             {
-                if (!string.IsNullOrWhiteSpace(c.ConnectionString) &&
-                    !list.Any(x => string.Equals(x.ConnectionString, c.ConnectionString, StringComparison.OrdinalIgnoreCase)))
-                {
-                    list.Add(c);
-                }
+                AddIfNotPresent(c);
             }
         }
 
@@ -1457,16 +1471,11 @@
         {
             foreach (var c in ConnectionService.SavedConnections)
             {
-                if (!string.IsNullOrWhiteSpace(c.ConnectionString) &&
-                    !list.Any(x => string.Equals(x.ConnectionString, c.ConnectionString, StringComparison.OrdinalIgnoreCase)))
-                {
-                    list.Add(c);
-                }
+                AddIfNotPresent(c);
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(ConnectionService.ConnectionString) &&
-            !list.Any(x => string.Equals(x.ConnectionString, ConnectionService.ConnectionString, StringComparison.OrdinalIgnoreCase)))
+        if (!string.IsNullOrWhiteSpace(ConnectionService.ConnectionString))
         {
             string srv = "Active Connection";
             string db = "";
@@ -1478,14 +1487,19 @@
             }
             catch { }
 
-            list.Insert(0, new ConnectionService.SavedConnection
+            var activeConn = new ConnectionService.SavedConnection
             {
                 Id = "current_active",
                 Name = srv,
                 Server = srv,
                 Database = db,
                 ConnectionString = ConnectionService.ConnectionString
-            });
+            };
+
+            if (!list.Any(x => IsSameServerConnection(x, activeConn)))
+            {
+                list.Insert(0, activeConn);
+            }
         }
 
         _availableConnections = list;
@@ -1497,6 +1511,67 @@
             {
                 _selectedDatabase = _availableConnections[0].Database ?? "";
             }
+        }
+    }
+
+    private static bool IsSameServerConnection(ConnectionService.SavedConnection a, ConnectionService.SavedConnection b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a == null || b == null) return false;
+
+        if (!string.IsNullOrEmpty(a.Id) && !string.IsNullOrEmpty(b.Id) &&
+            !string.Equals(a.Id, "current_active", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(b.Id, "current_active", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(a.Id, b.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(a.ConnectionString) && !string.IsNullOrWhiteSpace(b.ConnectionString) &&
+            string.Equals(a.ConnectionString, b.ConnectionString, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string normA = NormalizeServerConnectionString(a.ConnectionString);
+        string normB = NormalizeServerConnectionString(b.ConnectionString);
+        if (!string.IsNullOrEmpty(normA) && !string.IsNullOrEmpty(normB) &&
+            string.Equals(normA, normB, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrEmpty(a.Name) || string.IsNullOrEmpty(b.Name) ||
+                string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(a.Server) && !string.IsNullOrWhiteSpace(b.Server) &&
+            string.Equals(a.Server, b.Server, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(a.Name ?? "", b.Name ?? "", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(a.Username ?? "", b.Username ?? "", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeServerConnectionString(string? connStr)
+    {
+        if (string.IsNullOrWhiteSpace(connStr)) return string.Empty;
+        try
+        {
+            var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connStr);
+            b.InitialCatalog = "";
+            b.Remove("Initial Catalog");
+            b.Remove("Database");
+            return b.ConnectionString;
+        }
+        catch
+        {
+            return connStr.Trim();
         }
     }
 
@@ -1525,7 +1600,9 @@
 
     private string GetSelectedServerDisplayName()
     {
-        var conn = _availableConnections.FirstOrDefault(c => string.Equals(c.ConnectionString, _selectedConnectionString, StringComparison.OrdinalIgnoreCase));
+        var conn = _availableConnections.FirstOrDefault(c => 
+            string.Equals(c.ConnectionString, _selectedConnectionString, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(NormalizeServerConnectionString(c.ConnectionString), NormalizeServerConnectionString(_selectedConnectionString), StringComparison.OrdinalIgnoreCase));
         if (conn != null)
         {
             return GetConnectionOptionLabel(conn);
