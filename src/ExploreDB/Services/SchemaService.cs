@@ -1603,7 +1603,10 @@ SELECT
     ISNULL(cc.definition, '') AS ComputedDefinition,
     ISNULL(cc.is_persisted, 0) AS IsPersisted,
     ISNULL(dc.name, '') AS DefaultConstraintName,
-    ISNULL(dc.definition, '') AS DefaultDefinition
+    ISNULL(dc.definition, '') AS DefaultDefinition,
+    ISNULL(c.default_object_id, 0) AS DefaultObjectId,
+    ISNULL(OBJECT_SCHEMA_NAME(c.default_object_id), '') AS BoundDefaultSchema,
+    ISNULL(OBJECT_NAME(c.default_object_id), '') AS BoundDefaultName
 FROM sys.columns c
 JOIN sys.types t ON c.user_type_id = t.user_type_id
 LEFT JOIN sys.identity_columns ic ON c.object_id = ic.object_id AND c.column_id = ic.column_id
@@ -1679,6 +1682,7 @@ ORDER BY i.name, ic.is_included_column, ic.key_ordinal;
             using var reader = await cmd.ExecuteReaderAsync();
 
             var colDefinitions = new List<string>();
+            var boundDefaults = new List<(string Schema, string Name, string ColumnName)>();
 
             // 1. Process Columns
             while (await reader.ReadAsync())
@@ -1697,6 +1701,9 @@ ORDER BY i.name, ic.is_included_column, ic.key_ordinal;
                 bool isPersisted = Convert.ToBoolean(reader["IsPersisted"]);
                 string defConstName = reader["DefaultConstraintName"].ToString()!;
                 string defVal = reader["DefaultDefinition"].ToString()!;
+                int defaultObjId = Convert.ToInt32(reader["DefaultObjectId"]);
+                string boundDefSchema = reader["BoundDefaultSchema"].ToString()!;
+                string boundDefName = reader["BoundDefaultName"].ToString()!;
 
                 if (isComputed)
                 {
@@ -1723,6 +1730,10 @@ ORDER BY i.name, ic.is_included_column, ic.key_ordinal;
                     {
                         parts.Add($"DEFAULT {defVal}");
                     }
+                }
+                else if (defaultObjId != 0 && !string.IsNullOrEmpty(boundDefName))
+                {
+                    boundDefaults.Add((boundDefSchema, boundDefName, colName));
                 }
 
                 parts.Add(isNullable ? "NULL" : "NOT NULL");
@@ -1860,6 +1871,17 @@ ORDER BY i.name, ic.is_included_column, ic.key_ordinal;
                         sb.Append($" WHERE {entry.Filter}");
                     }
                     sb.AppendLine(";");
+                    sb.AppendLine("GO");
+                }
+            }
+
+            if (boundDefaults.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var (bSchema, bName, col) in boundDefaults)
+                {
+                    string defFull = string.IsNullOrEmpty(bSchema) ? $"[{bName}]" : $"[{bSchema}].[{bName}]";
+                    sb.AppendLine($"EXEC sp_bindefault N'{defFull}', N'{fullName}.[{col}]';");
                     sb.AppendLine("GO");
                 }
             }
