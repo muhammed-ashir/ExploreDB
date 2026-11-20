@@ -57,12 +57,13 @@ public class SpResultSetInfo
     public string StatementSummary { get; set; } = string.Empty;
     public List<string> Columns { get; set; } = new();
     public List<IDictionary<string, object?>> Rows { get; set; } = new();
-    public int TotalRowCount => Rows.Count;
+    public int TotalRowCount { get; set; }
 
     public void Clear()
     {
         Columns.Clear();
         Rows.Clear();
+        TotalRowCount = 0;
     }
 }
 

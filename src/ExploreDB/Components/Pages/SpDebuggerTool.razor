@@ -95,6 +95,14 @@
                         <span>Stop</span>
                     </button>
                 }
+
+                <!-- Clear Procedure -->
+                <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
+                        @onclick="ClearProcedureAsync"
+                        disabled="@_isRecording"
+                        title="Clear selected procedure and reset workspace">
+                    <span>Clear</span>
+                </button>
             }
 
             @if (!IsPopout)
@@ -109,29 +117,166 @@
 
     <!-- SELECTION BAR: Target Database & Stored Procedure Picker -->
     <div class="row g-2 align-items-center py-2 px-1">
-        <!-- Active Database Badge -->
+        <!-- Server Dropdown -->
         <div class="col-auto">
-            <span class="badge border py-1 px-2 font-monospace"
-                  style="background-color: var(--app-input-bg); color: var(--app-text); border-color: var(--app-border) !important; font-size: 0.82rem;"
-                  title="@GetDatabaseTooltip()">
-                <i class="bi bi-database me-1 text-primary"></i>@(string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? "None" : SchemaService.ActiveDatabase)
-            </span>
+            <div class="position-relative" style="width: 195px;">
+                <input class="form-control form-control-sm pe-4 text-truncate"
+                       value="@(IsDebuggerLocked ? GetSelectedServerDisplayName() : (_isServerDropdownOpen ? _serverSearch : GetSelectedServerDisplayName()))"
+                       @oninput="@((ChangeEventArgs e) => _serverSearch = e.Value?.ToString() ?? "")"
+                       placeholder="Search connection..."
+                       @onfocus="OpenServerDropdown"
+                       disabled="@IsDebuggerLocked"
+                       data-bs-tooltip="true"
+                       data-bs-placement="bottom"
+                       data-bs-title="@GetSelectedServerDisplayName()"
+                       style="cursor: @(IsDebuggerLocked ? "not-allowed" : "pointer"); font-size: 0.82rem; height: 30px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                @if (_isServerDropdownOpen && !IsDebuggerLocked)
+                {
+                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseServerDropdown"></div>
+                    <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                        @{
+                            var filteredConns = _availableConnections.Where(c =>
+                                string.IsNullOrWhiteSpace(_serverSearch) ||
+                                (c.Name ?? "").Contains(_serverSearch, StringComparison.OrdinalIgnoreCase) ||
+                                (c.Server ?? "").Contains(_serverSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                            if (filteredConns.Any())
+                            {
+                                <div class="list-group list-group-flush">
+                                    @foreach (var c in filteredConns)
+                                    {
+                                        string displayName = GetConnectionOptionLabel(c);
+                                        <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate"
+                                                style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.82rem; background-color: transparent; color: var(--app-text);"
+                                                data-bs-tooltip="true"
+                                                data-bs-placement="right"
+                                                data-bs-title="@displayName"
+                                                @onclick="() => OnServerSelectedAsync(c.ConnectionString)">
+                                            @displayName
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-2 text-muted small text-center" style="font-size: 0.8rem;">No connections found</div>
+                            }
+                        }
+                    </div>
+                }
+
+                <div class="position-absolute h-100 d-flex align-items-center" style="right: 10px; top: 0; pointer-events: none;">
+                    @if (IsDebuggerLocked)
+                    {
+                        <i class="bi bi-lock-fill text-muted" style="font-size: 0.75rem;"></i>
+                    }
+                    else
+                    {
+                        <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem;"></i>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Database Dropdown -->
+        <div class="col-auto">
+            <div class="position-relative" style="width: 185px;">
+                <input class="form-control form-control-sm pe-4 text-truncate"
+                       value="@(IsDebuggerLocked ? GetSelectedDatabaseDisplayName() : (_isDatabaseDropdownOpen ? _databaseSearch : GetSelectedDatabaseDisplayName()))"
+                       @oninput="@((ChangeEventArgs e) => _databaseSearch = e.Value?.ToString() ?? "")"
+                       placeholder="Search database..."
+                       @onfocus="OpenDatabaseDropdown"
+                       disabled="@IsDebuggerLocked"
+                       data-bs-tooltip="true"
+                       data-bs-placement="bottom"
+                       data-bs-title="@(string.IsNullOrEmpty(GetSelectedDatabaseDisplayName()) ? "Search database..." : GetSelectedDatabaseDisplayName())"
+                       style="cursor: @(IsDebuggerLocked ? "not-allowed" : "pointer"); font-size: 0.82rem; height: 30px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+
+                @if (_isDatabaseDropdownOpen && !IsDebuggerLocked)
+                {
+                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseDatabaseDropdown"></div>
+                    <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                        @if (_isLoadingDatabases)
+                        {
+                            <div class="p-3 text-center text-info">
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <small>Loading databases...</small>
+                            </div>
+                        }
+                        else if (_availableDatabases.Any())
+                        {
+                            var filteredDbs = _availableDatabases.Where(d =>
+                                string.IsNullOrWhiteSpace(_databaseSearch) ||
+                                d.Contains(_databaseSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                            if (filteredDbs.Any())
+                            {
+                                <div class="list-group list-group-flush">
+                                    @foreach (var db in filteredDbs)
+                                    {
+                                        <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small text-truncate"
+                                                style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.82rem; background-color: transparent; color: var(--app-text);"
+                                                data-bs-tooltip="true"
+                                                data-bs-placement="right"
+                                                data-bs-title="@db"
+                                                @onclick="() => OnDatabaseSelectedAsync(db)">
+                                            @db
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-2 text-muted small text-center" style="font-size: 0.8rem;">No databases found</div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="p-2 text-muted small text-center" style="font-size: 0.8rem;">No databases available</div>
+                        }
+                    </div>
+                }
+
+                <div class="position-absolute h-100 d-flex align-items-center" style="right: 10px; top: 0; pointer-events: none;">
+                    @if (IsDebuggerLocked)
+                    {
+                        <i class="bi bi-lock-fill text-muted" style="font-size: 0.75rem;"></i>
+                    }
+                    else if (_isLoadingDatabases)
+                    {
+                        <span class="spinner-border spinner-border-sm text-info" style="width: 0.75rem; height: 0.75rem;"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem;"></i>
+                    }
+                </div>
+            </div>
         </div>
 
         <!-- Procedure Filter / Autocomplete Dropdown -->
         <div class="col-12 col-sm-6 col-md-5 col-lg-4 position-relative">
             <div class="input-group input-group-sm">
                 <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
-                    <i class="bi bi-gear-wide-connected"></i>
+                    @if (_isLoadingProcedures)
+                    {
+                        <span class="spinner-border spinner-border-sm text-primary" style="width: 0.85rem; height: 0.85rem;"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-gear-wide-connected"></i>
+                    }
                 </span>
                 <input type="text"
                        class="form-control form-control-sm shadow-none border-start-0 @(!string.IsNullOrEmpty(_spFilter) ? "border-end-0" : "")"
-                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
-                       placeholder="Select or filter stored procedure..."
+                       style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border); cursor: @(IsDebuggerLocked ? "not-allowed" : "text");"
+                       placeholder="@(_isLoadingProcedures ? "Loading stored procedures..." : "Select or filter stored procedure...")"
                        value="@_spFilter"
+                       disabled="@IsDebuggerLocked"
                        @oninput="OnSpFilterInput"
-                       @onfocus="() => _showSpDropdown = true" />
-                @if (!string.IsNullOrEmpty(_spFilter))
+                       @onfocus="() => { if (!IsDebuggerLocked) _showSpDropdown = true; }" />
+                @if (!string.IsNullOrEmpty(_spFilter) && !IsDebuggerLocked)
                 {
                     <button class="btn btn-outline-secondary border-start-0"
                             style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
@@ -140,17 +285,26 @@
                     </button>
                 }
                 <button class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                        disabled="@IsDebuggerLocked"
                         style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);"
-                        @onclick="() => _showSpDropdown = !_showSpDropdown">
+                        @onclick="() => { if (!IsDebuggerLocked) _showSpDropdown = !_showSpDropdown; }">
                 </button>
             </div>
 
             <!-- SP Dropdown Menu -->
-            @if (_showSpDropdown)
+            @if (_showSpDropdown && !IsDebuggerLocked)
             {
+                <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => _showSpDropdown = false"></div>
                 <div class="dropdown-menu show shadow-lg w-100 mt-1 py-1"
-                     style="max-height: 320px; overflow-y: auto; background-color: var(--app-surface); border: 1px solid var(--app-border); z-index: 1050;">
-                    @if (FilteredProcedures.Any())
+                     style="position: absolute; top: 100%; left: 0; max-height: 320px; overflow-y: auto; background-color: var(--app-dropdown-bg); border: 1px solid var(--app-border); z-index: 1050;">
+                    @if (_isLoadingProcedures)
+                    {
+                        <div class="p-3 text-center text-info">
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <small>Loading stored procedures...</small>
+                        </div>
+                    }
+                    else if (FilteredProcedures.Any())
                     {
                         @foreach (var sp in FilteredProcedures)
                         {
@@ -182,10 +336,10 @@
                 </button>
             </div>
 
-            <!-- Right-Aligned Actions: Breakpoints & Clear -->
-            <div class="col-auto ms-auto d-flex align-items-center gap-2">
-                @if (_breakpointLines.Count > 0)
-                {
+            <!-- Right-Aligned Actions: Breakpoints -->
+            @if (_breakpointLines.Count > 0)
+            {
+                <div class="col-auto ms-auto d-flex align-items-center gap-2">
                     <div class="d-inline-flex align-items-center rounded shadow-sm"
                          style="background-color: var(--app-input-bg); border: 1px solid var(--app-border); height: 31px; font-size: 0.82rem; padding: 0 9px; gap: 6px;">
                         <span class="rounded-circle flex-shrink-0"
@@ -203,13 +357,8 @@
                             <i class="bi bi-x" style="font-size: 1.1rem; line-height: 1;"></i>
                         </button>
                     </div>
-                }
-                <button class="btn btn-sm btn-outline-danger shadow-sm px-2.5"
-                        @onclick="ClearProcedureAsync"
-                        title="Clear selected procedure and reset workspace">
-                    <span>Clear</span>
-                </button>
-            </div>
+                </div>
+            }
         }
     </div>
 
@@ -316,12 +465,7 @@
                                 <span>Step Out (Shift+F11)</span>
                             </button>
                         }
-                        @if (_session?.IsRecorded == true && _session.IsAtCompletion)
-                        {
-                            <span class="badge bg-success-subtle text-success" style="font-weight: 600;">
-                                <i class="bi bi-check-circle me-1"></i>All Statements Executed
-                            </span>
-                        }
+
                         <button type="button"
                                 class="btn btn-sm btn-link text-muted p-0 d-inline-flex align-items-center justify-content-center"
                                 style="width: 26px; height: 26px; text-decoration: none; border-radius: 4px;"
@@ -599,19 +743,26 @@
                                                     }
                                                 </div>
                                                 <span class="badge @(tt.TotalRowCount > 0 ? "bg-primary-subtle text-primary" : "bg-secondary-subtle text-muted")">
-                                                    @(tt.TotalRowCount == tt.Rows.Count ? $"{tt.TotalRowCount} rows" : $"{tt.Rows.Count} of {tt.TotalRowCount} rows")
+                                                    @(tt.TotalRowCount == tt.Rows.Count
+                                                        ? (tt.TotalRowCount == 1 ? "1 row" : $"{tt.TotalRowCount:N0} rows")
+                                                        : $"{tt.Rows.Count} of {tt.TotalRowCount:N0} rows")
                                                 </span>
                                             </div>
                                             @if (!isCollapsed)
                                             {
-                                                <div class="card-body p-0 table-responsive" style="max-height: 280px;">
+                                                var ttPage = GetTablePage(currentTtKey);
+                                                var totalTtPages = Math.Max(1, (int)Math.Ceiling(tt.Rows.Count / (double)_gridPageSize));
+                                                if (ttPage > totalTtPages) { ttPage = totalTtPages; }
+                                                var displayTtRows = tt.Rows.Skip((ttPage - 1) * _gridPageSize).Take(_gridPageSize).ToList();
+                                                int rNum = (ttPage - 1) * _gridPageSize + 1;
+                                                <div class="card-body p-0 table-responsive" style="min-height: 80px; max-height: 280px;">
                                                     <table class="table table-sm table-hover mb-0" style="font-size: 0.78rem; color: var(--app-text);">
                                                         <thead class="sticky-top" style="background-color: var(--app-surface-secondary);">
                                                             <tr>
-                                                                <th class="py-1 text-center text-muted" style="width: 35px;">#</th>
+                                                                <th class="py-1.5 px-2 text-center text-muted" style="width: 42px;">#</th>
                                                                 @foreach (var col in tt.Columns)
                                                                 {
-                                                                    <th class="py-1 font-monospace">@col</th>
+                                                                    <th class="py-1.5 px-2 font-monospace">@col</th>
                                                                 }
                                                             </tr>
                                                         </thead>
@@ -626,15 +777,14 @@
                                                             }
                                                             else
                                                             {
-                                                                int rNum = 1;
-                                                                @foreach (var r in tt.Rows)
+                                                                @foreach (var r in displayTtRows)
                                                                 {
                                                                     <tr>
-                                                                        <td class="text-center text-muted small">@rNum</td>
+                                                                        <td class="py-1.5 px-2 text-center text-muted small">@rNum</td>
                                                                         @foreach (var col in tt.Columns)
                                                                         {
                                                                             var cellVal = r.TryGetValue(col, out var raw) ? raw?.ToString() : null;
-                                                                            <td class="font-monospace text-truncate" style="max-width: 220px;" title="@cellVal">
+                                                                            <td class="py-1.5 px-2 font-monospace text-truncate" style="max-width: 220px;" title="@cellVal">
                                                                                 @(cellVal ?? "NULL")
                                                                             </td>
                                                                         }
@@ -645,6 +795,46 @@
                                                         </tbody>
                                                     </table>
                                                 </div>
+                                                @if (tt.Rows.Count > _gridPageSize || tt.TotalRowCount > tt.Rows.Count)
+                                                {
+                                                    <div class="card-footer py-1 px-3 d-flex justify-content-between align-items-center"
+                                                         style="background-color: var(--app-surface-secondary); font-size: 0.74rem; border-top: 1px solid var(--app-border);">
+                                                        <div class="text-muted d-flex align-items-center gap-1">
+                                                            @if (tt.TotalRowCount > tt.Rows.Count)
+                                                            {
+                                                                <span title="To protect debugger speed and memory, ExploreDB captures the first @tt.Rows.Count rows for preview.">
+                                                                    <i class="bi bi-info-circle text-info me-1"></i>Showing preview of @tt.Rows.Count of @tt.TotalRowCount.ToString("N0") rows
+                                                                </span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span>Showing @(((ttPage - 1) * _gridPageSize) + 1)–@(Math.Min(ttPage * _gridPageSize, tt.Rows.Count)) of @tt.Rows.Count rows</span>
+                                                            }
+                                                        </div>
+                                                        @if (totalTtPages > 1)
+                                                        {
+                                                            <div class="d-flex align-items-center gap-1">
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-link p-0 text-muted d-inline-flex align-items-center justify-content-center"
+                                                                        style="width: 22px; height: 22px; text-decoration: none;"
+                                                                        disabled="@(ttPage <= 1)"
+                                                                        @onclick="() => SetTablePage(currentTtKey, ttPage - 1)"
+                                                                        title="Previous page">
+                                                                    <i class="bi bi-chevron-left" style="font-size: 0.75rem;"></i>
+                                                                </button>
+                                                                <span class="text-muted px-1">Page @ttPage of @totalTtPages</span>
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-link p-0 text-muted d-inline-flex align-items-center justify-content-center"
+                                                                        style="width: 22px; height: 22px; text-decoration: none;"
+                                                                        disabled="@(ttPage >= totalTtPages)"
+                                                                        @onclick="() => SetTablePage(currentTtKey, ttPage + 1)"
+                                                                        title="Next page">
+                                                                    <i class="bi bi-chevron-right" style="font-size: 0.75rem;"></i>
+                                                                </button>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
                                             }
                                         </div>
                                         ttIndex++;
@@ -726,20 +916,27 @@
                                                         <span class="text-muted small">(Line @rs.LineNumber)</span>
                                                     }
                                                 </div>
-                                                <span class="badge @(rs.Rows.Count > 0 ? "bg-success-subtle text-success" : "bg-secondary-subtle text-muted")">
-                                                    @rs.Rows.Count rows
+                                                <span class="badge @(rs.TotalRowCount > 0 ? "bg-success-subtle text-success" : "bg-secondary-subtle text-muted")">
+                                                    @(rs.TotalRowCount == rs.Rows.Count
+                                                        ? (rs.TotalRowCount == 1 ? "1 row" : $"{rs.TotalRowCount:N0} rows")
+                                                        : $"{rs.Rows.Count} of {rs.TotalRowCount:N0} rows")
                                                 </span>
                                             </div>
                                             @if (!isCollapsed)
                                             {
-                                                <div class="card-body p-0 table-responsive" style="max-height: 280px;">
+                                                var rsPage = GetRsPage(currentRsIndex);
+                                                var totalRsPages = Math.Max(1, (int)Math.Ceiling(rs.Rows.Count / (double)_gridPageSize));
+                                                if (rsPage > totalRsPages) { rsPage = totalRsPages; }
+                                                var displayRows = rs.Rows.Skip((rsPage - 1) * _gridPageSize).Take(_gridPageSize).ToList();
+                                                int rNum = (rsPage - 1) * _gridPageSize + 1;
+                                                <div class="card-body p-0 table-responsive" style="min-height: 80px; max-height: 280px;">
                                                     <table class="table table-sm table-hover mb-0" style="font-size: 0.78rem; color: var(--app-text);">
                                                         <thead class="sticky-top" style="background-color: var(--app-surface-secondary);">
                                                             <tr>
-                                                                <th class="py-1 text-center text-muted" style="width: 35px;">#</th>
+                                                                <th class="py-1.5 px-2 text-center text-muted" style="width: 42px;">#</th>
                                                                 @foreach (var col in rs.Columns)
                                                                 {
-                                                                    <th class="py-1 font-monospace">@col</th>
+                                                                    <th class="py-1.5 px-2 font-monospace">@col</th>
                                                                 }
                                                             </tr>
                                                         </thead>
@@ -754,15 +951,14 @@
                                                             }
                                                             else
                                                             {
-                                                                int rNum = 1;
-                                                                @foreach (var r in rs.Rows)
+                                                                @foreach (var r in displayRows)
                                                                 {
                                                                     <tr>
-                                                                        <td class="text-center text-muted small">@rNum</td>
+                                                                        <td class="py-1.5 px-2 text-center text-muted small">@rNum</td>
                                                                         @foreach (var col in rs.Columns)
                                                                         {
                                                                             var cellVal = r.TryGetValue(col, out var raw) ? raw?.ToString() : null;
-                                                                            <td class="font-monospace text-truncate" style="max-width: 220px;" title="@cellVal">
+                                                                            <td class="py-1.5 px-2 font-monospace text-truncate" style="max-width: 220px;" title="@cellVal">
                                                                                 @(cellVal ?? "NULL")
                                                                             </td>
                                                                         }
@@ -773,6 +969,46 @@
                                                         </tbody>
                                                     </table>
                                                 </div>
+                                                @if (rs.Rows.Count > _gridPageSize || rs.TotalRowCount > rs.Rows.Count)
+                                                {
+                                                    <div class="card-footer py-1 px-3 d-flex justify-content-between align-items-center"
+                                                         style="background-color: var(--app-surface-secondary); font-size: 0.74rem; border-top: 1px solid var(--app-border);">
+                                                        <div class="text-muted d-flex align-items-center gap-1">
+                                                            @if (rs.TotalRowCount > rs.Rows.Count)
+                                                            {
+                                                                <span title="To protect debugger speed and memory, ExploreDB captures the first @rs.Rows.Count rows for preview.">
+                                                                    <i class="bi bi-info-circle text-info me-1"></i>Showing preview of @rs.Rows.Count of @rs.TotalRowCount.ToString("N0") rows
+                                                                </span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span>Showing @(((rsPage - 1) * _gridPageSize) + 1)–@(Math.Min(rsPage * _gridPageSize, rs.Rows.Count)) of @rs.Rows.Count rows</span>
+                                                            }
+                                                        </div>
+                                                        @if (totalRsPages > 1)
+                                                        {
+                                                            <div class="d-flex align-items-center gap-1">
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-link p-0 text-muted d-inline-flex align-items-center justify-content-center"
+                                                                        style="width: 22px; height: 22px; text-decoration: none;"
+                                                                        disabled="@(rsPage <= 1)"
+                                                                        @onclick="() => SetRsPage(currentRsIndex, rsPage - 1)"
+                                                                        title="Previous page">
+                                                                    <i class="bi bi-chevron-left" style="font-size: 0.75rem;"></i>
+                                                                </button>
+                                                                <span class="text-muted px-1">Page @rsPage of @totalRsPages</span>
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-link p-0 text-muted d-inline-flex align-items-center justify-content-center"
+                                                                        style="width: 22px; height: 22px; text-decoration: none;"
+                                                                        disabled="@(rsPage >= totalRsPages)"
+                                                                        @onclick="() => SetRsPage(currentRsIndex, rsPage + 1)"
+                                                                        title="Next page">
+                                                                    <i class="bi bi-chevron-right" style="font-size: 0.75rem;"></i>
+                                                                </button>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
                                             }
                                         </div>
                                     }
@@ -966,12 +1202,44 @@
     private bool _isLoadingDef = false;
     private bool _isRecording = false;
 
+    private List<ConnectionService.SavedConnection> _availableConnections = new();
+    private string _selectedConnectionString = string.Empty;
+    private string _selectedDatabase = string.Empty;
+    private List<string> _availableDatabases = new();
+    private bool _isLoadingDatabases = false;
+    private bool _isServerDropdownOpen = false;
+    private string _serverSearch = string.Empty;
+    private bool _isDatabaseDropdownOpen = false;
+    private string _databaseSearch = string.Empty;
+
+    private List<SpInfo> _spList = new();
+    private bool _isLoadingProcedures = false;
+
+    private bool IsDebuggerLocked => _isRecording || (_session != null && _session.IsRecorded);
+
     private string _activeInspectorTab = "Variables";
     private string _varFilter = string.Empty;
     private string _ttFilter = string.Empty;
     private string _rsFilter = string.Empty;
     private HashSet<int> _collapsedResultSets = new();
     private HashSet<string> _collapsedTempTables = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<int, int> _rsPages = new();
+    private Dictionary<string, int> _tablePages = new(StringComparer.OrdinalIgnoreCase);
+    private const int _gridPageSize = 50;
+
+    private int GetRsPage(int rsIndex) => _rsPages.TryGetValue(rsIndex, out var p) ? p : 1;
+    private void SetRsPage(int rsIndex, int page)
+    {
+        _rsPages[rsIndex] = page;
+        StateHasChanged();
+    }
+
+    private int GetTablePage(string tableName) => _tablePages.TryGetValue(tableName, out var p) ? p : 1;
+    private void SetTablePage(string tableName, int page)
+    {
+        _tablePages[tableName] = page;
+        StateHasChanged();
+    }
 
     private enum SpWorkspaceLayout
     {
@@ -1076,7 +1344,7 @@
         catch { }
     }
 
-    private IEnumerable<SpInfo> FilteredProcedures => SchemaService.StoredProcedures.Where(p =>
+    private IEnumerable<SpInfo> FilteredProcedures => _spList.Where(p =>
     {
         if (string.IsNullOrWhiteSpace(_spFilter)) return true;
         return p.FullName.Contains(_spFilter, StringComparison.OrdinalIgnoreCase) ||
@@ -1151,15 +1419,407 @@
         }
     }
 
-    private string GetDatabaseTooltip()
+    private string GetTargetConnectionString()
     {
-        var db = !string.IsNullOrEmpty(SchemaService.ActiveDatabase) ? SchemaService.ActiveDatabase : "None";
-        var server = ConnectionService.ActiveServer;
-        if (!string.IsNullOrEmpty(server))
+        if (string.IsNullOrWhiteSpace(_selectedConnectionString)) return string.Empty;
+        try
         {
-            return $"Server: {server}\nDatabase: {db}";
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(_selectedConnectionString);
+            if (!string.IsNullOrWhiteSpace(_selectedDatabase))
+            {
+                builder.InitialCatalog = _selectedDatabase;
+            }
+            return builder.ConnectionString;
         }
-        return $"Database: {db}";
+        catch
+        {
+            return _selectedConnectionString;
+        }
+    }
+
+    private void RefreshAvailableConnections()
+    {
+        var list = new List<ConnectionService.SavedConnection>();
+
+        if (ConnectionService.ActiveSessionConnections != null)
+        {
+            foreach (var c in ConnectionService.ActiveSessionConnections)
+            {
+                if (!string.IsNullOrWhiteSpace(c.ConnectionString) &&
+                    !list.Any(x => string.Equals(x.ConnectionString, c.ConnectionString, StringComparison.OrdinalIgnoreCase)))
+                {
+                    list.Add(c);
+                }
+            }
+        }
+
+        if (ConnectionService.SavedConnections != null)
+        {
+            foreach (var c in ConnectionService.SavedConnections)
+            {
+                if (!string.IsNullOrWhiteSpace(c.ConnectionString) &&
+                    !list.Any(x => string.Equals(x.ConnectionString, c.ConnectionString, StringComparison.OrdinalIgnoreCase)))
+                {
+                    list.Add(c);
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(ConnectionService.ConnectionString) &&
+            !list.Any(x => string.Equals(x.ConnectionString, ConnectionService.ConnectionString, StringComparison.OrdinalIgnoreCase)))
+        {
+            string srv = "Active Connection";
+            string db = "";
+            try
+            {
+                var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
+                srv = b.DataSource;
+                db = b.InitialCatalog;
+            }
+            catch { }
+
+            list.Insert(0, new ConnectionService.SavedConnection
+            {
+                Id = "current_active",
+                Name = srv,
+                Server = srv,
+                Database = db,
+                ConnectionString = ConnectionService.ConnectionString
+            });
+        }
+
+        _availableConnections = list;
+
+        if (string.IsNullOrEmpty(_selectedConnectionString) && _availableConnections.Count > 0)
+        {
+            _selectedConnectionString = _availableConnections[0].ConnectionString;
+            if (string.IsNullOrEmpty(_selectedDatabase))
+            {
+                _selectedDatabase = _availableConnections[0].Database ?? "";
+            }
+        }
+    }
+
+    private static string GetConnectionOptionLabel(ConnectionService.SavedConnection conn)
+    {
+        if (string.IsNullOrWhiteSpace(conn.Name) || string.Equals(conn.Name, conn.Server, StringComparison.OrdinalIgnoreCase))
+        {
+            return conn.Server ?? "Unknown Server";
+        }
+        return $"{conn.Server} ({conn.Name})";
+    }
+
+    private static string GetServerDisplayName(string? connStr)
+    {
+        if (string.IsNullOrWhiteSpace(connStr)) return "None";
+        try
+        {
+            var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connStr);
+            return b.DataSource;
+        }
+        catch
+        {
+            return "Server";
+        }
+    }
+
+    private string GetSelectedServerDisplayName()
+    {
+        var conn = _availableConnections.FirstOrDefault(c => string.Equals(c.ConnectionString, _selectedConnectionString, StringComparison.OrdinalIgnoreCase));
+        if (conn != null)
+        {
+            return GetConnectionOptionLabel(conn);
+        }
+        return GetServerDisplayName(_selectedConnectionString);
+    }
+
+    private string GetSelectedDatabaseDisplayName() => _selectedDatabase ?? string.Empty;
+
+    private void OpenServerDropdown()
+    {
+        if (IsDebuggerLocked) return;
+        _isServerDropdownOpen = true;
+        _isDatabaseDropdownOpen = false;
+        _showSpDropdown = false;
+        _serverSearch = "";
+    }
+
+    private void CloseServerDropdown()
+    {
+        _isServerDropdownOpen = false;
+        _serverSearch = GetSelectedServerDisplayName();
+    }
+
+    private async Task OnServerSelectedAsync(string connString)
+    {
+        _isServerDropdownOpen = false;
+        if (!string.Equals(_selectedConnectionString, connString, StringComparison.OrdinalIgnoreCase))
+        {
+            await ClearProcedureAsync();
+            _selectedConnectionString = connString;
+            _selectedDatabase = string.Empty;
+            _serverSearch = GetSelectedServerDisplayName();
+            await LoadDatabasesForSelectedServerAsync();
+            if (string.IsNullOrEmpty(_selectedDatabase) && _availableDatabases.Count > 0)
+            {
+                string initCatalog = "";
+                try
+                {
+                    var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connString);
+                    initCatalog = b.InitialCatalog;
+                }
+                catch { }
+
+                _selectedDatabase = _availableDatabases.FirstOrDefault(d => string.Equals(d, initCatalog, StringComparison.OrdinalIgnoreCase))
+                                    ?? _availableDatabases[0];
+                _databaseSearch = _selectedDatabase;
+                await LoadProceduresForTargetAsync();
+            }
+            else
+            {
+                _databaseSearch = GetSelectedDatabaseDisplayName();
+            }
+        }
+        else
+        {
+            _serverSearch = GetSelectedServerDisplayName();
+        }
+    }
+
+    private void OpenDatabaseDropdown()
+    {
+        if (IsDebuggerLocked) return;
+        _isDatabaseDropdownOpen = true;
+        _isServerDropdownOpen = false;
+        _showSpDropdown = false;
+        _databaseSearch = "";
+        if (_availableDatabases.Count == 0 && !_isLoadingDatabases)
+        {
+            _ = LoadDatabasesForSelectedServerAsync();
+        }
+    }
+
+    private void CloseDatabaseDropdown()
+    {
+        _isDatabaseDropdownOpen = false;
+        _databaseSearch = GetSelectedDatabaseDisplayName();
+    }
+
+    private async Task OnDatabaseSelectedAsync(string db)
+    {
+        _isDatabaseDropdownOpen = false;
+        if (!string.Equals(_selectedDatabase, db, StringComparison.OrdinalIgnoreCase))
+        {
+            await ClearProcedureAsync();
+            _selectedDatabase = db;
+            _databaseSearch = db;
+            await LoadProceduresForTargetAsync();
+        }
+        else
+        {
+            _databaseSearch = db;
+        }
+    }
+
+    private async Task LoadDatabasesForSelectedServerAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedConnectionString))
+        {
+            _availableDatabases.Clear();
+            return;
+        }
+
+        _isLoadingDatabases = true;
+        await InvokeAsync(StateHasChanged);
+
+        var dbs = new List<string>();
+        string targetConn = _selectedConnectionString;
+
+        try
+        {
+            await Task.Run(async () =>
+            {
+                bool fetched = false;
+                try
+                {
+                    var masterBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(targetConn)
+                    {
+                        InitialCatalog = "master",
+                        ConnectTimeout = 4
+                    };
+                    using var conn = new Microsoft.Data.SqlClient.SqlConnection(masterBuilder.ConnectionString);
+                    await conn.OpenAsync();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        dbs.Add(reader.GetString(0));
+                    }
+                    fetched = true;
+                }
+                catch { }
+
+                if (!fetched)
+                {
+                    try
+                    {
+                        using var conn = new Microsoft.Data.SqlClient.SqlConnection(targetConn);
+                        await conn.OpenAsync();
+                        using var cmd = conn.CreateCommand();
+                        cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
+                        using var reader = await cmd.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            dbs.Add(reader.GetString(0));
+                        }
+                    }
+                    catch { }
+                }
+            });
+        }
+        catch { }
+        finally
+        {
+            _availableDatabases = dbs;
+            _isLoadingDatabases = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadProceduresForTargetAsync()
+    {
+        _spList.Clear();
+        var targetConn = GetTargetConnectionString();
+        if (string.IsNullOrWhiteSpace(targetConn) || string.IsNullOrWhiteSpace(_selectedDatabase))
+        {
+            return;
+        }
+
+        _isLoadingProcedures = true;
+        await InvokeAsync(StateHasChanged);
+
+        var newSps = new List<SpInfo>();
+        try
+        {
+            await Task.Run(async () =>
+            {
+                using var conn = new Microsoft.Data.SqlClient.SqlConnection(targetConn);
+                await conn.OpenAsync();
+
+                var batchSql = @"
+                    SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+                    SELECT 
+                        s.name AS SchemaName, p.name AS ProcName, p.create_date AS CreatedDate, p.modify_date AS ModifiedDate
+                    FROM sys.procedures p
+                    JOIN sys.schemas s ON p.schema_id = s.schema_id
+                    WHERE p.is_ms_shipped = 0
+                    ORDER BY s.name, p.name;
+
+                    SELECT 
+                        s.name AS SchemaName, p.name AS ProcName, pm.name AS ParamName, t.name AS DataType,
+                        pm.is_output AS IsOutput, pm.has_default_value AS HasDefault,
+                        CAST(pm.default_value AS NVARCHAR(256)) AS DefaultValue,
+                        pm.max_length AS MaxLength, pm.precision AS Precision, pm.scale AS Scale
+                    FROM sys.procedures p
+                    JOIN sys.schemas s ON p.schema_id = s.schema_id
+                    JOIN sys.parameters pm ON pm.object_id = p.object_id
+                    JOIN sys.types t ON pm.user_type_id = t.user_type_id
+                    WHERE p.is_ms_shipped = 0
+                    ORDER BY s.name, p.name, pm.parameter_id;
+                ";
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = batchSql;
+                cmd.CommandTimeout = 30;
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                while (await reader.ReadAsync())
+                {
+                    newSps.Add(new SpInfo
+                    {
+                        Schema = reader.GetString(0),
+                        Name = reader.GetString(1),
+                        CreatedDate = await reader.IsDBNullAsync(2) ? null : reader.GetDateTime(2),
+                        ModifiedDate = await reader.IsDBNullAsync(3) ? null : reader.GetDateTime(3)
+                    });
+                }
+
+                var spDict = newSps.ToDictionary(sp => sp.FullName, StringComparer.OrdinalIgnoreCase);
+
+                if (await reader.NextResultAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var schema = reader.GetString(0);
+                        var procName = reader.GetString(1);
+                        var paramName = reader.GetString(2);
+                        var dataType = reader.GetString(3);
+                        var isOutput = reader.GetBoolean(4);
+                        var hasDefault = reader.GetBoolean(5);
+                        var defaultValue = await reader.IsDBNullAsync(6) ? null : reader.GetString(6);
+                        var maxLen = reader.GetInt16(7);
+                        var prec = reader.GetByte(8);
+                        var scale = reader.GetByte(9);
+
+                        var fullName = $"[{schema}].[{procName}]";
+                        if (spDict.TryGetValue(fullName, out var sp))
+                        {
+                            sp.Parameters.Add(new SpParameter
+                            {
+                                Name = paramName,
+                                DataType = dataType,
+                                IsOutput = isOutput,
+                                HasDefault = hasDefault,
+                                DefaultValue = defaultValue,
+                                MaxLength = maxLen,
+                                Precision = prec,
+                                Scale = scale
+                            });
+                        }
+                    }
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Error loading stored procedures for target database {Database}", _selectedDatabase);
+        }
+        finally
+        {
+            _spList = newSps;
+            _isLoadingProcedures = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task<string?> LoadSpDefinitionAsync(SpInfo sp)
+    {
+        var targetConn = GetTargetConnectionString();
+        if (string.IsNullOrWhiteSpace(targetConn)) return null;
+
+        try
+        {
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(targetConn);
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName))";
+            cmd.Parameters.AddWithValue("@FullName", sp.FullName);
+            var result = await cmd.ExecuteScalarAsync() as string;
+            if (!string.IsNullOrEmpty(result))
+            {
+                sp.Definition = result;
+                sp.IsDefinitionLoaded = true;
+                return result;
+            }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Error fetching definition for SP {FullName}", sp.FullName);
+        }
+        return null;
     }
 
     protected override async Task OnInitializedAsync()
@@ -1170,14 +1830,37 @@
             return;
         }
 
+        ConnectionService.OnConnectionChanged += HandleConnectionChanged;
         ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
+
+        RefreshAvailableConnections();
+
+        if (string.IsNullOrEmpty(_selectedConnectionString))
+        {
+            _selectedConnectionString = ConnectionService.ConnectionString;
+        }
+        if (string.IsNullOrEmpty(_selectedDatabase))
+        {
+            _selectedDatabase = SchemaService.ActiveDatabase;
+        }
+
+        _serverSearch = GetSelectedServerDisplayName();
+        _databaseSearch = GetSelectedDatabaseDisplayName();
 
         _session = DebuggerService.ActiveSession;
         if (_session != null)
         {
             _selectedSpName = _session.FullName;
+            if (!string.IsNullOrEmpty(_session.Database))
+            {
+                _selectedDatabase = _session.Database;
+                _databaseSearch = _selectedDatabase;
+            }
             _showSafetyAlert = false;
         }
+
+        await LoadDatabasesForSelectedServerAsync();
+        await LoadProceduresForTargetAsync();
     }
 
     private void OnSpFilterInput(ChangeEventArgs e)
@@ -1208,11 +1891,11 @@
         {
             if (!sp.IsDefinitionLoaded)
             {
-                await SchemaService.LoadDefinitionAsync(sp.FullName);
+                await LoadSpDefinitionAsync(sp);
             }
 
             var definition = sp.Definition ?? string.Empty;
-            _session = DebuggerService.CreateSession(SchemaService.ActiveDatabase, sp.Schema, sp.Name, definition);
+            _session = DebuggerService.CreateSession(_selectedDatabase, sp.Schema, sp.Name, definition);
 
             if (_editor != null && !string.IsNullOrEmpty(definition))
             {
@@ -1323,16 +2006,18 @@
 
         if (!_session.IsRecorded || (_session.IsAtCompletion && _session.CallStack.Count == 0))
         {
-            var connStr = ConnectionService.ConnectionString;
+            var connStr = GetTargetConnectionString();
             if (string.IsNullOrEmpty(connStr))
             {
-                _session.ErrorMessage = "No active database connection string found.";
+                _session.ErrorMessage = "No target database connection found.";
                 return;
             }
 
             _isRecording = true;
             _collapsedResultSets.Clear();
             _collapsedTempTables.Clear();
+            _rsPages.Clear();
+            _tablePages.Clear();
             StateHasChanged();
 
             try
@@ -1444,7 +2129,7 @@
             var stmt = _session.CurrentStatement;
             if (stmt == null || !stmt.IsExecCall) return false;
 
-            return SchemaService.StoredProcedures.Any(p =>
+            return _spList.Any(p =>
                 p.Name.Equals(stmt.ExecChildProcedureName, StringComparison.OrdinalIgnoreCase) &&
                 (string.IsNullOrEmpty(stmt.ExecChildSchema) || p.Schema.Equals(stmt.ExecChildSchema, StringComparison.OrdinalIgnoreCase)));
         }
@@ -1456,13 +2141,13 @@
         var stmt = _session.CurrentStatement;
         if (stmt == null || !stmt.IsExecCall) return;
 
-        var childSp = SchemaService.StoredProcedures.FirstOrDefault(p =>
+        var childSp = _spList.FirstOrDefault(p =>
             p.Name.Equals(stmt.ExecChildProcedureName, StringComparison.OrdinalIgnoreCase) &&
             (string.IsNullOrEmpty(stmt.ExecChildSchema) || p.Schema.Equals(stmt.ExecChildSchema, StringComparison.OrdinalIgnoreCase)));
 
         if (childSp == null) return;
 
-        var connStr = ConnectionService.ConnectionString;
+        var connStr = GetTargetConnectionString();
         if (string.IsNullOrEmpty(connStr)) return;
 
         _isRecording = true;
@@ -1472,7 +2157,7 @@
         {
             if (!childSp.IsDefinitionLoaded)
             {
-                await SchemaService.LoadDefinitionAsync(childSp.FullName);
+                await LoadSpDefinitionAsync(childSp);
             }
 
             var childDef = childSp.Definition ?? string.Empty;
@@ -1742,6 +2427,8 @@
 
         _collapsedResultSets.Clear();
         _collapsedTempTables.Clear();
+        _rsPages.Clear();
+        _tablePages.Clear();
         _activeInspectorTab = "Variables";
         StateHasChanged();
     }
@@ -1788,6 +2475,8 @@
         _breakpointLines.Clear();
         _collapsedResultSets.Clear();
         _collapsedTempTables.Clear();
+        _rsPages.Clear();
+        _tablePages.Clear();
         _varFilter = string.Empty;
         _ttFilter = string.Empty;
         _rsFilter = string.Empty;
@@ -1860,23 +2549,44 @@
         };
     }
 
+    private void HandleConnectionChanged()
+    {
+        RefreshAvailableConnections();
+        if (!IsDebuggerLocked && string.Equals(_selectedConnectionString, ConnectionService.ConnectionString, StringComparison.OrdinalIgnoreCase))
+        {
+            _selectedDatabase = SchemaService.ActiveDatabase;
+            _databaseSearch = GetSelectedDatabaseDisplayName();
+            _ = LoadProceduresForTargetAsync();
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
     private void OnDatabaseSwitchedHandler()
     {
-        InvokeAsync(() =>
+        if (!IsDebuggerLocked && string.Equals(_selectedConnectionString, ConnectionService.ConnectionString, StringComparison.OrdinalIgnoreCase))
         {
-            ClearSession();
-            _selectedSpName = string.Empty;
-            _spFilter = string.Empty;
-            StateHasChanged();
-        });
+            InvokeAsync(async () =>
+            {
+                await ClearProcedureAsync();
+                _selectedDatabase = SchemaService.ActiveDatabase;
+                _databaseSearch = GetSelectedDatabaseDisplayName();
+                await LoadProceduresForTargetAsync();
+                StateHasChanged();
+            });
+        }
     }
 
     public void Dispose()
     {
+        ConnectionService.OnConnectionChanged -= HandleConnectionChanged;
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
 
         _dotNetHelper?.Dispose();
         _dotNetHelper = null;
+
+        _spList.Clear();
+        _availableDatabases.Clear();
+        _availableConnections.Clear();
 
         // Guaranteed memory cleanup to ensure 0 MB memory leak
         _session?.ClearMemory();

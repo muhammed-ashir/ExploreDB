@@ -363,6 +363,7 @@ public class SpDebuggerService : IDisposable
                             rsInfo.Rows.Add(row);
                         }
                     }
+                    rsInfo.TotalRowCount = rowCount;
 
                     var rsTargetSnap = currentSnapshot ?? (session.RecordedSteps.Count > 0 ? session.RecordedSteps[^1] : snap0);
                     rsTargetSnap.ResultSets.Add(rsInfo);
@@ -451,7 +452,8 @@ public class SpDebuggerService : IDisposable
                 LineNumber = rs.LineNumber,
                 StatementSummary = rs.StatementSummary,
                 Columns = new List<string>(rs.Columns),
-                Rows = new List<IDictionary<string, object?>>(rs.Rows)
+                Rows = new List<IDictionary<string, object?>>(rs.Rows),
+                TotalRowCount = rs.TotalRowCount
             };
             target.ResultSets.Add(cloneRs);
         }
