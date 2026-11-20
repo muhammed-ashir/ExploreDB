@@ -837,7 +837,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
                     var nextLineClean = stripCommentsAndStrings(model.getLineContent(i + 1) || "");
                     if (parenDepth <= 0 && stmtStarters.test(nextLineClean)) {
-                        if (!clean.trim() || stmtStarters.test(clean)) {
+                        var isSetOpNext = setOps.test(nextLineClean) || setOps.test(clean.trim());
+                        if (!isSetOpNext) {
                             startLine = i + 1;
                             startCol = 1;
                             break;
@@ -846,7 +847,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
                     if (parenDepth <= 0 && stmtStarters.test(clean)) {
                         var prevClean = i > 1 ? stripCommentsAndStrings(model.getLineContent(i - 1)).trim() : "";
-                        if (i === 1 || !prevClean || prevClean.endsWith(';') || batchSep.test(prevClean) || stmtStarters.test(prevClean)) {
+                        var isSetOpPrev = setOps.test(clean) || setOps.test(prevClean);
+                        if (!isSetOpPrev) {
                             startLine = i;
                             startCol = 1;
                             break;
@@ -855,7 +857,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 } else if (i === curLine) {
                     if (parenDepth <= 0 && stmtStarters.test(clean)) {
                         var prevClean = i > 1 ? stripCommentsAndStrings(model.getLineContent(i - 1)).trim() : "";
-                        if (i === 1 || !prevClean || prevClean.endsWith(';') || batchSep.test(prevClean) || stmtStarters.test(prevClean)) {
+                        var isSetOpPrev = setOps.test(clean) || setOps.test(prevClean);
+                        if (!isSetOpPrev) {
                             startLine = i;
                             startCol = 1;
                             break;
@@ -942,6 +945,134 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             textUntilCursor: textUntilCursor
         };
     }
+
+    function analyzeClauseContext(textUntilCursor) {
+        var clean = (textUntilCursor || "")
+            .replace(/'(?:''|[^'])*'/g, "''")
+            .replace(/--.*$/gm, "")
+            .replace(/\/\*[\s\S]*?\*\//g, "");
+
+        var parenDepth = 0;
+        var lastOpenParenIdx = -1;
+        for (var i = 0; i < clean.length; i++) {
+            if (clean[i] === '(') {
+                parenDepth++;
+                lastOpenParenIdx = i;
+            } else if (clean[i] === ')') {
+                parenDepth--;
+                if (parenDepth === 0) lastOpenParenIdx = -1;
+            }
+        }
+
+        var textToScan = (parenDepth > 0 && lastOpenParenIdx >= 0)
+            ? clean.substring(lastOpenParenIdx + 1)
+            : clean;
+
+        var clauseRegex = /\b(SELECT|FROM|JOIN|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+JOIN|FULL\s+OUTER\s+JOIN|CROSS\s+JOIN|ON|WHERE|HAVING|GROUP\s+BY|ORDER\s+BY|SET|VALUES|INTO)\b/gi;
+        var matches = [];
+        var cm;
+        while ((cm = clauseRegex.exec(textToScan)) !== null) {
+            matches.push({
+                kw: cm[1].toUpperCase().replace(/\s+/g, ' '),
+                index: cm.index,
+                length: cm[0].length
+            });
+        }
+
+        if (matches.length === 0) {
+            return {
+                clause: 'SELECT',
+                inParens: parenDepth > 0,
+                hasExpression: false
+            };
+        }
+
+        var lastMatch = matches[matches.length - 1];
+        var clauseName = lastMatch.kw;
+        if (clauseName.indexOf('JOIN') >= 0) clauseName = 'JOIN';
+
+        var textAfterClauseKw = textToScan.substring(lastMatch.index + lastMatch.length).trim();
+        var withoutLastToken = textAfterClauseKw.replace(/[a-zA-Z0-9_\[\]\.]+$/, '').trim();
+
+        // An expression exists if there's text between the clause keyword and the active token,
+        // UNLESS that text ends with an operator/connector (AND, OR, NOT, comma, =, <, >, etc.)
+        var endsWithOperator = /(?:\b(?:AND|OR|NOT|IN|LIKE|BETWEEN|ON|WHERE|HAVING|SET)\b|[=<>!,]+)\s*$/i.test(withoutLastToken);
+        var hasExpression = withoutLastToken.length > 0 && !endsWithOperator;
+
+        return {
+            clause: clauseName,
+            inParens: parenDepth > 0,
+            hasExpression: hasExpression
+        };
+    }
+
+    function getContextualKeywords(clauseInfo) {
+        var clause = clauseInfo.clause;
+        var inParens = clauseInfo.inParens;
+        var hasExpression = clauseInfo.hasExpression;
+        var exprKeywords = ['CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'CAST', 'CONVERT', 'NULL'];
+
+        switch (clause) {
+            case 'WHERE':
+            case 'HAVING':
+                var whereKws = [];
+                if (hasExpression) {
+                    whereKws.push('AND', 'OR', 'ORDER BY', 'GROUP BY');
+                }
+                whereKws.push('NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE', 'IS NULL', 'IS NOT NULL');
+                whereKws.push.apply(whereKws, exprKeywords);
+                if (inParens) {
+                    whereKws.push('SELECT', 'DISTINCT', 'TOP');
+                }
+                return whereKws;
+
+            case 'ON':
+                var onKws = [];
+                if (hasExpression) {
+                    onKws.push('AND', 'OR');
+                }
+                onKws.push('NOT', 'IN', 'BETWEEN', 'LIKE', 'IS NULL', 'IS NOT NULL');
+                onKws.push.apply(onKws, exprKeywords);
+                return onKws;
+
+            case 'ORDER BY':
+                return ['ASC', 'DESC'];
+
+            case 'GROUP BY':
+                return ['HAVING'];
+
+            case 'SELECT':
+                var selectKws = ['DISTINCT', 'TOP', 'AS', 'FROM'];
+                selectKws.push.apply(selectKws, exprKeywords);
+                if (inParens) {
+                    selectKws.push('SELECT');
+                }
+                return selectKws;
+
+            case 'SET':
+                var setKws = ['WHERE', 'NULL'];
+                setKws.push.apply(setKws, exprKeywords);
+                return setKws;
+
+            case 'FROM':
+            case 'JOIN':
+                return [
+                    'AS', 'ON', 'WHERE', 'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN',
+                    'FULL OUTER JOIN', 'CROSS JOIN', 'ORDER BY', 'GROUP BY'
+                ];
+
+            default:
+                return [
+                    'SELECT', 'FROM', 'WHERE', 'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN',
+                    'FULL OUTER JOIN', 'CROSS JOIN', 'ON', 'GROUP BY', 'ORDER BY',
+                    'HAVING', 'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE',
+                    'IS NULL', 'IS NOT NULL', 'AS', 'DESC', 'ASC', 'UNION', 'UNION ALL',
+                    'TOP', 'DISTINCT', 'INSERT INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
+                    'EXEC', 'DECLARE', 'CAST', 'CONVERT', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END'
+                ];
+        }
+    }
+
     monaco.languages.registerCompletionItemProvider('sql', {
         triggerCharacters: ['.', "'", '[', ']', ' '],
         provideCompletionItems: function(model, position, context) {
@@ -1053,6 +1184,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             // Intelligent context detection scoped to active statement
             var stmtContext = getActiveStatementContext(model, position);
             var fullTextUntilPosition = stmtContext.textUntilCursor;
+            var clauseInfo = analyzeClauseContext(fullTextUntilPosition);
 
             var isSpaceTrigger = context && context.triggerCharacter === ' ';
             var isOnContext = /\bon\s*$/i.test(fullTextUntilPosition) || /\bon\s+[a-zA-Z0-9_\[\]\.]*$/i.test(fullTextUntilPosition);
@@ -1396,6 +1528,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     var prefixLower = rawPrefix.toLowerCase();
                     var foundAliasKey = Object.keys(aliasMap).find(k => k.toLowerCase() === prefixLower);
                     explicitTableName = foundAliasKey ? aliasMap[foundAliasKey] : rawPrefix;
+                    suggestKeywords = false;
                 }
 
                 if (suggestColumns) {
@@ -1428,7 +1561,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 insertText: insText,
                                 filterText: rawPrefix + "." + c + " " + c,
                                 range: replaceRange,
-                                detail: 'Column of ' + explicitTableName
+                                detail: 'Column of ' + explicitTableName,
+                                sortText: '0001_' + c
                             });
                         });
                     } else if (activeTableRefs.length > 0) {
@@ -1559,7 +1693,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 insertText: alias,
                                 filterText: alias,
                                 range: replaceRange,
-                                detail: 'Alias for ' + aliasMap[alias]
+                                detail: 'Alias for ' + aliasMap[alias],
+                                sortText: '0010_' + alias
                             });
                         });
                     }
@@ -1739,14 +1874,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             }
 
             if (suggestKeywords) {
-                var sqlKeywordsList = [
-                    'SELECT', 'FROM', 'WHERE', 'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN',
-                    'FULL OUTER JOIN', 'CROSS JOIN', 'ON', 'GROUP BY', 'ORDER BY',
-                    'HAVING', 'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE',
-                    'IS NULL', 'IS NOT NULL', 'AS', 'DESC', 'ASC', 'UNION', 'UNION ALL',
-                    'TOP', 'DISTINCT', 'INSERT INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
-                    'EXEC', 'DECLARE', 'CAST', 'CONVERT', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END'
-                ];
+                var sqlKeywordsList = getContextualKeywords(clauseInfo);
                 sqlKeywordsList.forEach(kw => {
                     suggestions.push({
                         label: kw,
@@ -1755,7 +1883,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         filterText: kw,
                         range: replaceRange,
                         detail: 'Keyword',
-                        sortText: '1000_' + kw
+                        sortText: '0100_' + kw
                     });
                 });
             }
