@@ -14,6 +14,9 @@ public class UserSettings
     public string LicenseKey { get; set; } = "";
     public string AppFontSize { get; set; } = "Default";
     public int EditorFontSize { get; set; } = 14;
+    public string SlowQueryDefaultTimeWindow { get; set; } = "Last24Hours";
+    public string SlowQueryDefaultMetric { get; set; } = "TotalCpu";
+    public int SlowQueryTopCount { get; set; } = 10;
 }
 
 public class UserSettingsService
@@ -92,6 +95,15 @@ public class UserSettingsService
     public void UpdateLicenseKey(string licenseKey)
     {
         Settings.LicenseKey = licenseKey;
+        SaveSettings();
+        OnSettingsChanged?.Invoke();
+    }
+
+    public void UpdateSlowQueryPreferences(string timeWindow, string metric, int topCount)
+    {
+        Settings.SlowQueryDefaultTimeWindow = timeWindow;
+        Settings.SlowQueryDefaultMetric = metric;
+        Settings.SlowQueryTopCount = topCount;
         SaveSettings();
         OnSettingsChanged?.Invoke();
     }

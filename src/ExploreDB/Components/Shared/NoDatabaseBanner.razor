@@ -21,8 +21,15 @@
             </div>
             <h3 class="fw-bold text-white mb-3" style="letter-spacing: -0.5px;">No Database Selected</h3>
             <p class="text-muted fs-6 mb-4" style="line-height: 1.6;">
-                You are currently connected to a server, but no specific database has been selected. 
-                Please select a database from the dropdown menu in the sidebar to begin exploring.
+                @if (!string.IsNullOrWhiteSpace(Message))
+                {
+                    @Message
+                }
+                else
+                {
+                    <span>You are currently connected to a server, but no specific database has been selected. 
+                    Please select a database from the dropdown menu in the sidebar to begin exploring.</span>
+                }
             </p>
         }
     </div>
@@ -31,6 +38,9 @@
 @code {
     [Parameter]
     public string Height { get; set; } = "calc(100vh - 100px)";
+
+    [Parameter]
+    public string? Message { get; set; }
 
     protected override void OnInitialized()
     {

@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using ExploreDB.Services;
 using ExploreDB.Services.Profiler;
+using ExploreDB.Services.SlowQuery;
 using ExploreDB.Services.SpDebugger;
 using ExploreDB.Services.SqlCompare;
 using Microsoft.Extensions.Configuration;
@@ -107,6 +108,7 @@ public partial class App : Application
             services.AddSingleton<ToolRegistryService>();
             services.AddSingleton<UserSettingsService>();
             services.AddSingleton<SpDebuggerService>();
+            services.AddSingleton<SlowQueryService>();
 
             // Register Windows
             services.AddTransient<MainWindow>();

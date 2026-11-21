@@ -1,0 +1,1045 @@
+@page "/tools/slow-query-analyzer"
+@using System.IO
+@using System.Text
+@using System.Threading
+@using ExploreDB.Services
+@using ExploreDB.Services.SlowQuery
+@using BlazorMonaco
+@using BlazorMonaco.Editor
+@inject SlowQueryService SlowQueryService
+@inject ConnectionService ConnectionService
+@inject SchemaService SchemaService
+@inject QueryStateService QueryStateService
+@inject UserSettingsService UserSettingsService
+@inject WindowManagerService WindowManager
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ThemeService ThemeService
+@inject ToolRegistryService ToolService
+@implements IDisposable
+
+<div class="container-fluid d-flex flex-column pb-2 overflow-hidden slow-query-container" style="@(IsPopout ? "height: calc(100vh - 45px); max-height: calc(100vh - 45px);" : "height: 100%; min-height: 0;")">
+    <!-- TOP TOOLBAR -->
+    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2 pt-2 border-bottom pb-2" style="border-color: var(--app-border) !important;">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if (!IsPopout)
+            {
+                <a href="tools" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm" title="Back to Tools Hub">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Tools</span>
+                </a>
+            }
+
+            <h4 class="fw-bold mb-0 d-flex align-items-center gap-2" style="font-size: 1.2rem; color: var(--app-text);">
+                <i class="bi bi-hourglass-split text-warning"></i>
+                <span>Slow Query Analyzer</span>
+            </h4>
+
+            @if (SchemaService.IsDatabaseConnected)
+            {
+                <span class="badge rounded-pill bg-body-secondary text-body border px-2.5 py-1" style="font-size: 0.78rem;">
+                    <i class="bi bi-database me-1 text-primary"></i>@SchemaService.ActiveDatabase
+                </span>
+
+                @if (_result != null)
+                {
+                    <div class="d-flex align-items-center gap-1.5 ms-1">
+                        @if (_result.IsQueryStoreSupported)
+                        {
+                            <!-- Option A: Segmented Mode Selector -->
+                            <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Query Analysis Engine">
+                                <button type="button"
+                                        class="btn btn-sm @(!_forceDmv ? "btn-primary text-white" : "btn-outline-secondary") d-inline-flex align-items-center gap-1 px-2.5 py-1"
+                                        style="font-size: 0.76rem;"
+                                        @onclick="() => SetEngineModeAsync(false)"
+                                        title="Analyze persisted historical runtime stats from Query Store">
+                                    <i class="bi bi-database-check"></i>
+                                    <span>Query Store (Historical)</span>
+                                </button>
+                                <button type="button"
+                                        class="btn btn-sm @(_forceDmv ? "btn-primary text-white" : "btn-outline-secondary") d-inline-flex align-items-center gap-1 px-2.5 py-1"
+                                        style="font-size: 0.76rem;"
+                                        @onclick="() => SetEngineModeAsync(true)"
+                                        title="Analyze active in-memory plan cache (DMVs)">
+                                    <i class="bi bi-cpu"></i>
+                                    <span>Live Cache (In-Memory)</span>
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle px-2.5 py-1 d-inline-flex align-items-center gap-1"
+                                  style="font-size: 0.75rem;"
+                                  title="Using in-memory plan cache dynamic management views">
+                                <i class="bi bi-cpu-fill"></i>
+                                <span>Live Cache (In-Memory)</span>
+                            </span>
+                        }
+
+                        <!-- Info Explainer Tooltip Button -->
+                        <button type="button"
+                                class="btn btn-sm btn-link text-muted p-0 text-decoration-none"
+                                style="font-size: 1rem; line-height: 1;"
+                                @onclick="() => _showModeHelpModal = true"
+                                title="What are these modes? (Click to view details)">
+                            <i class="bi bi-info-circle"></i>
+                        </button>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- Controls Toolbar -->
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if (SchemaService.IsDatabaseConnected)
+            {
+                <!-- Time Window Preset (Query Store only) -->
+                @if (_result != null && _result.IsUsingQueryStore)
+                {
+                    <div class="d-flex align-items-center gap-1">
+                        <label class="text-muted small fw-medium mb-0 me-1" style="font-size: 0.8rem;">Window:</label>
+                        <select class="form-select form-select-sm shadow-none"
+                                style="width: 130px; font-size: 0.82rem; height: 31px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                value="@_filterOptions.TimeWindow"
+                                @onchange="OnTimeWindowChangedAsync">
+                            <option value="@TimeWindowPreset.Last1Hour">Last 1 Hour</option>
+                            <option value="@TimeWindowPreset.Last4Hours">Last 4 Hours</option>
+                            <option value="@TimeWindowPreset.Last24Hours">Last 24 Hours</option>
+                            <option value="@TimeWindowPreset.Last7Days">Last 7 Days</option>
+                            <option value="@TimeWindowPreset.Last30Days">Last 30 Days</option>
+                        </select>
+                    </div>
+                }
+
+                <!-- Metric Selector -->
+                <div class="d-flex align-items-center gap-1">
+                    <label class="text-muted small fw-medium mb-0 me-1" style="font-size: 0.8rem;">Rank By:</label>
+                    <select class="form-select form-select-sm shadow-none"
+                            style="width: 160px; font-size: 0.82rem; height: 31px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                            value="@_filterOptions.Metric"
+                            @onchange="OnMetricChangedAsync">
+                        <option value="@RankingMetric.TotalCpu">Total CPU Time</option>
+                        <option value="@RankingMetric.AvgCpu">Avg CPU Time</option>
+                        <option value="@RankingMetric.TotalDuration">Total Duration</option>
+                        <option value="@RankingMetric.AvgDuration">Avg Duration</option>
+                        <option value="@RankingMetric.PhysicalReads">Physical Reads (Disk)</option>
+                        <option value="@RankingMetric.LogicalReads">Logical Reads (Memory)</option>
+                        <option value="@RankingMetric.LogicalWrites">Logical Writes</option>
+                        <option value="@RankingMetric.ExecutionCount">Execution Count</option>
+                    </select>
+                </div>
+
+                <!-- Top N Selector -->
+                <div class="d-flex align-items-center gap-1">
+                    <label class="text-muted small fw-medium mb-0 me-1" style="font-size: 0.8rem;">Top:</label>
+                    <select class="form-select form-select-sm shadow-none"
+                            style="width: 75px; font-size: 0.82rem; height: 31px; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                            value="@_filterOptions.TopCount"
+                            @onchange="OnTopCountChangedAsync">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+
+                <!-- Refresh Button -->
+                <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
+                        style="height: 31px;"
+                        @onclick="RefreshAsync"
+                        disabled="@_isLoading">
+                    @if (_isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                        <span>Loading...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-arrow-clockwise"></i>
+                        <span>Refresh</span>
+                    }
+                </button>
+            }
+
+            @if (!IsPopout)
+            {
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm"
+                        style="height: 31px;"
+                        @onclick="OpenPopout"
+                        title="Open in dedicated popout window">
+                    <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (!SchemaService.IsDatabaseConnected)
+    {
+        <NoDatabaseBanner Height="calc(100vh - 120px)" Message="Select a database from the sidebar to analyze top resource-consuming queries." />
+    }
+    else
+    {
+        <!-- Query Store Disabled Info Banner -->
+        @if (_result != null && !_result.IsQueryStoreSupported && _result.StoreState == QueryStoreState.Disabled)
+        {
+            <div class="alert alert-warning d-flex align-items-center justify-content-between py-2 px-3 mb-2 rounded-2 border" style="font-size: 0.82rem;" role="alert">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-triangle-fill fs-6 text-warning"></i>
+                    <div>
+                        <strong>Query Store is disabled</strong> on <code>@SchemaService.ActiveDatabase</code>. Showing live Plan Cache statistics instead.
+                        Plan Cache metrics reset when SQL Server restarts or when plans are evicted.
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-outline-warning border-0 text-decoration-underline py-0"
+                        @onclick="CopyEnableQueryStoreScriptAsync">
+                    <i class="bi bi-clipboard me-1"></i>Copy Enable Script
+                </button>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(_result?.ErrorMessage))
+        {
+            <div class="alert alert-danger py-2 px-3 mb-2 rounded-2" style="font-size: 0.84rem;">
+                <i class="bi bi-exclamation-circle me-1"></i>@_result.ErrorMessage
+            </div>
+        }
+
+        <!-- MAIN SPLIT VIEW -->
+        <div class="row g-2 flex-grow-1 overflow-hidden" style="min-height: 0;">
+            <!-- LEFT COLUMN: LEADERBOARD LIST -->
+            <div class="col-12 col-lg-5 col-xl-4 d-flex flex-column h-100 overflow-hidden">
+                <div class="card h-100 shadow-sm d-flex flex-column overflow-hidden" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                    <!-- Filter and List Header -->
+                    <div class="p-2 border-bottom d-flex align-items-center gap-2" style="border-color: var(--app-border) !important;">
+                        <div class="input-group input-group-sm flex-grow-1">
+                            <span class="input-group-text border-end-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text"
+                                   class="form-control shadow-none border-start-0"
+                                   placeholder="Filter queries / procedures..."
+                                   style="background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);"
+                                   @bind="_searchTerm"
+                                   @bind:event="oninput" />
+                            @if (!string.IsNullOrEmpty(_searchTerm))
+                            {
+                                <button class="btn btn-outline-secondary border-start-0" style="background-color: var(--app-input-bg); color: var(--app-text-muted); border-color: var(--app-input-border);" @onclick="() => _searchTerm = string.Empty">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            }
+                        </div>
+                        <span class="text-muted small text-nowrap" style="font-size: 0.75rem;">
+                            @FilteredQueries.Count() @(FilteredQueries.Count() == 1 ? "query" : "queries")
+                        </span>
+                    </div>
+
+                    <!-- Query List Items -->
+                    <div class="flex-grow-1 overflow-y-auto p-2 d-flex flex-column gap-1.5 custom-scrollbar-light">
+                        @if (_isLoading)
+                        {
+                            <div class="d-flex flex-column align-items-center justify-content-center p-5 text-muted">
+                                <span class="spinner-border text-primary mb-2" role="status"></span>
+                                <span class="small">Analyzing query execution statistics...</span>
+                            </div>
+                        }
+                        else if (!FilteredQueries.Any())
+                        {
+                            <div class="d-flex flex-column align-items-center justify-content-center p-5 text-muted text-center">
+                                <i class="bi bi-check2-circle fs-1 mb-2 text-success"></i>
+                                <div class="fw-semibold small">No queries found</div>
+                                <div class="small" style="font-size: 0.76rem;">Try clearing the filter or expanding the time window.</div>
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var query in FilteredQueries)
+                            {
+                                bool isSelected = _selectedItem == query;
+                                string rankBadgeClass = query.Rank switch
+                                {
+                                    1 => "badge bg-danger text-white",
+                                    2 => "badge bg-warning text-dark",
+                                    3 => "badge bg-info text-white",
+                                    _ => "badge bg-secondary-subtle text-body border"
+                                };
+
+                                string barClass = query.Rank switch
+                                {
+                                    1 => "bg-danger",
+                                    2 => "bg-warning",
+                                    3 => "bg-info",
+                                    _ => "bg-primary"
+                                };
+
+                                <div class="query-card p-2.5 rounded-2 transition-all position-relative @(isSelected ? "selected-card" : "")"
+                                     style="cursor: pointer; border: 1px solid @(isSelected ? "var(--bs-primary)" : "var(--app-border)"); background-color: @(isSelected ? "rgba(14, 165, 233, 0.08)" : "var(--app-surface-secondary)");"
+                                     @onclick="() => SelectQueryAsync(query)">
+                                    
+                                    <!-- Top Row: Rank & Object Name -->
+                                    <div class="d-flex align-items-center justify-content-between mb-1.5 gap-2">
+                                        <div class="d-flex align-items-center gap-1.5 text-truncate">
+                                            <span class="@rankBadgeClass" style="font-size: 0.72rem; min-width: 26px; text-align: center;">#@query.Rank</span>
+                                            <span class="fw-bold text-truncate" style="font-size: 0.82rem; color: var(--app-text);" title="@query.DisplayObjectName">
+                                                @query.DisplayObjectName
+                                            </span>
+                                        </div>
+                                        <span class="badge bg-body-tertiary text-body border" style="font-size: 0.7rem; font-weight: 500;">
+                                            @SlowQueryItem.FormatNumber(query.ExecutionCount) execs
+                                        </span>
+                                    </div>
+
+                                    <!-- Middle Row: Resource Impact Bar -->
+                                    <div class="progress mb-2" style="height: 4px; background-color: rgba(0,0,0,0.06);">
+                                        <div class="progress-bar @barClass" role="progressbar" style="width: @(Math.Max(5, query.ImpactPercentage))%"></div>
+                                    </div>
+
+                                    <!-- Bottom Row: Primary Metrics Chips -->
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-1" style="font-size: 0.74rem;">
+                                        <div class="d-flex align-items-center gap-2 text-muted">
+                                            <span title="Total CPU Time"><i class="bi bi-cpu me-1 text-primary"></i><strong>@query.FormattedTotalCpu</strong></span>
+                                            <span title="Avg Duration"><i class="bi bi-stopwatch me-1 text-warning"></i>@query.FormattedAvgDuration</span>
+                                        </div>
+                                        <div class="text-muted" title="Physical Reads (Disk I/O)">
+                                            <i class="bi bi-hdd me-1 text-danger"></i>@SlowQueryItem.FormatNumber(query.TotalPhysicalReads) reads
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: QUERY INSPECTOR, CODE & METRICS -->
+            <div class="col-12 col-lg-7 col-xl-8 d-flex flex-column h-100 overflow-hidden">
+                @if (_selectedItem == null)
+                {
+                    <div class="card h-100 shadow-sm d-flex align-items-center justify-content-center p-5 text-muted text-center" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                        <i class="bi bi-cursor-fill fs-1 text-muted mb-2"></i>
+                        <h5 class="fw-bold">Select a Query from the Leaderboard</h5>
+                        <p class="small mb-0">Click any query on the left to inspect its formatted SQL, performance metrics, and execution history.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="card h-100 shadow-sm d-flex flex-column overflow-hidden" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
+                        <!-- Action Bar Header -->
+                        <div class="p-2 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary);">
+                            <div class="d-flex align-items-center gap-2 text-truncate">
+                                <span class="badge bg-primary text-white" style="font-size: 0.78rem;">#@_selectedItem.Rank</span>
+                                <span class="fw-bold text-truncate" style="font-size: 0.92rem; color: var(--app-text);" title="@_selectedItem.DisplayObjectName">
+                                    @_selectedItem.DisplayObjectName
+                                </span>
+                            </div>
+
+                            <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                <!-- Statement vs Full Batch Toggle -->
+                                @if (!string.IsNullOrWhiteSpace(_selectedItem.FullBatchText) && _selectedItem.FullBatchText != _selectedItem.StatementText)
+                                {
+                                    <div class="btn-group btn-group-sm shadow-sm" role="group">
+                                        <button type="button"
+                                                class="btn btn-sm @(!_showFullBatch ? "btn-primary text-white" : "btn-outline-secondary") px-2 py-0.5"
+                                                style="font-size: 0.75rem;"
+                                                @onclick="() => ToggleBatchViewAsync(false)">
+                                            Statement
+                                        </button>
+                                        <button type="button"
+                                                class="btn btn-sm @(_showFullBatch ? "btn-primary text-white" : "btn-outline-secondary") px-2 py-0.5"
+                                                style="font-size: 0.75rem;"
+                                                @onclick="() => ToggleBatchViewAsync(true)">
+                                            Full Batch
+                                        </button>
+                                    </div>
+                                }
+
+                                <!-- Copy SQL -->
+                                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm px-2 py-1"
+                                        style="font-size: 0.78rem;"
+                                        @onclick="CopySqlAsync"
+                                        title="Copy formatted SQL to clipboard">
+                                    <i class="bi @(_copyFeedback ? "bi-check2 text-success" : "bi-clipboard")"></i>
+                                    <span>@(_copyFeedback ? "Copied" : "Copy SQL")</span>
+                                </button>
+
+                                <!-- Export .sqlplan / View Plan -->
+                                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm px-2 py-1"
+                                        style="font-size: 0.78rem;"
+                                        @onclick="DownloadExecutionPlanAsync"
+                                        disabled="@_isLoadingPlan"
+                                        title="Download XML execution plan (.sqlplan)">
+                                    @if (_isLoadingPlan)
+                                    {
+                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-file-earmark-code"></i>
+                                    }
+                                    <span>Export .sqlplan</span>
+                                </button>
+
+                                <!-- 1-CLICK OPEN IN QUERY RUNNER -->
+                                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-2.5 py-1"
+                                        style="font-size: 0.8rem;"
+                                        @onclick="OpenInQueryRunnerAsync"
+                                        title="Open query in a new tab in Query Runner for tuning and testing">
+                                    <i class="bi bi-play-fill fs-6"></i>
+                                    <span>Open in Query Runner</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Scrollable Inspector Content -->
+                        <div class="flex-grow-1 overflow-y-auto p-2.5 d-flex flex-column gap-3 custom-scrollbar-light">
+                            <!-- MONACO CODE VIEWER -->
+                            <div class="rounded-2 overflow-hidden border" style="height: 240px; min-height: 180px; border-color: var(--app-border) !important;">
+                                <StandaloneCodeEditor @ref="_monacoEditor"
+                                                      Id="slow-query-monaco"
+                                                      CssClass="w-100 h-100"
+                                                      ConstructionOptions="EditorConstructionOptions"
+                                                      OnDidInit="OnMonacoInitAsync" />
+                            </div>
+
+                            <!-- PERFORMANCE METRICS STATS CARDS -->
+                            <div class="row g-2">
+                                <!-- CPU Card -->
+                                <div class="col-6 col-md-4 col-xl-2">
+                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
+                                            <i class="bi bi-cpu text-primary me-1"></i>Total CPU
+                                        </div>
+                                        <div class="fw-bold fs-6 my-0.5 text-truncate" style="color: var(--app-text);">
+                                            @_selectedItem.FormattedTotalCpu
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.68rem;">
+                                            Avg: @_selectedItem.FormattedAvgCpu
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Duration Card -->
+                                <div class="col-6 col-md-4 col-xl-2">
+                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
+                                            <i class="bi bi-stopwatch text-warning me-1"></i>Total Duration
+                                        </div>
+                                        <div class="fw-bold fs-6 my-0.5 text-truncate" style="color: var(--app-text);">
+                                            @_selectedItem.FormattedTotalDuration
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.68rem;">
+                                            Avg: @_selectedItem.FormattedAvgDuration
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Physical Reads Card -->
+                                <div class="col-6 col-md-4 col-xl-2">
+                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
+                                            <i class="bi bi-hdd text-danger me-1"></i>Physical Reads
+                                        </div>
+                                        <div class="fw-bold fs-6 my-0.5 text-truncate" style="color: var(--app-text);">
+                                            @SlowQueryItem.FormatNumber(_selectedItem.TotalPhysicalReads)
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.68rem;">
+                                            Avg: @SlowQueryItem.FormatNumber(_selectedItem.AvgPhysicalReads)
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Logical Reads Card -->
+                                <div class="col-6 col-md-4 col-xl-2">
+                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
+                                            <i class="bi bi-memory text-info me-1"></i>Logical Reads
+                                        </div>
+                                        <div class="fw-bold fs-6 my-0.5 text-truncate" style="color: var(--app-text);">
+                                            @SlowQueryItem.FormatNumber(_selectedItem.TotalLogicalReads)
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.68rem;">
+                                            Avg: @SlowQueryItem.FormatNumber(_selectedItem.AvgLogicalReads)
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Logical Writes Card -->
+                                <div class="col-6 col-md-4 col-xl-2">
+                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
+                                            <i class="bi bi-pencil-square text-secondary me-1"></i>Writes
+                                        </div>
+                                        <div class="fw-bold fs-6 my-0.5 text-truncate" style="color: var(--app-text);">
+                                            @SlowQueryItem.FormatNumber(_selectedItem.TotalLogicalWrites)
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.68rem;">
+                                            Avg: @SlowQueryItem.FormatNumber(_selectedItem.AvgLogicalWrites)
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Executions & Rows Card -->
+                                <div class="col-6 col-md-4 col-xl-2">
+                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
+                                            <i class="bi bi-arrow-repeat text-success me-1"></i>Exec Count
+                                        </div>
+                                        <div class="fw-bold fs-6 my-0.5 text-truncate" style="color: var(--app-text);">
+                                            @SlowQueryItem.FormatNumber(_selectedItem.ExecutionCount)
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.68rem;">
+                                            Rows: @SlowQueryItem.FormatNumber(_selectedItem.TotalRows)
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- EXECUTION TRENDS (QUERY STORE MODE) -->
+                            @if (_result != null && _result.IsUsingQueryStore)
+                            {
+                                <div class="card p-3 rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <div class="fw-bold small d-flex align-items-center gap-1.5" style="color: var(--app-text);">
+                                            <i class="bi bi-graph-up text-primary"></i>
+                                            <span>Execution History & Trends (Query Store Intervals)</span>
+                                        </div>
+                                        <span class="text-muted small" style="font-size: 0.72rem;">
+                                            @_trends.Count intervals captured
+                                        </span>
+                                    </div>
+
+                                    @if (_isLoadingTrends)
+                                    {
+                                        <div class="d-flex align-items-center justify-content-center p-3 text-muted">
+                                            <span class="spinner-border spinner-border-sm me-2 text-primary" role="status"></span>
+                                            <span class="small">Loading interval timeline...</span>
+                                        </div>
+                                    }
+                                    else if (!_trends.Any())
+                                    {
+                                        <div class="text-muted small text-center p-2">
+                                            No runtime interval history found for this query in the selected window.
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <!-- Visual Sparkline Bar Chart -->
+                                        long maxExecs = _trends.Max(t => t.Executions);
+                                        if (maxExecs == 0) maxExecs = 1;
+
+                                        <div class="d-flex align-items-end gap-1 overflow-x-auto py-2 custom-scrollbar-light" style="height: 90px; border-bottom: 1px solid var(--app-border);">
+                                            @foreach (var trend in _trends)
+                                            {
+                                                int heightPct = Math.Clamp((int)((trend.Executions / (double)maxExecs) * 75), 8, 80);
+                                                string tip = $"{trend.IntervalStart:MMM dd HH:mm} - {trend.IntervalEnd:HH:mm}\nExecutions: {trend.Executions:N0}\nAvg Duration: {SlowQueryItem.FormatDuration(trend.AvgDurationMs)}\nAvg CPU: {SlowQueryItem.FormatDuration(trend.AvgCpuMs)}";
+
+                                                <div class="d-flex flex-column align-items-center flex-shrink-0" style="width: 22px;" title="@tip">
+                                                    <div class="w-100 rounded-top bg-primary transition-all hover-glow"
+                                                         style="height: @(heightPct)px; opacity: 0.85;">
+                                                    </div>
+                                                    <span class="text-muted" style="font-size: 0.58rem; margin-top: 2px;">
+                                                        @trend.IntervalStart.ToString("HH:mm")
+                                                    </span>
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <div class="d-flex align-items-center justify-content-between mt-1 text-muted" style="font-size: 0.7rem;">
+                                            <span>Start: @_trends.First().IntervalStart.ToString("g")</span>
+                                            <span>End: @_trends.Last().IntervalEnd.ToString("g")</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="card p-2.5 rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                    <div class="d-flex align-items-center justify-content-between text-muted" style="font-size: 0.76rem;">
+                                        <span><i class="bi bi-clock-history me-1"></i>First Seen in Cache: @(_selectedItem.FirstSeen?.ToString("g") ?? "N/A")</span>
+                                        <span><i class="bi bi-arrow-clockwise me-1"></i>Last Executed: @(_selectedItem.LastExecutionTime?.ToString("g") ?? "N/A")</span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- MODE EXPLANATION MODAL -->
+@if (_showModeHelpModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 1060;" @onclick="() => _showModeHelpModal = false">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 580px;" @onclick:stopPropagation="true">
+            <div class="modal-content shadow-lg border" style="background-color: var(--app-surface); border-color: var(--app-border) !important; color: var(--app-text);">
+                <div class="modal-header border-bottom py-2.5 px-3" style="border-color: var(--app-border) !important;">
+                    <h5 class="modal-title fw-bold fs-6 d-flex align-items-center gap-2 mb-0">
+                        <i class="bi bi-info-circle-fill text-primary"></i>
+                        <span>Query Analysis Modes Explained</span>
+                    </h5>
+                    <button type="button" class="btn-close shadow-none" style="filter: var(--app-btn-close-filter);" @onclick="() => _showModeHelpModal = false"></button>
+                </div>
+                <div class="modal-body p-3.5 d-flex flex-column gap-3" style="font-size: 0.85rem; line-height: 1.55;">
+                    <!-- Query Store Card -->
+                    <div class="p-3 rounded-3 border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                        <div class="d-flex align-items-center gap-2 mb-1.5">
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                <i class="bi bi-database-check me-1"></i>Query Store (Historical)
+                            </span>
+                            <span class="fw-semibold" style="font-size: 0.8rem; color: var(--app-text);">Flight Recorder on Disk</span>
+                        </div>
+                        <p class="mb-1 text-muted">
+                            SQL Server continuously captures query runtime metrics directly into your database storage.
+                        </p>
+                        <ul class="mb-0 ps-3 text-muted" style="font-size: 0.8rem;">
+                            <li><strong>Time travel:</strong> Analyze queries across specific windows (Last 1 hour, 24 hours, 7 days, etc.).</li>
+                            <li><strong>Survives restarts:</strong> Data remains intact even if SQL Server or the machine reboots.</li>
+                            <li><strong>Trends:</strong> Displays visual timeline interval trends and duration spikes.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Live Plan Cache Card -->
+                    <div class="p-3 rounded-3 border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                        <div class="d-flex align-items-center gap-2 mb-1.5">
+                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">
+                                <i class="bi bi-cpu me-1"></i>Live Cache (In-Memory DMVs)
+                            </span>
+                            <span class="fw-semibold" style="font-size: 0.8rem; color: var(--app-text);">Server RAM Snapshot</span>
+                        </div>
+                        <p class="mb-1 text-muted">
+                            Directly inspects compiled queries currently resting in SQL Server's memory cache (<code>sys.dm_exec_query_stats</code>).
+                        </p>
+                        <ul class="mb-0 ps-3 text-muted" style="font-size: 0.8rem;">
+                            <li><strong>Always available:</strong> Works on every SQL Server version without enabling any features.</li>
+                            <li><strong>Real-time state:</strong> Shows cumulative consumption since the server started or cache was cleared.</li>
+                            <li><strong>No time filter:</strong> Does not support time windows; resets if the server restarts.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2 px-3" style="border-color: var(--app-border) !important;">
+                    <button type="button" class="btn btn-sm btn-primary px-3" @onclick="() => _showModeHelpModal = false">
+                        Got it
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .slow-query-container {
+        color: var(--app-text);
+    }
+    .query-card:hover {
+        border-color: var(--bs-primary) !important;
+        transform: translateY(-1px);
+    }
+    .selected-card {
+        border-color: var(--bs-primary) !important;
+        box-shadow: 0 0 0 1px var(--bs-primary) !important;
+    }
+    .hover-glow:hover {
+        opacity: 1 !important;
+        filter: brightness(1.2);
+    }
+</style>
+
+@code {
+    [CascadingParameter(Name = "IsPopout")]
+    public bool IsPopout { get; set; } = false;
+
+    private bool _isLoading = false;
+    private bool _forceDmv = false;
+    private bool _showModeHelpModal = false;
+    private bool _showFullBatch = false;
+    private bool _copyFeedback = false;
+    private bool _isLoadingPlan = false;
+    private bool _isLoadingTrends = false;
+    private string _searchTerm = "";
+
+    private SlowQueryResult? _result;
+    private SlowQueryItem? _selectedItem;
+    private List<QueryIntervalTrend> _trends = new();
+    private SlowQueryFilterOptions _filterOptions = new();
+
+    private StandaloneCodeEditor? _monacoEditor;
+    private bool _monacoReady = false;
+
+    private IEnumerable<SlowQueryItem> FilteredQueries
+    {
+        get
+        {
+            if (_result?.Queries == null) return Enumerable.Empty<SlowQueryItem>();
+            if (string.IsNullOrWhiteSpace(_searchTerm)) return _result.Queries;
+
+            var term = _searchTerm.Trim();
+            return _result.Queries.Where(q =>
+                (q.ObjectName != null && q.ObjectName.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (q.ObjectSchema != null && q.ObjectSchema.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                q.StatementText.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        ConnectionService.OnConnectionChanged += HandleConnectionChanged;
+        ThemeService.OnThemeChanged += HandleThemeChanged;
+
+        // Load preferences from UserSettingsService
+        var settings = UserSettingsService.Settings;
+        if (Enum.TryParse<RankingMetric>(settings.SlowQueryDefaultMetric, true, out var metric))
+        {
+            _filterOptions.Metric = metric;
+        }
+        if (Enum.TryParse<TimeWindowPreset>(settings.SlowQueryDefaultTimeWindow, true, out var timeWindow))
+        {
+            _filterOptions.TimeWindow = timeWindow;
+        }
+        if (settings.SlowQueryTopCount > 0)
+        {
+            _filterOptions.TopCount = settings.SlowQueryTopCount;
+        }
+
+        if (SchemaService.IsDatabaseConnected)
+        {
+            await LoadQueriesAsync();
+        }
+    }
+
+    private async Task LoadQueriesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ConnectionService.ConnectionString)) return;
+
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _result = await SlowQueryService.GetTopQueriesAsync(
+                ConnectionService.ConnectionString,
+                _filterOptions,
+                forceDmv: _forceDmv);
+
+            if (_result.Queries.Any())
+            {
+                // Preserve selection if possible, otherwise select rank #1
+                var prevSelected = _selectedItem;
+                _selectedItem = _result.Queries.FirstOrDefault(q => 
+                    prevSelected != null && (q.QueryId > 0 ? q.QueryId == prevSelected.QueryId : q.QueryHash == prevSelected.QueryHash))
+                    ?? _result.Queries.First();
+
+                await UpdateMonacoContentAsync();
+                await LoadTrendsForSelectedQueryAsync();
+            }
+            else
+            {
+                _selectedItem = null;
+                _trends.Clear();
+            }
+        }
+        catch (Exception ex)
+        {
+            _result = new SlowQueryResult { ErrorMessage = ex.Message };
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SelectQueryAsync(SlowQueryItem query)
+    {
+        if (_selectedItem == query) return;
+        _selectedItem = query;
+        _showFullBatch = false;
+
+        await UpdateMonacoContentAsync();
+        await LoadTrendsForSelectedQueryAsync();
+    }
+
+    private async Task ToggleBatchViewAsync(bool showFull)
+    {
+        _showFullBatch = showFull;
+        await UpdateMonacoContentAsync();
+    }
+
+    private async Task LoadTrendsForSelectedQueryAsync()
+    {
+        if (_selectedItem == null || _result == null || !_result.IsUsingQueryStore || _selectedItem.QueryId <= 0)
+        {
+            _trends.Clear();
+            return;
+        }
+
+        _isLoadingTrends = true;
+        StateHasChanged();
+
+        try
+        {
+            var (start, end) = _filterOptions.GetResolvedTimeRange();
+            _trends = await SlowQueryService.GetQueryExecutionTrendsAsync(
+                ConnectionService.ConnectionString,
+                _selectedItem.QueryId,
+                start,
+                end);
+        }
+        catch
+        {
+            _trends.Clear();
+        }
+        finally
+        {
+            _isLoadingTrends = false;
+            StateHasChanged();
+        }
+    }
+
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        string initialSql = _selectedItem != null
+            ? (_showFullBatch && !string.IsNullOrWhiteSpace(_selectedItem.FullBatchText) ? _selectedItem.FullBatchText : _selectedItem.StatementText)
+            : "";
+
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "sql",
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
+            Value = initialSql,
+            AutomaticLayout = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            LineNumbers = "on",
+            ReadOnly = true,
+            ScrollBeyondLastLine = false,
+            FontSize = 13,
+            OverviewRulerBorder = false,
+            HideCursorInOverviewRuler = true,
+            FixedOverflowWidgets = true,
+            Scrollbar = new EditorScrollbarOptions { UseShadows = false }
+        };
+    }
+
+    private async Task OnMonacoInitAsync()
+    {
+        _monacoReady = true;
+        await UpdateMonacoContentAsync();
+    }
+
+    private async Task UpdateMonacoContentAsync()
+    {
+        if (_monacoEditor != null && _monacoReady && _selectedItem != null)
+        {
+            string sql = _showFullBatch && !string.IsNullOrWhiteSpace(_selectedItem.FullBatchText)
+                ? _selectedItem.FullBatchText
+                : _selectedItem.StatementText;
+
+            await _monacoEditor.SetValue(sql);
+        }
+    }
+
+    private async Task OnTimeWindowChangedAsync(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<TimeWindowPreset>(e.Value?.ToString(), out var preset))
+        {
+            _filterOptions.TimeWindow = preset;
+            PersistPreferences();
+            await LoadQueriesAsync();
+        }
+    }
+
+    private async Task OnMetricChangedAsync(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<RankingMetric>(e.Value?.ToString(), out var metric))
+        {
+            _filterOptions.Metric = metric;
+            PersistPreferences();
+            await LoadQueriesAsync();
+        }
+    }
+
+    private async Task OnTopCountChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int topCount))
+        {
+            _filterOptions.TopCount = topCount;
+            PersistPreferences();
+            await LoadQueriesAsync();
+        }
+    }
+
+    private async Task SetEngineModeAsync(bool forceDmv)
+    {
+        if (_forceDmv == forceDmv) return;
+        _forceDmv = forceDmv;
+        await LoadQueriesAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadQueriesAsync();
+    }
+
+    private void PersistPreferences()
+    {
+        UserSettingsService.UpdateSlowQueryPreferences(
+            _filterOptions.TimeWindow.ToString(),
+            _filterOptions.Metric.ToString(),
+            _filterOptions.TopCount);
+    }
+
+    private async Task CopySqlAsync()
+    {
+        if (_selectedItem == null) return;
+        string sql = _showFullBatch && !string.IsNullOrWhiteSpace(_selectedItem.FullBatchText)
+            ? _selectedItem.FullBatchText
+            : _selectedItem.StatementText;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", sql);
+            _copyFeedback = true;
+            StateHasChanged();
+            await Task.Delay(1500);
+            _copyFeedback = false;
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task CopyEnableQueryStoreScriptAsync()
+    {
+        const string script = "ALTER DATABASE CURRENT SET QUERY_STORE = ON (OPERATION_MODE = READ_WRITE);";
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", script);
+        }
+        catch { }
+    }
+
+    private async Task DownloadExecutionPlanAsync()
+    {
+        if (_selectedItem == null) return;
+
+        _isLoadingPlan = true;
+        StateHasChanged();
+
+        try
+        {
+            string? planXml = _selectedItem.QueryPlanXml;
+            if (string.IsNullOrWhiteSpace(planXml))
+            {
+                planXml = await SlowQueryService.GetExecutionPlanXmlAsync(
+                    ConnectionService.ConnectionString,
+                    _selectedItem,
+                    _result?.IsUsingQueryStore ?? false);
+
+                _selectedItem.QueryPlanXml = planXml;
+            }
+
+            if (!string.IsNullOrWhiteSpace(planXml))
+            {
+                string objName = !string.IsNullOrWhiteSpace(_selectedItem.ObjectName) ? _selectedItem.ObjectName : $"Rank{_selectedItem.Rank}";
+                string fileName = $"Plan_{objName}_{DateTime.Now:yyyyMMdd_HHmmss}.sqlplan";
+
+                using var stream = new MemoryStream(Encoding.UTF8.GetBytes(planXml));
+                using var streamRef = new DotNetStreamReference(stream);
+                await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+            }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Failed to download execution plan");
+        }
+        finally
+        {
+            _isLoadingPlan = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenInQueryRunnerAsync()
+    {
+        if (_selectedItem == null) return;
+
+        string sql = _showFullBatch && !string.IsNullOrWhiteSpace(_selectedItem.FullBatchText)
+            ? _selectedItem.FullBatchText
+            : _selectedItem.StatementText;
+
+        string objName = !string.IsNullOrWhiteSpace(_selectedItem.ObjectName) 
+            ? _selectedItem.ObjectName 
+            : $"Query_Rank{_selectedItem.Rank}";
+        string tabName = $"Tuning_{objName}_{DateTime.Now:HHmmss}.sql";
+
+        var newTab = new QueryTab
+        {
+            Id = Guid.NewGuid(),
+            Name = tabName,
+            Content = sql,
+            OriginalContent = sql,
+            ConnectionString = ConnectionService.ConnectionString
+        };
+
+        QueryStateService.Tabs.Add(newTab);
+        QueryStateService.ActiveTabId = newTab.Id;
+        QueryStateService.NotifyTabUpdated(newTab.Id);
+        await QueryStateService.SaveTabsAsync();
+
+        if (IsPopout)
+        {
+            WindowManager.NavigateMainWindow("/runner");
+        }
+        else
+        {
+            Nav.NavigateTo("/runner");
+        }
+    }
+
+    private void OpenPopout()
+    {
+        WindowManager.OpenToolPopout(
+            "slow-query-analyzer",
+            "/tools/slow-query-analyzer",
+            "Slow Query Analyzer - ExploreDB",
+            closeOnConnectionChange: false);
+    }
+
+    private async void HandleConnectionChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            if (SchemaService.IsDatabaseConnected)
+            {
+                await LoadQueriesAsync();
+            }
+            else
+            {
+                _result = null;
+                _selectedItem = null;
+                _trends.Clear();
+                StateHasChanged();
+            }
+        });
+    }
+
+    private async void HandleThemeChanged()
+    {
+        if (_monacoEditor != null && _monacoReady)
+        {
+            await InvokeAsync(async () =>
+            {
+                try
+                {
+                    await BlazorMonaco.Editor.Global.SetTheme(JS, ThemeService.IsDark ? "vs-dark" : "vs");
+                }
+                catch { }
+            });
+        }
+    }
+
+    public void Dispose()
+    {
+        ConnectionService.OnConnectionChanged -= HandleConnectionChanged;
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
+    }
+}

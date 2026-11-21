@@ -143,6 +143,19 @@ public class ToolRegistryService
         {
             new ToolItem
             {
+                Id = "slow-query-analyzer",
+                Title = "Slow Query Analyzer",
+                Description = "Find the top queries consuming CPU, memory, and disk I/O with Query Store and plan cache performance analytics.",
+                Icon = "bi-hourglass-split",
+                IconBg = "rgba(245, 158, 11, 0.12)",
+                IconColor = "#f59e0b",
+                Route = "/tools/slow-query-analyzer",
+                Status = "Live",
+                IsVisible = true,
+                CloseOnConnectionChange = false
+            },
+            new ToolItem
+            {
                 Id = "data-cleanup",
                 Title = "Data Cleanup",
                 Description = "Calculate safe deletion hierarchy and generate dependency-ordered cleanup scripts without foreign key violation errors.",
