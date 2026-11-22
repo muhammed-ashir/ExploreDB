@@ -2,6 +2,7 @@
 @using System.IO
 @using System.Text
 @using System.Threading
+@using System.Globalization
 @using ExploreDB.Services
 @using ExploreDB.Services.SlowQuery
 @using BlazorMonaco
@@ -49,20 +50,20 @@
                             <!-- Option A: Segmented Mode Selector -->
                             <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Query Analysis Engine">
                                 <button type="button"
-                                        class="btn btn-sm @(!_forceDmv ? "btn-primary text-white" : "btn-outline-secondary") d-inline-flex align-items-center gap-1 px-2.5 py-1"
+                                        class="btn btn-sm @(!_forceDmv ? "btn-primary text-white" : "btn-outline-secondary") d-inline-flex align-items-center gap-1.5 px-2.5 py-1"
                                         style="font-size: 0.76rem;"
                                         @onclick="() => SetEngineModeAsync(false)"
-                                        title="Analyze persisted historical runtime stats from Query Store">
-                                    <i class="bi bi-database-check"></i>
-                                    <span>Query Store (Historical)</span>
+                                        title="Analyze persisted historical runtime stats across time windows">
+                                    <i class="bi bi-clock-history"></i>
+                                    <span>Historical (Time Range)</span>
                                 </button>
                                 <button type="button"
-                                        class="btn btn-sm @(_forceDmv ? "btn-primary text-white" : "btn-outline-secondary") d-inline-flex align-items-center gap-1 px-2.5 py-1"
+                                        class="btn btn-sm @(_forceDmv ? "btn-primary text-white" : "btn-outline-secondary") d-inline-flex align-items-center gap-1.5 px-2.5 py-1"
                                         style="font-size: 0.76rem;"
                                         @onclick="() => SetEngineModeAsync(true)"
-                                        title="Analyze active in-memory plan cache (DMVs)">
-                                    <i class="bi bi-cpu"></i>
-                                    <span>Live Cache (In-Memory)</span>
+                                        title="Analyze live in-memory execution stats currently in server cache">
+                                    <i class="bi bi-lightning-charge"></i>
+                                    <span>Live / Real-Time</span>
                                 </button>
                             </div>
                         }
@@ -70,9 +71,9 @@
                         {
                             <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle px-2.5 py-1 d-inline-flex align-items-center gap-1"
                                   style="font-size: 0.75rem;"
-                                  title="Using in-memory plan cache dynamic management views">
-                                <i class="bi bi-cpu-fill"></i>
-                                <span>Live Cache (In-Memory)</span>
+                                  title="Showing live in-memory execution stats from server cache">
+                                <i class="bi bi-lightning-charge-fill"></i>
+                                <span>Live / Real-Time</span>
                             </span>
                         }
 
@@ -186,8 +187,8 @@
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-exclamation-triangle-fill fs-6 text-warning"></i>
                     <div>
-                        <strong>Query Store is disabled</strong> on <code>@SchemaService.ActiveDatabase</code>. Showing live Plan Cache statistics instead.
-                        Plan Cache metrics reset when SQL Server restarts or when plans are evicted.
+                        <strong>Historical tracking is disabled</strong> on <code>@SchemaService.ActiveDatabase</code>. Showing real-time live execution statistics instead.
+                        To persist query performance history across time windows and server restarts, enable Query Store.
                     </div>
                 </div>
                 <button class="btn btn-sm btn-outline-warning border-0 text-decoration-underline py-0"
@@ -207,7 +208,7 @@
         <!-- MAIN SPLIT VIEW -->
         <div class="row g-2 flex-grow-1 overflow-hidden" style="min-height: 0;">
             <!-- LEFT COLUMN: LEADERBOARD LIST -->
-            <div class="col-12 col-lg-5 col-xl-4 d-flex flex-column h-100 overflow-hidden">
+            <div class="@(_isInspectorExpanded ? "d-none" : "col-12 col-lg-5 col-xl-4") d-flex flex-column h-100 overflow-hidden">
                 <div class="card h-100 shadow-sm d-flex flex-column overflow-hidden" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
                     <!-- Filter and List Header -->
                     <div class="p-2 border-bottom d-flex align-items-center gap-2" style="border-color: var(--app-border) !important;">
@@ -234,7 +235,7 @@
                     </div>
 
                     <!-- Query List Items -->
-                    <div class="flex-grow-1 overflow-y-auto p-2 d-flex flex-column gap-1.5 custom-scrollbar-light">
+                    <div class="flex-grow-1 overflow-y-auto p-2 d-flex flex-column gap-2 custom-scrollbar-light">
                         @if (_isLoading)
                         {
                             <div class="d-flex flex-column align-items-center justify-content-center p-5 text-muted">
@@ -263,45 +264,23 @@
                                     _ => "badge bg-secondary-subtle text-body border"
                                 };
 
-                                string barClass = query.Rank switch
-                                {
-                                    1 => "bg-danger",
-                                    2 => "bg-warning",
-                                    3 => "bg-info",
-                                    _ => "bg-primary"
-                                };
-
-                                <div class="query-card p-2.5 rounded-2 transition-all position-relative @(isSelected ? "selected-card" : "")"
-                                     style="cursor: pointer; border: 1px solid @(isSelected ? "var(--bs-primary)" : "var(--app-border)"); background-color: @(isSelected ? "rgba(14, 165, 233, 0.08)" : "var(--app-surface-secondary)");"
+                                <div class="query-card rounded-2 transition-all position-relative @(isSelected ? "selected-card" : "")"
+                                     style="cursor: pointer; padding: 10px 12px; border: 1px solid @(isSelected ? "var(--bs-primary)" : "var(--app-border)"); background-color: @(isSelected ? "rgba(14, 165, 233, 0.08)" : "var(--app-surface-secondary)");"
                                      @onclick="() => SelectQueryAsync(query)">
                                     
                                     <!-- Top Row: Rank & Object Name -->
-                                    <div class="d-flex align-items-center justify-content-between mb-1.5 gap-2">
-                                        <div class="d-flex align-items-center gap-1.5 text-truncate">
-                                            <span class="@rankBadgeClass" style="font-size: 0.72rem; min-width: 26px; text-align: center;">#@query.Rank</span>
-                                            <span class="fw-bold text-truncate" style="font-size: 0.82rem; color: var(--app-text);" title="@query.DisplayObjectName">
-                                                @query.DisplayObjectName
-                                            </span>
-                                        </div>
-                                        <span class="badge bg-body-tertiary text-body border" style="font-size: 0.7rem; font-weight: 500;">
-                                            @SlowQueryItem.FormatNumber(query.ExecutionCount) execs
+                                    <div class="d-flex align-items-center gap-2 mb-1 text-truncate">
+                                        <span class="@rankBadgeClass" style="font-size: 0.72rem; min-width: 26px; text-align: center;">#@query.Rank</span>
+                                        <span class="fw-bold text-truncate" style="font-size: 0.82rem; color: var(--app-text);" title="@query.DisplayObjectName">
+                                            @query.DisplayObjectName
                                         </span>
                                     </div>
 
-                                    <!-- Middle Row: Resource Impact Bar -->
-                                    <div class="progress mb-2" style="height: 4px; background-color: rgba(0,0,0,0.06);">
-                                        <div class="progress-bar @barClass" role="progressbar" style="width: @(Math.Max(5, query.ImpactPercentage))%"></div>
-                                    </div>
-
-                                    <!-- Bottom Row: Primary Metrics Chips -->
-                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-1" style="font-size: 0.74rem;">
-                                        <div class="d-flex align-items-center gap-2 text-muted">
-                                            <span title="Total CPU Time"><i class="bi bi-cpu me-1 text-primary"></i><strong>@query.FormattedTotalCpu</strong></span>
-                                            <span title="Avg Duration"><i class="bi bi-stopwatch me-1 text-warning"></i>@query.FormattedAvgDuration</span>
-                                        </div>
-                                        <div class="text-muted" title="Physical Reads (Disk I/O)">
-                                            <i class="bi bi-hdd me-1 text-danger"></i>@SlowQueryItem.FormatNumber(query.TotalPhysicalReads) reads
-                                        </div>
+                                    <!-- Bottom Row: Primary Metrics -->
+                                    <div class="d-flex align-items-center gap-3 text-muted" style="font-size: 0.74rem;">
+                                        <span title="Total CPU Time"><i class="bi bi-cpu me-1 text-primary"></i><strong>@query.FormattedTotalCpu</strong></span>
+                                        <span title="Avg Duration"><i class="bi bi-stopwatch me-1 text-warning"></i>@query.FormattedAvgDuration</span>
+                                        <span title="Execution Count"><i class="bi bi-arrow-repeat me-1 text-success"></i>@SlowQueryItem.FormatNumber(query.ExecutionCount) execs</span>
                                     </div>
                                 </div>
                             }
@@ -311,7 +290,7 @@
             </div>
 
             <!-- RIGHT COLUMN: QUERY INSPECTOR, CODE & METRICS -->
-            <div class="col-12 col-lg-7 col-xl-8 d-flex flex-column h-100 overflow-hidden">
+            <div class="@(_isInspectorExpanded ? "col-12" : "col-12 col-lg-7 col-xl-8") d-flex flex-column h-100 overflow-hidden">
                 @if (_selectedItem == null)
                 {
                     <div class="card h-100 shadow-sm d-flex align-items-center justify-content-center p-5 text-muted text-center" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
@@ -385,6 +364,15 @@
                                         title="Open query in a new tab in Query Runner for tuning and testing">
                                     <i class="bi bi-play-fill fs-6"></i>
                                     <span>Open in Query Runner</span>
+                                </button>
+
+                                <!-- Expand / Collapse Full Width Toggle -->
+                                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 shadow-sm px-2 py-1"
+                                        style="font-size: 0.78rem;"
+                                        @onclick="ToggleExpandInspectorAsync"
+                                        title="@(_isInspectorExpanded ? "Collapse to split view" : "Expand inspector to full width")">
+                                    <i class="bi @(_isInspectorExpanded ? "bi-arrows-angle-contract" : "bi-arrows-angle-expand")"></i>
+                                    <span>@(_isInspectorExpanded ? "Collapse" : "Expand")</span>
                                 </button>
                             </div>
                         </div>
@@ -496,22 +484,12 @@
                             <!-- EXECUTION TRENDS (QUERY STORE MODE) -->
                             @if (_result != null && _result.IsUsingQueryStore)
                             {
-                                <div class="card p-3 rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
-                                    <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <div class="fw-bold small d-flex align-items-center gap-1.5" style="color: var(--app-text);">
-                                            <i class="bi bi-graph-up text-primary"></i>
-                                            <span>Execution History & Trends (Query Store Intervals)</span>
-                                        </div>
-                                        <span class="text-muted small" style="font-size: 0.72rem;">
-                                            @_trends.Count intervals captured
-                                        </span>
-                                    </div>
-
+                                <div class="card rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; padding: 0.6rem 0.85rem;">
                                     @if (_isLoadingTrends)
                                     {
                                         <div class="d-flex align-items-center justify-content-center p-3 text-muted">
                                             <span class="spinner-border spinner-border-sm me-2 text-primary" role="status"></span>
-                                            <span class="small">Loading interval timeline...</span>
+                                            <span class="small">Loading activity timeline...</span>
                                         </div>
                                     }
                                     else if (!_trends.Any())
@@ -522,37 +500,158 @@
                                     }
                                     else
                                     {
-                                        <!-- Visual Sparkline Bar Chart -->
-                                        long maxExecs = _trends.Max(t => t.Executions);
-                                        if (maxExecs == 0) maxExecs = 1;
-
-                                        <div class="d-flex align-items-end gap-1 overflow-x-auto py-2 custom-scrollbar-light" style="height: 90px; border-bottom: 1px solid var(--app-border);">
-                                            @foreach (var trend in _trends)
-                                            {
-                                                int heightPct = Math.Clamp((int)((trend.Executions / (double)maxExecs) * 75), 8, 80);
-                                                string tip = $"{trend.IntervalStart:MMM dd HH:mm} - {trend.IntervalEnd:HH:mm}\nExecutions: {trend.Executions:N0}\nAvg Duration: {SlowQueryItem.FormatDuration(trend.AvgDurationMs)}\nAvg CPU: {SlowQueryItem.FormatDuration(trend.AvgCpuMs)}";
-
-                                                <div class="d-flex flex-column align-items-center flex-shrink-0" style="width: 22px;" title="@tip">
-                                                    <div class="w-100 rounded-top bg-primary transition-all hover-glow"
-                                                         style="height: @(heightPct)px; opacity: 0.85;">
-                                                    </div>
-                                                    <span class="text-muted" style="font-size: 0.58rem; margin-top: 2px;">
-                                                        @trend.IntervalStart.ToString("HH:mm")
+                                        <!-- Trends Header with Metric Pills & Hover State -->
+                                        <div class="d-flex align-items-center justify-content-between mb-1.5 flex-wrap gap-2">
+                                            <!-- Left: Hover info or summary -->
+                                            <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size: 0.74rem; min-height: 22px;">
+                                                @if (_hoveredTrendIndex.HasValue && _hoveredTrendIndex.Value >= 0 && _hoveredTrendIndex.Value < _trends.Count)
+                                                {
+                                                    var ht = _trends[_hoveredTrendIndex.Value];
+                                                    <span class="badge bg-dark border text-light fw-normal py-0.5 px-2" style="border-color: var(--app-border) !important; font-size: 0.7rem;">
+                                                        <i class="bi bi-clock me-1"></i>@ht.IntervalStart.ToString("MMM dd HH:mm") - @ht.IntervalEnd.ToString("HH:mm")
                                                     </span>
-                                                </div>
-                                            }
+                                                    <span style="color: #38bdf8;"><strong>@ht.Executions.ToString("N0")</strong> execs</span>
+                                                    <span class="text-muted">·</span>
+                                                    <span style="color: #fbbf24;"><strong>@SlowQueryItem.FormatDuration(ht.AvgDurationMs)</strong> avg dur</span>
+                                                    <span class="text-muted">·</span>
+                                                    <span style="color: #c084fc;"><strong>@SlowQueryItem.FormatDuration(ht.AvgCpuMs)</strong> avg cpu</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="fw-semibold small" style="color: var(--app-text); font-size: 0.76rem;">
+                                                        Trend
+                                                    </span>
+                                                    <span class="text-muted small" style="font-size: 0.7rem;">
+                                                        (@GetTrendMetricSummary())
+                                                    </span>
+                                                }
+                                            </div>
+
+                                            <!-- Right: Metric Toggle Pills (Azure-style, Compact) -->
+                                            <div class="d-inline-flex align-items-center rounded-pill border" style="background-color: var(--app-surface); border-color: var(--app-border) !important; padding: 1.5px; gap: 1px;">
+                                                <button type="button" 
+                                                        class="btn rounded-pill border-0 transition-all @(_selectedTrendMetric == TrendMetric.Executions ? "fw-bold shadow-sm text-white" : "text-muted")"
+                                                        style="font-size: 0.67rem; line-height: 1.15; padding: 2px 7px; @(_selectedTrendMetric == TrendMetric.Executions ? "background-color: #0284c7;" : "background: transparent;")"
+                                                        @onclick="() => _selectedTrendMetric = TrendMetric.Executions">
+                                                    Executions
+                                                </button>
+                                                <button type="button" 
+                                                        class="btn rounded-pill border-0 transition-all @(_selectedTrendMetric == TrendMetric.Duration ? "fw-bold shadow-sm text-white" : "text-muted")"
+                                                        style="font-size: 0.67rem; line-height: 1.15; padding: 2px 7px; @(_selectedTrendMetric == TrendMetric.Duration ? "background-color: #d97706;" : "background: transparent;")"
+                                                        @onclick="() => _selectedTrendMetric = TrendMetric.Duration">
+                                                    Avg Duration
+                                                </button>
+                                                <button type="button" 
+                                                        class="btn rounded-pill border-0 transition-all @(_selectedTrendMetric == TrendMetric.Cpu ? "fw-bold shadow-sm text-white" : "text-muted")"
+                                                        style="font-size: 0.67rem; line-height: 1.15; padding: 2px 7px; @(_selectedTrendMetric == TrendMetric.Cpu ? "background-color: #7c3aed;" : "background: transparent;")"
+                                                        @onclick="() => _selectedTrendMetric = TrendMetric.Cpu">
+                                                    Avg CPU
+                                                </button>
+                                            </div>
                                         </div>
 
+                                        <!-- Azure-Style Gradient Area Chart (SVG) -->
+                                        var points = GetTrendPoints();
+                                        string linePath = GetSmoothSvgPath(points);
+                                        string areaPath = GetSmoothAreaPath(points);
+                                        string strokeColor = GetTrendMetricColor();
+                                        string gradientStart = GetTrendGradientStart();
+                                        string gradientId = $"azureTrendGrad_{_selectedTrendMetric}";
+
+                                        <div class="position-relative w-100" style="height: 75px;">
+                                            <svg viewBox="0 0 1000 120" 
+                                                 preserveAspectRatio="none" 
+                                                 style="width: 100%; height: 100%; display: block; overflow: visible;"
+                                                 @onmouseleave="() => _hoveredTrendIndex = null">
+                                                
+                                                <defs>
+                                                    <linearGradient id="@gradientId" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="0%" stop-color="@gradientStart" stop-opacity="0.45" />
+                                                        <stop offset="65%" stop-color="@gradientStart" stop-opacity="0.12" />
+                                                        <stop offset="100%" stop-color="@gradientStart" stop-opacity="0.0" />
+                                                    </linearGradient>
+                                                </defs>
+
+                                                <!-- Horizontal Guidelines -->
+                                                <line x1="0" y1="25" x2="1000" y2="25" stroke="var(--app-border)" stroke-dasharray="4,4" stroke-opacity="0.5" stroke-width="1" />
+                                                <line x1="0" y1="65" x2="1000" y2="65" stroke="var(--app-border)" stroke-dasharray="4,4" stroke-opacity="0.5" stroke-width="1" />
+                                                <line x1="0" y1="108" x2="1000" y2="108" stroke="var(--app-border)" stroke-opacity="0.8" stroke-width="1" />
+
+                                                <!-- Area Fill -->
+                                                @if (!string.IsNullOrEmpty(areaPath))
+                                                {
+                                                    <path d="@areaPath" fill="url(#@gradientId)" />
+                                                }
+
+                                                <!-- Top Curve Line -->
+                                                @if (!string.IsNullOrEmpty(linePath))
+                                                {
+                                                    <path d="@linePath" fill="none" stroke="@strokeColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                                                }
+
+                                                <!-- Interactive Crosshair & Indicator Point -->
+                                                @if (_hoveredTrendIndex.HasValue && _hoveredTrendIndex.Value >= 0 && _hoveredTrendIndex.Value < _trends.Count)
+                                                {
+                                                    int hIdx = _hoveredTrendIndex.Value;
+                                                    double hX = _trends.Count == 1 ? 500.0 : (hIdx / (double)(_trends.Count - 1)) * 1000.0;
+                                                    double hY = points.Count > hIdx ? points[hIdx].Y : 108.0;
+
+                                                    <!-- Vertical Crosshair Line -->
+                                                    <line x1="@hX.ToString("F1", CultureInfo.InvariantCulture)" 
+                                                          y1="10" 
+                                                          x2="@hX.ToString("F1", CultureInfo.InvariantCulture)" 
+                                                          y2="108" 
+                                                          stroke="@strokeColor" 
+                                                          stroke-width="1.5" 
+                                                          stroke-dasharray="3,3" 
+                                                          opacity="0.85" />
+
+                                                    <!-- Highlight Halo & Dot -->
+                                                    <circle cx="@hX.ToString("F1", CultureInfo.InvariantCulture)" 
+                                                            cy="@hY.ToString("F1", CultureInfo.InvariantCulture)" 
+                                                            r="8" 
+                                                            fill="@strokeColor" 
+                                                            opacity="0.25" />
+                                                    <circle cx="@hX.ToString("F1", CultureInfo.InvariantCulture)" 
+                                                            cy="@hY.ToString("F1", CultureInfo.InvariantCulture)" 
+                                                            r="4.5" 
+                                                            fill="@strokeColor" 
+                                                            stroke="#ffffff" 
+                                                            stroke-width="2" />
+                                                }
+
+                                                <!-- Transparent Hover Hit Columns -->
+                                                @for (int i = 0; i < _trends.Count; i++)
+                                                {
+                                                    int idx = i;
+                                                    double colW = 1000.0 / Math.Max(1, _trends.Count);
+                                                    double colX = i * colW;
+                                                    <rect x="@colX.ToString("F1", CultureInfo.InvariantCulture)"
+                                                          y="0"
+                                                          width="@colW.ToString("F1", CultureInfo.InvariantCulture)"
+                                                          height="120"
+                                                          fill="transparent"
+                                                          style="cursor: crosshair;"
+                                                          @onmouseenter="() => _hoveredTrendIndex = idx" />
+                                                }
+                                            </svg>
+                                        </div>
+
+                                        <!-- Clean X-Axis Time Markers -->
                                         <div class="d-flex align-items-center justify-content-between mt-1 text-muted" style="font-size: 0.7rem;">
-                                            <span>Start: @_trends.First().IntervalStart.ToString("g")</span>
-                                            <span>End: @_trends.Last().IntervalEnd.ToString("g")</span>
+                                            <span>@_trends.First().IntervalStart.ToString("MMM dd, HH:mm")</span>
+                                            @if (_trends.Count >= 3)
+                                            {
+                                                <span>@_trends[_trends.Count / 2].IntervalStart.ToString("MMM dd, HH:mm")</span>
+                                            }
+                                            <span>@_trends.Last().IntervalEnd.ToString("MMM dd, HH:mm")</span>
                                         </div>
                                     }
                                 </div>
                             }
                             else
                             {
-                                <div class="card p-2.5 rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                <div class="card rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; padding: 10px 14px;">
                                     <div class="d-flex align-items-center justify-content-between text-muted" style="font-size: 0.76rem;">
                                         <span><i class="bi bi-clock-history me-1"></i>First Seen in Cache: @(_selectedItem.FirstSeen?.ToString("g") ?? "N/A")</span>
                                         <span><i class="bi bi-arrow-clockwise me-1"></i>Last Executed: @(_selectedItem.LastExecutionTime?.ToString("g") ?? "N/A")</span>
@@ -585,17 +684,17 @@
                     <div class="p-3 rounded-3 border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
                         <div class="d-flex align-items-center gap-2 mb-1.5">
                             <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
-                                <i class="bi bi-database-check me-1"></i>Query Store (Historical)
+                                <i class="bi bi-clock-history me-1"></i>Historical (Time Range)
                             </span>
-                            <span class="fw-semibold" style="font-size: 0.8rem; color: var(--app-text);">Flight Recorder on Disk</span>
+                            <span class="fw-semibold text-muted" style="font-size: 0.78rem;">Powered by SQL Server Query Store</span>
                         </div>
                         <p class="mb-1 text-muted">
-                            SQL Server continuously captures query runtime metrics directly into your database storage.
+                            SQL Server continuously captures query execution history and saves it directly to your database disk.
                         </p>
                         <ul class="mb-0 ps-3 text-muted" style="font-size: 0.8rem;">
                             <li><strong>Time travel:</strong> Analyze queries across specific windows (Last 1 hour, 24 hours, 7 days, etc.).</li>
                             <li><strong>Survives restarts:</strong> Data remains intact even if SQL Server or the machine reboots.</li>
-                            <li><strong>Trends:</strong> Displays visual timeline interval trends and duration spikes.</li>
+                            <li><strong>Timeline trends:</strong> Visualizes execution volume and duration spikes over time.</li>
                         </ul>
                     </div>
 
@@ -603,17 +702,17 @@
                     <div class="p-3 rounded-3 border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
                         <div class="d-flex align-items-center gap-2 mb-1.5">
                             <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">
-                                <i class="bi bi-cpu me-1"></i>Live Cache (In-Memory DMVs)
+                                <i class="bi bi-lightning-charge me-1"></i>Live / Real-Time
                             </span>
-                            <span class="fw-semibold" style="font-size: 0.8rem; color: var(--app-text);">Server RAM Snapshot</span>
+                            <span class="fw-semibold text-muted" style="font-size: 0.78rem;">Powered by Active Plan Cache</span>
                         </div>
                         <p class="mb-1 text-muted">
-                            Directly inspects compiled queries currently resting in SQL Server's memory cache (<code>sys.dm_exec_query_stats</code>).
+                            Directly inspects compiled queries currently resting in SQL Server's active memory (RAM).
                         </p>
                         <ul class="mb-0 ps-3 text-muted" style="font-size: 0.8rem;">
-                            <li><strong>Always available:</strong> Works on every SQL Server version without enabling any features.</li>
-                            <li><strong>Real-time state:</strong> Shows cumulative consumption since the server started or cache was cleared.</li>
-                            <li><strong>No time filter:</strong> Does not support time windows; resets if the server restarts.</li>
+                            <li><strong>Always available:</strong> Works on every database without needing any setup or extra storage.</li>
+                            <li><strong>Right now:</strong> Shows cumulative consumption since the server started or cache was cleared.</li>
+                            <li><strong>Resets on restart:</strong> Cleared whenever the database service restarts or memory is flushed.</li>
                         </ul>
                     </div>
                 </div>
@@ -653,6 +752,7 @@
     private bool _forceDmv = false;
     private bool _showModeHelpModal = false;
     private bool _showFullBatch = false;
+    private bool _isInspectorExpanded = false;
     private bool _copyFeedback = false;
     private bool _isLoadingPlan = false;
     private bool _isLoadingTrends = false;
@@ -662,6 +762,16 @@
     private SlowQueryItem? _selectedItem;
     private List<QueryIntervalTrend> _trends = new();
     private SlowQueryFilterOptions _filterOptions = new();
+
+    private enum TrendMetric
+    {
+        Executions,
+        Duration,
+        Cpu
+    }
+
+    private TrendMetric _selectedTrendMetric = TrendMetric.Executions;
+    private int? _hoveredTrendIndex = null;
 
     private StandaloneCodeEditor? _monacoEditor;
     private bool _monacoReady = false;
@@ -765,8 +875,20 @@
         await UpdateMonacoContentAsync();
     }
 
+    private async Task ToggleExpandInspectorAsync()
+    {
+        _isInspectorExpanded = !_isInspectorExpanded;
+        StateHasChanged();
+        if (_monacoEditor != null && _monacoReady)
+        {
+            await Task.Delay(50);
+            try { await _monacoEditor.Layout(); } catch { }
+        }
+    }
+
     private async Task LoadTrendsForSelectedQueryAsync()
     {
+        _hoveredTrendIndex = null;
         if (_selectedItem == null || _result == null || !_result.IsUsingQueryStore || _selectedItem.QueryId <= 0)
         {
             _trends.Clear();
@@ -1034,6 +1156,133 @@
                 }
                 catch { }
             });
+        }
+    }
+
+    private string GetTrendMetricColor() => _selectedTrendMetric switch
+    {
+        TrendMetric.Duration => "#fbbf24",
+        TrendMetric.Cpu => "#c084fc",
+        _ => "#38bdf8"
+    };
+
+    private string GetTrendGradientStart() => _selectedTrendMetric switch
+    {
+        TrendMetric.Duration => "#d97706",
+        TrendMetric.Cpu => "#9333ea",
+        _ => "#0284c7"
+    };
+
+    private List<(double X, double Y, QueryIntervalTrend Trend)> GetTrendPoints()
+    {
+        var list = new List<(double X, double Y, QueryIntervalTrend Trend)>();
+        if (!_trends.Any()) return list;
+
+        int count = _trends.Count;
+        double maxVal = 0;
+        foreach (var t in _trends)
+        {
+            double v = _selectedTrendMetric switch
+            {
+                TrendMetric.Duration => t.AvgDurationMs,
+                TrendMetric.Cpu => t.AvgCpuMs,
+                _ => (double)t.Executions
+            };
+            if (v > maxVal) maxVal = v;
+        }
+        if (maxVal <= 0) maxVal = 1;
+
+        const double yTop = 15.0;
+        const double yBottom = 105.0;
+        const double yRange = yBottom - yTop;
+
+        if (count == 1)
+        {
+            double val = _selectedTrendMetric switch
+            {
+                TrendMetric.Duration => _trends[0].AvgDurationMs,
+                TrendMetric.Cpu => _trends[0].AvgCpuMs,
+                _ => (double)_trends[0].Executions
+            };
+            double y = yBottom - ((val / maxVal) * yRange);
+            list.Add((0.0, y, _trends[0]));
+            list.Add((1000.0, y, _trends[0]));
+            return list;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            var t = _trends[i];
+            double x = (i / (double)(count - 1)) * 1000.0;
+            double val = _selectedTrendMetric switch
+            {
+                TrendMetric.Duration => t.AvgDurationMs,
+                TrendMetric.Cpu => t.AvgCpuMs,
+                _ => (double)t.Executions
+            };
+            double y = yBottom - ((val / maxVal) * yRange);
+            list.Add((x, y, t));
+        }
+
+        return list;
+    }
+
+    private string GetSmoothSvgPath(List<(double X, double Y, QueryIntervalTrend Trend)> points)
+    {
+        if (points.Count == 0) return "";
+        if (points.Count == 1) return FormattableString.Invariant($"M 0 {points[0].Y:F1} L 1000 {points[0].Y:F1}");
+        if (points.Count == 2) return FormattableString.Invariant($"M {points[0].X:F1} {points[0].Y:F1} L {points[1].X:F1} {points[1].Y:F1}");
+
+        var sb = new StringBuilder();
+        sb.Append(FormattableString.Invariant($"M {points[0].X:F1} {points[0].Y:F1}"));
+
+        for (int i = 0; i < points.Count - 1; i++)
+        {
+            var p0 = i > 0 ? points[i - 1] : points[i];
+            var p1 = points[i];
+            var p2 = points[i + 1];
+            var p3 = i < points.Count - 2 ? points[i + 2] : p2;
+
+            double cp1x = p1.X + (p2.X - p0.X) / 6.0;
+            double cp1y = p1.Y + (p2.Y - p0.Y) / 6.0;
+            double cp2x = p2.X - (p3.X - p1.X) / 6.0;
+            double cp2y = p2.Y - (p3.Y - p1.Y) / 6.0;
+
+            cp1y = Math.Clamp(cp1y, 10.0, 108.0);
+            cp2y = Math.Clamp(cp2y, 10.0, 108.0);
+
+            sb.Append(FormattableString.Invariant($" C {cp1x:F1} {cp1y:F1}, {cp2x:F1} {cp2y:F1}, {p2.X:F1} {p2.Y:F1}"));
+        }
+
+        return sb.ToString();
+    }
+
+    private string GetSmoothAreaPath(List<(double X, double Y, QueryIntervalTrend Trend)> points)
+    {
+        if (points.Count == 0) return "";
+        string linePath = GetSmoothSvgPath(points);
+        double lastX = points.Last().X;
+        double firstX = points.First().X;
+        return FormattableString.Invariant($"{linePath} L {lastX:F1} 108 L {firstX:F1} 108 Z");
+    }
+
+    private string GetTrendMetricSummary()
+    {
+        if (!_trends.Any()) return "";
+        switch (_selectedTrendMetric)
+        {
+            case TrendMetric.Duration:
+                double maxDur = _trends.Max(t => t.AvgDurationMs);
+                double avgDur = _trends.Average(t => t.AvgDurationMs);
+                return $"Peak: {SlowQueryItem.FormatDuration(maxDur)} · Window Avg: {SlowQueryItem.FormatDuration(avgDur)}";
+            case TrendMetric.Cpu:
+                double maxCpu = _trends.Max(t => t.AvgCpuMs);
+                double avgCpu = _trends.Average(t => t.AvgCpuMs);
+                return $"Peak: {SlowQueryItem.FormatDuration(maxCpu)} · Window Avg: {SlowQueryItem.FormatDuration(avgCpu)}";
+            default:
+                long maxEx = _trends.Max(t => t.Executions);
+                double avgEx = _trends.Average(t => t.Executions);
+                return $"Peak: {maxEx:N0} execs · Avg: {avgEx:N1} execs/bucket";
         }
     }
 

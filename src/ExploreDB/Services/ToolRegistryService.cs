@@ -145,7 +145,7 @@ public class ToolRegistryService
             {
                 Id = "slow-query-analyzer",
                 Title = "Slow Query Analyzer",
-                Description = "Find the top queries consuming CPU, memory, and disk I/O with Query Store and plan cache performance analytics.",
+                Description = "Identify the most expensive queries draining database CPU, memory, and disk I/O with real-time and historical analytics.",
                 Icon = "bi-hourglass-split",
                 IconBg = "rgba(245, 158, 11, 0.12)",
                 IconColor = "#f59e0b",
