@@ -17,6 +17,7 @@ public class ToolItem
     public string Route { get; set; } = string.Empty;
     public string Status { get; set; } = "Live"; // "Live", "Beta", "Coming Soon"
     public bool IsVisible { get; set; } = true;
+    public int Order { get; set; } = 0;
     public bool? OpenInPopout { get; set; }
     public bool? CloseOnConnectionChange { get; set; }
 
@@ -31,6 +32,7 @@ public class ToolItem
 public class ToolConfigItem
 {
     public string Id { get; set; } = string.Empty;
+    public int? Order { get; set; }
     public string? Status { get; set; }
     public bool? IsVisible { get; set; }
     public bool? OpenInPopout { get; set; }
@@ -59,11 +61,13 @@ public class ToolRegistryService
             if (configList != null && configList.Count > 0)
             {
                 var result = new List<ToolItem>();
+                int configIndex = 1;
                 foreach (var cfg in configList)
                 {
                     var tool = registered.FirstOrDefault(t => t.Id.Equals(cfg.Id, StringComparison.OrdinalIgnoreCase));
                     if (tool != null)
                     {
+                        tool.Order = cfg.Order ?? configIndex++;
                         if (!string.IsNullOrEmpty(cfg.Status))
                         {
                             tool.Status = cfg.Status;
@@ -89,11 +93,12 @@ public class ToolRegistryService
                 {
                     if (!result.Any(r => r.Id.Equals(tool.Id, StringComparison.OrdinalIgnoreCase)))
                     {
+                        tool.Order = configIndex++;
                         result.Add(tool);
                     }
                 }
 
-                return result;
+                return result.OrderBy(t => t.Order).ToList();
             }
         }
         catch (Exception ex)
@@ -101,7 +106,7 @@ public class ToolRegistryService
             _logger.LogError(ex, "Failed to load tools from configuration, falling back to defaults.");
         }
 
-        return registered;
+        return registered.OrderBy(t => t.Order).ToList();
     }
 
     public List<ToolItem> GetVisibleTools()
@@ -144,6 +149,7 @@ public class ToolRegistryService
             new ToolItem
             {
                 Id = "slow-query-analyzer",
+                Order = 1,
                 Title = "Slow Query Analyzer",
                 Description = "Identify the most expensive queries draining database CPU, memory, and disk I/O with real-time and historical analytics.",
                 Icon = "bi-hourglass-split",
@@ -157,6 +163,7 @@ public class ToolRegistryService
             new ToolItem
             {
                 Id = "data-cleanup",
+                Order = 2,
                 Title = "Data Cleanup",
                 Description = "Calculate safe deletion hierarchy and generate dependency-ordered cleanup scripts without foreign key violation errors.",
                 Icon = "bi-eraser",
@@ -170,6 +177,7 @@ public class ToolRegistryService
             new ToolItem
             {
                 Id = "sql-compare",
+                Order = 3,
                 Title = "SQL Compare",
                 Description = "Compare schemas, table structures, and data differences between databases with synchronization scripts.",
                 Icon = "bi-arrow-left-right",
@@ -183,6 +191,7 @@ public class ToolRegistryService
             new ToolItem
             {
                 Id = "sql-profiler",
+                Order = 4,
                 Title = "SQL Profiler",
                 Description = "Real-time query execution monitoring, trace events, deadlocks, and live SQL server activity tracking.",
                 Icon = "bi-activity",
@@ -196,6 +205,7 @@ public class ToolRegistryService
             new ToolItem
             {
                 Id = "sp-debugger",
+                Order = 5,
                 Title = "SP Debugger",
                 Description = "Interactive statement-by-statement execution, variable inspection, and live temp table examination with automated rollback safety.",
                 Icon = "bi-bug",
