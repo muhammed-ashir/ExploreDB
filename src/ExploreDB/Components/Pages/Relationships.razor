@@ -65,7 +65,11 @@
         color: #dc3545 !important;
         border-bottom: 3px solid #dc3545 !important;
     }
-    .tab-nav-btn:hover:not(.active-primary):not(.active-warning):not(.active-success):not(.active-danger) {
+    .tab-nav-btn.active-info {
+        color: #0dcaf0 !important;
+        border-bottom: 3px solid #0dcaf0 !important;
+    }
+    .tab-nav-btn:hover:not(.active-primary):not(.active-warning):not(.active-success):not(.active-danger):not(.active-info) {
         color: var(--app-text) !important;
     }
 </style>
@@ -237,6 +241,12 @@
                     {
                         <span class="badge bg-danger bg-opacity-25 text-danger ms-1">@BlacklistedCount</span>
                     }
+                </button>
+
+                <button type="button" 
+                        class="tab-nav-btn @(ActiveTab == "lookups" ? "active-info" : "text-muted")"
+                        @onclick='() => SwitchToLookupsTab()'>
+                    <span>Lookup Tables</span>
                 </button>
             </div>
 
@@ -624,7 +634,7 @@
                 {
                     <div class="p-3" style="max-width: 900px;">
                         <h6 class="fw-bold text-info mb-2">Create Custom Relationship</h6>
-                        <p class="text-muted small mb-4">Define a virtual relationship between any two tables in the database. Pathfinder and Query Builder will use this link to route joins automatically.</p>
+                        <p class="text-muted small mb-4">Define a virtual relationship between any two tables in the database. Query Builder will use this link to route joins automatically.</p>
 
                         @if (!string.IsNullOrEmpty(CustomRelErrorMessage))
                         {
@@ -1054,6 +1064,162 @@
                         }
                     }
                 }
+                else if (ActiveTab == "lookups")
+                {
+                    <div class="alert alert-dark border-0 shadow-sm mb-4 p-3 d-flex align-items-center" style="background-color: var(--app-surface-tertiary, rgba(255,255,255,0.03)); border: 1px solid var(--app-border) !important;">
+                        <div class="d-flex align-items-start gap-3">
+                            <i class="bi bi-info-circle-fill text-info fs-4 mt-1"></i>
+                            <div>
+                                <div class="fw-bold mb-1" style="color: var(--app-text);">Non-Routing Lookup Tables (Leaf-Only Protection)</div>
+                                <div class="small text-muted" style="line-height: 1.5;">
+                                    Lookup and dimension tables (such as <code>Status</code>, <code>Priority</code>, <code>Country</code>, <code>Type</code>) are referenced by dozens of tables across your schema.
+                                    When marked as <strong>Non-Routing</strong>, Query Builder will <em>never</em> use them as transit bridges between unrelated business entities (preventing accidental Cartesian cross-joins like <code>Orders &harr; Status &harr; Employees</code>), while still seamlessly joining them when their columns are selected in your query.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border) !important;">
+                        <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between" style="background-color: rgba(13, 202, 240, 0.05); border-bottom: 1px solid var(--app-border);">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold fs-6" style="color: var(--app-text);">Non-Routing Tables</span>
+                                <span class="badge bg-info bg-opacity-25 text-info ms-2">@ActiveNonRoutingCount</span>
+                            </div>
+                        </div>
+                        <div class="card-body p-4">
+                            <!-- Toolbar: Filter Search & Add Table -->
+                            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 pb-3" style="border-bottom: 1px solid var(--app-border);">
+                                <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 320px;">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text" style="background-color: var(--app-surface-tertiary, #2c323f); border-color: var(--app-input-border); color: var(--app-text-muted);">
+                                            <i class="bi bi-search"></i>
+                                        </span>
+                                        <input type="text" class="form-control" placeholder="Search non-routing tables..." 
+                                               @bind="ActiveLookupsSearch" @bind:event="oninput" 
+                                               style="background: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="position-relative" style="min-width: 280px;">
+                                        <input class="form-control form-control-sm pe-4 text-truncate" 
+                                               @bind="AddTableSearch" 
+                                               @bind:event="oninput"
+                                               placeholder="Search table to add..." 
+                                               @onfocus="OpenAddTableDropdown"
+                                               style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+                                        
+                                        @if (IsAddTableDropdownOpen)
+                                        {
+                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseAddTableDropdown"></div>
+                                            <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                                @{
+                                                    var filteredToAdd = AvailableTablesToAddAsLookup
+                                                        .Where(t => string.IsNullOrWhiteSpace(AddTableSearch) || 
+                                                                    t.FullName.Contains(AddTableSearch, StringComparison.OrdinalIgnoreCase) || 
+                                                                    t.Name.Contains(AddTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                                                    (!string.IsNullOrEmpty(t.Schema) && t.Schema.Contains(AddTableSearch, StringComparison.OrdinalIgnoreCase)))
+                                                        .ToList();
+                                                }
+                                                @if (filteredToAdd.Any())
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var t in filteredToAdd)
+                                                        {
+                                                            var isSelected = t.FullName == SelectedTableToAddAsLookup;
+                                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small d-flex align-items-center" 
+                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: @(isSelected ? "var(--app-accent)" : "transparent"); color: @(isSelected ? "#fff" : "var(--app-text)");" 
+                                                                    @onclick="() => SelectTableToAdd(t.FullName)">
+                                                                <div class="text-truncate">
+                                                                    @if (!string.IsNullOrEmpty(t.Schema))
+                                                                    {
+                                                                        <span class="text-muted fw-normal opacity-75">@t.Schema.</span>
+                                                                    }<span class="fw-bold">@t.Name</span>
+                                                                </div>
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-muted small text-center">No matching tables found.</div>
+                                                }
+                                            </div>
+                                        }
+
+                                        <div class="position-absolute h-100 d-flex align-items-center gap-1" style="right: 10px; top: 0;">
+                                            @if (!string.IsNullOrEmpty(SelectedTableToAddAsLookup))
+                                            {
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted" style="text-decoration: none; font-size: 0.75rem;" title="Clear selection" @onclick="ClearSelectedTableToAdd">
+                                                    <i class="bi bi-x-circle-fill"></i>
+                                                </button>
+                                            }
+                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.8rem; pointer-events: none;"></i>
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-sm btn-primary d-flex align-items-center gap-1 text-nowrap shadow-sm" 
+                                            disabled="@string.IsNullOrEmpty(SelectedTableToAddAsLookup)" 
+                                            @onclick="AddSelectedTableAsLookup">
+                                        <i class="bi bi-plus-lg"></i>
+                                        <span>Add Table</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            @{
+                                var activeTables = VirtualRelationshipService.GetActiveNonRoutingTables();
+                                var filteredActive = string.IsNullOrWhiteSpace(ActiveLookupsSearch)
+                                    ? activeTables.OrderBy(t => t).ToList()
+                                    : activeTables.Where(t => t.Contains(ActiveLookupsSearch, StringComparison.OrdinalIgnoreCase)).OrderBy(t => t).ToList();
+                            }
+
+                            @if (filteredActive.Count == 0)
+                            {
+                                <div class="text-center py-4 text-muted">
+                                    @if (activeTables.Count == 0)
+                                    {
+                                        <i class="bi bi-diagram-2 text-muted fs-3 d-block mb-2"></i>
+                                        <span>No tables are currently configured as Non-Routing. Use the dropdown above to add tables like Status, Country, or Type.</span>
+                                    }
+                                    else
+                                    {
+                                        <span>No non-routing tables match "<strong>@ActiveLookupsSearch</strong>".</span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0" style="color: var(--app-text);">
+                                        <thead class="small text-muted text-uppercase" style="border-bottom: 2px solid var(--app-border);">
+                                            <tr>
+                                                <th>Table</th>
+                                                <th class="text-end" style="min-width: 140px;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var tbl in filteredActive)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <span class="fw-semibold text-info">@FormatTableDisplay(tbl, SchemaService)</span>
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <button class="btn btn-sm btn-outline-warning d-flex align-items-center gap-1 ms-auto"
+                                                                @onclick="() => RemoveNonRoutingLookup(tbl)"
+                                                                title="Remove non-routing rule and allow Query Builder to traverse through this table">
+                                                            <i class="bi bi-arrow-repeat"></i>
+                                                            <span>Allow Bridge</span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
         </div>
     }
@@ -1250,10 +1416,31 @@
     private bool IsToTableDropdownOpen = false;
     private bool IsToColumnDropdownOpen = false;
 
+    // Non-routing tables state
+    private string ActiveLookupsSearch = "";
+    private string SelectedTableToAddAsLookup = "";
+    private string AddTableSearch = "";
+    private bool IsAddTableDropdownOpen = false;
+
+    private int ActiveNonRoutingCount => VirtualRelationshipService?.GetActiveNonRoutingTables().Count ?? 0;
+
+    private IEnumerable<TableInfo> AvailableTablesToAddAsLookup
+    {
+        get
+        {
+            if (SchemaService.Tables == null) return Enumerable.Empty<TableInfo>();
+            var active = VirtualRelationshipService?.GetActiveNonRoutingTables() ?? new HashSet<string>();
+            return SchemaService.Tables
+                .Where(t => !active.Contains(t.FullName) && !active.Contains($"[{t.Schema}].[{t.Name}]") && !active.Contains(t.Name))
+                .OrderBy(t => t.FullName);
+        }
+    }
+
     protected override void OnInitialized()
     {
         VirtualRelationshipService.OnVirtualRelationshipsChanged += HandleRelationshipsChanged;
         VirtualRelationshipService.OnScanningStateChanged += HandleScanningStateChanged;
+        VirtualRelationshipService.OnNonRoutingTablesChanged += HandleNonRoutingTablesChanged;
         SchemaService.OnTablesLoaded += HandleSchemaUpdated;
         RefreshAvailableProfiles();
 
@@ -1735,6 +1922,66 @@
         CustomRelToColumnSearch = "";
     }
 
+    private void SwitchToLookupsTab()
+    {
+        ActiveTab = "lookups";
+    }
+
+    private void HandleNonRoutingTablesChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void RemoveNonRoutingLookup(string tableName)
+    {
+        VirtualRelationshipService.RemoveNonRoutingTable(tableName);
+        ProfileNotificationMessage = $"Removed non-routing restriction from '{FormatTableDisplay(tableName, SchemaService)}'. It can now act as a transit bridge.";
+        IsProfileNotificationSuccess = true;
+    }
+
+    private void OpenAddTableDropdown()
+    {
+        IsAddTableDropdownOpen = true;
+        if (string.IsNullOrEmpty(SelectedTableToAddAsLookup))
+        {
+            AddTableSearch = "";
+        }
+    }
+
+    private void CloseAddTableDropdown()
+    {
+        IsAddTableDropdownOpen = false;
+        if (!string.IsNullOrEmpty(SelectedTableToAddAsLookup))
+        {
+            AddTableSearch = FormatTableDisplay(SelectedTableToAddAsLookup, SchemaService);
+        }
+    }
+
+    private void SelectTableToAdd(string fullName)
+    {
+        SelectedTableToAddAsLookup = fullName;
+        AddTableSearch = FormatTableDisplay(fullName, SchemaService);
+        IsAddTableDropdownOpen = false;
+    }
+
+    private void ClearSelectedTableToAdd()
+    {
+        SelectedTableToAddAsLookup = "";
+        AddTableSearch = "";
+    }
+
+    private void AddSelectedTableAsLookup()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedTableToAddAsLookup)) return;
+        var tableToAdd = SelectedTableToAddAsLookup;
+        SelectedTableToAddAsLookup = "";
+        AddTableSearch = "";
+        IsAddTableDropdownOpen = false;
+        VirtualRelationshipService.AddCustomNonRoutingTable(tableToAdd);
+        ProfileNotificationMessage = $"Added '{FormatTableDisplay(tableToAdd, SchemaService)}' as a non-routing lookup table.";
+        IsProfileNotificationSuccess = true;
+    }
+
     private static (string Schema, string Table) SplitSchemaAndTable(string fullName, SchemaService? schemaService = null)
     {
         if (string.IsNullOrWhiteSpace(fullName)) return (string.Empty, string.Empty);
@@ -1767,6 +2014,7 @@
     {
         VirtualRelationshipService.OnVirtualRelationshipsChanged -= HandleRelationshipsChanged;
         VirtualRelationshipService.OnScanningStateChanged -= HandleScanningStateChanged;
+        VirtualRelationshipService.OnNonRoutingTablesChanged -= HandleNonRoutingTablesChanged;
         SchemaService.OnTablesLoaded -= HandleSchemaUpdated;
     }
 }

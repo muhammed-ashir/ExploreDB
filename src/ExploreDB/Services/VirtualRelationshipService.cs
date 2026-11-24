@@ -44,6 +44,24 @@ public class RelationProfileMetadata
     public int EntryCount { get; set; }
 }
 
+public class LookupTableEntry
+{
+    public string TableName { get; set; } = string.Empty;
+    public string Schema { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int InDegree { get; set; }
+    public List<string> ReferencingTables { get; set; } = new();
+    public string DetectionReason { get; set; } = string.Empty;
+    public bool IsAutoDetected { get; set; } = true;
+}
+
+public class LocalDatabaseRelationData
+{
+    public List<VirtualRelationshipEntry> Relationships { get; set; } = new();
+    public List<string> NonRoutingTables { get; set; } = new();
+    public List<string> DismissedLookupTables { get; set; } = new();
+}
+
 public class RelationProfile
 {
     public string Name { get; set; } = string.Empty;
@@ -53,6 +71,8 @@ public class RelationProfile
     public DateTime LastModified { get; set; } = DateTime.UtcNow;
     public DateTime? ExportedAt { get; set; }
     public List<VirtualRelationshipEntry> Relationships { get; set; } = new();
+    public List<string> NonRoutingTables { get; set; } = new();
+    public List<string> DismissedLookupTables { get; set; } = new();
 }
 
 public class RelationProfileImportSummary
@@ -64,6 +84,8 @@ public class RelationProfileImportSummary
     public int UnmatchedSchemaCount { get; set; }
     public List<string> Warnings { get; set; } = new();
     public List<VirtualRelationshipEntry> ImportedEntries { get; set; } = new();
+    public List<string> ImportedNonRoutingTables { get; set; } = new();
+    public List<string> ImportedDismissedLookupTables { get; set; } = new();
 }
 
 public class VirtualRelationshipService
@@ -75,7 +97,13 @@ public class VirtualRelationshipService
     private readonly List<VirtualRelationshipEntry> _entries = new();
     private readonly List<Relationship> _suggestedRelationships = new();
 
+    // Non-routing lookup tables for current active context
+    private readonly HashSet<string> _confirmedNonRoutingTables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _dismissedLookupTables = new(StringComparer.OrdinalIgnoreCase);
+    private List<LookupTableEntry> _suggestedLookupTables = new();
+
     public event Action? OnVirtualRelationshipsChanged;
+    public event Action? OnNonRoutingTablesChanged;
 
     public VirtualRelationshipService(ConnectionService connectionService, SchemaService schemaService)
     {
@@ -94,13 +122,18 @@ public class VirtualRelationshipService
     {
         _entries.Clear();
         _suggestedRelationships.Clear();
+        _confirmedNonRoutingTables.Clear();
+        _dismissedLookupTables.Clear();
+        _suggestedLookupTables.Clear();
         _hasScannedSuggestions = false;
         LoadCurrentDatabaseEntries();
+        DetectLookupTables();
         SyncActiveToSchema();
     }
 
     private void HandleTablesLoaded()
     {
+        DetectLookupTables();
         SyncActiveToSchema();
     }
 
@@ -223,6 +256,8 @@ public class VirtualRelationshipService
     public void LoadCurrentDatabaseEntries()
     {
         _entries.Clear();
+        _confirmedNonRoutingTables.Clear();
+        _dismissedLookupTables.Clear();
         _activeProfileName = null;
 
         var key = GetDatabaseMappingKey();
@@ -238,10 +273,18 @@ public class VirtualRelationshipService
                     {
                         var json = File.ReadAllText(profilePath);
                         var profile = JsonSerializer.Deserialize<RelationProfile>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                        if (profile?.Relationships != null)
+                        if (profile != null)
                         {
                             _activeProfileName = profile.Name;
-                            _entries.AddRange(profile.Relationships);
+                            if (profile.Relationships != null) _entries.AddRange(profile.Relationships);
+                            if (profile.NonRoutingTables != null)
+                            {
+                                foreach (var t in profile.NonRoutingTables) _confirmedNonRoutingTables.Add(t);
+                            }
+                            if (profile.DismissedLookupTables != null)
+                            {
+                                foreach (var t in profile.DismissedLookupTables) _dismissedLookupTables.Add(t);
+                            }
                             return;
                         }
                     }
@@ -257,10 +300,30 @@ public class VirtualRelationshipService
         try
         {
             var json = File.ReadAllText(localFilePath);
-            var loaded = JsonSerializer.Deserialize<List<VirtualRelationshipEntry>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (loaded != null)
+            var trimmed = json.TrimStart();
+            if (trimmed.StartsWith("["))
             {
-                _entries.AddRange(loaded);
+                var loaded = JsonSerializer.Deserialize<List<VirtualRelationshipEntry>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (loaded != null)
+                {
+                    _entries.AddRange(loaded);
+                }
+            }
+            else
+            {
+                var localData = JsonSerializer.Deserialize<LocalDatabaseRelationData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (localData != null)
+                {
+                    if (localData.Relationships != null) _entries.AddRange(localData.Relationships);
+                    if (localData.NonRoutingTables != null)
+                    {
+                        foreach (var t in localData.NonRoutingTables) _confirmedNonRoutingTables.Add(t);
+                    }
+                    if (localData.DismissedLookupTables != null)
+                    {
+                        foreach (var t in localData.DismissedLookupTables) _dismissedLookupTables.Add(t);
+                    }
+                }
             }
         }
         catch { }
@@ -291,7 +354,14 @@ public class VirtualRelationshipService
                 Directory.CreateDirectory(dir);
             }
 
-            var json = JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true });
+            var localData = new LocalDatabaseRelationData
+            {
+                Relationships = new List<VirtualRelationshipEntry>(_entries),
+                NonRoutingTables = _confirmedNonRoutingTables.ToList(),
+                DismissedLookupTables = _dismissedLookupTables.ToList()
+            };
+
+            var json = JsonSerializer.Serialize(localData, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(filePath, json);
         }
         catch { }
@@ -328,6 +398,8 @@ public class VirtualRelationshipService
             profile.Name = profileName;
             profile.LastModified = DateTime.UtcNow;
             profile.Relationships = new List<VirtualRelationshipEntry>(_entries);
+            profile.NonRoutingTables = _confirmedNonRoutingTables.ToList();
+            profile.DismissedLookupTables = _dismissedLookupTables.ToList();
 
             var json = JsonSerializer.Serialize(profile, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(profilePath, json);
@@ -1010,7 +1082,9 @@ public class VirtualRelationshipService
                 Description = description?.Trim(),
                 CreatedAt = DateTime.UtcNow,
                 LastModified = DateTime.UtcNow,
-                Relationships = new List<VirtualRelationshipEntry>(_entries)
+                Relationships = new List<VirtualRelationshipEntry>(_entries),
+                NonRoutingTables = _confirmedNonRoutingTables.ToList(),
+                DismissedLookupTables = _dismissedLookupTables.ToList()
             };
 
             var filePath = GetProfileFilePath(cleanName);
@@ -1059,13 +1133,26 @@ public class VirtualRelationshipService
 
             _activeProfileName = profile.Name;
             _entries.Clear();
+            _confirmedNonRoutingTables.Clear();
+            _dismissedLookupTables.Clear();
+
             if (profile.Relationships != null)
             {
                 _entries.AddRange(profile.Relationships);
             }
+            if (profile.NonRoutingTables != null)
+            {
+                foreach (var t in profile.NonRoutingTables) _confirmedNonRoutingTables.Add(t);
+            }
+            if (profile.DismissedLookupTables != null)
+            {
+                foreach (var t in profile.DismissedLookupTables) _dismissedLookupTables.Add(t);
+            }
 
             _suggestedRelationships.Clear();
+            DetectLookupTables();
             SyncActiveToSchema();
+            OnNonRoutingTablesChanged?.Invoke();
         }
         catch { }
     }
@@ -1081,27 +1168,124 @@ public class VirtualRelationshipService
         }
 
         _activeProfileName = null;
-        _entries.Clear();
-
-        var localPath = GetStorageFilePath();
-        if (File.Exists(localPath))
-        {
-            try
-            {
-                var json = File.ReadAllText(localPath);
-                var loaded = JsonSerializer.Deserialize<List<VirtualRelationshipEntry>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (loaded != null) _entries.AddRange(loaded);
-            }
-            catch { }
-        }
-
+        LoadCurrentDatabaseEntries();
         _suggestedRelationships.Clear();
+        DetectLookupTables();
         SyncActiveToSchema();
+        OnNonRoutingTablesChanged?.Invoke();
     }
 
     public void DetachToLocal(bool keepCopy = false)
     {
         SwitchToLocal();
+    }
+
+    // ==========================================
+    // Non-Routing Lookup Table Engine & Methods
+    // ==========================================
+
+    public IReadOnlySet<string> GetActiveNonRoutingTables()
+    {
+        return _confirmedNonRoutingTables;
+    }
+
+    public IReadOnlyList<LookupTableEntry> GetSuggestedLookupTables()
+    {
+        return _suggestedLookupTables;
+    }
+
+    public IReadOnlyList<string> GetDismissedLookupTables()
+    {
+        return _dismissedLookupTables.OrderBy(t => t).ToList();
+    }
+
+    public void DetectLookupTables()
+    {
+        _suggestedLookupTables.Clear();
+    }
+
+    public void ConfirmLookupTable(string tableName)
+    {
+        var norm = NormalizeFullTableName(tableName);
+        var matchingTable = _schemaService.Tables?.FirstOrDefault(t => 
+            string.Equals(t.FullName, tableName, StringComparison.OrdinalIgnoreCase) || 
+            string.Equals(NormalizeFullTableName(t.FullName), norm, StringComparison.OrdinalIgnoreCase));
+
+        var fullKey = matchingTable?.FullName ?? tableName;
+        _confirmedNonRoutingTables.Add(fullKey);
+        _dismissedLookupTables.Remove(fullKey);
+        _suggestedLookupTables.RemoveAll(s => string.Equals(s.TableName, fullKey, StringComparison.OrdinalIgnoreCase) || string.Equals(NormalizeFullTableName(s.TableName), norm, StringComparison.OrdinalIgnoreCase));
+
+        SaveCurrentDatabaseEntries();
+        OnNonRoutingTablesChanged?.Invoke();
+    }
+
+    public void ConfirmAllLookupTables()
+    {
+        foreach (var item in _suggestedLookupTables.ToList())
+        {
+            _confirmedNonRoutingTables.Add(item.TableName);
+        }
+        _suggestedLookupTables.Clear();
+
+        SaveCurrentDatabaseEntries();
+        OnNonRoutingTablesChanged?.Invoke();
+    }
+
+    public void DismissLookupTable(string tableName)
+    {
+        var norm = NormalizeFullTableName(tableName);
+        var matchingTable = _schemaService.Tables?.FirstOrDefault(t => 
+            string.Equals(t.FullName, tableName, StringComparison.OrdinalIgnoreCase) || 
+            string.Equals(NormalizeFullTableName(t.FullName), norm, StringComparison.OrdinalIgnoreCase));
+
+        var fullKey = matchingTable?.FullName ?? tableName;
+        _dismissedLookupTables.Add(fullKey);
+        _confirmedNonRoutingTables.Remove(fullKey);
+        _suggestedLookupTables.RemoveAll(s => string.Equals(s.TableName, fullKey, StringComparison.OrdinalIgnoreCase) || string.Equals(NormalizeFullTableName(s.TableName), norm, StringComparison.OrdinalIgnoreCase));
+
+        SaveCurrentDatabaseEntries();
+        OnNonRoutingTablesChanged?.Invoke();
+    }
+
+    public void AddCustomNonRoutingTable(string tableName)
+    {
+        var norm = NormalizeFullTableName(tableName);
+        var matchingTable = _schemaService.Tables?.FirstOrDefault(t => 
+            string.Equals(t.FullName, tableName, StringComparison.OrdinalIgnoreCase) || 
+            string.Equals(NormalizeFullTableName(t.FullName), norm, StringComparison.OrdinalIgnoreCase));
+
+        var fullKey = matchingTable?.FullName ?? tableName;
+        _confirmedNonRoutingTables.Add(fullKey);
+        _dismissedLookupTables.Remove(fullKey);
+        _suggestedLookupTables.RemoveAll(s => string.Equals(s.TableName, fullKey, StringComparison.OrdinalIgnoreCase) || string.Equals(NormalizeFullTableName(s.TableName), norm, StringComparison.OrdinalIgnoreCase));
+
+        SaveCurrentDatabaseEntries();
+        OnNonRoutingTablesChanged?.Invoke();
+    }
+
+    public void RemoveNonRoutingTable(string tableName)
+    {
+        var norm = NormalizeFullTableName(tableName);
+        _confirmedNonRoutingTables.RemoveWhere(t => 
+            string.Equals(t, tableName, StringComparison.OrdinalIgnoreCase) || 
+            string.Equals(NormalizeFullTableName(t), norm, StringComparison.OrdinalIgnoreCase));
+
+        SaveCurrentDatabaseEntries();
+        DetectLookupTables();
+        OnNonRoutingTablesChanged?.Invoke();
+    }
+
+    public void RestoreDismissedLookupTable(string tableName)
+    {
+        var norm = NormalizeFullTableName(tableName);
+        _dismissedLookupTables.RemoveWhere(t => 
+            string.Equals(t, tableName, StringComparison.OrdinalIgnoreCase) || 
+            string.Equals(NormalizeFullTableName(t), norm, StringComparison.OrdinalIgnoreCase));
+
+        SaveCurrentDatabaseEntries();
+        DetectLookupTables();
+        OnNonRoutingTablesChanged?.Invoke();
     }
 
     public void DeleteProfile(string profileName)
@@ -1146,7 +1330,9 @@ public class VirtualRelationshipService
                 LastModified = DateTime.UtcNow,
                 ExportedAt = DateTime.UtcNow,
                 Version = 1,
-                Relationships = new List<VirtualRelationshipEntry>(_entries)
+                Relationships = new List<VirtualRelationshipEntry>(_entries),
+                NonRoutingTables = _confirmedNonRoutingTables.ToList(),
+                DismissedLookupTables = _dismissedLookupTables.ToList()
             };
         }
         else
@@ -1186,6 +1372,8 @@ public class VirtualRelationshipService
         List<VirtualRelationshipEntry>? entries = null;
         string profileName = "Imported Profile";
         string? description = null;
+        List<string> nonRouting = new();
+        List<string> dismissed = new();
 
         try
         {
@@ -1195,6 +1383,8 @@ public class VirtualRelationshipService
                 entries = profile.Relationships;
                 if (!string.IsNullOrWhiteSpace(profile.Name)) profileName = profile.Name;
                 description = profile.Description;
+                if (profile.NonRoutingTables != null) nonRouting = profile.NonRoutingTables;
+                if (profile.DismissedLookupTables != null) dismissed = profile.DismissedLookupTables;
             }
         }
         catch { }
@@ -1218,6 +1408,8 @@ public class VirtualRelationshipService
         summary.Description = description;
         summary.TotalRelationships = entries.Count;
         summary.ImportedEntries = entries;
+        summary.ImportedNonRoutingTables = nonRouting;
+        summary.ImportedDismissedLookupTables = dismissed;
 
         var loadedTables = new HashSet<string>(_schemaService.Tables.Select(t => t.FullName), StringComparer.OrdinalIgnoreCase);
 
@@ -1265,7 +1457,9 @@ public class VirtualRelationshipService
                 Description = summary.Description,
                 CreatedAt = DateTime.UtcNow,
                 LastModified = DateTime.UtcNow,
-                Relationships = new List<VirtualRelationshipEntry>(summary.ImportedEntries)
+                Relationships = new List<VirtualRelationshipEntry>(summary.ImportedEntries),
+                NonRoutingTables = summary.ImportedNonRoutingTables?.ToList() ?? new(),
+                DismissedLookupTables = summary.ImportedDismissedLookupTables?.ToList() ?? new()
             };
 
             if (!Directory.Exists(ProfilesDirectoryPath))
@@ -1289,7 +1483,21 @@ public class VirtualRelationshipService
                 }
                 _entries.Clear();
                 _entries.AddRange(summary.ImportedEntries);
+
+                _confirmedNonRoutingTables.Clear();
+                if (summary.ImportedNonRoutingTables != null)
+                {
+                    foreach (var t in summary.ImportedNonRoutingTables) _confirmedNonRoutingTables.Add(t);
+                }
+                _dismissedLookupTables.Clear();
+                if (summary.ImportedDismissedLookupTables != null)
+                {
+                    foreach (var t in summary.ImportedDismissedLookupTables) _dismissedLookupTables.Add(t);
+                }
+
+                DetectLookupTables();
                 SyncActiveToSchema();
+                OnNonRoutingTablesChanged?.Invoke();
             }
             else
             {
@@ -1308,8 +1516,18 @@ public class VirtualRelationshipService
                 }
             }
 
+            if (summary.ImportedNonRoutingTables != null)
+            {
+                foreach (var t in summary.ImportedNonRoutingTables)
+                {
+                    _confirmedNonRoutingTables.Add(t);
+                }
+            }
+
             SaveCurrentDatabaseEntries();
+            DetectLookupTables();
             SyncActiveToSchema();
+            OnNonRoutingTablesChanged?.Invoke();
         }
     }
 }

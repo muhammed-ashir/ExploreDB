@@ -1570,7 +1570,7 @@ else
                     {
                         <div class="card p-4 shadow-sm" style="background: var(--app-surface-secondary); border: 1px solid var(--app-border);">
                             <h6 class="fw-bold text-info mb-3">Create Custom Relationship</h6>
-                            <p class="text-muted small mb-3">Define a virtual relationship between any two tables in the database. Pathfinder will use this link to route joins automatically.</p>
+                            <p class="text-muted small mb-3">Define a virtual relationship between any two tables in the database. Query Builder will use this link to route joins automatically.</p>
 
                             @if (!string.IsNullOrEmpty(CustomRelErrorMessage))
                             {
@@ -3169,7 +3169,22 @@ else
     private string GeneratedSql { get => QueryStateService.GeneratedSql; set => QueryStateService.GeneratedSql = value; }
     private bool HasOneToMany = false;
     private List<string>? OptimalTableOrder = null;
-    private HashSet<string> IgnoredRoutingTables => QueryStateService.IgnoredRoutingTables;
+    private HashSet<string> IgnoredRoutingTables
+    {
+        get
+        {
+            var set = new HashSet<string>(QueryStateService.IgnoredRoutingTables, StringComparer.OrdinalIgnoreCase);
+            if (VirtualRelationshipService != null)
+            {
+                foreach (var t in VirtualRelationshipService.GetActiveNonRoutingTables())
+                {
+                    set.Add(t);
+                    set.Add(t.Replace("[", "").Replace("]", ""));
+                }
+            }
+            return set;
+        }
+    }
     private HashSet<string> IgnoredRoutingEdges => QueryStateService.IgnoredRoutingEdges;
 
     private Dictionary<string, List<AlternativeRoute>> AlternativeRoutes = new(StringComparer.OrdinalIgnoreCase);
@@ -3306,6 +3321,7 @@ else
         SchemaService.OnViewsLoaded += Refresh;
         SchemaService.OnRelationshipsUpdated += HandleVirtualRelationshipsChanged;
         VirtualRelationshipService.OnVirtualRelationshipsChanged += HandleVirtualRelationshipsChanged;
+        VirtualRelationshipService.OnNonRoutingTablesChanged += HandleVirtualRelationshipsChanged;
 
         if (SchemaService.IsDatabaseConnected && !SchemaService.AreTablesLoaded && !SchemaService.IsLoadingTables)
         {
@@ -3925,6 +3941,7 @@ else
         SchemaService.OnViewsLoaded -= Refresh;
         SchemaService.OnRelationshipsUpdated -= HandleVirtualRelationshipsChanged;
         VirtualRelationshipService.OnVirtualRelationshipsChanged -= HandleVirtualRelationshipsChanged;
+        VirtualRelationshipService.OnNonRoutingTablesChanged -= HandleVirtualRelationshipsChanged;
 
         _debounceCts?.Cancel();
         _debounceCts?.Dispose();
