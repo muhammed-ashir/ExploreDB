@@ -290,7 +290,7 @@
     else
     {
         <!-- Query Store Disabled Info Banner -->
-        @if (_result != null && !_result.IsQueryStoreSupported && _result.StoreState == QueryStoreState.Disabled)
+        @if (_result != null && !_result.IsQueryStoreSupported && _result.StoreState == QueryStoreState.Disabled && !string.IsNullOrEmpty(_selectedDatabase) && !_dismissedWarningDatabases.Contains(_selectedDatabase))
         {
             <div class="alert alert-warning d-flex align-items-center justify-content-between py-2 px-3 mb-2 rounded-2 border" style="font-size: 0.82rem;" role="alert">
                 <div class="d-flex align-items-start gap-2">
@@ -300,10 +300,21 @@
                         To persist query performance history across time windows and server restarts, enable Query Store.
                     </div>
                 </div>
-                <button class="btn btn-sm btn-outline-warning border-0 text-decoration-underline py-0 text-nowrap flex-shrink-0 ms-3"
-                        @onclick="CopyEnableQueryStoreScriptAsync">
-                    <i class="bi bi-clipboard me-1"></i>Copy Enable Script
-                </button>
+                <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-3">
+                    <button class="btn btn-sm btn-outline-warning border-0 text-decoration-underline py-0 text-nowrap"
+                            @onclick="CopyEnableQueryStoreScriptAsync">
+                        <i class="bi bi-clipboard me-1"></i>Copy Enable Script
+                    </button>
+                    <button type="button"
+                            class="btn btn-sm text-warning p-0 d-inline-flex align-items-center justify-content-center opacity-75"
+                            style="width: 24px; height: 24px; text-decoration: none; cursor: pointer; transition: opacity 0.15s ease;"
+                            onmouseover="this.style.opacity='1'"
+                            onmouseout="this.style.opacity='0.75'"
+                            @onclick="() => _dismissedWarningDatabases.Add(_selectedDatabase)"
+                            title="Dismiss notification">
+                        <i class="bi bi-x-lg" style="font-size: 0.85rem;"></i>
+                    </button>
+                </div>
             </div>
         }
 
@@ -343,7 +354,7 @@
                                 {
                                     1 => "badge bg-danger text-white border-0",
                                     2 => "badge bg-warning text-dark border-0",
-                                    3 => "badge bg-info text-white border-0",
+                                    3 => "badge bg-info text-dark border-0",
                                     _ => "badge bg-secondary-subtle text-body border"
                                 };
 
@@ -419,7 +430,7 @@
                                     {
                                         1 => "badge bg-danger text-white",
                                         2 => "badge bg-warning text-dark",
-                                        3 => "badge bg-info text-white",
+                                        3 => "badge bg-info text-dark",
                                         _ => "badge bg-secondary-subtle text-body border"
                                     };
 
@@ -466,21 +477,13 @@
                     <div class="card h-100 shadow-sm d-flex flex-column overflow-hidden" style="background-color: var(--app-surface); border: 1px solid var(--app-border);">
                         <!-- Action Bar Header -->
                         <div class="p-2 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2" style="border-color: var(--app-border) !important; background-color: var(--app-surface-secondary);">
-                            <div class="d-flex align-items-center gap-2 text-truncate" style="max-width: 60%;">
+                            <div class="d-flex align-items-center gap-2 text-truncate" style="max-width: 65%;">
                                 <span class="badge bg-primary text-white flex-shrink-0" style="font-size: 0.78rem;">#@_selectedItem.Rank</span>
                                 <span class="fw-bold text-truncate" 
                                       style="font-size: 0.88rem; color: var(--app-text);" 
                                       title="@(_selectedItem.IsAdHoc && !string.IsNullOrWhiteSpace(_selectedItem.StatementText) ? _selectedItem.StatementText : _selectedItem.DisplayObjectName)">
                                     @_selectedItem.DisplayObjectName
                                 </span>
-                                @if (_selectedItem.IsAdHoc)
-                                {
-                                    <span class="badge bg-secondary-subtle text-muted border flex-shrink-0" style="font-size: 0.68rem;">Ad-hoc</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-info-subtle text-info border border-info-subtle flex-shrink-0" style="font-size: 0.68rem;">Stored Procedure</span>
-                                }
                             </div>
 
                             <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -568,70 +571,75 @@
                             <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-2">
                                 <!-- CPU Card -->
                                 <div class="col">
-                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
-                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
-                                            <i class="bi bi-cpu text-primary me-1"></i>Total CPU
+                                    <div class="metric-card p-2 rounded-2 border h-100 d-flex flex-column justify-content-between" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate fw-medium" style="font-size: 0.72rem;">
+                                            Total CPU
                                         </div>
-                                        <div class="d-flex align-items-baseline gap-1 flex-wrap text-truncate mt-1">
-                                            <span class="fw-bold" style="color: var(--app-text); font-size: 0.92rem;">@_selectedItem.FormattedTotalCpu</span>
-                                            <span class="text-muted opacity-50" style="font-size: 0.75rem;">|</span>
-                                            <span class="text-muted text-truncate" style="font-size: 0.72rem;">Avg: @_selectedItem.FormattedAvgCpu</span>
+                                        <div class="fw-bold text-truncate my-1" style="color: var(--app-text); font-size: 1.05rem; line-height: 1.2;">
+                                            @_selectedItem.FormattedTotalCpu
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.72rem;">
+                                            Avg: @_selectedItem.FormattedAvgCpu
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- Duration Card -->
                                 <div class="col">
-                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
-                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
-                                            <i class="bi bi-stopwatch text-warning me-1"></i>Total Duration
+                                    <div class="metric-card p-2 rounded-2 border h-100 d-flex flex-column justify-content-between" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate fw-medium" style="font-size: 0.72rem;">
+                                            Total Duration
                                         </div>
-                                        <div class="d-flex align-items-baseline gap-1 flex-wrap text-truncate mt-1">
-                                            <span class="fw-bold" style="color: var(--app-text); font-size: 0.92rem;">@_selectedItem.FormattedTotalDuration</span>
-                                            <span class="text-muted opacity-50" style="font-size: 0.75rem;">|</span>
-                                            <span class="text-muted text-truncate" style="font-size: 0.72rem;">Avg: @_selectedItem.FormattedAvgDuration</span>
+                                        <div class="fw-bold text-truncate my-1" style="color: var(--app-text); font-size: 1.05rem; line-height: 1.2;">
+                                            @_selectedItem.FormattedTotalDuration
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.72rem;">
+                                            Avg: @_selectedItem.FormattedAvgDuration
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- Physical Reads Card -->
                                 <div class="col">
-                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
-                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
-                                            <i class="bi bi-hdd text-danger me-1"></i>Physical Reads
+                                    <div class="metric-card p-2 rounded-2 border h-100 d-flex flex-column justify-content-between" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate fw-medium" style="font-size: 0.72rem;">
+                                            Physical Reads
                                         </div>
-                                        <div class="d-flex align-items-baseline gap-1 flex-wrap text-truncate mt-1">
-                                            <span class="fw-bold" style="color: var(--app-text); font-size: 0.92rem;">@SlowQueryItem.FormatNumber(_selectedItem.TotalPhysicalReads)</span>
-                                            <span class="text-muted opacity-50" style="font-size: 0.75rem;">|</span>
-                                            <span class="text-muted text-truncate" style="font-size: 0.72rem;">Avg: @SlowQueryItem.FormatNumber(_selectedItem.AvgPhysicalReads)</span>
+                                        <div class="fw-bold text-truncate my-1" style="color: var(--app-text); font-size: 1.05rem; line-height: 1.2;">
+                                            @SlowQueryItem.FormatNumber(_selectedItem.TotalPhysicalReads)
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.72rem;">
+                                            Avg: @SlowQueryItem.FormatNumber(_selectedItem.AvgPhysicalReads)
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- Logical Reads Card -->
                                 <div class="col">
-                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
-                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
-                                            <i class="bi bi-memory text-info me-1"></i>Logical Reads
+                                    <div class="metric-card p-2 rounded-2 border h-100 d-flex flex-column justify-content-between" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate fw-medium" style="font-size: 0.72rem;">
+                                            Logical Reads
                                         </div>
-                                        <div class="d-flex align-items-baseline gap-1 flex-wrap text-truncate mt-1">
-                                            <span class="fw-bold" style="color: var(--app-text); font-size: 0.92rem;">@SlowQueryItem.FormatNumber(_selectedItem.TotalLogicalReads)</span>
-                                            <span class="text-muted opacity-50" style="font-size: 0.75rem;">|</span>
-                                            <span class="text-muted text-truncate" style="font-size: 0.72rem;">Avg: @SlowQueryItem.FormatNumber(_selectedItem.AvgLogicalReads)</span>
+                                        <div class="fw-bold text-truncate my-1" style="color: var(--app-text); font-size: 1.05rem; line-height: 1.2;">
+                                            @SlowQueryItem.FormatNumber(_selectedItem.TotalLogicalReads)
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.72rem;">
+                                            Avg: @SlowQueryItem.FormatNumber(_selectedItem.AvgLogicalReads)
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- Logical Writes Card -->
                                 <div class="col">
-                                    <div class="metric-card p-2 rounded-2 border h-100" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
-                                        <div class="text-muted small text-truncate" style="font-size: 0.72rem;">
-                                            <i class="bi bi-pencil-square text-secondary me-1"></i>Writes
+                                    <div class="metric-card p-2 rounded-2 border h-100 d-flex flex-column justify-content-between" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                                        <div class="text-muted small text-truncate fw-medium" style="font-size: 0.72rem;">
+                                            Writes
                                         </div>
-                                        <div class="d-flex align-items-baseline gap-1 flex-wrap text-truncate mt-1">
-                                            <span class="fw-bold" style="color: var(--app-text); font-size: 0.92rem;">@SlowQueryItem.FormatNumber(_selectedItem.TotalLogicalWrites)</span>
-                                            <span class="text-muted opacity-50" style="font-size: 0.75rem;">|</span>
-                                            <span class="text-muted text-truncate" style="font-size: 0.72rem;">Avg: @SlowQueryItem.FormatNumber(_selectedItem.AvgLogicalWrites)</span>
+                                        <div class="fw-bold text-truncate my-1" style="color: var(--app-text); font-size: 1.05rem; line-height: 1.2;">
+                                            @SlowQueryItem.FormatNumber(_selectedItem.TotalLogicalWrites)
+                                        </div>
+                                        <div class="text-muted text-truncate" style="font-size: 0.72rem;">
+                                            Avg: @SlowQueryItem.FormatNumber(_selectedItem.AvgLogicalWrites)
                                         </div>
                                     </div>
                                 </div>
@@ -640,7 +648,7 @@
                             <!-- EXECUTION TRENDS (QUERY STORE MODE) -->
                             @if (_result != null && _result.IsUsingQueryStore)
                             {
-                                <div class="card rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; padding: 0.6rem 0.85rem;">
+                                <div class="card rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; padding: 0.7rem 0.85rem;">
                                     @if (_isLoadingTrends)
                                     {
                                         <div class="d-flex align-items-center justify-content-center p-3 text-muted">
@@ -714,7 +722,7 @@
                                         string gradientStart = GetTrendGradientStart();
                                         string gradientId = $"azureTrendGrad_{_selectedTrendMetric}";
 
-                                        <div class="position-relative w-100" style="height: 75px;">
+                                        <div class="position-relative w-100" style="height: 140px;">
                                             <svg viewBox="0 0 1000 120" 
                                                  preserveAspectRatio="none" 
                                                  style="width: 100%; height: 100%; display: block; overflow: visible;"
@@ -742,15 +750,14 @@
                                                 <!-- Top Curve Line -->
                                                 @if (!string.IsNullOrEmpty(linePath))
                                                 {
-                                                    <path d="@linePath" fill="none" stroke="@strokeColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                                                    <path d="@linePath" fill="none" stroke="@strokeColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
                                                 }
 
-                                                <!-- Interactive Crosshair & Indicator Point -->
+                                                <!-- Interactive Crosshair (Vector line) -->
                                                 @if (_hoveredTrendIndex.HasValue && _hoveredTrendIndex.Value >= 0 && _hoveredTrendIndex.Value < _trends.Count)
                                                 {
                                                     int hIdx = _hoveredTrendIndex.Value;
                                                     double hX = _trends.Count == 1 ? 500.0 : (hIdx / (double)(_trends.Count - 1)) * 1000.0;
-                                                    double hY = points.Count > hIdx ? points[hIdx].Y : 108.0;
 
                                                     <!-- Vertical Crosshair Line -->
                                                     <line x1="@hX.ToString("F1", CultureInfo.InvariantCulture)" 
@@ -760,20 +767,8 @@
                                                           stroke="@strokeColor" 
                                                           stroke-width="1.5" 
                                                           stroke-dasharray="3,3" 
-                                                          opacity="0.85" />
-
-                                                    <!-- Highlight Halo & Dot -->
-                                                    <circle cx="@hX.ToString("F1", CultureInfo.InvariantCulture)" 
-                                                            cy="@hY.ToString("F1", CultureInfo.InvariantCulture)" 
-                                                            r="8" 
-                                                            fill="@strokeColor" 
-                                                            opacity="0.25" />
-                                                    <circle cx="@hX.ToString("F1", CultureInfo.InvariantCulture)" 
-                                                            cy="@hY.ToString("F1", CultureInfo.InvariantCulture)" 
-                                                            r="4.5" 
-                                                            fill="@strokeColor" 
-                                                            stroke="#ffffff" 
-                                                            stroke-width="2" />
+                                                          opacity="0.85"
+                                                          vector-effect="non-scaling-stroke" />
                                                 }
 
                                                 <!-- Transparent Hover Hit Columns -->
@@ -791,6 +786,23 @@
                                                           @onmouseenter="() => _hoveredTrendIndex = idx" />
                                                 }
                                             </svg>
+
+                                            <!-- Perfectly Circular Hover Indicator Point (HTML overlay prevents SVG aspect ratio distortion) -->
+                                            @if (_hoveredTrendIndex.HasValue && _hoveredTrendIndex.Value >= 0 && _hoveredTrendIndex.Value < _trends.Count)
+                                            {
+                                                int hIdx = _hoveredTrendIndex.Value;
+                                                double hXPercent = _trends.Count <= 1 ? 50.0 : (hIdx / (double)(_trends.Count - 1)) * 100.0;
+                                                double hYVal = points.Count > hIdx ? points[hIdx].Y : 108.0;
+                                                double hYPercent = (hYVal / 120.0) * 100.0;
+
+                                                <div class="position-absolute" 
+                                                     style="left: @hXPercent.ToString("F2", CultureInfo.InvariantCulture)%; top: @hYPercent.ToString("F2", CultureInfo.InvariantCulture)%; transform: translate(-50%, -50%); pointer-events: none; width: 18px; height: 18px; z-index: 2;">
+                                                    <!-- Halo -->
+                                                    <div style="width: 18px; height: 18px; border-radius: 50%; background-color: @strokeColor; opacity: 0.25; position: absolute; top: 0; left: 0;"></div>
+                                                    <!-- Center Dot -->
+                                                    <div style="width: 10px; height: 10px; border-radius: 50%; background-color: @strokeColor; border: 2px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.5); position: absolute; top: 4px; left: 4px;"></div>
+                                                </div>
+                                            }
                                         </div>
 
                                         <!-- Clean X-Axis Time Markers -->
@@ -807,10 +819,9 @@
                             }
                             else
                             {
-                                <div class="card rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; padding: 10px 14px;">
-                                    <div class="d-flex align-items-center justify-content-between text-muted" style="font-size: 0.76rem;">
-                                        <span><i class="bi bi-clock-history me-1"></i>First Seen in Cache: @(_selectedItem.FirstSeen?.ToString("g") ?? "N/A")</span>
-                                        <span><i class="bi bi-arrow-clockwise me-1"></i>Last Executed: @(_selectedItem.LastExecutionTime?.ToString("g") ?? "N/A")</span>
+                                <div class="card rounded-2 border shadow-none" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important; padding: 8px 14px;">
+                                    <div class="d-flex align-items-center text-muted" style="font-size: 0.76rem;">
+                                        <span><i class="bi bi-clock me-1 text-muted"></i>Last Executed: @(_selectedItem.LastExecutionTime?.ToString("g") ?? "N/A")</span>
                                     </div>
                                 </div>
                             }
@@ -833,16 +844,13 @@
                         <i class="bi bi-info-circle-fill text-primary"></i>
                         <span>Query Analysis Modes Explained</span>
                     </h5>
-                    <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") shadow-none" @onclick="() => _showModeHelpModal = false"></button>
                 </div>
                 <div class="modal-body p-3 d-flex flex-column gap-2" style="font-size: 0.85rem; line-height: 1.5;">
                     <!-- Query Store Card -->
-                    <div class="p-2.5 p-3 rounded-3 border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                    <div class="p-3 rounded-3 border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
                         <div class="d-flex align-items-center gap-2 mb-1">
-                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
-                                <i class="bi bi-clock-history me-1"></i>Historical (Time Range)
-                            </span>
-                            <span class="text-muted" style="font-size: 0.76rem;">Powered by Query Store</span>
+                            <span class="fw-semibold" style="color: var(--app-text); font-size: 0.88rem;">Historical (Time Range)</span>
+                            <span class="text-muted" style="font-size: 0.76rem;">&bull; Powered by Query Store</span>
                         </div>
                         <p class="mb-0 text-muted" style="font-size: 0.82rem;">
                             Analyzes persistent execution history across specific time windows (survives SQL Server restarts) with activity timeline trends.
@@ -850,12 +858,10 @@
                     </div>
 
                     <!-- Live Plan Cache Card -->
-                    <div class="p-2.5 p-3 rounded-3 border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                    <div class="p-3 rounded-3 border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
                         <div class="d-flex align-items-center gap-2 mb-1">
-                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">
-                                <i class="bi bi-lightning-charge me-1"></i>Live / Real-Time
-                            </span>
-                            <span class="text-muted" style="font-size: 0.76rem;">Powered by Active Plan Cache</span>
+                            <span class="fw-semibold" style="color: var(--app-text); font-size: 0.88rem;">Live / Real-Time</span>
+                            <span class="text-muted" style="font-size: 0.76rem;">&bull; Powered by Active Plan Cache</span>
                         </div>
                         <p class="mb-0 text-muted" style="font-size: 0.82rem;">
                             Inspects active compiled queries currently in memory (RAM) for immediate resource stats without needing Query Store. Resets on restart.
@@ -880,19 +886,11 @@
             <div class="modal-content shadow-lg h-100 flex-column d-flex" style="background-color: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border);">
                 <!-- Modal Header -->
                 <div class="modal-header py-2 px-3 flex-shrink-0 d-flex align-items-center justify-content-between" style="border-bottom: 1px solid var(--app-border); background-color: var(--app-surface-secondary);">
-                    <div class="d-flex align-items-center gap-2 text-truncate me-2" style="max-width: 60%;">
+                    <div class="d-flex align-items-center gap-2 text-truncate me-2" style="max-width: 65%;">
                         <span class="badge bg-primary text-white flex-shrink-0" style="font-size: 0.78rem;">#@_selectedItem.Rank</span>
                         <span class="fw-bold text-truncate" style="font-size: 0.95rem; color: var(--app-text);" title="@(_selectedItem.IsAdHoc && !string.IsNullOrWhiteSpace(_selectedItem.StatementText) ? _selectedItem.StatementText : _selectedItem.DisplayObjectName)">
                             @_selectedItem.DisplayObjectName
                         </span>
-                        @if (_selectedItem.IsAdHoc)
-                        {
-                            <span class="badge bg-secondary-subtle text-muted border flex-shrink-0" style="font-size: 0.68rem;">Ad-hoc</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-info-subtle text-info border border-info-subtle flex-shrink-0" style="font-size: 0.68rem;">Stored Procedure</span>
-                        }
                     </div>
 
                     <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -979,6 +977,7 @@
     private bool _isLoading = false;
     private bool _forceDmv = false;
     private bool _showModeHelpModal = false;
+    private readonly HashSet<string> _dismissedWarningDatabases = new(StringComparer.OrdinalIgnoreCase);
     private bool _showFullBatch = false;
     private bool _isSidebarCollapsed = false;
     private bool _isSqlPopupOpen = false;
@@ -1484,59 +1483,53 @@
 
     private void OnDatabaseSwitchedHandler()
     {
-        InvokeAsync(async () =>
+        // Decoupled from sidebar: only auto-adopt active database if no database has been selected yet
+        if (string.IsNullOrEmpty(_selectedDatabase) && SchemaService.IsDatabaseConnected && !string.IsNullOrWhiteSpace(SchemaService.ActiveDatabase))
         {
-            if (SchemaService.IsDatabaseConnected && !string.IsNullOrWhiteSpace(SchemaService.ActiveDatabase))
+            InvokeAsync(async () =>
             {
-                _selectedConnectionString = ConnectionService.ConnectionString ?? _selectedConnectionString;
+                if (string.IsNullOrEmpty(_selectedConnectionString))
+                {
+                    _selectedConnectionString = ConnectionService.ConnectionString ?? "";
+                    _serverSearch = GetSelectedServerDisplayName();
+                    await LoadDatabasesForSelectedServerAsync();
+                }
                 _selectedDatabase = SchemaService.ActiveDatabase;
-                _serverSearch = GetSelectedServerDisplayName();
                 _databaseSearch = GetSelectedDatabaseDisplayName();
-                await LoadDatabasesForSelectedServerAsync();
                 await LoadQueriesAsync();
-            }
-            else
-            {
-                _selectedDatabase = string.Empty;
-                _databaseSearch = string.Empty;
-                _result = null;
-                _selectedItem = null;
-                _trends.Clear();
-            }
-            StateHasChanged();
-        });
+                StateHasChanged();
+            });
+        }
     }
 
     private void HandleConnectionChanged()
     {
         RefreshAvailableConnections();
-        InvokeAsync(async () =>
+        // Decoupled from sidebar: if a connection is already active/selected in Slow Query Analyzer, do not hijack it.
+        // Only auto-initialize if the tool hasn't selected a connection target yet.
+        if (string.IsNullOrEmpty(_selectedConnectionString) && !string.IsNullOrEmpty(ConnectionService.ConnectionString))
         {
-            if (SchemaService.IsDatabaseConnected && !string.IsNullOrWhiteSpace(SchemaService.ActiveDatabase))
+            InvokeAsync(async () =>
             {
-                _selectedConnectionString = ConnectionService.ConnectionString ?? "";
-                _selectedDatabase = SchemaService.ActiveDatabase;
+                _selectedConnectionString = ConnectionService.ConnectionString;
+                if (SchemaService.IsDatabaseConnected && !string.IsNullOrWhiteSpace(SchemaService.ActiveDatabase))
+                {
+                    _selectedDatabase = SchemaService.ActiveDatabase;
+                }
                 _serverSearch = GetSelectedServerDisplayName();
                 _databaseSearch = GetSelectedDatabaseDisplayName();
                 await LoadDatabasesForSelectedServerAsync();
-                await LoadQueriesAsync();
-            }
-            else
-            {
-                _selectedConnectionString = ConnectionService.ConnectionString ?? (_availableConnections.FirstOrDefault()?.ConnectionString ?? "");
-                _selectedDatabase = string.Empty;
-                _serverSearch = GetSelectedServerDisplayName();
-                _databaseSearch = string.Empty;
-                _result = null;
-                _selectedItem = null;
-                _trends.Clear();
-                if (!string.IsNullOrWhiteSpace(_selectedConnectionString))
+                if (!string.IsNullOrWhiteSpace(_selectedDatabase))
                 {
-                    await LoadDatabasesForSelectedServerAsync();
+                    await LoadQueriesAsync();
                 }
-            }
-            StateHasChanged();
-        });
+                StateHasChanged();
+            });
+        }
+        else
+        {
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     private string GetTargetConnectionString()

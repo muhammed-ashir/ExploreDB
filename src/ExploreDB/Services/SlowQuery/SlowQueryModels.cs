@@ -81,7 +81,7 @@ public class SlowQueryItem
         {
             if (!IsAdHoc)
             {
-                return ObjectFullName;
+                return $"SP - {ObjectFullName}";
             }
 
             var summary = GetOperationAndTargetTable(StatementText);
@@ -173,13 +173,6 @@ public class SlowQueryItem
         // 4. Handle SELECT
         if (verb == "SELECT")
         {
-            string topInfo = "";
-            var topMatch = Regex.Match(text, @"^SELECT\s+TOP\s*\(?\s*(\d+)\s*\)?", RegexOptions.IgnoreCase);
-            if (topMatch.Success && long.TryParse(topMatch.Groups[1].Value, out long topVal))
-            {
-                topInfo = $" (TOP {FormatNumber(topVal)})";
-            }
-
             // Find target table after FROM
             var fromMatch = Regex.Match(
                 text, 
@@ -191,12 +184,12 @@ public class SlowQueryItem
                 string table = fromMatch.Groups[1].Value.Trim();
                 if (!string.Equals(table, "SELECT", StringComparison.OrdinalIgnoreCase) && !table.StartsWith("("))
                 {
-                    return $"SELECT{topInfo} from {table}";
+                    return $"SELECT - {table}";
                 }
             }
 
             var snippet = GetSqlSnippetPreview(text, 50);
-            return !string.IsNullOrEmpty(snippet) ? snippet : $"SELECT{topInfo}";
+            return !string.IsNullOrEmpty(snippet) ? snippet : "SELECT";
         }
 
         // 5. Handle INSERT
@@ -210,7 +203,7 @@ public class SlowQueryItem
             if (insertMatch.Success)
             {
                 string table = insertMatch.Groups[1].Value.Trim();
-                return $"INSERT into {table}";
+                return $"INSERT - {table}";
             }
             return "INSERT";
         }
@@ -226,7 +219,7 @@ public class SlowQueryItem
             if (fromMatch.Success)
             {
                 string table = fromMatch.Groups[1].Value.Trim();
-                return $"UPDATE {table}";
+                return $"UPDATE - {table}";
             }
 
             var updateMatch = Regex.Match(
@@ -237,7 +230,7 @@ public class SlowQueryItem
             if (updateMatch.Success)
             {
                 string table = updateMatch.Groups[1].Value.Trim();
-                return $"UPDATE {table}";
+                return $"UPDATE - {table}";
             }
             return "UPDATE";
         }
@@ -253,7 +246,7 @@ public class SlowQueryItem
             if (deleteMatch.Success)
             {
                 string table = deleteMatch.Groups[1].Value.Trim();
-                return $"DELETE from {table}";
+                return $"DELETE - {table}";
             }
             return "DELETE";
         }
@@ -269,7 +262,7 @@ public class SlowQueryItem
             if (mergeMatch.Success)
             {
                 string table = mergeMatch.Groups[1].Value.Trim();
-                return $"MERGE into {table}";
+                return $"MERGE - {table}";
             }
             return "MERGE";
         }
@@ -285,7 +278,7 @@ public class SlowQueryItem
             if (execMatch.Success)
             {
                 string proc = execMatch.Groups[1].Value.Trim();
-                return $"EXEC {proc}";
+                return $"EXEC - {proc}";
             }
             return "EXEC";
         }
