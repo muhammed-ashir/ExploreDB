@@ -85,7 +85,15 @@
     {
         <!-- Page Header & Toolbar -->
         <div class="d-flex justify-content-between align-items-center mb-3 pt-1 gap-2 flex-wrap">
-            <h3 class="fw-bold mb-0" style="color: var(--app-text);">Relationships</h3>
+            <div class="d-flex align-items-center gap-2">
+                <h3 class="fw-bold mb-0" style="color: var(--app-text);">Virtual Relationships</h3>
+                <i class="bi bi-info-circle text-muted fs-5" 
+                   data-bs-tooltip="true" 
+                   data-bs-placement="right" 
+                   data-bs-title="Virtual relationships define logical connections between tables without requiring physical foreign keys in the database. Query Builder uses them to automatically discover join paths across your schema." 
+                   title="Virtual relationships define logical connections between tables without requiring physical foreign keys in the database. Query Builder uses them to automatically discover join paths across your schema."
+                   style="cursor: help; opacity: 0.85;"></i>
+            </div>
 
             <!-- Profile & Action Toolbar -->
             <div class="d-flex align-items-center gap-2 flex-nowrap">
@@ -94,26 +102,28 @@
                     <button type="button" 
                             class="btn btn-sm d-flex align-items-center gap-2 shadow-sm" 
                             style="background-color: var(--app-surface-secondary); color: var(--app-text); border: 1px solid var(--app-border); height: 32px; padding: 0 10px;" 
-                            @onclick="ToggleProfileDropdown">
+                            @onclick="ToggleProfileDropdown"
+                            title="@(string.IsNullOrEmpty(ActiveProfileName) ? "Local (Isolated to this DB)" : ActiveProfileName)">
                         <span class="text-muted" style="font-size: 0.8rem; line-height: 1; white-space: nowrap;">Relation Profile:</span>
-                        <span class="fw-bold text-info text-truncate" style="font-size: 0.8rem; line-height: 1; max-width: 180px;">
+                        <span class="fw-bold text-info text-truncate d-inline-block" style="font-size: 0.8rem; line-height: 1; max-width: 180px;">
                             @(string.IsNullOrEmpty(ActiveProfileName) ? "Local (Isolated to this DB)" : ActiveProfileName)
                         </span>
-                        <i class="bi bi-chevron-down text-muted" style="font-size: 0.75rem; line-height: 1;"></i>
+                        <i class="bi bi-chevron-down text-muted flex-shrink-0" style="font-size: 0.75rem; line-height: 1;"></i>
                     </button>
 
                     @if (IsProfileDropdownOpen)
                     {
                         <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="() => IsProfileDropdownOpen = false"></div>
-                        <div class="dropdown-menu show shadow-lg p-2 mt-1 custom-scrollbar-light" style="position: absolute; top: 100%; right: 0; z-index: 1050; min-width: 280px; max-height: 360px; overflow-y: auto; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                        <div class="dropdown-menu show shadow-lg p-2 mt-1 custom-scrollbar-light" 
+                             style="position: absolute; top: 100%; right: 0; z-index: 1050; width: 320px; max-width: min(340px, 90vw); max-height: 360px; overflow-y: auto; overflow-x: hidden; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
                             <div class="px-2 py-1 text-muted small fw-bold text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">Select Relation Profile</div>
 
                             <!-- Local Option -->
                             <button type="button" class="dropdown-item py-2 px-2 rounded mb-1 d-flex flex-column @(string.IsNullOrEmpty(ActiveProfileName) ? "active" : "")" style="@(string.IsNullOrEmpty(ActiveProfileName) ? "" : "color: var(--app-text);")" @onclick="SwitchToLocalProfile">
-                                <div class="d-flex align-items-center justify-content-between w-100">
-                                    <span class="fw-semibold small">Local (Isolated to this DB)</span>
+                                <div class="d-flex align-items-center justify-content-between w-100" style="min-width: 0;">
+                                    <span class="fw-semibold small text-truncate">Local (Isolated to this DB)</span>
                                 </div>
-                                <span class="small opacity-75" style="font-size: 0.7rem;">Changes stay only in this database</span>
+                                <span class="small opacity-75 text-truncate" style="font-size: 0.7rem;">Changes stay only in this database</span>
                             </button>
 
                             @if (AvailableProfiles.Count > 0)
@@ -124,13 +134,14 @@
                                 @foreach (var p in AvailableProfiles)
                                 {
                                     var isSelected = string.Equals(ActiveProfileName, p.Name, StringComparison.OrdinalIgnoreCase);
-                                    <div class="d-flex align-items-center justify-content-between rounded mb-1 px-2 py-1 profile-item-row @(isSelected ? "bg-primary text-white selected" : "")" style="@(isSelected ? "" : "background: transparent; color: var(--app-text);")">
-                                        <div class="flex-grow-1 text-truncate cursor-pointer" @onclick="() => SwitchToProfile(p.Name)">
-                                            <div class="fw-semibold small text-truncate">@p.Name</div>
-                                            <div class="small opacity-75" style="font-size: 0.7rem;">@p.EntryCount relations • @p.LastModified.ToLocalTime().ToString("g")</div>
+                                    <div class="d-flex align-items-center justify-content-between rounded mb-1 px-2 py-1 profile-item-row @(isSelected ? "bg-primary text-white selected" : "")" 
+                                         style="min-width: 0; @(isSelected ? "" : "background: transparent; color: var(--app-text);")">
+                                        <div class="flex-grow-1 cursor-pointer overflow-hidden me-2" style="min-width: 0;" @onclick="() => SwitchToProfile(p.Name)" title="@p.Name">
+                                            <div class="fw-semibold small text-truncate" title="@p.Name">@p.Name</div>
+                                            <div class="small opacity-75 text-truncate" style="font-size: 0.7rem;">@p.EntryCount relations • @p.LastModified.ToLocalTime().ToString("g")</div>
                                         </div>
                                         <button type="button" 
-                                                class="btn btn-link btn-sm p-1 ms-2 shadow-none profile-delete-btn @(isSelected ? "selected text-white" : "text-danger")" 
+                                                class="btn btn-link btn-sm p-1 flex-shrink-0 shadow-none profile-delete-btn @(isSelected ? "selected text-white" : "text-danger")" 
                                                 title="Delete Profile" 
                                                 @onclick="() => PromptDeleteProfile(p.Name)"
                                                 @onclick:stopPropagation>
@@ -204,17 +215,24 @@
             <!-- Tab Headers -->
             <div class="card-header p-0 d-flex align-items-center" style="background-color: transparent; border-bottom: 1px solid var(--app-border);">
                 <button type="button" 
-                        class="tab-nav-btn @(ActiveTab == "active" ? "active-primary" : "text-muted")"
+                        class="tab-nav-btn @(ActiveTab == "active" ? "active-primary" : "text-muted") d-inline-flex align-items-center"
                         @onclick='() => ActiveTab = "active"'>
                     <span>Active Relationships</span>
                     @if (ActiveVirtualCount > 0)
                     {
                         <span class="badge bg-primary bg-opacity-25 text-primary ms-1">@ActiveVirtualCount</span>
                     }
+                    <i class="bi bi-info-circle ms-1" 
+                       style="font-size: 0.8rem; cursor: help; opacity: 0.85;" 
+                       data-bs-tooltip="true" 
+                       data-bs-placement="bottom" 
+                       data-bs-html="true" 
+                       data-bs-title="<b>Active Virtual Relationships</b><br/>All approved virtual relationships currently enabled. Query Builder uses these to automatically connect tables and generate SQL joins without physical foreign keys." 
+                       title="Active Virtual Relationships: All approved virtual relationships currently enabled. Query Builder uses these to automatically connect tables and generate SQL joins without physical foreign keys."></i>
                 </button>
 
                 <button type="button" 
-                        class="tab-nav-btn @(ActiveTab == "suggested" ? "active-warning" : "text-muted")"
+                        class="tab-nav-btn @(ActiveTab == "suggested" ? "active-warning" : "text-muted") d-inline-flex align-items-center"
                         @onclick='() => SwitchToSuggestedTab()'>
                     <span>Suggested Keys</span>
                     @if (VirtualRelationshipService.IsScanningSuggestions)
@@ -225,28 +243,57 @@
                     {
                         <span class="badge bg-warning bg-opacity-25 text-warning ms-1">@SuggestedCount</span>
                     }
+                    <i class="bi bi-info-circle ms-1" 
+                       style="font-size: 0.8rem; cursor: help; opacity: 0.85;" 
+                       data-bs-tooltip="true" 
+                       data-bs-placement="bottom" 
+                       data-bs-html="true" 
+                       data-bs-title="<b>Suggested Relationships</b><br/>Candidate relationships discovered heuristically from column naming patterns and compatible data types. Verify and approve them to enable join routing in Query Builder." 
+                       title="Suggested Relationships: Candidate relationships discovered heuristically from column naming patterns and compatible data types. Verify and approve them to enable join routing in Query Builder."></i>
                 </button>
 
                 <button type="button" 
-                        class="tab-nav-btn @(ActiveTab == "add" ? "active-success" : "text-muted")"
+                        class="tab-nav-btn @(ActiveTab == "add" ? "active-success" : "text-muted") d-inline-flex align-items-center"
                         @onclick='() => ActiveTab = "add"'>
-                    <i class="bi bi-plus-lg me-1"></i> Add Custom Link
+                    <i class="bi bi-plus-lg me-1"></i>
+                    <span>Add Custom Link</span>
+                    <i class="bi bi-info-circle ms-1" 
+                       style="font-size: 0.8rem; cursor: help; opacity: 0.85;" 
+                       data-bs-tooltip="true" 
+                       data-bs-placement="bottom" 
+                       data-bs-html="true" 
+                       data-bs-title="<b>Add Custom Link</b><br/>Manually define a logical relationship between any two tables and columns across your database schema to enable automatic join routing." 
+                       title="Add Custom Link: Manually define a logical relationship between any two tables and columns across your database schema to enable automatic join routing."></i>
                 </button>
 
                 <button type="button" 
-                        class="tab-nav-btn @(ActiveTab == "blacklisted" ? "active-danger" : "text-muted")"
+                        class="tab-nav-btn @(ActiveTab == "blacklisted" ? "active-danger" : "text-muted") d-inline-flex align-items-center"
                         @onclick='() => ActiveTab = "blacklisted"'>
                     <span>Dismissed</span>
                     @if (BlacklistedCount > 0)
                     {
                         <span class="badge bg-danger bg-opacity-25 text-danger ms-1">@BlacklistedCount</span>
                     }
+                    <i class="bi bi-info-circle ms-1" 
+                       style="font-size: 0.8rem; cursor: help; opacity: 0.85;" 
+                       data-bs-tooltip="true" 
+                       data-bs-placement="bottom" 
+                       data-bs-html="true" 
+                       data-bs-title="<b>Dismissed Relationships</b><br/>Candidate relationships that were dismissed or rejected. ExploreDB will ignore them and never propose them again, but they can be restored here anytime." 
+                       title="Dismissed Relationships: Candidate relationships that were dismissed or rejected. ExploreDB will ignore them and never propose them again, but they can be restored here anytime."></i>
                 </button>
 
                 <button type="button" 
-                        class="tab-nav-btn @(ActiveTab == "lookups" ? "active-info" : "text-muted")"
+                        class="tab-nav-btn @(ActiveTab == "lookups" ? "active-info" : "text-muted") d-inline-flex align-items-center"
                         @onclick='() => SwitchToLookupsTab()'>
                     <span>Lookup Tables</span>
+                    <i class="bi bi-info-circle ms-1" 
+                       style="font-size: 0.8rem; cursor: help; opacity: 0.85;" 
+                       data-bs-tooltip="true" 
+                       data-bs-placement="bottom" 
+                       data-bs-html="true" 
+                       data-bs-title="<b>Non-Routing Lookup Tables (Leaf-Only Protection)</b><br/>Lookup and dimension tables (such as Status, Priority, Country, Type) are referenced by dozens of tables across your schema. When marked as Non-Routing, Query Builder will never use them as transit bridges between unrelated business entities (preventing accidental Cartesian cross-joins like Orders &harr; Status &harr; Employees), while still seamlessly joining them when their columns are selected in your query." 
+                       title="Non-Routing Lookup Tables (Leaf-Only Protection): Lookup and dimension tables (such as Status, Priority, Country, Type) are referenced by dozens of tables across your schema. When marked as Non-Routing, Query Builder will never use them as transit bridges between unrelated business entities (preventing accidental Cartesian cross-joins like Orders <-> Status <-> Employees), while still seamlessly joining them when their columns are selected in your query."></i>
                 </button>
             </div>
 
@@ -1066,128 +1113,105 @@
                 }
                 else if (ActiveTab == "lookups")
                 {
-                    <div class="alert alert-dark border-0 shadow-sm mb-4 p-3 d-flex align-items-center" style="background-color: var(--app-surface-tertiary, rgba(255,255,255,0.03)); border: 1px solid var(--app-border) !important;">
-                        <div class="d-flex align-items-start gap-3">
-                            <i class="bi bi-info-circle-fill text-info fs-4 mt-1"></i>
-                            <div>
-                                <div class="fw-bold mb-1" style="color: var(--app-text);">Non-Routing Lookup Tables (Leaf-Only Protection)</div>
-                                <div class="small text-muted" style="line-height: 1.5;">
-                                    Lookup and dimension tables (such as <code>Status</code>, <code>Priority</code>, <code>Country</code>, <code>Type</code>) are referenced by dozens of tables across your schema.
-                                    When marked as <strong>Non-Routing</strong>, Query Builder will <em>never</em> use them as transit bridges between unrelated business entities (preventing accidental Cartesian cross-joins like <code>Orders &harr; Status &harr; Employees</code>), while still seamlessly joining them when their columns are selected in your query.
+                    <!-- Toolbar: Add Table (Left) & Filter Search (Right) -->
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 pb-3" style="border-bottom: 1px solid var(--app-border);">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="position-relative" style="min-width: 280px;">
+                                <input class="form-control form-control-sm pe-4 text-truncate" 
+                                       @bind="AddTableSearch" 
+                                       @bind:event="oninput"
+                                       placeholder="Search table to add..." 
+                                       @onfocus="OpenAddTableDropdown"
+                                       style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
+                                
+                                @if (IsAddTableDropdownOpen)
+                                {
+                                    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseAddTableDropdown"></div>
+                                    <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
+                                        @{
+                                            var filteredToAdd = AvailableTablesToAddAsLookup
+                                                .Where(t => string.IsNullOrWhiteSpace(AddTableSearch) || 
+                                                            t.FullName.Contains(AddTableSearch, StringComparison.OrdinalIgnoreCase) || 
+                                                            t.Name.Contains(AddTableSearch, StringComparison.OrdinalIgnoreCase) ||
+                                                            (!string.IsNullOrEmpty(t.Schema) && t.Schema.Contains(AddTableSearch, StringComparison.OrdinalIgnoreCase)))
+                                                .ToList();
+                                        }
+                                        @if (filteredToAdd.Any())
+                                        {
+                                            <div class="list-group list-group-flush">
+                                                @foreach (var t in filteredToAdd)
+                                                {
+                                                    var isSelected = t.FullName == SelectedTableToAddAsLookup;
+                                                    <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small d-flex align-items-center" 
+                                                            style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: @(isSelected ? "var(--app-accent)" : "transparent"); color: @(isSelected ? "#fff" : "var(--app-text)");" 
+                                                            @onclick="() => SelectTableToAdd(t.FullName)">
+                                                        <div class="text-truncate">
+                                                            @if (!string.IsNullOrEmpty(t.Schema))
+                                                            {
+                                                                <span class="text-muted fw-normal opacity-75">@t.Schema.</span>
+                                                            }<span class="fw-bold">@t.Name</span>
+                                                        </div>
+                                                    </button>
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="p-3 text-muted small text-center">No matching tables found.</div>
+                                        }
+                                    </div>
+                                }
+
+                                <div class="position-absolute h-100 d-flex align-items-center gap-1" style="right: 10px; top: 0;">
+                                    @if (!string.IsNullOrEmpty(SelectedTableToAddAsLookup))
+                                    {
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-muted" style="text-decoration: none; font-size: 0.75rem;" title="Clear selection" @onclick="ClearSelectedTableToAdd">
+                                            <i class="bi bi-x-circle-fill"></i>
+                                        </button>
+                                    }
+                                    <i class="bi bi-chevron-down text-muted" style="font-size: 0.8rem; pointer-events: none;"></i>
                                 </div>
+                            </div>
+                            <button class="btn btn-sm btn-primary d-flex align-items-center gap-1 text-nowrap shadow-sm" 
+                                    disabled="@string.IsNullOrEmpty(SelectedTableToAddAsLookup)" 
+                                    @onclick="AddSelectedTableAsLookup">
+                                <i class="bi bi-plus-lg"></i>
+                                <span>Add Table</span>
+                            </button>
+                        </div>
+                        <div class="d-flex align-items-center gap-2" style="max-width: 320px; width: 100%;">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="background-color: var(--app-surface-tertiary, #2c323f); border-color: var(--app-input-border); color: var(--app-text-muted);">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control" placeholder="Search non-routing tables..." 
+                                       @bind="ActiveLookupsSearch" @bind:event="oninput" 
+                                       style="background: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
                             </div>
                         </div>
                     </div>
 
-                    <div class="card border-0 shadow-sm" style="background-color: var(--app-surface-secondary); border: 1px solid var(--app-border) !important;">
-                        <div class="card-header py-3 px-4 d-flex align-items-center justify-content-between" style="background-color: rgba(13, 202, 240, 0.05); border-bottom: 1px solid var(--app-border);">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="fw-bold fs-6" style="color: var(--app-text);">Non-Routing Tables</span>
-                                <span class="badge bg-info bg-opacity-25 text-info ms-2">@ActiveNonRoutingCount</span>
-                            </div>
-                        </div>
-                        <div class="card-body p-4">
-                            <!-- Toolbar: Filter Search & Add Table -->
-                            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 pb-3" style="border-bottom: 1px solid var(--app-border);">
-                                <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 320px;">
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text" style="background-color: var(--app-surface-tertiary, #2c323f); border-color: var(--app-input-border); color: var(--app-text-muted);">
-                                            <i class="bi bi-search"></i>
-                                        </span>
-                                        <input type="text" class="form-control" placeholder="Search non-routing tables..." 
-                                               @bind="ActiveLookupsSearch" @bind:event="oninput" 
-                                               style="background: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
-                                    </div>
-                                </div>
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="position-relative" style="min-width: 280px;">
-                                        <input class="form-control form-control-sm pe-4 text-truncate" 
-                                               @bind="AddTableSearch" 
-                                               @bind:event="oninput"
-                                               placeholder="Search table to add..." 
-                                               @onfocus="OpenAddTableDropdown"
-                                               style="cursor: pointer; background-color: var(--app-input-bg); color: var(--app-input-text); border-color: var(--app-input-border);" />
-                                        
-                                        @if (IsAddTableDropdownOpen)
-                                        {
-                                            <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseAddTableDropdown"></div>
-                                            <div class="dropdown-menu show w-100 shadow-lg p-0 mt-1 custom-scrollbar-light custom-scrollbar-solid-track" style="position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; background-color: var(--app-dropdown-bg); border-color: var(--app-border);">
-                                                @{
-                                                    var filteredToAdd = AvailableTablesToAddAsLookup
-                                                        .Where(t => string.IsNullOrWhiteSpace(AddTableSearch) || 
-                                                                    t.FullName.Contains(AddTableSearch, StringComparison.OrdinalIgnoreCase) || 
-                                                                    t.Name.Contains(AddTableSearch, StringComparison.OrdinalIgnoreCase) ||
-                                                                    (!string.IsNullOrEmpty(t.Schema) && t.Schema.Contains(AddTableSearch, StringComparison.OrdinalIgnoreCase)))
-                                                        .ToList();
-                                                }
-                                                @if (filteredToAdd.Any())
-                                                {
-                                                    <div class="list-group list-group-flush">
-                                                        @foreach (var t in filteredToAdd)
-                                                        {
-                                                            var isSelected = t.FullName == SelectedTableToAddAsLookup;
-                                                            <button type="button" class="list-group-item list-group-item-action border-0 py-2 px-3 small d-flex align-items-center" 
-                                                                    style="border-bottom: 1px solid var(--app-border) !important; font-size: 0.85rem; background-color: @(isSelected ? "var(--app-accent)" : "transparent"); color: @(isSelected ? "#fff" : "var(--app-text)");" 
-                                                                    @onclick="() => SelectTableToAdd(t.FullName)">
-                                                                <div class="text-truncate">
-                                                                    @if (!string.IsNullOrEmpty(t.Schema))
-                                                                    {
-                                                                        <span class="text-muted fw-normal opacity-75">@t.Schema.</span>
-                                                                    }<span class="fw-bold">@t.Name</span>
-                                                                </div>
-                                                            </button>
-                                                        }
-                                                    </div>
-                                                }
-                                                else
-                                                {
-                                                    <div class="p-3 text-muted small text-center">No matching tables found.</div>
-                                                }
-                                            </div>
-                                        }
+                    var activeTables = VirtualRelationshipService.GetActiveNonRoutingTables();
+                    var filteredActive = string.IsNullOrWhiteSpace(ActiveLookupsSearch)
+                        ? activeTables.OrderBy(t => t).ToList()
+                        : activeTables.Where(t => t.Contains(ActiveLookupsSearch, StringComparison.OrdinalIgnoreCase)).OrderBy(t => t).ToList();
 
-                                        <div class="position-absolute h-100 d-flex align-items-center gap-1" style="right: 10px; top: 0;">
-                                            @if (!string.IsNullOrEmpty(SelectedTableToAddAsLookup))
-                                            {
-                                                <button type="button" class="btn btn-link btn-sm p-0 text-muted" style="text-decoration: none; font-size: 0.75rem;" title="Clear selection" @onclick="ClearSelectedTableToAdd">
-                                                    <i class="bi bi-x-circle-fill"></i>
-                                                </button>
-                                            }
-                                            <i class="bi bi-chevron-down text-muted" style="font-size: 0.8rem; pointer-events: none;"></i>
-                                        </div>
-                                    </div>
-                                    <button class="btn btn-sm btn-primary d-flex align-items-center gap-1 text-nowrap shadow-sm" 
-                                            disabled="@string.IsNullOrEmpty(SelectedTableToAddAsLookup)" 
-                                            @onclick="AddSelectedTableAsLookup">
-                                        <i class="bi bi-plus-lg"></i>
-                                        <span>Add Table</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            @{
-                                var activeTables = VirtualRelationshipService.GetActiveNonRoutingTables();
-                                var filteredActive = string.IsNullOrWhiteSpace(ActiveLookupsSearch)
-                                    ? activeTables.OrderBy(t => t).ToList()
-                                    : activeTables.Where(t => t.Contains(ActiveLookupsSearch, StringComparison.OrdinalIgnoreCase)).OrderBy(t => t).ToList();
-                            }
-
-                            @if (filteredActive.Count == 0)
+                    if (filteredActive.Count == 0)
+                    {
+                        <div class="text-center py-4 text-muted">
+                            @if (activeTables.Count == 0)
                             {
-                                <div class="text-center py-4 text-muted">
-                                    @if (activeTables.Count == 0)
-                                    {
-                                        <i class="bi bi-diagram-2 text-muted fs-3 d-block mb-2"></i>
-                                        <span>No tables are currently configured as Non-Routing. Use the dropdown above to add tables like Status, Country, or Type.</span>
-                                    }
-                                    else
-                                    {
-                                        <span>No non-routing tables match "<strong>@ActiveLookupsSearch</strong>".</span>
-                                    }
-                                </div>
+                                <i class="bi bi-diagram-2 text-muted fs-3 d-block mb-2"></i>
+                                <span>No tables are currently configured as Non-Routing. Use the dropdown above to add tables like Status, Country, or Type.</span>
                             }
                             else
                             {
+                                <span>No non-routing tables match "<strong>@ActiveLookupsSearch</strong>".</span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
                                 <div class="table-responsive">
                                     <table class="table table-hover align-middle mb-0" style="color: var(--app-text);">
                                         <thead class="small text-muted text-uppercase" style="border-bottom: 2px solid var(--app-border);">
@@ -1217,8 +1241,6 @@
                                     </table>
                                 </div>
                             }
-                        </div>
-                    </div>
                 }
             </div>
         </div>

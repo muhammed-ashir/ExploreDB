@@ -1045,14 +1045,14 @@ else
                             @if (IsProfileDropdownOpen)
                             {
                                 <div class="dropdown-menu show shadow-lg py-1 mt-1 position-absolute" 
-                                     style="min-width: 280px; z-index: 1070; background: var(--app-surface); border: 1px solid var(--app-border);">
+                                     style="width: 320px; max-width: min(340px, 90vw); z-index: 1070; overflow-x: hidden; background: var(--app-surface); border: 1px solid var(--app-border);">
                                     <div class="px-3 py-1.5 text-muted small fw-bold text-uppercase border-bottom" style="font-size: 0.7rem; border-color: var(--app-border) !important;">
                                         Select Relation Profile
                                     </div>
                                     <button class="dropdown-item py-2 px-3 small @(string.IsNullOrEmpty(ActiveProfileName) ? "active bg-primary text-white" : "")"
                                             @onclick="InitiateSwitchToLocal">
-                                        <div class="fw-semibold">Local (Isolated to this DB)</div>
-                                        <div class="@(string.IsNullOrEmpty(ActiveProfileName) ? "text-white-50" : "text-muted")" style="font-size: 0.72rem;">Changes stay only in this database</div>
+                                        <div class="fw-semibold text-truncate">Local (Isolated to this DB)</div>
+                                        <div class="@(string.IsNullOrEmpty(ActiveProfileName) ? "text-white-50" : "text-muted") text-truncate" style="font-size: 0.72rem;">Changes stay only in this database</div>
                                     </button>
 
                                     @if (AvailableProfiles.Count > 0)
@@ -1064,14 +1064,15 @@ else
                                         @foreach (var prof in AvailableProfiles)
                                         {
                                             var isCurrent = string.Equals(ActiveProfileName, prof.Name, StringComparison.OrdinalIgnoreCase);
-                                            <div class="d-flex align-items-center justify-content-between px-2 py-0.5 dropdown-item-container">
-                                                <button class="btn btn-sm text-start flex-grow-1 border-0 p-1.5 @(isCurrent ? "fw-bold text-primary" : "")"
-                                                        style="background: transparent; color: var(--app-text);"
-                                                        @onclick="() => SwitchToProfile(prof.Name)">
-                                                    <div>@prof.Name</div>
-                                                    <div class="text-muted small" style="font-size: 0.7rem;">@prof.EntryCount relations &bull; @prof.LastModified.ToString("g")</div>
+                                            <div class="d-flex align-items-center justify-content-between px-2 py-0.5 dropdown-item-container" style="min-width: 0;">
+                                                <button class="btn btn-sm text-start flex-grow-1 border-0 p-1.5 overflow-hidden @(isCurrent ? "fw-bold text-primary" : "")"
+                                                        style="min-width: 0; background: transparent; color: var(--app-text);"
+                                                        @onclick="() => SwitchToProfile(prof.Name)"
+                                                        title="@prof.Name">
+                                                    <div class="text-truncate" title="@prof.Name">@prof.Name</div>
+                                                    <div class="text-muted small text-truncate" style="font-size: 0.7rem;">@prof.EntryCount relations &bull; @prof.LastModified.ToString("g")</div>
                                                 </button>
-                                                <button class="btn btn-sm btn-link text-danger p-1 opacity-75 hover-opacity-100" 
+                                                <button class="btn btn-sm btn-link text-danger p-1 flex-shrink-0 opacity-75 hover-opacity-100" 
                                                         title="Delete profile" 
                                                         @onclick="() => PromptDeleteProfile(prof.Name)" 
                                                         @onclick:stopPropagation>
