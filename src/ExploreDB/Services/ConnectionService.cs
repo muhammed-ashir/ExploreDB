@@ -91,6 +91,122 @@ public class ConnectionService
     public static string EnsureOptimalConnectionString(string connString)
         => EnsureOptimalConnectionString(connString, out _);
 
+    public static string GetAuthMode(SqlConnectionStringBuilder builder)
+    {
+        if (builder.IntegratedSecurity) return "Windows";
+        if (builder.Authentication == SqlAuthenticationMethod.ActiveDirectoryInteractive ||
+            builder.Authentication == SqlAuthenticationMethod.ActiveDirectoryIntegrated ||
+            builder.Authentication == SqlAuthenticationMethod.ActiveDirectoryPassword ||
+            builder.Authentication == SqlAuthenticationMethod.ActiveDirectoryDefault)
+        {
+            return "EntraMfa";
+        }
+        return "SqlServer";
+    }
+
+    public static string GetAuthMode(SavedConnection connection)
+    {
+        if (!string.IsNullOrWhiteSpace(connection.AuthType))
+        {
+            if (connection.AuthType.Equals("Windows", StringComparison.OrdinalIgnoreCase)) return "Windows";
+            if (connection.AuthType.Equals("EntraMfa", StringComparison.OrdinalIgnoreCase)) return "EntraMfa";
+            return "SqlServer";
+        }
+        return connection.UseWindowsAuth ? "Windows" : "SqlServer";
+    }
+
+    public static string GetConnectionIdentityKey(string? connString)
+    {
+        if (string.IsNullOrWhiteSpace(connString)) return string.Empty;
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connString);
+            string server = (builder.DataSource ?? string.Empty).Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(server)) return string.Empty;
+            string authMode = GetAuthMode(builder).ToUpperInvariant();
+            string userId = (builder.UserID ?? string.Empty).Trim().ToUpperInvariant();
+            return $"{server}|{authMode}|{userId}";
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    public static string GetConnectionIdentityKey(SavedConnection connection)
+    {
+        if (!string.IsNullOrWhiteSpace(connection.Server))
+        {
+            string server = connection.Server.Trim().ToUpperInvariant();
+            string authMode = GetAuthMode(connection).ToUpperInvariant();
+            string userId = (connection.Username ?? string.Empty).Trim().ToUpperInvariant();
+            return $"{server}|{authMode}|{userId}";
+        }
+        return GetConnectionIdentityKey(connection.ConnectionString);
+    }
+
+    public SavedConnection? ResolveConnectionMetadata(string? connString)
+    {
+        if (string.IsNullOrWhiteSpace(connString)) return null;
+
+        string targetKey = GetConnectionIdentityKey(connString);
+
+        var active = ActiveSessionConnections.FirstOrDefault(c =>
+            string.Equals(c.ConnectionString, connString, StringComparison.OrdinalIgnoreCase));
+        if (active != null && !string.IsNullOrWhiteSpace(active.Name) &&
+            !string.Equals(active.Name, active.Server, StringComparison.OrdinalIgnoreCase))
+        {
+            return active;
+        }
+
+        var savedExact = SavedConnections.FirstOrDefault(c =>
+            string.Equals(c.ConnectionString, connString, StringComparison.OrdinalIgnoreCase));
+        if (savedExact != null) return savedExact;
+
+        if (!string.IsNullOrEmpty(targetKey))
+        {
+            var savedByKey = SavedConnections.FirstOrDefault(c =>
+                string.Equals(GetConnectionIdentityKey(c), targetKey, StringComparison.OrdinalIgnoreCase));
+            if (savedByKey != null) return savedByKey;
+
+            var activeByKey = ActiveSessionConnections.FirstOrDefault(c =>
+                string.Equals(GetConnectionIdentityKey(c), targetKey, StringComparison.OrdinalIgnoreCase));
+            if (activeByKey != null) return activeByKey;
+        }
+
+        if (active != null) return active;
+
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connString);
+            string server = builder.DataSource ?? string.Empty;
+            string authMode = GetAuthMode(builder);
+            string userId = builder.UserID ?? string.Empty;
+
+            var savedByServerUser = SavedConnections.FirstOrDefault(c =>
+                string.Equals(c.Server?.Trim(), server.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals((c.Username ?? string.Empty).Trim(), userId.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (savedByServerUser != null) return savedByServerUser;
+
+            if (!string.IsNullOrEmpty(server))
+            {
+                return new SavedConnection
+                {
+                    Name = string.Empty,
+                    Server = server,
+                    AuthType = authMode,
+                    UseWindowsAuth = authMode == "Windows",
+                    Username = userId,
+                    Database = builder.InitialCatalog ?? string.Empty,
+                    ConnectionString = connString
+                };
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
     public void PrewarmConnection(string connString)
     {
         if (string.IsNullOrWhiteSpace(connString)) return;
@@ -188,6 +304,7 @@ public class ConnectionService
     {
         if (string.IsNullOrWhiteSpace(connString)) return;
 
+        string targetKey = GetConnectionIdentityKey(connString);
         string server = "";
         string userId = "";
         try
@@ -198,11 +315,10 @@ public class ConnectionService
         }
         catch { }
 
-        var toRemove = ActiveSessionConnections.Where(c => 
+        var toRemove = ActiveSessionConnections.Where(c =>
             string.Equals(c.ConnectionString, connString, StringComparison.OrdinalIgnoreCase) ||
-            (!string.IsNullOrEmpty(server) && 
-             string.Equals(c.Server, server, StringComparison.OrdinalIgnoreCase) && 
-             string.Equals(c.Username ?? "", userId, StringComparison.OrdinalIgnoreCase))).ToList();
+            (!string.IsNullOrEmpty(targetKey) &&
+             string.Equals(GetConnectionIdentityKey(c), targetKey, StringComparison.OrdinalIgnoreCase))).ToList();
 
         foreach (var item in toRemove)
         {
@@ -222,6 +338,15 @@ public class ConnectionService
             if (string.Equals(ConnectionString, connString, StringComparison.OrdinalIgnoreCase))
             {
                 isCurrent = true;
+            }
+            else if (!string.IsNullOrEmpty(targetKey))
+            {
+                string currentKey = GetConnectionIdentityKey(ConnectionString);
+                if (!string.IsNullOrEmpty(currentKey) &&
+                    string.Equals(currentKey, targetKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    isCurrent = true;
+                }
             }
             else if (!string.IsNullOrEmpty(server))
             {

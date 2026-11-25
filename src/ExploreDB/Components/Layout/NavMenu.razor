@@ -196,6 +196,8 @@
 </div>
 
 @code {
+    private sealed record CachedServerDbList(List<string> Databases, DateTime FetchedUtc);
+
     private string CurrentUrl = "";
     private string ActiveServer = "";
     private string SelectedDatabase = "";
@@ -206,6 +208,13 @@
     private List<string> ServerDatabases = new();
     private bool IsLoadingDBs = false;
     private bool IsExplorersExpanded = false;
+
+    private readonly Dictionary<string, CachedServerDbList> _dbListCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan DbListCacheTtl = TimeSpan.FromSeconds(60);
+    private string _activeConnIdentityKey = "";
+    private CancellationTokenSource? _dbLoadCts;
+    private long _dbLoadGeneration = 0;
+    private volatile bool _disposed = false;
 
     private bool IsRunnerActive => CurrentUrl == Nav.BaseUri || CurrentUrl == Nav.BaseUri.TrimEnd('/');
     private bool IsPathfinderActive => CurrentUrl.Contains("/builder");
@@ -225,7 +234,7 @@
         IsExplorersExpanded = !IsExplorersExpanded;
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
         Nav.LocationChanged += OnLocationChanged;
         ConnectionService.OnConnectionChanged += OnConnectionChangedHandler;
@@ -236,32 +245,25 @@
         {
             IsExplorersExpanded = true;
         }
-        await LoadServerDatabases();
-        ConnectionSearch = GetActiveConnectionDisplayName();
+        SyncActiveConnectionDisplayFromService();
+        _ = LoadServerDatabasesAsync(forceRefresh: false);
+        return Task.CompletedTask;
     }
 
     private string GetActiveConnectionDisplayName()
     {
-        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
-        if (active == null) 
-        {
-            active = ConnectionService.SavedConnections.FirstOrDefault(c => c.Server == ActiveServer);
-        }
+        var active = ConnectionService.ResolveConnectionMetadata(ConnectionService.ConnectionString);
         if (active == null) return ActiveServer;
         return string.IsNullOrWhiteSpace(active.Name) ? active.Server : $"{active.Server} ({active.Name})";
     }
 
     private string GetActiveConnectionTooltipHtml()
     {
-        var active = ConnectionService.SavedConnections.FirstOrDefault(c => c.ConnectionString == ConnectionService.ConnectionString);
-        if (active == null)
-        {
-            active = ConnectionService.SavedConnections.FirstOrDefault(c => c.Server == ActiveServer);
-        }
+        var active = ConnectionService.ResolveConnectionMetadata(ConnectionService.ConnectionString);
         return GetConnectionTooltipHtml(active);
     }
 
-    private string GetConnectionTooltipHtml(ExploreDB.Services.ConnectionService.SavedConnection c)
+    private string GetConnectionTooltipHtml(ExploreDB.Services.ConnectionService.SavedConnection? c)
     {
         if (c == null) return "";
         string html = $"<b>Connection Name:</b> {(string.IsNullOrWhiteSpace(c.Name) ? "-" : c.Name)}<br/><b>Server Name:</b> {c.Server}<br/><b>Auth Type:</b> {c.AuthType}";
@@ -272,77 +274,253 @@
         return html;
     }
 
-    private async void OnConnectionChangedHandler()
+    private void SyncActiveConnectionDisplayFromService()
     {
+        string connStr = ConnectionService.ConnectionString;
+        if (string.IsNullOrWhiteSpace(connStr))
+        {
+            ActiveServer = "";
+            SelectedDatabase = "";
+            DatabaseSearch = "";
+            ConnectionSearch = "";
+            _activeConnIdentityKey = "";
+            ServerDatabases.Clear();
+            IsLoadingDBs = false;
+            IsDropdownOpen = false;
+            IsConnectionDropdownOpen = false;
+            _dbListCache.Clear();
+            return;
+        }
+
+        PruneDisconnectedDbCache();
+
         try
         {
-            await LoadServerDatabases();
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connStr);
+            string server = builder.DataSource ?? "";
+            string db = builder.InitialCatalog ?? "";
+            string identityKey = ConnectionService.GetConnectionIdentityKey(connStr);
+
+            bool serverChanged =
+                !string.Equals(_activeConnIdentityKey, identityKey, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(ActiveServer, server, StringComparison.OrdinalIgnoreCase);
+
+            bool connectionChanged =
+                serverChanged ||
+                !string.Equals(SelectedDatabase, db, StringComparison.OrdinalIgnoreCase);
+
+            if (connectionChanged)
+            {
+                IsConnectionDropdownOpen = false;
+                IsDropdownOpen = false;
+            }
+
+            ActiveServer = server;
+            SelectedDatabase = db;
+            DatabaseSearch = db;
+            _activeConnIdentityKey = identityKey;
             ConnectionSearch = GetActiveConnectionDisplayName();
-            await SchemaService.LoadSchemaAsync();
-            await InvokeAsync(StateHasChanged);
+
+            if (!string.IsNullOrEmpty(identityKey) && _dbListCache.TryGetValue(identityKey, out var cached))
+            {
+                ServerDatabases = cached.Databases;
+                IsLoadingDBs = false;
+            }
+            else if (serverChanged)
+            {
+                ServerDatabases = new List<string>();
+            }
         }
+        catch
+        {
+            ConnectionSearch = GetActiveConnectionDisplayName();
+        }
+    }
+
+    private void PruneDisconnectedDbCache()
+    {
+        if (_dbListCache.Count == 0) return;
+        var activeKeys = new HashSet<string>(
+            ConnectionService.ActiveSessionConnections
+                .Select(ConnectionService.GetConnectionIdentityKey)
+                .Where(k => !string.IsNullOrEmpty(k)),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(ConnectionService.ConnectionString))
+        {
+            var currentKey = ConnectionService.GetConnectionIdentityKey(ConnectionService.ConnectionString);
+            if (!string.IsNullOrEmpty(currentKey)) activeKeys.Add(currentKey);
+        }
+
+        foreach (var key in _dbListCache.Keys.ToList())
+        {
+            if (!activeKeys.Contains(key))
+            {
+                _dbListCache.Remove(key);
+            }
+        }
+    }
+
+    private async void OnConnectionChangedHandler()
+    {
+        if (_disposed) return;
+
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                SyncActiveConnectionDisplayFromService();
+                StateHasChanged();
+            });
+
+            var schemaTask = SchemaService.LoadSchemaAsync();
+            var dbTask = LoadServerDatabasesAsync(forceRefresh: false);
+            await Task.WhenAll(schemaTask, dbTask);
+        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             Serilog.Log.Warning(ex, "Error handling connection changed in NavMenu");
         }
     }
 
-    private async Task LoadServerDatabases()
+    private async Task LoadServerDatabasesAsync(bool forceRefresh)
     {
-        if (string.IsNullOrEmpty(ConnectionService.ConnectionString))
+        if (_disposed) return;
+
+        string targetConnStr = ConnectionService.ConnectionString;
+        if (string.IsNullOrWhiteSpace(targetConnStr))
         {
-            ActiveServer = "";
-            ServerDatabases.Clear();
+            CancelPendingDbLoad();
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                SyncActiveConnectionDisplayFromService();
+                StateHasChanged();
+            });
             return;
+        }
+
+        string identityKey = ConnectionService.GetConnectionIdentityKey(targetConnStr);
+        CachedServerDbList? cached = null;
+        bool hasCache = !string.IsNullOrEmpty(identityKey) && _dbListCache.TryGetValue(identityKey, out cached);
+
+        if (!forceRefresh && hasCache && cached != null && (DateTime.UtcNow - cached.FetchedUtc) < DbListCacheTtl)
+        {
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                if (string.Equals(_activeConnIdentityKey, identityKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    ServerDatabases = cached.Databases;
+                    IsLoadingDBs = false;
+                    StateHasChanged();
+                }
+            });
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        var prevCts = Interlocked.Exchange(ref _dbLoadCts, cts);
+        try { prevCts?.Cancel(); } catch { }
+        try { prevCts?.Dispose(); } catch { }
+
+        long gen = Interlocked.Increment(ref _dbLoadGeneration);
+        var token = cts.Token;
+
+        if (!hasCache)
+        {
+            await InvokeAsync(() =>
+            {
+                if (_disposed || token.IsCancellationRequested || gen != Interlocked.Read(ref _dbLoadGeneration)) return;
+                ServerDatabases = new List<string>();
+                IsLoadingDBs = true;
+                StateHasChanged();
+            });
         }
 
         try
         {
-            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
-            string server = builder.DataSource;
-            
-            if (ActiveServer != server)
+            var dbs = await Task.Run(async () =>
             {
-                ActiveServer = server;
-                IsLoadingDBs = true;
-                await InvokeAsync(StateHasChanged);
-                
-                var dbs = new List<string>();
-                var masterBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString) { InitialCatalog = "master" };
+                var list = new List<string>();
+                var masterBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(targetConnStr) { InitialCatalog = "master" };
                 bool fetched = false;
 
                 try
                 {
                     using var conn = new Microsoft.Data.SqlClient.SqlConnection(masterBuilder.ConnectionString);
-                    await conn.OpenAsync();
+                    await conn.OpenAsync(token);
                     using var cmd = conn.CreateCommand();
                     cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
-                    using var reader = await cmd.ExecuteReaderAsync();
-                    while (await reader.ReadAsync()) dbs.Add(reader.GetString(0));
+                    using var reader = await cmd.ExecuteReaderAsync(token);
+                    while (await reader.ReadAsync(token)) list.Add(reader.GetString(0));
                     fetched = true;
                 }
+                catch (OperationCanceledException) { throw; }
                 catch { }
 
                 if (!fetched)
                 {
-                    using var conn = new Microsoft.Data.SqlClient.SqlConnection(ConnectionService.ConnectionString);
-                    await conn.OpenAsync();
+                    token.ThrowIfCancellationRequested();
+                    using var conn = new Microsoft.Data.SqlClient.SqlConnection(targetConnStr);
+                    await conn.OpenAsync(token);
                     using var cmd = conn.CreateCommand();
                     cmd.CommandText = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
-                    using var reader = await cmd.ExecuteReaderAsync();
-                    while (await reader.ReadAsync()) dbs.Add(reader.GetString(0));
+                    using var reader = await cmd.ExecuteReaderAsync(token);
+                    while (await reader.ReadAsync(token)) list.Add(reader.GetString(0));
+                }
+
+                return list;
+            }, token);
+
+            if (_disposed || token.IsCancellationRequested || gen != Interlocked.Read(ref _dbLoadGeneration))
+            {
+                return;
+            }
+
+            await InvokeAsync(() =>
+            {
+                if (_disposed || token.IsCancellationRequested || gen != Interlocked.Read(ref _dbLoadGeneration)) return;
+                if (!string.IsNullOrEmpty(identityKey))
+                {
+                    _dbListCache[identityKey] = new CachedServerDbList(dbs, DateTime.UtcNow);
                 }
                 ServerDatabases = dbs;
                 IsLoadingDBs = false;
-            }
-            SelectedDatabase = builder.InitialCatalog;
-            DatabaseSearch = SelectedDatabase;
+                StateHasChanged();
+            });
         }
+        catch (OperationCanceledException) { }
         catch
         {
-            ActiveServer = "";
-            ServerDatabases.Clear();
-            IsLoadingDBs = false;
+            if (_disposed || token.IsCancellationRequested || gen != Interlocked.Read(ref _dbLoadGeneration))
+            {
+                return;
+            }
+
+            await InvokeAsync(() =>
+            {
+                if (_disposed || token.IsCancellationRequested || gen != Interlocked.Read(ref _dbLoadGeneration)) return;
+                if (!hasCache)
+                {
+                    ServerDatabases = new List<string>();
+                }
+                IsLoadingDBs = false;
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void CancelPendingDbLoad()
+    {
+        Interlocked.Increment(ref _dbLoadGeneration);
+        var prevCts = Interlocked.Exchange(ref _dbLoadCts, null);
+        if (prevCts != null)
+        {
+            try { prevCts.Cancel(); } catch { }
+            try { prevCts.Dispose(); } catch { }
         }
     }
 
@@ -350,6 +528,12 @@
     {
         IsDropdownOpen = true;
         DatabaseSearch = "";
+        if (!string.IsNullOrEmpty(_activeConnIdentityKey) &&
+            (!_dbListCache.TryGetValue(_activeConnIdentityKey, out var cached) ||
+             (DateTime.UtcNow - cached.FetchedUtc) >= DbListCacheTtl))
+        {
+            _ = LoadServerDatabasesAsync(forceRefresh: true);
+        }
     }
 
     private void CloseDropdown()
@@ -374,11 +558,16 @@
     {
         IsConnectionDropdownOpen = false;
         ConnectionService.SaveActiveConnection(connString);
-        ConnectionSearch = GetActiveConnectionDisplayName();
+        SyncActiveConnectionDisplayFromService();
     }
 
     private void OnDisconnectClick(string connString)
     {
+        string key = ConnectionService.GetConnectionIdentityKey(connString);
+        if (!string.IsNullOrEmpty(key))
+        {
+            _dbListCache.Remove(key);
+        }
         ConnectionService.DisconnectConnection(connString);
         IsConnectionDropdownOpen = false;
         StateHasChanged();
@@ -404,20 +593,27 @@
     private async Task SwitchDatabaseAsync()
     {
         if (string.IsNullOrEmpty(SelectedDatabase)) return;
+        string expectedConnStr = ConnectionService.ConnectionString;
+        if (string.IsNullOrEmpty(expectedConnStr)) return;
 
         try
         {
-            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
-            if (builder.InitialCatalog == SelectedDatabase) return;
-            
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(expectedConnStr);
+            if (string.Equals(builder.InitialCatalog, SelectedDatabase, StringComparison.OrdinalIgnoreCase)) return;
+
             ConnectionService.NotifyDatabaseSwitching(SelectedDatabase);
             await InvokeAsync(StateHasChanged);
             await Task.Delay(50); // Give UI time to render the loader
-            
+
             builder.InitialCatalog = SelectedDatabase;
             var newConnString = builder.ConnectionString;
-            
+
             var result = await ConnectionService.TestConnectionAsync(newConnString);
+            if (!string.Equals(ConnectionService.ConnectionString, expectedConnStr, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             if (result.Success)
             {
                 ConnectionService.SaveActiveConnection(newConnString);
@@ -427,13 +623,17 @@
             {
                 var oldBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
                 SelectedDatabase = oldBuilder.InitialCatalog; // Revert
+                DatabaseSearch = SelectedDatabase;
             }
-
-            ConnectionService.NotifyDatabaseSwitched();
-            await InvokeAsync(StateHasChanged);
         }
-        catch
+        catch { }
+        finally
         {
+            ConnectionService.NotifyDatabaseSwitched();
+            if (!_disposed)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
@@ -454,17 +654,25 @@
 
     private void HandleThemeChanged()
     {
+        if (_disposed) return;
         InvokeAsync(StateHasChanged);
     }
 
     private void OnSavedConnectionsChangedHandler()
     {
-        ConnectionSearch = GetActiveConnectionDisplayName();
-        InvokeAsync(StateHasChanged);
+        if (_disposed) return;
+        InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            ConnectionSearch = GetActiveConnectionDisplayName();
+            StateHasChanged();
+        });
     }
 
     public void Dispose()
     {
+        _disposed = true;
+        CancelPendingDbLoad();
         Nav.LocationChanged -= OnLocationChanged;
         ConnectionService.OnConnectionChanged -= OnConnectionChangedHandler;
         ConnectionService.OnSavedConnectionsChanged -= OnSavedConnectionsChangedHandler;

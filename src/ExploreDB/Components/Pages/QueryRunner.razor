@@ -1228,7 +1228,7 @@
                 await InvokeAsync(InitializeSessionAsync);
             }
 
-            if (ActiveTab != _fallbackTab && ActiveTab.ConnectionString != ConnectionService.ConnectionString)
+            if (ActiveTab != _fallbackTab && !string.Equals(ActiveTab.ConnectionString, ConnectionService.ConnectionString, StringComparison.OrdinalIgnoreCase))
             {
                 ActiveTab.ConnectionString = ConnectionService.ConnectionString;
                 await QueryStateService.SaveTabsAsync();
@@ -1589,6 +1589,16 @@
         StateHasChanged();
     }
 
+    private void SyncActiveConnectionToTab(QueryTab? tab)
+    {
+        if (tab == null) return;
+        if (!string.IsNullOrEmpty(tab.ConnectionString) &&
+            !string.Equals(tab.ConnectionString, ConnectionService.ConnectionString, StringComparison.OrdinalIgnoreCase))
+        {
+            ConnectionService.SaveActiveConnection(tab.ConnectionString);
+        }
+    }
+
     private async Task SwitchTabAsync(Guid tabId)
     {
         if (QueryStateService.ActiveTabId == tabId) return;
@@ -1611,9 +1621,9 @@
         {
             newTab.ConnectionString = ConnectionService.ConnectionString;
         }
-        else if (newTab.ConnectionString != ConnectionService.ConnectionString)
+        else
         {
-            ConnectionService.SaveActiveConnection(newTab.ConnectionString);
+            SyncActiveConnectionToTab(newTab);
         }
         
         await QueryStateService.SaveTabsAsync();
@@ -1798,7 +1808,7 @@
                 
                 if (newTab.ConnectionString != ConnectionService.ConnectionString && !string.IsNullOrEmpty(newTab.ConnectionString))
                 {
-                    ConnectionService.SaveActiveConnection(newTab.ConnectionString);
+                    SyncActiveConnectionToTab(newTab);
                 }
             }
             await QueryStateService.SaveTabsAsync();
@@ -1911,9 +1921,13 @@
 
         QueryStateService.ActiveTabId = keepTabId;
         var activeTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == keepTabId);
-        if (activeTab != null && _editor != null)
+        if (activeTab != null)
         {
-            await _editor.SetValue(activeTab.Content);
+            if (_editor != null)
+            {
+                await _editor.SetValue(activeTab.Content);
+            }
+            SyncActiveConnectionToTab(activeTab);
         }
 
         await QueryStateService.SaveTabsAsync();
@@ -1947,9 +1961,13 @@
         {
             QueryStateService.ActiveTabId = currentTabId;
             var activeTab = QueryStateService.Tabs.FirstOrDefault(t => t.Id == currentTabId);
-            if (activeTab != null && _editor != null)
+            if (activeTab != null)
             {
-                await _editor.SetValue(activeTab.Content);
+                if (_editor != null)
+                {
+                    await _editor.SetValue(activeTab.Content);
+                }
+                SyncActiveConnectionToTab(activeTab);
             }
         }
 
@@ -1993,6 +2011,7 @@
             {
                 await _editor.SetValue(active.Content);
             }
+            SyncActiveConnectionToTab(active);
         }
 
         await QueryStateService.SaveTabsAsync();
