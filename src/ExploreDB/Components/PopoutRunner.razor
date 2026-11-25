@@ -525,6 +525,7 @@
         SchemaService.OnTablesLoaded += OnSchemaLoadedHandler;
         SchemaService.OnViewsLoaded += OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded += OnSchemaLoadedHandler;
+        SchemaService.OnRelationshipsUpdated += OnSchemaLoadedHandler;
         ThemeService.OnThemeChanged += HandleThemeChanged;
         UserSettingsService.OnSettingsChanged += HandleSettingsChanged;
         _objRef = DotNetObjectReference.Create(this);
@@ -631,6 +632,7 @@
         SchemaService.OnTablesLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnViewsLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded -= OnSchemaLoadedHandler;
+        SchemaService.OnRelationshipsUpdated -= OnSchemaLoadedHandler;
         _autocompleteDebounceCts?.Cancel();
         _autocompleteDebounceCts?.Dispose();
         _autocompleteDebounceCts = null;

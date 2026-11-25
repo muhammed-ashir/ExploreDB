@@ -116,6 +116,10 @@ public partial class App : Application
 
             Services = services.BuildServiceProvider();
 
+            // Eagerly initialize VirtualRelationshipService so saved/profile virtual
+            // relationships sync automatically across all tools when connecting or loading schemas.
+            _ = Services.GetRequiredService<VirtualRelationshipService>();
+
             // Launch Main Window
             var mainWindow = Services.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;

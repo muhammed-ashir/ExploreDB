@@ -1166,10 +1166,16 @@
     protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
+        SchemaService.OnRelationshipsUpdated += HandleRelationshipsUpdated;
         _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChanging);
     }
 
     private void HandleThemeChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleRelationshipsUpdated()
     {
         InvokeAsync(StateHasChanged);
     }
@@ -1198,6 +1204,7 @@
     public void Dispose()
     {
         ThemeService.OnThemeChanged -= HandleThemeChanged;
+        SchemaService.OnRelationshipsUpdated -= HandleRelationshipsUpdated;
         _locationChangingRegistration?.Dispose();
     }
 

@@ -113,6 +113,16 @@ public class VirtualRelationshipService
         _connectionService.OnConnectionChanged += HandleConnectionOrDatabaseChanged;
         _connectionService.OnDatabaseSwitched += HandleConnectionOrDatabaseChanged;
         _schemaService.OnTablesLoaded += HandleTablesLoaded;
+
+        if (!string.IsNullOrEmpty(_connectionService.ActiveServer) && !string.IsNullOrEmpty(_schemaService.ActiveDatabase))
+        {
+            LoadCurrentDatabaseEntries();
+            DetectLookupTables();
+            if (_schemaService.AreTablesLoaded && _schemaService.Tables.Count > 0)
+            {
+                SyncActiveToSchema();
+            }
+        }
     }
 
     private bool _hasScannedSuggestions = false;
@@ -133,6 +143,10 @@ public class VirtualRelationshipService
 
     private void HandleTablesLoaded()
     {
+        if (!string.IsNullOrEmpty(_connectionService.ActiveServer) && !string.IsNullOrEmpty(_schemaService.ActiveDatabase))
+        {
+            LoadCurrentDatabaseEntries();
+        }
         DetectLookupTables();
         SyncActiveToSchema();
     }

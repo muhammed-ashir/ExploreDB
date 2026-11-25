@@ -490,6 +490,7 @@
 
         ConnectionService.OnDatabaseSwitched += OnDatabaseSwitchedHandler;
         SchemaService.OnTablesLoaded += OnTablesLoadedHandler;
+        SchemaService.OnRelationshipsUpdated += OnRelationshipsUpdatedHandler;
 
         var currentDb = SchemaService.ActiveDatabase;
         var session = CleanupService.SessionState;
@@ -509,6 +510,7 @@
             _autoIncludeChildTables = session.AutoIncludeChildTables;
             _showSelectedOnly = session.ShowSelectedOnly;
             _plan = session.Plan;
+            SyncTableRelationshipsFromSchema(invalidatePlanOnChange: true);
         }
         else if (SchemaService.IsLoadingTables)
         {
@@ -558,6 +560,49 @@
                 await LoadTablesAsync();
             }
         });
+    }
+
+    private void OnRelationshipsUpdatedHandler()
+    {
+        _ = InvokeAsync(() =>
+        {
+            SyncTableRelationshipsFromSchema(invalidatePlanOnChange: true);
+        });
+    }
+
+    private void SyncTableRelationshipsFromSchema(bool invalidatePlanOnChange)
+    {
+        if (_tables.Count == 0 || SchemaService.Tables.Count == 0) return;
+
+        var schemaLookup = SchemaService.Tables.ToDictionary(t => t.FullName, StringComparer.OrdinalIgnoreCase);
+        bool changed = false;
+
+        foreach (var item in _tables)
+        {
+            if (schemaLookup.TryGetValue(item.FullName, out var schemaTable))
+            {
+                var updatedParents = schemaTable.OutgoingKeys.Select(k => k.ToTable).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                var updatedChildren = schemaTable.IncomingKeys.Select(k => k.FromTable).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                if (!item.ReferencedParents.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(updatedParents) ||
+                    !item.DependentChildren.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(updatedChildren))
+                {
+                    item.ReferencedParents = updatedParents;
+                    item.DependentChildren = updatedChildren;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            if (invalidatePlanOnChange)
+            {
+                _plan = null;
+            }
+            UpdateAutoSelections();
+            SaveSession();
+        }
     }
 
     private async Task RefreshTablesAsync()
@@ -850,6 +895,7 @@
     {
         ConnectionService.OnDatabaseSwitched -= OnDatabaseSwitchedHandler;
         SchemaService.OnTablesLoaded -= OnTablesLoadedHandler;
+        SchemaService.OnRelationshipsUpdated -= OnRelationshipsUpdatedHandler;
         SaveSession();
     }
 }

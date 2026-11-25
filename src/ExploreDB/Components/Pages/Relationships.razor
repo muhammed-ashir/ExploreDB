@@ -90,8 +90,9 @@
                 <i class="bi bi-info-circle text-muted fs-5" 
                    data-bs-tooltip="true" 
                    data-bs-placement="right" 
-                   data-bs-title="Virtual relationships define logical connections between tables without requiring physical foreign keys in the database. Query Builder uses them to automatically discover join paths across your schema." 
-                   title="Virtual relationships define logical connections between tables without requiring physical foreign keys in the database. Query Builder uses them to automatically discover join paths across your schema."
+                   data-bs-html="true"
+                   data-bs-title="<b>Virtual Relationships</b><br/>Logical foreign key links between tables defined without physical database constraints, automatically enabling table connections and join intelligence across ExploreDB." 
+                   title="Virtual Relationships: Logical foreign key links between tables defined without physical database constraints, automatically enabling table connections and join intelligence across ExploreDB."
                    style="cursor: help; opacity: 0.85;"></i>
             </div>
 
@@ -227,8 +228,8 @@
                        data-bs-tooltip="true" 
                        data-bs-placement="bottom" 
                        data-bs-html="true" 
-                       data-bs-title="<b>Active Virtual Relationships</b><br/>All approved virtual relationships currently enabled. Query Builder uses these to automatically connect tables and generate SQL joins without physical foreign keys." 
-                       title="Active Virtual Relationships: All approved virtual relationships currently enabled. Query Builder uses these to automatically connect tables and generate SQL joins without physical foreign keys."></i>
+                       data-bs-title="<b>Active Virtual Relationships</b><br/>All approved and enabled logical foreign key links currently active for this database or profile." 
+                       title="Active Virtual Relationships: All approved and enabled logical foreign key links currently active for this database or profile."></i>
                 </button>
 
                 <button type="button" 
@@ -248,8 +249,8 @@
                        data-bs-tooltip="true" 
                        data-bs-placement="bottom" 
                        data-bs-html="true" 
-                       data-bs-title="<b>Suggested Relationships</b><br/>Candidate relationships discovered heuristically from column naming patterns and compatible data types. Verify and approve them to enable join routing in Query Builder." 
-                       title="Suggested Relationships: Candidate relationships discovered heuristically from column naming patterns and compatible data types. Verify and approve them to enable join routing in Query Builder."></i>
+                       data-bs-title="<b>Suggested Relationships</b><br/>Candidate links discovered heuristically from column naming patterns and compatible data types. Verify and approve them to activate them." 
+                       title="Suggested Relationships: Candidate links discovered heuristically from column naming patterns and compatible data types. Verify and approve them to activate them."></i>
                 </button>
 
                 <button type="button" 
@@ -262,8 +263,8 @@
                        data-bs-tooltip="true" 
                        data-bs-placement="bottom" 
                        data-bs-html="true" 
-                       data-bs-title="<b>Add Custom Link</b><br/>Manually define a logical relationship between any two tables and columns across your database schema to enable automatic join routing." 
-                       title="Add Custom Link: Manually define a logical relationship between any two tables and columns across your database schema to enable automatic join routing."></i>
+                       data-bs-title="<b>Add Custom Link</b><br/>Manually define a logical relationship between any two tables and columns across your schema." 
+                       title="Add Custom Link: Manually define a logical relationship between any two tables and columns across your schema."></i>
                 </button>
 
                 <button type="button" 
@@ -681,7 +682,7 @@
                 {
                     <div class="p-3" style="max-width: 900px;">
                         <h6 class="fw-bold text-info mb-2">Create Custom Relationship</h6>
-                        <p class="text-muted small mb-4">Define a virtual relationship between any two tables in the database. Query Builder will use this link to route joins automatically.</p>
+                        <p class="text-muted small mb-4">Define a logical relationship between any two tables in the database to enable automatic connections across ExploreDB.</p>
 
                         @if (!string.IsNullOrEmpty(CustomRelErrorMessage))
                         {

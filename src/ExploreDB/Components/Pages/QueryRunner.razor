@@ -1155,6 +1155,7 @@
         SchemaService.OnViewsLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded -= OnSchemaLoadedHandler;
         SchemaService.OnFunctionsLoaded -= OnSchemaLoadedHandler;
+        SchemaService.OnRelationshipsUpdated -= OnSchemaLoadedHandler;
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
@@ -1409,6 +1410,7 @@
         SchemaService.OnViewsLoaded += OnSchemaLoadedHandler;
         SchemaService.OnStoredProceduresLoaded += OnSchemaLoadedHandler;
         SchemaService.OnFunctionsLoaded += OnSchemaLoadedHandler;
+        SchemaService.OnRelationshipsUpdated += OnSchemaLoadedHandler;
         QueryStateService.OnTabUpdated += HandleTabUpdated;
         ThemeService.OnThemeChanged += HandleThemeChanged;
         UserSettingsService.OnSettingsChanged += HandleSettingsChanged;
