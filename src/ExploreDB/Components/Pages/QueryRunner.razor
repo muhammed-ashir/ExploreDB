@@ -10,6 +10,7 @@
 @inject ConnectionService ConnectionService
 @inject SchemaService SchemaService
 @inject QueryStateService QueryStateService
+@inject QueryExecutionService QueryExecutionService
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject IJSRuntime JS
 @inject NavigationManager Nav
@@ -342,10 +343,7 @@
 
                             @if (ResultTab == "Results" && ActiveTab.ResultSets.Count > 0)
                             {
-                                var totalRows = GetTotalRowCount(ActiveTab.ResultSets);
-                                @if (ActiveTab.IsExecuting) { <span class="text-primary fw-medium d-inline-flex align-items-center" style="font-size: 0.75rem; white-space: nowrap;"><span class="spinner-border spinner-border-sm me-1" style="width: 0.75rem; height: 0.75rem; border-width: 0.15em;" role="status"></span><span>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")</span></span> } else { <span class="text-muted fw-medium" style="font-size: 0.75rem; white-space: nowrap;"><i class="bi bi-list me-1" style="font-size: 0.75rem;"></i>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")</span> } @*
-                                    <i class="bi bi-list me-1" style="font-size: 0.75rem;"></i>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")
-                                </span>*@
+                                <QueryRowCountBadge Tab="ActiveTab" />
                             }
     
                             @if (false)
@@ -398,19 +396,7 @@
                             {
                                 if (ActiveTab.IsExecuting && ActiveTab.ResultSets.Count == 0)
                                 {
-                                    <div class="text-center mt-5">
-                                        <div class="spinner-border @(ActiveTab.IsCancelling ? "text-warning" : "text-primary")" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div>
-                                        <div class="mt-3 text-muted fs-5">
-                                            @if (ActiveTab.IsCancelling)
-                                            {
-                                                <span class="text-warning"><i class="bi bi-exclamation-circle me-1"></i>Cancelling query...</span>
-                                            }
-                                            else
-                                            {
-                                                <span>Executing... (@GetFormattedExecutionTime(ActiveTab.ExecElapsedSeconds))</span>
-                                            }
-                                        </div>
-                                    </div>
+                                    <QueryExecutionTimer Tab="ActiveTab" Mode="QueryExecutionTimer.DisplayMode.ExecutingSpinner" IsDarkTheme="ThemeService.IsDark" />
                                 }
                                 else if (ActiveTab.ResultSets.Count == 0 && !ActiveTab.HasExecuted)
                                 {
@@ -527,7 +513,7 @@
 
                                             <div @key="rsItem" id="@($"rs-pane-{capturedIndex}")" 
                                                  class="d-flex flex-column overflow-hidden" 
-                                                 style="@GetResultSetPaneStyle(rsItem, totalCount)">
+                                                 style="@QueryExecutionService.GetResultSetPaneStyle(rsItem, totalCount)">
                                                 <ResultSetGrid Data="rsItem" 
                                                                ResultSetIndex="capturedIndex" 
                                                                TotalResultSets="totalCount" 
@@ -535,7 +521,7 @@
                                                                SearchCaseSensitive="@_searchCaseSensitive" 
                                                                SearchMatchWholeWord="@_searchMatchWholeWord" 
                                                                SearchExactMatch="@_searchExactMatch" 
-                                                               OnToggleSearch="ToggleSearch"
+                                                               OnToggleSearch="ToggleSearch" 
                                                                OnExportStateChanged="HandleExportStateChanged" 
                                                                OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
                                             </div>
@@ -584,16 +570,16 @@
                             {
                                 <div class="p-3 overflow-auto flex-grow-1 custom-scrollbar-light" style="min-height: 0;">
                                 <pre class="m-0" style="color: var(--app-text); font-size: 0.85em; white-space: pre-wrap; font-family: Consolas, 'Courier New', monospace;">
-@if (ActiveTab.Messages.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
-@foreach (var msg in ActiveTab.Messages)
+@{ var messagesSnapshot = ActiveTab.GetMessagesSnapshot(); }
+@if (messagesSnapshot.Count == 0) { <span class="text-muted fst-italic">No Messages.</span> }
+@foreach (var msg in messagesSnapshot)
 {
     @if (msg.IsError || msg.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || msg.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
     {
         var navLine = msg.LineNumber;
         if (!navLine.HasValue && msg.IsError)
         {
-            var match = System.Text.RegularExpressions.Regex.Match(msg.Text, @"\bLine\s+(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (match.Success && int.TryParse(match.Groups[1].Value, out int pLine)) navLine = pLine;
+            navLine = QueryExecutionService.ParseLineNumberFromErrorText(msg.Text);
         }
 
         if (navLine.HasValue && navLine.Value > 0)
@@ -622,21 +608,7 @@
     }
 </div>
 
-@if (ActiveTab.ExecElapsedSeconds >= 10 && ActiveTab.IsCurrentQuerySelect)
-{
-    <div class="toast-container position-fixed bottom-0 end-0 p-4" style="z-index: 10000; animation: fadeIn 0.5s;">
-        <div class="toast show bg-dark text-white shadow-lg" style="border: 1px solid rgba(255,193,7,0.5);" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="toast-header bg-dark text-warning border-secondary border-opacity-50">
-                <i class="bi bi-hourglass-split me-2"></i>
-                <strong class="me-auto" style="letter-spacing: 0.5px;">Long Execution</strong>
-                <button type="button" class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "")" onclick="this.closest('.toast-container').style.display='none'" aria-label="Close"></button>
-            </div>
-            <div class="toast-body text-start" style="font-size: 0.9rem; color: #ccc;">
-                Execution is taking longer than usual. If you are querying a massive dataset, consider adding a <code class="text-warning bg-black px-1 rounded border border-secondary border-opacity-50">TOP</code> or <code class="text-warning bg-black px-1 rounded border border-secondary border-opacity-50">WHERE</code> clause to narrow down your results. Otherwise, please hold tight while we finish fetching your data!
-            </div>
-        </div>
-    </div>
-}
+<QueryExecutionTimer Tab="ActiveTab" Mode="QueryExecutionTimer.DisplayMode.LongExecutionToast" IsDarkTheme="ThemeService.IsDark" />
 
 @if (ShowLimitAlert)
 {
@@ -965,88 +937,6 @@
         }
     }
 
-    private int GetTotalRowCount(List<object> resultSets)
-    {
-        if (resultSets == null || resultSets.Count == 0) return 0;
-        int sum = 0;
-        foreach (var rs in resultSets)
-        {
-            if (rs is QueryResultTable qrt) sum += qrt.RowCount;
-            else if (rs is IEnumerable<dynamic> d) sum += d.Count();
-            else if (rs is System.Collections.ICollection c) sum += c.Count;
-        }
-        return sum;
-    }
-
-    private int GetResultRowCount(object? rs)
-    {
-        if (rs == null) return 0;
-        if (rs is QueryResultTable qrt) return qrt.RowCount;
-        if (rs is System.Data.DataTable dt) return dt.Rows.Count;
-        if (rs is System.Collections.ICollection c) return c.Count;
-        if (rs is IEnumerable<dynamic> d) return d.Count();
-        return 0;
-    }
-
-    private bool IsResultTextDefinition(object? rs)
-    {
-        if (rs is QueryResultTable qrt)
-        {
-            return qrt.Columns.Count == 1 &&
-                   qrt.Columns[0].Equals("Text", StringComparison.OrdinalIgnoreCase);
-        }
-        return false;
-    }
-
-    private string GetResultSetPaneStyle(object? rsItem, int totalCount)
-    {
-        if (totalCount <= 1)
-        {
-            return "flex: 1 0 100%; min-height: 0; position: relative;";
-        }
-
-        if (IsResultTextDefinition(rsItem))
-        {
-            return "flex: 1 1 auto; min-height: 280px; position: relative;";
-        }
-
-        int rowCount = GetResultRowCount(rsItem);
-        if (rowCount <= 3)
-        {
-            // Compact auto-fit height: header (~28px) + rows (24px each) + scrollbar allowance (14px) + borders/padding (4px)
-            int compactHeight = 28 + (Math.Max(rowCount, 1) * 24) + 16;
-            return $"flex: 0 0 {compactHeight}px; height: {compactHeight}px; min-height: 54px; position: relative;";
-        }
-
-        return "flex: 1 1 auto; min-height: 90px; position: relative;";
-    }
-
-    private (string Header, int? DisplayLine) FormatSqlErrorHeader(SqlError err, int lineOffset)
-    {
-        int displayLine = (string.IsNullOrEmpty(err.Procedure) && err.LineNumber > 0)
-            ? err.LineNumber + lineOffset
-            : err.LineNumber;
-
-        string procPart = !string.IsNullOrEmpty(err.Procedure) ? $", Procedure {err.Procedure}" : "";
-        string header = $"Msg {err.Number}, Level {err.Class}, State {err.State}{procPart}, Line {displayLine}";
-
-        int? navLine = string.IsNullOrEmpty(err.Procedure) && displayLine > 0 ? displayLine : (int?)null;
-        return (header, navLine);
-    }
-
-    private (string Header, int? DisplayLine) FormatSqlErrorHeader(SqlException ex, int lineOffset)
-    {
-        int displayLine = (string.IsNullOrEmpty(ex.Procedure) && ex.LineNumber > 0)
-            ? ex.LineNumber + lineOffset
-            : ex.LineNumber;
-
-        string procPart = !string.IsNullOrEmpty(ex.Procedure) ? $", Procedure {ex.Procedure}" : "";
-        string header = $"Msg {ex.Number}, Level {ex.Class}, State {ex.State}{procPart}, Line {displayLine}";
-
-        int? navLine = string.IsNullOrEmpty(ex.Procedure) && displayLine > 0 ? displayLine : (int?)null;
-        return (header, navLine);
-    }
-
     private async Task JumpToEditorLineAsync(int lineNumber)
     {
         if (_editor == null || lineNumber <= 0) return;
@@ -1268,6 +1158,9 @@
         QueryStateService.OnTabUpdated -= HandleTabUpdated;
         ThemeService.OnThemeChanged -= HandleThemeChanged;
         UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
+        _autocompleteDebounceCts?.Cancel();
+        _autocompleteDebounceCts?.Dispose();
+        _autocompleteDebounceCts = null;
     }
 
     private async void HandleSettingsChanged()
@@ -1398,76 +1291,29 @@
         await JS.InvokeVoidAsync("updateSqlAutocompleteData", new List<object>(), new List<object>(), new List<object>(), new List<object>(), new List<object>());
     }
 
-    private async void OnSchemaLoadedHandler()
-    {
-        try
-        {
-            if (!_isEditorReady) return;
-            await InvokeAsync(RegisterAutocompleteItemsAsync);
-        }
-        catch { }
-    }
+    private CancellationTokenSource? _autocompleteDebounceCts;
 
-    private static string StripLeadingComments(string sql)
+    private void OnSchemaLoadedHandler()
     {
-        var s = sql.AsSpan();
-        while (true)
-        {
-            // Skip whitespace
-            s = s.TrimStart();
-            if (s.IsEmpty) break;
+        if (!_isEditorReady) return;
+        _autocompleteDebounceCts?.Cancel();
+        _autocompleteDebounceCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _autocompleteDebounceCts = cts;
 
-            // Strip single-line comment: -- ... \n
-            if (s.StartsWith("--".AsSpan(), StringComparison.Ordinal))
+        _ = Task.Run(async () =>
+        {
+            try
             {
-                var nl = s.IndexOf('\n');
-                s = nl >= 0 ? s[(nl + 1)..] : ReadOnlySpan<char>.Empty;
-                continue;
+                await Task.Delay(80, cts.Token);
+                if (!cts.Token.IsCancellationRequested && _isEditorReady)
+                {
+                    await InvokeAsync(RegisterAutocompleteItemsAsync);
+                }
             }
-
-            // Strip block comment: /* ... */
-            if (s.StartsWith("/*".AsSpan(), StringComparison.Ordinal))
-            {
-                var end = s.IndexOf("*/", StringComparison.Ordinal);
-                s = end >= 0 ? s[(end + 2)..] : ReadOnlySpan<char>.Empty;
-                continue;
-            }
-
-            break;
-        }
-        return s.ToString();
-    }
-
-    private static bool IsReadOnlyQuery(string queryText)
-    {
-        var q = StripLeadingComments(queryText).TrimStart();
-        if (q.StartsWith("select", StringComparison.OrdinalIgnoreCase) || 
-            q.StartsWith("with", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var stripped = q;
-        if (stripped.StartsWith("execute", StringComparison.OrdinalIgnoreCase))
-        {
-            stripped = stripped.Substring(7).TrimStart();
-        }
-        else if (stripped.StartsWith("exec", StringComparison.OrdinalIgnoreCase))
-        {
-            stripped = stripped.Substring(4).TrimStart();
-        }
-
-        if (stripped.StartsWith("sp_helptext", StringComparison.OrdinalIgnoreCase) ||
-            stripped.StartsWith("sp_help", StringComparison.OrdinalIgnoreCase) ||
-            stripped.StartsWith("sp_spaceused", StringComparison.OrdinalIgnoreCase) ||
-            stripped.StartsWith("sp_depends", StringComparison.OrdinalIgnoreCase) ||
-            stripped.StartsWith("sp_who", StringComparison.OrdinalIgnoreCase) ||
-            stripped.StartsWith("sp_columns", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return false;
+            catch (OperationCanceledException) { }
+            catch { }
+        });
     }
 
     private Task<bool> ConfirmDangerousQueryAsync()
@@ -1600,36 +1446,51 @@
             await InvokeAsync(StateHasChanged);
         }
 
-        try
-        {
-            await JS.InvokeVoidAsync("setUserSettings", UserSettingsService.Settings);
-            await JS.InvokeVoidAsync("initTabStripWheelScroll", "ssms-tab-scroll");
-        }
-        catch { }
-
-        if (ActiveTab.ResultSets.Count > 1 && ResultTab == "Results")
+        if (!_tabStripWheelInit && !string.IsNullOrEmpty(ConnectionService.ConnectionString))
         {
             try
             {
-                await JS.InvokeVoidAsync("initResultSetSplitters", "results-multi-container");
+                await JS.InvokeVoidAsync("initTabStripWheelScroll", "ssms-tab-scroll");
+                _tabStripWheelInit = true;
             }
             catch { }
         }
 
-        try
+        if (ActiveTab.ResultSets.Count > 1 && ResultTab == "Results")
         {
+            if (_lastSplitterResultSetCount != ActiveTab.ResultSets.Count || _lastSplitterTabId != ActiveTab.Id)
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("initResultSetSplitters", "results-multi-container");
+                    _lastSplitterResultSetCount = ActiveTab.ResultSets.Count;
+                    _lastSplitterTabId = ActiveTab.Id;
+                }
+                catch { }
+            }
         }
-        catch { }
+        else
+        {
+            _lastSplitterResultSetCount = 0;
+        }
 
-        if (_objRef != null)
+        if (_objRef != null && !_editorSplitterInit && ActiveTab.HasExecuted && !IsMinimized && !IsFullScreen)
         {
             try
             {
-                await JS.InvokeVoidAsync("initQueryEditorSplitter", _objRef);
+                if (await JS.InvokeAsync<bool>("initQueryEditorSplitter", _objRef))
+                {
+                    _editorSplitterInit = true;
+                }
             }
             catch { }
         }
     }
+
+    private bool _tabStripWheelInit = false;
+    private int _lastSplitterResultSetCount = 0;
+    private Guid _lastSplitterTabId = Guid.Empty;
+    private bool _editorSplitterInit = false;
 
     private async Task OnTabMouseUpAsync(MouseEventArgs e, Guid tabId)
     {
@@ -2550,28 +2411,6 @@
         return $"{Math.Round(ts.TotalSeconds, 1)}s";
     }
 
-    private string GetFormattedExecutionTime(int totalSeconds)
-    {
-        if (totalSeconds < 60) return $"{totalSeconds}s";
-        var ts = TimeSpan.FromSeconds(totalSeconds);
-        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m {ts.Seconds}s";
-        return $"{ts.Minutes}m {ts.Seconds}s";
-    }
-
-    private async Task UpdateTimerAsync(ExploreDB.Services.QueryTab tab)
-    {
-        var start = DateTime.UtcNow;
-        while (tab.IsExecuting)
-        {
-            await Task.Delay(500);
-            if (tab.IsExecuting)
-            {
-                tab.ExecElapsedSeconds = (int)(DateTime.UtcNow - start).TotalSeconds;
-                if (tab == ActiveTab) await InvokeAsync(StateHasChanged);
-            }
-        }
-    }
-
     private void CancelExecution()
     {
         var tabToCancel = ActiveTab;
@@ -2590,22 +2429,14 @@
 
     [JSInvokable]
     public async Task OpenSaveSnippetModal()
-
     {
         var queryText = "";
         try
         {
-            if (_editor != null)
+            var input = await JS.InvokeAsync<QueryEditorInput?>("getQueryExecutionInput", "query-editor");
+            if (input != null)
             {
-                var selection = await _editor.GetSelection();
-                if (selection != null && (selection.StartLineNumber != selection.EndLineNumber || selection.StartColumn != selection.EndColumn))
-                {
-                    var model = await _editor.GetModel();
-                    if (model != null)
-                    {
-                        queryText = await model.GetValueInRange(selection, EndOfLinePreference.TextDefined);
-                    }
-                }
+                queryText = !string.IsNullOrWhiteSpace(input.SelectedText) ? input.SelectedText : input.FullText;
             }
         }
         catch { }
@@ -2759,445 +2590,28 @@
         var targetTab = ActiveTab;
         if (targetTab.IsExecuting) return;
 
-        int lineOffset = 0;
+        Func<Task<string>>? fallback = _editor != null ? () => _editor.GetValue() : null;
+        var (queryText, fullScript, lineOffset) = await QueryExecutionService.ResolveEditorInputAsync(
+            JS, "query-editor", fallback, targetTab);
 
-        var queryText = "";
-        var fullScript = "";
-
-        try
+        await QueryExecutionService.ExecuteAsync(new QueryExecutionRequest
         {
-            if (_editor != null)
+            Tab = targetTab,
+            QueryText = queryText,
+            FullScript = fullScript,
+            LineOffset = lineOffset,
+            InvokeOnUiAsync = InvokeAsync,
+            SetActiveResultTab = tabName =>
             {
-                fullScript = await _editor.GetValue();
-                targetTab.Content = fullScript;
-
-                var sel = await _editor.GetSelection();
-                if (sel != null && (sel.StartLineNumber != sel.EndLineNumber || sel.StartColumn != sel.EndColumn))
+                if (targetTab == ActiveTab)
                 {
-                    var model = await _editor.GetModel();
-                    if (model != null)
-                    {
-                        var selText = await model.GetValueInRange(sel, EndOfLinePreference.TextDefined);
-                        if (!string.IsNullOrWhiteSpace(selText))
-                        {
-                            queryText = selText;
-                            lineOffset = sel.StartLineNumber - 1;
-                        }
-                    }
+                    ResultTab = tabName;
                 }
-            }
-        }
-        catch { }
-
-        try
-        {
-            if (_editor != null)
-            {
-                var selection = await _editor.GetSelection();
-                if (selection != null && (selection.StartLineNumber != selection.EndLineNumber || selection.StartColumn != selection.EndColumn))
-                {
-                    var model = await _editor.GetModel();
-                    if (model != null)
-                    {
-                        queryText = await model.GetValueInRange(selection, EndOfLinePreference.TextDefined);
-                    }
-                }
-            }
-        }
-        catch { }
-
-        if (string.IsNullOrWhiteSpace(queryText))
-        {
-            queryText = fullScript;
-            lineOffset = 0;
-        }
-
-        if (string.IsNullOrWhiteSpace(queryText))
-        {
-            targetTab.Messages.Add("Error: Query is empty.");
-
-            if (targetTab == ActiveTab) ResultTab = "Messages";
-            return;
-        }
-
-        targetTab.IsCurrentQuerySelect = IsReadOnlyQuery(queryText);
-
-        targetTab.IsExecuting = true;
-        targetTab.IsCancelling = false;
-        targetTab.HasExecuted = true;
-        targetTab.ExecElapsedSeconds = 0;
-        
-        targetTab.QueryCts = new CancellationTokenSource();
-        _ = UpdateTimerAsync(targetTab);
-
-        targetTab.ResultSets.Clear();
-        targetTab.Messages.Clear();
-        if (targetTab == ActiveTab) ResultTab = "Results";
-        StateHasChanged();
-
-        var connWatch = System.Diagnostics.Stopwatch.StartNew();
-        var queryWatch = new System.Diagnostics.Stopwatch();
-        bool isSuccess = false;
-        string? errorMessage = null;
-        string dbName = "";
-        string serverName = "";
-        QueryResultTable? currentStreamingTable = null;
-        List<object?[]>? currentBatch = null;
-
-        try
-        {
-            if (string.IsNullOrEmpty(targetTab.ConnectionString))
-            {
-                targetTab.Messages.Add("Error: Tab is disconnected. Please connect to a server using the plug icon in the top right.");
-                if (targetTab == ActiveTab) ResultTab = "Messages";
-                return;
-            }
-
-            var connStrBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(targetTab.ConnectionString);
-            if (string.IsNullOrEmpty(connStrBuilder.InitialCatalog))
-            {
-                targetTab.Messages.Add("Error: No database selected. Please select a database from the sidebar before executing.");
-                if (targetTab == ActiveTab) ResultTab = "Messages";
-                return;
-            }
-
-            QueryStateService.CustomQuery = queryText;
-            if (connStrBuilder.PacketSize < 32767)
-            {
-                connStrBuilder.PacketSize = 32767;
-            }
-            using var conn = new SqlConnection(connStrBuilder.ConnectionString);
-            dbName = conn.Database;
-            serverName = conn.DataSource;
-            conn.InfoMessage += (sender, args) =>
-            {
-                foreach (SqlError err in args.Errors)
-                {
-                    if (err.Class > 10)
-                    {
-                        var (hMsg, nLine) = FormatSqlErrorHeader(err, lineOffset);
-                        targetTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
-                        targetTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
-                    }
-                    else
-                    {
-                        targetTab.Messages.Add(new QueryOutputMessage(err.Message, isError: false));
-                    }
-                }
-                if (args.Errors.Count == 0 && !string.IsNullOrEmpty(args.Message))
-                {
-                    targetTab.Messages.Add(new QueryOutputMessage(args.Message, isError: false));
-                }
-                if (targetTab == ActiveTab) InvokeAsync(StateHasChanged);
-            };
-            targetTab.CancelAction = () => { try { conn.Close(); } catch { } };
-            await conn.OpenAsync(targetTab.QueryCts.Token);
-            connWatch.Stop();
-            targetTab.LastConnectionTimeMs = connWatch.ElapsedMilliseconds;
-            queryWatch.Start();
-
-            if (!targetTab.IsCurrentQuerySelect)
-            {
-                bool allowNonSelect = Config.GetValue<bool>("AllowNonSelectQueries", false);
-                if (!allowNonSelect)
-                {
-                    targetTab.Messages.Add("Error: Execution of non-SELECT statements is disabled.");
-                    if (targetTab == ActiveTab) ResultTab = "Messages";
-                    return;
-                }
-
-                bool confirm = await ConfirmDangerousQueryAsync();
-                if (!confirm)
-                {
-                    targetTab.Messages.Add("Execution cancelled by user.");
-                    if (targetTab == ActiveTab) ResultTab = "Messages";
-                    return;
-                }
-            }
-
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = QueryStateService.CustomQuery;
-            cmd.CommandTimeout = 0;
-            
-            targetTab.CancelAction = () =>
-            {
-                try { cmd.Cancel(); } catch { }
-                try { conn.Close(); } catch { }
-            };
-
-            using var ctr = targetTab.QueryCts.Token.Register(() => {
-                try { cmd.Cancel(); } catch { }
-                try { conn.Close(); } catch { }
-            });
-            
-            using var reader = await cmd.ExecuteReaderAsync(targetTab.QueryCts.Token);
-            int totalRows = 0;
-            int affectedStatementCount = 0;
-            var renderWatch = System.Diagnostics.Stopwatch.StartNew();
-            
-            do
-            {
-                try
-                {
-                    var table = new QueryResultTable(Array.Empty<string>());
-                    var batch = new List<object?[]>(2000);
-                    currentStreamingTable = table;
-                    currentBatch = batch;
-                    int fieldCount = reader.FieldCount;
-                    
-                    if (fieldCount > 0)
-                    {
-                        var columnNames = new string[fieldCount];
-                        var columnTypes = new string[fieldCount];
-                        for (int i = 0; i < fieldCount; i++)
-                        {
-                            columnNames[i] = reader.GetName(i);
-                            if (string.IsNullOrEmpty(columnNames[i])) columnNames[i] = $"Column{i}";
-                            try { columnTypes[i] = reader.GetDataTypeName(i); } catch { columnTypes[i] = ""; }
-                        }
-                        table = new QueryResultTable(columnNames, columnTypes);
-                        currentStreamingTable = table;
-                        try
-                        {
-                            var schemaTable = reader.GetSchemaTable();
-                            if (schemaTable != null && schemaTable.Rows.Count > 0)
-                            {
-                                var hasBaseTable = schemaTable.Columns.Contains("BaseTableName");
-                                var hasBaseSchema = schemaTable.Columns.Contains("BaseSchemaName");
-                                if (hasBaseTable)
-                                {
-                                    var baseTable = schemaTable.Rows[0]["BaseTableName"]?.ToString();
-                                    var baseSchema = hasBaseSchema ? schemaTable.Rows[0]["BaseSchemaName"]?.ToString() : null;
-                                    if (!string.IsNullOrWhiteSpace(baseTable))
-                                    {
-                                        table.TableName = string.IsNullOrWhiteSpace(baseSchema) ? $"[{baseTable}]" : $"[{baseSchema}].[{baseTable}]";
-                                    }
-                                }
-                            }
-                        }
-                        catch { }
-
-                        if (string.IsNullOrEmpty(table.TableName) && !string.IsNullOrWhiteSpace(QueryStateService.CustomQuery))
-                        {
-                            var match = System.Text.RegularExpressions.Regex.Match(
-                                QueryStateService.CustomQuery,
-                                @"\bFROM\s+([\[\]a-zA-Z0-9_\.]+)",
-                                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                            if (match.Success)
-                            {
-                                table.TableName = match.Groups[1].Value.Trim();
-                            }
-                        }
-                        targetTab.ResultSets.Add(table);
-                        if (targetTab == ActiveTab) ResultTab = "Results";
-                        if (targetTab == ActiveTab) await InvokeAsync(StateHasChanged);
-                        if (false) {
-                        }
-
-                        int yieldCount = 0;
-                        while (await reader.ReadAsync(targetTab.QueryCts?.Token ?? CancellationToken.None))
-                        {
-                            if ((targetTab.QueryCts?.IsCancellationRequested ?? false) || targetTab.IsCancelling)
-                            {
-                                throw new OperationCanceledException(targetTab.QueryCts?.Token ?? CancellationToken.None);
-                            }
-
-                            var rowValues = new object?[fieldCount];
-                            reader.GetValues(rowValues);
-                            for (int colIdx = 0; colIdx < fieldCount; colIdx++)
-                            {
-                                if (rowValues[colIdx] is DBNull) rowValues[colIdx] = null;
-                            }
-                            batch.Add(rowValues);
-                            if (batch.Count >= 2000)
-                            {
-                                table.AddRows(batch);
-                                batch.Clear();
-                                if (renderWatch.ElapsedMilliseconds >= 300)
-                                {
-                                    renderWatch.Restart();
-                                    if (targetTab == ActiveTab) await InvokeAsync(StateHasChanged);
-                                }
-                                else if (++yieldCount % 10 == 0)
-                                {
-                                    await Task.Yield();
-                                }
-                                if (false)
-                                {
-                                    await Task.Delay(1);
-                                    if (targetTab == ActiveTab) await InvokeAsync(StateHasChanged);
-                                }
-                            }
-                            if (false) {
-                            for (int i = 0; i < fieldCount; i++)
-                            {
-                                // row populated via reader.GetValues above
-                            }
-                            }
-                            
-                            // Throttled UI yields handled above every 300ms without thread sleep delay
-                        }
-                        
-                        if (batch.Count > 0)
-                        {
-                            table.AddRows(batch);
-                        }
-                        table.IsComplete = true;
-                        currentStreamingTable = null;
-                        currentBatch = null;
-                        if (targetTab == ActiveTab) await InvokeAsync(StateHasChanged);
-                        if (false)
-                        targetTab.ResultSets.Add(table);
-                        totalRows += table.RowCount;
-                        var rowWord = table.RowCount == 1 ? "row" : "rows";
-                        targetTab.Messages.Add($"({table.RowCount} {rowWord} returned)");
-                        targetTab.Messages.Add("");
-                        affectedStatementCount++;
-                    }
-                    else
-                    {
-                        if (reader.RecordsAffected >= 0)
-                        {
-                            var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
-                            targetTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
-                targetTab.Messages.Add("");
-
-                            affectedStatementCount++;
-                        }
-                    }
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException && !(targetTab.QueryCts?.IsCancellationRequested ?? false) && !targetTab.IsCancelling)
-                {
-                    targetTab.Messages.Add(new QueryOutputMessage($"Error reading result set: {ex.Message}", isError: true));
-                    break;
-                }
-            }
-            while (await reader.NextResultAsync(targetTab.QueryCts?.Token ?? CancellationToken.None));
-            
-            if (affectedStatementCount == 0 && targetTab.ResultSets.Count == 0 && reader.RecordsAffected >= 0)
-            {
-                var rowWord = reader.RecordsAffected == 1 ? "row" : "rows";
-                targetTab.Messages.Add($"({reader.RecordsAffected} {rowWord} affected)");
-                targetTab.Messages.Add("");
-            }
-
-            targetTab.Messages.Add("");
-            targetTab.AddCompletionTime();
-
-            if (targetTab == ActiveTab) ResultTab = targetTab.ResultSets.Count == 0 ? "Messages" : "Results";
-            isSuccess = true;
-        }
-        catch (Exception ex)
-        {
-            if ((targetTab.QueryCts != null && targetTab.QueryCts.IsCancellationRequested) || targetTab.IsCancelling || ex is OperationCanceledException)
-            {
-                if (currentBatch != null && currentBatch.Count > 0 && currentStreamingTable != null) { currentStreamingTable.AddRows(currentBatch); currentBatch.Clear(); }
-                if (currentStreamingTable != null) currentStreamingTable.IsComplete = true;
-                foreach (var rs in targetTab.ResultSets.OfType<QueryResultTable>()) rs.IsComplete = true;
-                int partialTotal = targetTab.ResultSets.OfType<QueryResultTable>().Sum(t => t.RowCount);
-                if (partialTotal > 0)
-                {
-                    targetTab.Messages.Add($"({partialTotal:N0} {(partialTotal == 1 ? "row" : "rows")} returned - Execution cancelled by user)");
-                    if (targetTab == ActiveTab) ResultTab = "Results";
-                }
-                else
-                {
-                    targetTab.Messages.Add("Execution cancelled by user.");
-                    if (targetTab == ActiveTab) ResultTab = "Messages";
-                }
-                targetTab.Messages.Add("");
-                targetTab.AddCompletionTime();
-                errorMessage = "Cancelled";
-            }
-            else if (false)
-            {
-                targetTab.Messages.Add("Execution cancelled by user.");
-                targetTab.Messages.Add("");
-                targetTab.AddCompletionTime();
-                if (targetTab == ActiveTab) ResultTab = "Messages";
-                errorMessage = "Cancelled";
-            }
-            else if (ex is SqlException sqlEx)
-            {
-                if (targetTab == ActiveTab) ResultTab = "Messages";
-                errorMessage = sqlEx.Message;
-                foreach (SqlError err in sqlEx.Errors)
-                {
-                    var (hMsg, nLine) = FormatSqlErrorHeader(err, lineOffset);
-                    targetTab.Messages.Add(new QueryOutputMessage(hMsg, isError: true, lineNumber: nLine));
-                    targetTab.Messages.Add(new QueryOutputMessage(err.Message, isError: true, lineNumber: nLine));
-                }
-                if (sqlEx.Errors.Count == 0)
-                {
-                    var (hEx, nExLine) = FormatSqlErrorHeader(sqlEx, lineOffset);
-                    targetTab.Messages.Add(new QueryOutputMessage(hEx, isError: true, lineNumber: nExLine));
-                    targetTab.Messages.Add(new QueryOutputMessage(sqlEx.Message, isError: true, lineNumber: nExLine));
-                }
-                targetTab.Messages.Add("");
-                targetTab.AddCompletionTime();
-            }
-            else
-            {
-                targetTab.Messages.Add(new QueryOutputMessage($"ERROR: {ex.Message}", isError: true));
-                targetTab.Messages.Add("");
-                targetTab.AddCompletionTime();
-                if (targetTab == ActiveTab) ResultTab = "Messages";
-                errorMessage = ex.Message;
-            }
-        }
-        finally
-        {
-            if (connWatch.IsRunning) connWatch.Stop();
-            if (queryWatch.IsRunning) queryWatch.Stop();
-            targetTab.LastConnectionTimeMs = connWatch.ElapsedMilliseconds;
-            targetTab.LastExecutionTimeMs = queryWatch.ElapsedMilliseconds > 0 ? (connWatch.ElapsedMilliseconds + queryWatch.ElapsedMilliseconds) : connWatch.ElapsedMilliseconds;
-            targetTab.LastQueryTimeMs = queryWatch.ElapsedMilliseconds;
-            targetTab.IsExecuting = false;
-            targetTab.IsCancelling = false;
-            targetTab.CancelAction = null;
-            if (isSuccess)
-            {
-                Serilog.Log.Information(
-                    "Query executed in {ExecTimeMs}ms (query: {QueryTimeMs}ms, conn: {ConnTimeMs}ms) on {Server}/{Database} [{TabName}]",
-                    targetTab.LastExecutionTimeMs,
-                    targetTab.LastQueryTimeMs,
-                    targetTab.LastConnectionTimeMs,
-                    string.IsNullOrEmpty(serverName) ? "Server" : serverName,
-                    string.IsNullOrEmpty(dbName) ? "Database" : dbName,
-                    targetTab.Name);
-            }
-            else if (!string.IsNullOrEmpty(errorMessage))
-            {
-                Serilog.Log.Information(
-                    "Query finished with {Status} in {ExecTimeMs}ms on {Server}/{Database} [{TabName}]: {Error}",
-                    errorMessage == "Cancelled" ? "Cancellation" : "Error",
-                    targetTab.LastExecutionTimeMs,
-                    string.IsNullOrEmpty(serverName) ? "Server" : serverName,
-                    string.IsNullOrEmpty(dbName) ? "Database" : dbName,
-                    targetTab.Name,
-                    errorMessage);
-            }
-            if (!string.IsNullOrWhiteSpace(fullScript) || !string.IsNullOrWhiteSpace(targetTab.Content))
-            {
-                var scriptToSave = !string.IsNullOrWhiteSpace(fullScript) ? fullScript : targetTab.Content;
-                await HistoryService.SaveTabHistoryAsync(
-                    targetTab.Id,
-                    targetTab.Name,
-                    scriptToSave,
-                    serverName,
-                    dbName,
-                    targetTab.ConnectionString,
-                    targetTab.ConnectionName);
-            }
-            targetTab.QueryCts?.Dispose();
-            targetTab.QueryCts = null;
-            await InvokeAsync(StateHasChanged);
-        }
+            },
+            NotifyUi = StateHasChanged,
+            ConfirmDangerousQueryAsync = ConfirmDangerousQueryAsync,
+            SaveHistory = true,
+            IsPopout = false
+        });
     }
 }
-
-
-
-
-
-

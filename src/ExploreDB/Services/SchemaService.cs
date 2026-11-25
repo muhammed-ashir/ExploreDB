@@ -283,6 +283,8 @@ public class SchemaService
     private readonly IConfiguration _config;
     private readonly Dictionary<string, SchemaCacheEntry> _schemaCache = new();
     private readonly int _maxCacheSize = 10;
+    private string? _activeLoadedCacheKey;
+    private DateTime _activeLoadedAt;
 
     public SchemaService(ConnectionService connectionService, ILogger<SchemaService> logger, IConfiguration config)
     {
@@ -358,6 +360,7 @@ public class SchemaService
     {
         if (string.IsNullOrEmpty(_connectionService.ConnectionString))
         {
+            _activeLoadedCacheKey = null;
             Tables = new(); Views = new(); Functions = new(); StoredProcedures = new(); Types = new();
             AreTablesLoaded = false; AreViewsLoaded = false; AreFunctionsLoaded = false; AreStoredProceduresLoaded = false; AreTypesLoaded = false;
             OnTablesLoaded?.Invoke();
@@ -372,6 +375,7 @@ public class SchemaService
         
         if (string.IsNullOrEmpty(builder.InitialCatalog))
         {
+            _activeLoadedCacheKey = null;
             Tables = new(); Views = new(); Functions = new(); StoredProcedures = new(); Types = new();
             AreTablesLoaded = false; AreViewsLoaded = false; AreFunctionsLoaded = false; AreStoredProceduresLoaded = false; AreTypesLoaded = false;
             OnTablesLoaded?.Invoke();
@@ -383,10 +387,19 @@ public class SchemaService
         }
 
         string cacheKey = _connectionService.ConnectionString;
+        var expirationHours = _config.GetValue<int>("SchemaCacheExpirationHours", 24);
+
+        // Already loaded and unexpired for this exact connection string (e.g. window focus regain): no-op
+        if (!forceRefresh &&
+            AreTablesLoaded && AreViewsLoaded && AreFunctionsLoaded && AreStoredProceduresLoaded && AreTypesLoaded &&
+            string.Equals(_activeLoadedCacheKey, cacheKey, StringComparison.OrdinalIgnoreCase) &&
+            (DateTime.Now - _activeLoadedAt).TotalHours < expirationHours)
+        {
+            return Task.CompletedTask;
+        }
 
         if (!forceRefresh && _schemaCache.TryGetValue(cacheKey, out var cacheEntry))
         {
-            var expirationHours = _config.GetValue<int>("SchemaCacheExpirationHours", 24);
             if ((DateTime.Now - cacheEntry.LastFetched).TotalHours >= expirationHours)
             {
                 _logger.LogInformation("Schema cache expired for {ConnectionString}, forcing refresh.", cacheKey);
@@ -402,21 +415,24 @@ public class SchemaService
                 StoredProcedures = cacheEntry.StoredProcedures;
                 Types = cacheEntry.Types;
 
-            AreTablesLoaded = true;
-            AreViewsLoaded = true;
-            AreFunctionsLoaded = true;
-            AreStoredProceduresLoaded = true;
-            AreTypesLoaded = true;
+                AreTablesLoaded = true;
+                AreViewsLoaded = true;
+                AreFunctionsLoaded = true;
+                AreStoredProceduresLoaded = true;
+                AreTypesLoaded = true;
+                _activeLoadedCacheKey = cacheKey;
+                _activeLoadedAt = cacheEntry.LastFetched;
 
-            OnTablesLoaded?.Invoke();
-            OnViewsLoaded?.Invoke();
-            OnFunctionsLoaded?.Invoke();
-            OnStoredProceduresLoaded?.Invoke();
-            OnTypesLoaded?.Invoke();
-            return Task.CompletedTask;
+                OnTablesLoaded?.Invoke();
+                OnViewsLoaded?.Invoke();
+                OnFunctionsLoaded?.Invoke();
+                OnStoredProceduresLoaded?.Invoke();
+                OnTypesLoaded?.Invoke();
+                return Task.CompletedTask;
             }
         }
 
+        _activeLoadedCacheKey = null;
         AreTablesLoaded = false;
         AreViewsLoaded = false;
         AreFunctionsLoaded = false;
@@ -442,6 +458,7 @@ public class SchemaService
 
         if (AreTablesLoaded && AreViewsLoaded && AreFunctionsLoaded && AreStoredProceduresLoaded && AreTypesLoaded)
         {
+            var now = DateTime.Now;
             var newEntry = new SchemaCacheEntry
             {
                 ConnectionString = cacheKey,
@@ -450,8 +467,12 @@ public class SchemaService
                 Functions = Functions,
                 StoredProcedures = StoredProcedures,
                 Types = Types,
-                LastAccessed = DateTime.Now
+                LastAccessed = now,
+                LastFetched = now
             };
+
+            _activeLoadedCacheKey = cacheKey;
+            _activeLoadedAt = now;
 
             lock (_schemaCache)
             {

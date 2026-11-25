@@ -1,0 +1,135 @@
+@using System
+@using System.Threading
+@using ExploreDB.Services
+@implements IDisposable
+
+@if (Mode == DisplayMode.ExecutingSpinner)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border @(Tab.IsCancelling ? "text-warning" : "text-primary")" style="width: 3rem; height: 3rem; border-width: 0.25em;"></div>
+        <div class="mt-3 text-muted fs-5">
+            @if (Tab.IsCancelling)
+            {
+                <span class="text-warning"><i class="bi bi-exclamation-circle me-1"></i>Cancelling query...</span>
+            }
+            else
+            {
+                <span>Executing... (@FormatElapsed(CurrentElapsedSeconds))</span>
+            }
+        </div>
+    </div>
+}
+else if (Mode == DisplayMode.LongExecutionToast)
+{
+    @if (Tab.IsExecuting && CurrentElapsedSeconds >= 10 && Tab.IsCurrentQuerySelect)
+    {
+        <div class="toast-container position-fixed bottom-0 end-0 p-4" style="z-index: 10000; animation: fadeIn 0.5s;">
+            <div class="toast show bg-dark text-white shadow-lg" style="border: 1px solid rgba(255,193,7,0.5);" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header bg-dark text-warning border-secondary border-opacity-50">
+                    <i class="bi bi-hourglass-split me-2"></i>
+                    <strong class="me-auto" style="letter-spacing: 0.5px;">Long Execution</strong>
+                    <button type="button" class="btn-close @(IsDarkTheme ? "btn-close-white" : "")" onclick="this.closest('.toast-container').style.display='none'" aria-label="Close"></button>
+                </div>
+                <div class="toast-body text-start" style="font-size: 0.9rem; color: #ccc;">
+                    Execution is taking longer than usual. If you are querying a massive dataset, consider adding a <code class="text-warning bg-black px-1 rounded border border-secondary border-opacity-50">TOP</code> or <code class="text-warning bg-black px-1 rounded border border-secondary border-opacity-50">WHERE</code> clause to narrow down your results. Otherwise, please hold tight while we finish fetching your data!
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    public enum DisplayMode { ExecutingSpinner, LongExecutionToast }
+
+    [Parameter, EditorRequired]
+    public QueryTab Tab { get; set; } = default!;
+
+    [Parameter]
+    public DisplayMode Mode { get; set; } = DisplayMode.ExecutingSpinner;
+
+    [Parameter]
+    public bool UseMmSsFormat { get; set; } = false;
+
+    [Parameter]
+    public bool IsDarkTheme { get; set; } = true;
+
+    private int CurrentElapsedSeconds => Tab.ExecutionStartedUtc != default
+        ? Math.Max(0, (int)(DateTime.UtcNow - Tab.ExecutionStartedUtc).TotalSeconds)
+        : Tab.ExecElapsedSeconds;
+
+    private CancellationTokenSource? _timerCts;
+    private QueryTab? _trackedTab;
+    private bool _wasExecuting;
+    private volatile bool _disposed;
+
+    protected override void OnParametersSet()
+    {
+        if (_disposed) return;
+        bool isExecuting = Tab.IsExecuting;
+        if (!ReferenceEquals(Tab, _trackedTab) || isExecuting != _wasExecuting)
+        {
+            _trackedTab = Tab;
+            _wasExecuting = isExecuting;
+            RestartTimerIfNeeded();
+        }
+    }
+
+    private void RestartTimerIfNeeded()
+    {
+        _timerCts?.Cancel();
+        _timerCts?.Dispose();
+        _timerCts = null;
+
+        if (_disposed || !Tab.IsExecuting) return;
+
+        var cts = new CancellationTokenSource();
+        _timerCts = cts;
+        var token = cts.Token;
+        var tab = Tab;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(500));
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    if (_disposed || token.IsCancellationRequested || !tab.IsExecuting) break;
+                    if (tab.ExecutionStartedUtc != default)
+                    {
+                        tab.ExecElapsedSeconds = Math.Max(0, (int)(DateTime.UtcNow - tab.ExecutionStartedUtc).TotalSeconds);
+                    }
+                    await InvokeAsync(() =>
+                    {
+                        if (!_disposed && !token.IsCancellationRequested)
+                        {
+                            StateHasChanged();
+                        }
+                    });
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch { }
+        }, token);
+    }
+
+    private string FormatElapsed(int totalSeconds)
+    {
+        if (UseMmSsFormat)
+        {
+            return TimeSpan.FromSeconds(totalSeconds).ToString(@"mm\:ss");
+        }
+        if (totalSeconds < 60) return $"{totalSeconds}s";
+        var ts = TimeSpan.FromSeconds(totalSeconds);
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m {ts.Seconds}s";
+        return $"{ts.Minutes}m {ts.Seconds}s";
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _timerCts?.Cancel();
+        _timerCts?.Dispose();
+        _timerCts = null;
+    }
+}

@@ -160,8 +160,52 @@
                         {
                             var col = Columns[colIdx];
                             int localCol = colIdx;
-                            var rawCellVal = GetRawCellValue(actualIndex, localCol, col);
-                            var val = FormatCellValue(rawCellVal, localCol);
+                            string? val;
+                            byte[]? binaryBadgeBytes = null;
+                            bool isJsonOrXml = false;
+
+                            if (_tableStore != null)
+                            {
+                                if (_tableStore.IsNull(actualIndex, localCol))
+                                {
+                                    val = null;
+                                }
+                                else if (_tableStore.IsBinaryColumn(localCol))
+                                {
+                                    var b = _tableStore.GetBinaryBytes(actualIndex, localCol);
+                                    if (b != null && b.Length > BinaryDataHelper.ShortBinaryThreshold)
+                                    {
+                                        binaryBadgeBytes = b;
+                                        val = BinaryDataHelper.FormatBinaryForDisplay(b);
+                                    }
+                                    else
+                                    {
+                                        val = _tableStore.FormatCellForDisplay(actualIndex, localCol);
+                                    }
+                                }
+                                else
+                                {
+                                    val = _tableStore.FormatCellForDisplay(actualIndex, localCol);
+                                    if (val != null && _tableStore.CanContainJsonOrXml(localCol))
+                                    {
+                                        isJsonOrXml = IsJsonOrXml(val);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                var rawCellVal = GetRawCellValue(actualIndex, localCol, col);
+                                val = FormatCellValue(rawCellVal, localCol);
+                                if (rawCellVal is byte[] legacyBytes && legacyBytes.Length > BinaryDataHelper.ShortBinaryThreshold)
+                                {
+                                    binaryBadgeBytes = legacyBytes;
+                                }
+                                else if (val != null)
+                                {
+                                    isJsonOrXml = IsJsonOrXml(val);
+                                }
+                            }
+
                             bool isCellSelected = IsCellSelected(actualIndex, localCol);
                             <td class="@(isCellSelected ? "selected-cell" : "")"
                                 style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis; padding: 2px 8px; font-size: 0.78rem; line-height: 1.25; height: @(RowHeight)px;" 
@@ -171,7 +215,8 @@
                                 @oncontextmenu:preventDefault="true">
                                 @if (val == null) {
                                     <span class="text-muted fst-italic">NULL</span>
-                                } else if (rawCellVal is byte[] rawBytes && rawBytes.Length > BinaryDataHelper.ShortBinaryThreshold) {
+                                } else if (binaryBadgeBytes != null) {
+                                    var rawBytes = binaryBadgeBytes;
                                     @if (BinaryDataHelper.IsImage(rawBytes, out var imgFormat, out _)) {
                                         <span class="badge rounded-pill text-info border border-info bg-dark-subtle cursor-pointer d-inline-flex align-items-center gap-1"
                                               style="cursor: pointer; font-size: 0.72rem; padding: 1px 7px; line-height: 1.25;"
@@ -197,8 +242,9 @@
                                             <i class="bi bi-file-earmark-binary" style="font-size: 0.7rem;"></i> Binary: @BinaryDataHelper.FormatFileSize(rawBytes.Length)
                                         </span>
                                     }
-                                } else if (IsJsonOrXml(val)) {
-                                    <span style="color: var(--app-table-header-text); cursor: pointer; text-decoration: underline;" @onclick="() => OpenCodeViewer(val)" @onclick:stopPropagation>@val</span>
+                                } else if (isJsonOrXml) {
+                                    var codeVal = val;
+                                    <span style="color: var(--app-table-header-text); cursor: pointer; text-decoration: underline;" @onclick="() => OpenCodeViewer(codeVal)" @onclick:stopPropagation>@val</span>
                                 } else {
                                     @val
                                 }
@@ -771,6 +817,19 @@ else
     }
 
     private object? _lastDataRef;
+    private QueryResultTable? _subscribedTable;
+    private bool _wasTableComplete = true;
+    private string _lastSearchTerm = "";
+    private bool _lastSearchCaseSensitive = false;
+    private bool _lastSearchMatchWholeWord = false;
+    private bool _lastSearchExactMatch = false;
+    private string? _resizersInitContainerId;
+    private object? _resizersInitDataRef;
+    private string? _virtualScrollInitContainerId;
+    private object? _virtualScrollInitDataRef;
+    private int _virtualScrollLastRowCount = -1;
+    private CancellationTokenSource? _filterCts;
+    private CancellationTokenSource? _sortCts;
     private bool _shouldResetScroll = false;
 
     private void InitializeSmartColumnWidths()
@@ -786,8 +845,9 @@ else
 
             for (int r = 0; r < sampleCount; r++)
             {
-                var raw = GetRawCellValue(r, c, col);
-                var formatted = FormatCellValue(raw, c);
+                var formatted = _tableStore != null
+                    ? _tableStore.FormatCellForDisplay(r, c)
+                    : FormatCellValue(GetRawCellValue(r, c, col), c);
                 if (!string.IsNullOrEmpty(formatted))
                 {
                     maxDataChars = Math.Max(maxDataChars, formatted.Length);
@@ -801,35 +861,96 @@ else
         }
     }
 
+    private volatile bool _disposed;
+
+    private void HandleTableRowsUpdated()
+    {
+        if (_disposed) return;
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            var table = _tableStore;
+            if (table == null) return;
+
+            bool currentComplete = table.IsComplete;
+            bool becameComplete = !_wasTableComplete && currentComplete;
+            if (becameComplete)
+            {
+                _wasTableComplete = true;
+                _renderedFirstVisible = -1;
+                if (!string.IsNullOrWhiteSpace(SearchTerm))
+                {
+                    ApplyFilter();
+                }
+                if (!string.IsNullOrEmpty(SortColumn))
+                {
+                    ApplySorting();
+                }
+                StateHasChanged();
+                return;
+            }
+
+            int viewportTarget = Math.Min(table.RowCount, GetViewportRows() + 15);
+            if (_lastEndIndex < viewportTarget || _renderedFirstVisible < 0)
+            {
+                _renderedFirstVisible = -1;
+                StateHasChanged();
+            }
+        });
+    }
+
     protected override void OnParametersSet()
     {
-        ClearCellSelection();
-
-
-        _columnDateFormatCache.Clear();
         bool isNewData = !ReferenceEquals(Data, _lastDataRef);
         if (isNewData)
         {
+            ClearCellSelection();
+            _columnDateFormatCache.Clear();
+            _filterCts?.Cancel();
+            _sortCts?.Cancel();
             _lastDataRef = Data;
             _currentScrollTop = 0;
             _renderedFirstVisible = -1;
+            _lastEndIndex = 0;
+            _lastComputedCount = -1;
             _shouldResetScroll = true;
             _columnWidths.Clear();
+            _sortedIndices = null;
+            _filteredIndices = null;
+            SortColumn = null;
+            SortAscending = true;
         }
 
-        if (Data is QueryResultTable qrt)
+        QueryResultTable? nextTable = Data as QueryResultTable;
+        if (!ReferenceEquals(_subscribedTable, nextTable))
         {
-            _tableStore = qrt;
-            Columns = qrt.Columns.ToList();
+            if (_subscribedTable != null)
+            {
+                _subscribedTable.OnRowsUpdated -= HandleTableRowsUpdated;
+            }
+            _subscribedTable = nextTable;
+            if (_subscribedTable != null)
+            {
+                _subscribedTable.OnRowsUpdated += HandleTableRowsUpdated;
+            }
+        }
+
+        if (nextTable != null)
+        {
+            _tableStore = nextTable;
+            if (isNewData || Columns.Count != nextTable.Columns.Count)
+            {
+                Columns = nextTable.Columns.ToList();
+            }
             Rows.Clear();
         }
         else if (Data is IEnumerable<object> en)
         {
             _tableStore = null;
-            Rows = en.Select(d => (IDictionary<string, object>)d).ToList();
-            if (Rows.Any())
+            if (isNewData)
             {
-                Columns = Rows.First().Keys.ToList();
+                Rows = en.Select(d => (IDictionary<string, object>)d).ToList();
+                Columns = Rows.Any() ? Rows.First().Keys.ToList() : new List<string>();
             }
         }
         else
@@ -845,9 +966,34 @@ else
             InitializeSmartColumnWidths();
         }
 
-        ApplyFilter();
-        ApplySorting();
-        _renderedFirstVisible = -1;
+        bool currentComplete = _tableStore?.IsComplete ?? true;
+        bool becameComplete = !_wasTableComplete && currentComplete;
+        _wasTableComplete = currentComplete;
+
+        bool searchChanged =
+            !string.Equals(_lastSearchTerm, SearchTerm, StringComparison.Ordinal) ||
+            _lastSearchCaseSensitive != SearchCaseSensitive ||
+            _lastSearchMatchWholeWord != SearchMatchWholeWord ||
+            _lastSearchExactMatch != SearchExactMatch;
+
+        if (isNewData || searchChanged || becameComplete)
+        {
+            _lastSearchTerm = SearchTerm;
+            _lastSearchCaseSensitive = SearchCaseSensitive;
+            _lastSearchMatchWholeWord = SearchMatchWholeWord;
+            _lastSearchExactMatch = SearchExactMatch;
+            ApplyFilter();
+        }
+
+        if ((isNewData || becameComplete) && !string.IsNullOrEmpty(SortColumn))
+        {
+            ApplySorting();
+        }
+
+        if (isNewData || becameComplete || searchChanged)
+        {
+            _renderedFirstVisible = -1;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -888,12 +1034,31 @@ else
         else if (!IsTextDefinition && Columns.Count > 0)
         {
             _dotNetRef ??= DotNetObjectReference.Create(this);
-            try
+            bool needResizers = _resizersInitContainerId != _tableContainerId || !ReferenceEquals(_resizersInitDataRef, _lastDataRef);
+            bool needVirtualScroll = _virtualScrollInitContainerId != _tableContainerId ||
+                                     !ReferenceEquals(_virtualScrollInitDataRef, _lastDataRef) ||
+                                     _virtualScrollLastRowCount != ActiveRowCount;
+
+            if (needResizers || needVirtualScroll)
             {
-                await JS.InvokeVoidAsync("initGridColumnResizers", _tableContainerId, _dotNetRef);
-                await JS.InvokeVoidAsync("initGridVirtualScroll", _tableContainerId, _dotNetRef, ActiveRowCount);
+                try
+                {
+                    if (needResizers)
+                    {
+                        await JS.InvokeVoidAsync("initGridColumnResizers", _tableContainerId, _dotNetRef);
+                        _resizersInitContainerId = _tableContainerId;
+                        _resizersInitDataRef = _lastDataRef;
+                    }
+                    if (needVirtualScroll)
+                    {
+                        await JS.InvokeVoidAsync("initGridVirtualScroll", _tableContainerId, _dotNetRef, ActiveRowCount);
+                        _virtualScrollInitContainerId = _tableContainerId;
+                        _virtualScrollInitDataRef = _lastDataRef;
+                        _virtualScrollLastRowCount = ActiveRowCount;
+                    }
+                }
+                catch { }
             }
-            catch { }
         }
     }
 
@@ -902,8 +1067,7 @@ else
 
     private int GetActualRowIndex(int displayIndex)
     {
-        int idx = _filteredIndices != null ? _filteredIndices[displayIndex] : displayIndex;
-        return _sortedIndices != null ? _sortedIndices[idx] : idx;
+        return _viewIndices != null ? _viewIndices[displayIndex] : displayIndex;
     }
 
     private object? GetRawCellValue(int actualRowIndex, int colIndex, string colName)
@@ -939,19 +1103,35 @@ else
         }
 
         string? format = null;
-        var typeName = GetColumnDataType(colIdx)?.ToLowerInvariant();
-        if (!string.IsNullOrEmpty(typeName))
+        if (_tableStore != null)
         {
-            format = typeName switch
+            format = _tableStore.GetColumnDisplayKind(colIdx) switch
             {
-                "datetime2" => "yyyy-MM-dd HH:mm:ss.fffffff",
-                "datetime" => "yyyy-MM-dd HH:mm:ss.fff",
-                "date" => "yyyy-MM-dd",
-                "time" => "HH:mm:ss.fffffff",
-                "smalldatetime" => "yyyy-MM-dd HH:mm:ss",
-                "datetimeoffset" => "yyyy-MM-dd HH:mm:ss.fffffff zzz",
+                ColumnDisplayKind.DateTime2 => "yyyy-MM-dd HH:mm:ss.fffffff",
+                ColumnDisplayKind.DateTime => "yyyy-MM-dd HH:mm:ss.fff",
+                ColumnDisplayKind.Date => "yyyy-MM-dd",
+                ColumnDisplayKind.Time => "HH:mm:ss.fffffff",
+                ColumnDisplayKind.SmallDateTime => "yyyy-MM-dd HH:mm:ss",
+                ColumnDisplayKind.DateTimeOffset => "yyyy-MM-dd HH:mm:ss.fffffff zzz",
                 _ => null
             };
+        }
+        else
+        {
+            var typeName = GetColumnDataType(colIdx)?.ToLowerInvariant();
+            if (!string.IsNullOrEmpty(typeName))
+            {
+                format = typeName switch
+                {
+                    "datetime2" => "yyyy-MM-dd HH:mm:ss.fffffff",
+                    "datetime" => "yyyy-MM-dd HH:mm:ss.fff",
+                    "date" => "yyyy-MM-dd",
+                    "time" => "HH:mm:ss.fffffff",
+                    "smalldatetime" => "yyyy-MM-dd HH:mm:ss",
+                    "datetimeoffset" => "yyyy-MM-dd HH:mm:ss.fffffff zzz",
+                    _ => null
+                };
+            }
         }
 
         if (format == null && TotalDataCount > 0 && colIdx >= 0 && colIdx < Columns.Count)
@@ -1001,15 +1181,28 @@ else
         if (rawVal == null) return null;
         if (rawVal is DateTime dt)
         {
-            var typeName = colIdx >= 0 ? GetColumnDataType(colIdx)?.ToLowerInvariant() : null;
-            if (typeName == "date")
-                return dt.ToString("yyyy-MM-dd");
-            if (typeName == "datetime")
-                return dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
-            if (typeName == "smalldatetime")
-                return dt.ToString("yyyy-MM-dd HH:mm:ss");
-            if (typeName == "datetime2")
-                return dt.ToString("yyyy-MM-dd HH:mm:ss.fffffff");
+            if (_tableStore != null && colIdx >= 0)
+            {
+                switch (_tableStore.GetColumnDisplayKind(colIdx))
+                {
+                    case ColumnDisplayKind.Date: return dt.ToString("yyyy-MM-dd");
+                    case ColumnDisplayKind.DateTime: return dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                    case ColumnDisplayKind.SmallDateTime: return dt.ToString("yyyy-MM-dd HH:mm:ss");
+                    case ColumnDisplayKind.DateTime2: return dt.ToString("yyyy-MM-dd HH:mm:ss.fffffff");
+                }
+            }
+            else if (colIdx >= 0)
+            {
+                var typeName = GetColumnDataType(colIdx)?.ToLowerInvariant();
+                if (typeName == "date")
+                    return dt.ToString("yyyy-MM-dd");
+                if (typeName == "datetime")
+                    return dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                if (typeName == "smalldatetime")
+                    return dt.ToString("yyyy-MM-dd HH:mm:ss");
+                if (typeName == "datetime2")
+                    return dt.ToString("yyyy-MM-dd HH:mm:ss.fffffff");
+            }
 
             // Intelligent fallback when column type is not explicitly known
             if (dt.Ticks % TimeSpan.TicksPerMillisecond != 0)
@@ -1037,6 +1230,10 @@ else
 
         if (rawVal is TimeSpan ts)
         {
+            if (_tableStore != null && colIdx >= 0 && _tableStore.GetColumnDisplayKind(colIdx) == ColumnDisplayKind.Time)
+            {
+                return ts.ToString(@"hh\:mm\:ss\.fffffff");
+            }
             var typeName = colIdx >= 0 ? GetColumnDataType(colIdx)?.ToLowerInvariant() : null;
             if (typeName == "time")
             {
@@ -1077,8 +1274,48 @@ else
 
     private int[]? _sortedIndices = null;
     private int[]? _filteredIndices = null;
+    private int[]? _viewIndices = null;
     private string? SortColumn = null;
     private bool SortAscending = true;
+
+    private void UpdateViewIndices()
+    {
+        if (_filteredIndices == null && _sortedIndices == null)
+        {
+            _viewIndices = null;
+            return;
+        }
+        if (_sortedIndices == null)
+        {
+            _viewIndices = _filteredIndices;
+            return;
+        }
+        if (_filteredIndices == null)
+        {
+            _viewIndices = _sortedIndices;
+            return;
+        }
+
+        int total = TotalDataCount;
+        var mask = new bool[total];
+        for (int i = 0; i < _filteredIndices.Length; i++)
+        {
+            int rawIdx = _filteredIndices[i];
+            if ((uint)rawIdx < (uint)total) mask[rawIdx] = true;
+        }
+
+        var combined = new int[_filteredIndices.Length];
+        int k = 0;
+        for (int i = 0; i < _sortedIndices.Length && k < combined.Length; i++)
+        {
+            int rawIdx = _sortedIndices[i];
+            if ((uint)rawIdx < (uint)total && mask[rawIdx])
+            {
+                combined[k++] = rawIdx;
+            }
+        }
+        _viewIndices = k == combined.Length ? combined : combined.AsSpan(0, k).ToArray();
+    }
 
     private bool _isAllSelected = false;
     private HashSet<int> SelectedEntireRows = new();
@@ -1185,15 +1422,25 @@ else
 
     private void ApplyFilter()
     {
+        var prevFilterCts = _filterCts;
+        _filterCts = null;
+        if (prevFilterCts != null)
+        {
+            try { prevFilterCts.Cancel(); } catch { }
+            try { prevFilterCts.Dispose(); } catch { }
+        }
+
         if (_tableStore != null && !_tableStore.IsComplete)
         {
             _filteredIndices = null;
+            UpdateViewIndices();
             return;
         }
 
         if (string.IsNullOrWhiteSpace(SearchTerm))
         {
             _filteredIndices = null;
+            UpdateViewIndices();
             return;
         }
 
@@ -1201,6 +1448,47 @@ else
         if (total == 0)
         {
             _filteredIndices = Array.Empty<int>();
+            UpdateViewIndices();
+            return;
+        }
+
+        if (_tableStore != null)
+        {
+            if (total > 10_000)
+            {
+                var cts = new CancellationTokenSource();
+                _filterCts = cts;
+                var token = cts.Token;
+                var table = _tableStore;
+                string term = SearchTerm;
+                bool caseSens = SearchCaseSensitive;
+                bool wholeWord = SearchMatchWholeWord;
+                bool exact = SearchExactMatch;
+
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        var indices = table.BuildFilteredIndices(term, caseSens, wholeWord, exact, token);
+                        if (token.IsCancellationRequested) return;
+                        _ = InvokeAsync(() =>
+                        {
+                            if (token.IsCancellationRequested || !ReferenceEquals(_tableStore, table)) return;
+                            _filteredIndices = indices;
+                            UpdateViewIndices();
+                            _renderedFirstVisible = -1;
+                            _lastComputedCount = -1;
+                            StateHasChanged();
+                        });
+                    }
+                    catch (OperationCanceledException) { }
+                }, token);
+                return;
+            }
+
+            _filteredIndices = _tableStore.BuildFilteredIndices(
+                SearchTerm, SearchCaseSensitive, SearchMatchWholeWord, SearchExactMatch);
+            UpdateViewIndices();
             return;
         }
 
@@ -1239,6 +1527,7 @@ else
         }
 
         _filteredIndices = matches.ToArray();
+        UpdateViewIndices();
     }
 
     private void SortBy(string column)
@@ -1254,8 +1543,17 @@ else
             }
             else
             {
+                var prevSortCts = _sortCts;
+                _sortCts = null;
+                if (prevSortCts != null)
+                {
+                    try { prevSortCts.Cancel(); } catch { }
+                    try { prevSortCts.Dispose(); } catch { }
+                }
                 SortColumn = null;
                 _sortedIndices = null;
+                UpdateViewIndices();
+                _renderedFirstVisible = -1;
                 return;
             }
         }
@@ -1271,15 +1569,25 @@ else
 
     private void ApplySorting()
     {
+        var prevSortCts = _sortCts;
+        _sortCts = null;
+        if (prevSortCts != null)
+        {
+            try { prevSortCts.Cancel(); } catch { }
+            try { prevSortCts.Dispose(); } catch { }
+        }
+
         if (_tableStore != null && !_tableStore.IsComplete)
         {
             _sortedIndices = null;
+            UpdateViewIndices();
             return;
         }
 
         if (string.IsNullOrEmpty(SortColumn))
         {
             _sortedIndices = null;
+            UpdateViewIndices();
             return;
         }
 
@@ -1288,6 +1596,47 @@ else
 
         int colIdx = _tableStore != null ? _tableStore.GetColumnIndex(SortColumn) : Columns.IndexOf(SortColumn);
         if (colIdx < 0) return;
+
+        if (_tableStore != null)
+        {
+            if (total > 10_000)
+            {
+                var cts = new CancellationTokenSource();
+                _sortCts = cts;
+                var token = cts.Token;
+                var table = _tableStore;
+                string sortCol = SortColumn;
+                bool asc = SortAscending;
+
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        var indices = table.BuildSortedIndices(colIdx, asc, token);
+                        if (token.IsCancellationRequested) return;
+                        _ = InvokeAsync(() =>
+                        {
+                            if (token.IsCancellationRequested || !ReferenceEquals(_tableStore, table) ||
+                                SortColumn != sortCol || SortAscending != asc)
+                            {
+                                return;
+                            }
+                            _sortedIndices = indices;
+                            UpdateViewIndices();
+                            _renderedFirstVisible = -1;
+                            _lastComputedCount = -1;
+                            StateHasChanged();
+                        });
+                    }
+                    catch (OperationCanceledException) { }
+                }, token);
+                return;
+            }
+
+            _sortedIndices = _tableStore.BuildSortedIndices(colIdx, SortAscending);
+            UpdateViewIndices();
+            return;
+        }
 
         var indices = new int[total];
         for (int i = 0; i < total; i++) indices[i] = i;
@@ -1301,6 +1650,7 @@ else
         });
 
         _sortedIndices = indices;
+        UpdateViewIndices();
     }
 
     private int CompareCellValues(object? a, object? b)
@@ -2159,6 +2509,26 @@ else
         int colIdx = _tableStore != null ? _tableStore.GetColumnIndex(ContextMenuColumn) : Columns.IndexOf(ContextMenuColumn);
         if (colIdx < 0) return;
 
+        if (_tableStore != null)
+        {
+            var agg = _tableStore.ComputeAggregates(colIdx, _filteredIndices);
+            AggCount = agg.Count;
+            AggDistinct = agg.DistinctCount;
+            AggSum = agg.Sum;
+            AggAverage = agg.Average;
+            AggMin = agg.Min is DateTime minDt ? minDt.ToString("g")
+                   : agg.Min is DateTimeOffset minDto ? minDto.ToString("g")
+                   : agg.Min is DateOnly minDo ? minDo.ToString("yyyy-MM-dd")
+                   : agg.Min;
+            AggMax = agg.Max is DateTime maxDt ? maxDt.ToString("g")
+                   : agg.Max is DateTimeOffset maxDto ? maxDto.ToString("g")
+                   : agg.Max is DateOnly maxDo ? maxDo.ToString("yyyy-MM-dd")
+                   : agg.Max;
+            ActiveAggregateColumn = ContextMenuColumn;
+            HideContextMenu();
+            return;
+        }
+
         int rowCount = ActiveRowCount;
         var values = new List<object?>(Math.Min(rowCount, 100000));
         for (int i = 0; i < rowCount; i++)
@@ -2438,12 +2808,12 @@ else
         return str;
     }
 
-    private bool IsJsonOrXml(string? val)
+    private static bool IsJsonOrXml(string? val)
     {
-        if (string.IsNullOrWhiteSpace(val)) return false;
-        var trimmed = val.TrimStart();
-        if (trimmed.Length < 2) return false;
-        char first = trimmed[0];
+        if (string.IsNullOrEmpty(val)) return false;
+        var span = val.AsSpan().TrimStart();
+        if (span.Length < 2) return false;
+        char first = span[0];
         return first == '{' || first == '[' || first == '<';
     }
 
@@ -2664,6 +3034,12 @@ else
 
     public void Dispose()
     {
+        _disposed = true;
+        if (_subscribedTable != null)
+        {
+            _subscribedTable.OnRowsUpdated -= HandleTableRowsUpdated;
+            _subscribedTable = null;
+        }
         if (!string.IsNullOrEmpty(_activePdfBlobUrl))
         {
             try { _ = JS.InvokeVoidAsync("revokeBlobUrl", _activePdfBlobUrl); } catch { }
@@ -2675,5 +3051,9 @@ else
         UserSettingsService.OnSettingsChanged -= HandleSettingsChanged;
         _copyFeedbackCts?.Cancel();
         _copyFeedbackCts?.Dispose();
+        _filterCts?.Cancel();
+        _filterCts?.Dispose();
+        _sortCts?.Cancel();
+        _sortCts?.Dispose();
     }
 }

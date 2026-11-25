@@ -63,22 +63,53 @@ public class ConnectionService
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _prewarmedConnections = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Ensures a connection string uses at least PacketSize=32767 in a deterministic form
+    /// so connection pool keys match between PrewarmConnection and query execution.
+    /// </summary>
+    public static string EnsureOptimalConnectionString(string connString, out string databaseName)
+    {
+        databaseName = string.Empty;
+        if (string.IsNullOrWhiteSpace(connString)) return string.Empty;
+
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connString);
+            databaseName = builder.InitialCatalog ?? string.Empty;
+            if (builder.PacketSize < 32767)
+            {
+                builder.PacketSize = 32767;
+            }
+            return builder.ConnectionString;
+        }
+        catch
+        {
+            return connString;
+        }
+    }
+
+    public static string EnsureOptimalConnectionString(string connString)
+        => EnsureOptimalConnectionString(connString, out _);
+
     public void PrewarmConnection(string connString)
     {
         if (string.IsNullOrWhiteSpace(connString)) return;
 
-        if (_prewarmedConnections.TryGetValue(connString, out var lastWarmed) && (DateTime.UtcNow - lastWarmed).TotalMinutes < 3)
+        var optimalConnStr = EnsureOptimalConnectionString(connString);
+        if (string.IsNullOrWhiteSpace(optimalConnStr)) return;
+
+        if (_prewarmedConnections.TryGetValue(optimalConnStr, out var lastWarmed) && (DateTime.UtcNow - lastWarmed).TotalMinutes < 3)
         {
             return;
         }
 
-        _prewarmedConnections[connString] = DateTime.UtcNow;
+        _prewarmedConnections[optimalConnStr] = DateTime.UtcNow;
 
         _ = Task.Run(async () =>
         {
             try
             {
-                using var conn = new SqlConnection(connString);
+                using var conn = new SqlConnection(optimalConnStr);
                 await conn.OpenAsync();
             }
             catch

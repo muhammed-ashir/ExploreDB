@@ -1,0 +1,120 @@
+@using System
+@using System.Collections.Generic
+@using System.Linq
+@using ExploreDB.Services
+@implements IDisposable
+
+@if (Tab.ResultSets != null && Tab.ResultSets.Count > 0)
+{
+    var totalRows = GetTotalRowCount();
+    @if (Tab.IsExecuting)
+    {
+        <span class="text-primary fw-medium d-inline-flex align-items-center" style="font-size: 0.75rem; white-space: nowrap;">
+            <span class="spinner-border spinner-border-sm me-1" style="width: 0.75rem; height: 0.75rem; border-width: 0.15em;" role="status"></span>
+            <span>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")</span>
+        </span>
+    }
+    else
+    {
+        <span class="text-muted fw-medium" style="font-size: 0.75rem; white-space: nowrap;">
+            <i class="bi bi-list me-1" style="font-size: 0.75rem;"></i>@(totalRows == 1 ? "1 row" : $"{totalRows:N0} rows")
+        </span>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public QueryTab Tab { get; set; } = default!;
+
+    private readonly object _subLock = new();
+    private volatile QueryResultTable[] _subscribedTables = Array.Empty<QueryResultTable>();
+    private long _lastRenderTickMs;
+    private int _renderScheduled;
+    private volatile bool _disposed;
+
+    protected override void OnParametersSet()
+    {
+        if (_disposed) return;
+        SyncSubscriptions();
+    }
+
+    private void SyncSubscriptions()
+    {
+        var currentTables = Tab.ResultSets?.OfType<QueryResultTable>().ToArray() ?? Array.Empty<QueryResultTable>();
+        lock (_subLock)
+        {
+            var prev = _subscribedTables;
+            if (prev.Length == currentTables.Length && prev.SequenceEqual(currentTables))
+            {
+                return;
+            }
+
+            foreach (var oldTbl in prev)
+            {
+                oldTbl.OnRowsUpdated -= HandleTableUpdated;
+            }
+            foreach (var tbl in currentTables)
+            {
+                tbl.OnRowsUpdated += HandleTableUpdated;
+            }
+            _subscribedTables = currentTables;
+        }
+    }
+
+    private void HandleTableUpdated()
+    {
+        if (_disposed) return;
+
+        long now = Environment.TickCount64;
+        if (now - Interlocked.Read(ref _lastRenderTickMs) < 120)
+        {
+            // Ensure final completion render isn't skipped
+            var snapshot = _subscribedTables;
+            if (snapshot.Length == 0 || !snapshot.All(t => t.IsComplete))
+                return;
+        }
+
+        if (Interlocked.CompareExchange(ref _renderScheduled, 1, 0) != 0)
+            return;
+
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            Interlocked.Exchange(ref _lastRenderTickMs, Environment.TickCount64);
+            Interlocked.Exchange(ref _renderScheduled, 0);
+            SyncSubscriptions();
+            StateHasChanged();
+        });
+    }
+
+    private int GetTotalRowCount()
+    {
+        if (Tab.ResultSets == null || Tab.ResultSets.Count == 0) return 0;
+        int sum = 0;
+        foreach (var rs in Tab.ResultSets)
+        {
+            if (rs is QueryResultTable qrt) sum += qrt.RowCount;
+            else if (rs is System.Collections.ICollection c) sum += c.Count;
+            else if (rs is IEnumerable<dynamic> d) sum += d.Count();
+        }
+        return sum;
+    }
+
+    private void UnsubscribeAll()
+    {
+        lock (_subLock)
+        {
+            foreach (var tbl in _subscribedTables)
+            {
+                tbl.OnRowsUpdated -= HandleTableUpdated;
+            }
+            _subscribedTables = Array.Empty<QueryResultTable>();
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        UnsubscribeAll();
+    }
+}

@@ -887,6 +887,7 @@ code:not(.editor-syntax-preview code) {
     color: var(--app-text);
     background-color: var(--app-table-bg);
     border-collapse: collapse;
+    contain: layout style;
 }
 
 .result-set-table th,
@@ -918,7 +919,6 @@ code:not(.editor-syntax-preview code) {
 
 .result-set-table tbody tr {
     background-color: var(--app-table-bg);
-    transition: background-color 0.15s ease;
 }
 
 .result-set-table tbody tr:nth-child(even) {

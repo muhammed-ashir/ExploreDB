@@ -34,7 +34,7 @@ public class QueryTab
     public string OriginalContent { get; set; } = "";
     public string? FilePath { get; set; }
     public bool IsPinned { get; set; } = false;
-    
+
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsDirty => Content != OriginalContent;
 
@@ -52,44 +52,94 @@ public class QueryTab
         if (!CollapsedResultSets.Remove(index))
             CollapsedResultSets.Add(index);
     }
-    
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    private readonly object _messagesLock = new();
+
     [System.Text.Json.Serialization.JsonIgnore]
     public List<QueryOutputMessage> Messages { get; set; } = new();
 
+    public void AddMessage(QueryOutputMessage message)
+    {
+        lock (_messagesLock)
+        {
+            Messages.Add(message);
+        }
+    }
+
+    public void AddMessages(IEnumerable<QueryOutputMessage> messages)
+    {
+        lock (_messagesLock)
+        {
+            Messages.AddRange(messages);
+        }
+    }
+
+    public void ClearMessages()
+    {
+        lock (_messagesLock)
+        {
+            Messages.Clear();
+        }
+    }
+
+    public List<QueryOutputMessage> GetMessagesSnapshot()
+    {
+        lock (_messagesLock)
+        {
+            return Messages.ToList();
+        }
+    }
+
     [System.Text.Json.Serialization.JsonIgnore]
-    public bool HasMessageErrors => Messages.Any(m => m.IsError || m.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || m.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase));
+    public bool HasMessageErrors
+    {
+        get
+        {
+            lock (_messagesLock)
+            {
+                return Messages.Any(m => m.IsError || m.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || m.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase));
+            }
+        }
+    }
 
     [System.Text.Json.Serialization.JsonIgnore]
     public int MessageBadgeCount
     {
         get
         {
-            if (Messages.Count == 0) return 0;
-            if (HasMessageErrors)
+            lock (_messagesLock)
             {
-                var errCount = Messages.Count(m => (m.IsError || m.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || m.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase)) && !m.Text.StartsWith("Msg ", StringComparison.OrdinalIgnoreCase));
-                return errCount > 0 ? errCount : Messages.Count(m => m.IsError);
+                if (Messages.Count == 0) return 0;
+                if (Messages.Any(m => m.IsError || m.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || m.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var errCount = Messages.Count(m => (m.IsError || m.Text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || m.Text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase)) && !m.Text.StartsWith("Msg ", StringComparison.OrdinalIgnoreCase));
+                    return errCount > 0 ? errCount : Messages.Count(m => m.IsError);
+                }
+                return Messages.Count(m => !string.IsNullOrWhiteSpace(m.Text) && !m.Text.StartsWith("Completion time:", StringComparison.OrdinalIgnoreCase));
             }
-            return Messages.Count(m => !string.IsNullOrWhiteSpace(m.Text) && !m.Text.StartsWith("Completion time:", StringComparison.OrdinalIgnoreCase));
         }
     }
 
     public void AddCompletionTime()
     {
-        while (Messages.Count > 0 && string.IsNullOrWhiteSpace(Messages[^1].Text))
+        lock (_messagesLock)
         {
-            Messages.RemoveAt(Messages.Count - 1);
+            while (Messages.Count > 0 && string.IsNullOrWhiteSpace(Messages[^1].Text))
+            {
+                Messages.RemoveAt(Messages.Count - 1);
+            }
+            if (Messages.Count > 0)
+            {
+                Messages.Add("");
+            }
+            Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
         }
-        if (Messages.Count > 0)
-        {
-            Messages.Add("");
-        }
-        Messages.Add($"Completion time: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}");
     }
-    
+
     [System.Text.Json.Serialization.JsonIgnore]
     public bool HasExecuted { get; set; }
-    
+
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsExecuting { get; set; }
 
@@ -98,20 +148,23 @@ public class QueryTab
 
     [System.Text.Json.Serialization.JsonIgnore]
     public Action? CancelAction { get; set; }
-    
+
     [System.Text.Json.Serialization.JsonIgnore]
     public long LastExecutionTimeMs { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]
     public long LastConnectionTimeMs { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]
     public long LastQueryTimeMs { get; set; }
-    
+
     [System.Text.Json.Serialization.JsonIgnore]
     public int ExecElapsedSeconds { get; set; }
-    
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public DateTime ExecutionStartedUtc { get; set; }
+
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsCurrentQuerySelect { get; set; }
-    
+
     [System.Text.Json.Serialization.JsonIgnore]
     public CancellationTokenSource? QueryCts { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]
@@ -124,14 +177,14 @@ public class QueryStateService
 {
     public List<QueryTab> Tabs { get; set; } = new();
     public Guid ActiveTabId { get; set; }
-    
+
     public event Action<Guid>? OnTabUpdated;
-    
+
     public void NotifyTabUpdated(Guid tabId)
     {
         OnTabUpdated?.Invoke(tabId);
     }
-    
+
     // Tracks if the session prompt has already been shown this app lifecycle
     public bool Initialized { get; set; } = false;
 

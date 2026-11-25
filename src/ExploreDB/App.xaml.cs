@@ -95,6 +95,7 @@ public partial class App : Application
             services.AddSingleton<VirtualRelationshipService>();
             services.AddSingleton<PathfinderService>();
             services.AddSingleton<QueryStateService>();
+            services.AddSingleton<QueryExecutionService>();
             services.AddSingleton<GitHubUpdateService>();
             services.AddSingleton<StoreUpdateService>();
             services.AddSingleton<HistoryService>();

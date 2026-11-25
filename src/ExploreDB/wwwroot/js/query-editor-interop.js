@@ -606,6 +606,49 @@ window.formatSqlEditor = (editorId) => {
     editor.pushUndoStop();
 };
 
+window.getQueryExecutionInput = (editorId) => {
+    try {
+        if (typeof monaco === 'undefined' || !monaco.editor) return null;
+        var editors = monaco.editor.getEditors();
+        var editor = null;
+
+        for (var i = 0; i < editors.length; i++) {
+            var e = editors[i];
+            var container = e.getContainerDomNode();
+            if (container && (container.id === editorId || (container.parentElement && container.parentElement.id === editorId) || (container.closest && container.closest('#' + editorId)))) {
+                editor = e;
+                break;
+            }
+        }
+
+        if (!editor && editors.length > 0) {
+            editor = editors[0];
+        }
+        if (!editor) return null;
+
+        var model = editor.getModel();
+        if (!model) return null;
+
+        var fullText = model.getValue() || "";
+        var selectedText = "";
+        var startLineNumber = 1;
+
+        var selection = editor.getSelection();
+        if (selection && (selection.startLineNumber !== selection.endLineNumber || selection.startColumn !== selection.endColumn)) {
+            selectedText = model.getValueInRange(selection) || "";
+            startLineNumber = selection.startLineNumber || 1;
+        }
+
+        return {
+            fullText: fullText,
+            selectedText: selectedText,
+            startLineNumber: startLineNumber
+        };
+    } catch (e) {
+        return null;
+    }
+};
+
 window.updateSqlAutocompleteData = (tables, views, columns, sps, functions) => {
     window.sqlTables = tables || window.sqlTables;
     window.sqlViews = views || window.sqlViews;
