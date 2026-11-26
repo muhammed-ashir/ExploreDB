@@ -649,6 +649,777 @@ window.getQueryExecutionInput = (editorId) => {
     }
 };
 
+(function initQueryBlockExecutionSupport() {
+    var ddlIfTargetWords = new Set([
+        'TABLE', 'VIEW', 'PROC', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'INDEX',
+        'CONSTRAINT', 'COLUMN', 'SCHEMA', 'DATABASE', 'TYPE', 'SEQUENCE',
+        'SYNONYM', 'USER', 'LOGIN', 'ROLE', 'RULE', 'DEFAULT', 'STATISTICS'
+    ]);
+    var alterDropClauseWords = new Set(['COLUMN', 'CONSTRAINT', 'PERIOD', 'INDEX', 'DEFAULT']);
+    var ddlModuleTargets = new Set(['PROC', 'PROCEDURE', 'FUNCTION', 'TRIGGER']);
+    var mergeOrDdlAfterWords = new Set(['ON', 'AFTER', 'INSTEAD', 'OF', 'FOR']);
+    var setJoinOpWords = new Set(['UNION', 'INTERSECT', 'EXCEPT']);
+    var nonWithCteNextWords = new Set([
+        'RESULT', 'ENCRYPTION', 'SCHEMABINDING', 'GRANT', 'EXECUTE',
+        'CHECK', 'READ_ONLY', 'MARK', 'MOVE', 'REPLACE', 'RECOVERY', 'NORECOVERY',
+        'STATS', 'RECOMPILE', 'VIEW_METADATA'
+    ]);
+    var topLevelStarters = new Set([
+        'SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE', 'MERGE',
+        'EXEC', 'EXECUTE', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE',
+        'DECLARE', 'SET', 'USE', 'PRINT', 'DBCC', 'WAITFOR',
+        'RAISERROR', 'THROW', 'RETURN', 'BULK', 'IF', 'WHILE',
+        'GRANT', 'REVOKE', 'DENY', 'BACKUP', 'RESTORE',
+        'COMMIT', 'ROLLBACK', 'SAVE', 'BEGIN'
+    ]);
+    var blockingPunct = new Set(['.', ',', '(', '=', '+', '-', '/', '<', '>', '!', '%', '&', '|', '^', '~']);
+
+    function isQueryRunnerEditor(editor) {
+        try {
+            if (!editor || typeof editor.getContainerDomNode !== 'function') return false;
+            var container = editor.getContainerDomNode();
+            return !!(container && (
+                container.id === 'query-editor' ||
+                (container.parentElement && container.parentElement.id === 'query-editor') ||
+                (container.closest && container.closest('#query-editor'))
+            ));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function resolveQueryEditor(editorOrId) {
+        if (editorOrId && typeof editorOrId.getModel === 'function') {
+            return editorOrId;
+        }
+        var targetId = typeof editorOrId === 'string' && editorOrId ? editorOrId : 'query-editor';
+        if (typeof monaco === 'undefined' || !monaco.editor) return null;
+        var editors = monaco.editor.getEditors();
+        for (var i = 0; i < editors.length; i++) {
+            var e = editors[i];
+            var container = e.getContainerDomNode();
+            if (container && (container.id === targetId || (container.parentElement && container.parentElement.id === targetId) || (container.closest && container.closest('#' + targetId)))) {
+                return e;
+            }
+        }
+        return editors.length > 0 ? editors[0] : null;
+    }
+
+    function isIdentStart(ch) {
+        return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_' || ch === '@' || ch === '#';
+    }
+
+    function isIdentPart(ch) {
+        return isIdentStart(ch) || (ch >= '0' && ch <= '9') || ch === '$';
+    }
+
+    function tokenizeSqlModelForExecution(model) {
+        var tokens = [];
+        var lineCount = model.getLineCount();
+        var inSingleQuote = false;
+        var inBracketIdent = false;
+        var inDoubleQuote = false;
+        var openToken = null;
+        var blockCommentDepth = 0;
+
+        for (var lineNum = 1; lineNum <= lineCount; lineNum++) {
+            var line = model.getLineContent(lineNum) || '';
+            var len = line.length;
+            if (len === 0) continue;
+
+            if (!inSingleQuote && !inBracketIdent && !inDoubleQuote && blockCommentDepth === 0) {
+                var goCheck = line.replace(/--.*$/, '').trim();
+                if (/^GO(?:\s+\d+)?$/i.test(goCheck)) {
+                    tokens.push({
+                        kind: 'go',
+                        upper: 'GO',
+                        startLine: lineNum,
+                        startCol: 1,
+                        endLine: lineNum,
+                        endCol: len + 1
+                    });
+                    continue;
+                }
+            }
+
+            var i = 0;
+            while (i < len) {
+                var ch = line[i];
+
+                if (blockCommentDepth > 0) {
+                    if (ch === '/' && i + 1 < len && line[i + 1] === '*') {
+                        blockCommentDepth++;
+                        i += 2;
+                    } else if (ch === '*' && i + 1 < len && line[i + 1] === '/') {
+                        blockCommentDepth--;
+                        i += 2;
+                    } else {
+                        i++;
+                    }
+                    continue;
+                }
+
+                if (inSingleQuote) {
+                    if (ch === "'") {
+                        if (i + 1 < len && line[i + 1] === "'") {
+                            i += 2;
+                        } else {
+                            inSingleQuote = false;
+                            i++;
+                            if (openToken) {
+                                openToken.endLine = lineNum;
+                                openToken.endCol = i + 1;
+                                tokens.push(openToken);
+                                openToken = null;
+                            }
+                        }
+                    } else {
+                        i++;
+                    }
+                    continue;
+                }
+
+                if (inBracketIdent) {
+                    if (ch === ']') {
+                        if (i + 1 < len && line[i + 1] === ']') {
+                            i += 2;
+                        } else {
+                            inBracketIdent = false;
+                            i++;
+                            if (openToken) {
+                                openToken.endLine = lineNum;
+                                openToken.endCol = i + 1;
+                                tokens.push(openToken);
+                                openToken = null;
+                            }
+                        }
+                    } else {
+                        i++;
+                    }
+                    continue;
+                }
+
+                if (inDoubleQuote) {
+                    if (ch === '"') {
+                        if (i + 1 < len && line[i + 1] === '"') {
+                            i += 2;
+                        } else {
+                            inDoubleQuote = false;
+                            i++;
+                            if (openToken) {
+                                openToken.endLine = lineNum;
+                                openToken.endCol = i + 1;
+                                tokens.push(openToken);
+                                openToken = null;
+                            }
+                        }
+                    } else {
+                        i++;
+                    }
+                    continue;
+                }
+
+                if (ch === ' ' || ch === '\t' || ch === '\r') {
+                    i++;
+                    continue;
+                }
+
+                if (ch === '-' && i + 1 < len && line[i + 1] === '-') {
+                    break;
+                }
+
+                if (ch === '/' && i + 1 < len && line[i + 1] === '*') {
+                    blockCommentDepth = 1;
+                    i += 2;
+                    continue;
+                }
+
+                if (ch === "'") {
+                    openToken = {
+                        kind: 'literal',
+                        upper: '',
+                        startLine: lineNum,
+                        startCol: i + 1,
+                        endLine: lineNum,
+                        endCol: i + 2
+                    };
+                    inSingleQuote = true;
+                    i++;
+                    continue;
+                }
+
+                if (ch === '[') {
+                    openToken = {
+                        kind: 'ident',
+                        upper: '',
+                        startLine: lineNum,
+                        startCol: i + 1,
+                        endLine: lineNum,
+                        endCol: i + 2
+                    };
+                    inBracketIdent = true;
+                    i++;
+                    continue;
+                }
+
+                if (ch === '"') {
+                    openToken = {
+                        kind: 'ident',
+                        upper: '',
+                        startLine: lineNum,
+                        startCol: i + 1,
+                        endLine: lineNum,
+                        endCol: i + 2
+                    };
+                    inDoubleQuote = true;
+                    i++;
+                    continue;
+                }
+
+                if ((ch === 'N' || ch === 'n') && i + 1 < len && line[i + 1] === "'") {
+                    openToken = {
+                        kind: 'literal',
+                        upper: '',
+                        startLine: lineNum,
+                        startCol: i + 1,
+                        endLine: lineNum,
+                        endCol: i + 3
+                    };
+                    inSingleQuote = true;
+                    i += 2;
+                    continue;
+                }
+
+                if (isIdentStart(ch)) {
+                    var wStart = i;
+                    i++;
+                    while (i < len && isIdentPart(line[i])) {
+                        i++;
+                    }
+                    var isKeywordCandidate = (ch !== '@' && ch !== '#');
+                    var wordSlice = isKeywordCandidate && (i - wStart <= 32)
+                        ? line.slice(wStart, i).toUpperCase()
+                        : '';
+                    tokens.push({
+                        kind: isKeywordCandidate ? 'word' : 'ident',
+                        upper: wordSlice,
+                        startLine: lineNum,
+                        startCol: wStart + 1,
+                        endLine: lineNum,
+                        endCol: i + 1
+                    });
+                    continue;
+                }
+
+                if (ch >= '0' && ch <= '9') {
+                    var nStart = i;
+                    i++;
+                    while (i < len && ((line[i] >= '0' && line[i] <= '9') || line[i] === '.' || line[i] === 'x' || line[i] === 'X' || (line[i] >= 'a' && line[i] <= 'f') || (line[i] >= 'A' && line[i] <= 'F'))) {
+                        i++;
+                    }
+                    tokens.push({
+                        kind: 'literal',
+                        upper: '',
+                        startLine: lineNum,
+                        startCol: nStart + 1,
+                        endLine: lineNum,
+                        endCol: i + 1
+                    });
+                    continue;
+                }
+
+                tokens.push({
+                    kind: ch === ';' ? 'semi' : 'punct',
+                    upper: ch,
+                    startLine: lineNum,
+                    startCol: i + 1,
+                    endLine: lineNum,
+                    endCol: i + 2
+                });
+                i++;
+            }
+        }
+
+        if (openToken) {
+            var lastLen = (model.getLineContent(lineCount) || '').length;
+            openToken.endLine = lineCount;
+            openToken.endCol = lastLen + 1;
+            tokens.push(openToken);
+        }
+
+        return tokens;
+    }
+
+    function isCteWithAt(tokens, idx) {
+        var t1 = tokens[idx + 1];
+        if (!t1 || (t1.kind !== 'word' && t1.kind !== 'ident')) return false;
+        if (t1.kind === 'word' && nonWithCteNextWords.has(t1.upper)) return false;
+        var t2 = tokens[idx + 2];
+        if (!t2) return false;
+        if (t2.kind === 'word' && t2.upper === 'AS') return true;
+        if (t2.kind === 'punct' && t2.upper === '(') {
+            var depth = 0;
+            for (var k = idx + 2; k < tokens.length && k < idx + 200; k++) {
+                var tk = tokens[k];
+                if (tk.kind === 'punct' && tk.upper === '(') depth++;
+                else if (tk.kind === 'punct' && tk.upper === ')') {
+                    depth--;
+                    if (depth === 0) {
+                        var afterParen = tokens[k + 1];
+                        return !!(afterParen && afterParen.kind === 'word' && afterParen.upper === 'AS');
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    function shouldStartNewSqlStatement(stmt, tokens, idx, prevWord, prevPrevWord, prevPunct) {
+        if (!stmt) return false;
+        var tok = tokens[idx];
+        if (tok.kind !== 'word' || !topLevelStarters.has(tok.upper)) return false;
+        if (blockingPunct.has(prevPunct)) return false;
+
+        var u = tok.upper;
+        var nextTok = tokens[idx + 1];
+        var nextUpper = nextTok ? nextTok.upper : '';
+
+        if (stmt.isDdlModule) {
+            return false;
+        }
+
+        if (stmt.isIfOrWhile && stmt.awaitingBody) {
+            return false;
+        }
+
+        if (u === 'SELECT') {
+            if (stmt.expectingInsertSource || stmt.awaitingCteMain) return false;
+            if (stmt.isDdlView && prevWord === 'AS') {
+                stmt.seenViewSelect = true;
+                return false;
+            }
+            if (setJoinOpWords.has(prevWord) || prevWord === 'AS') return false;
+            if (prevWord === 'ALL' && prevPrevWord === 'UNION') return false;
+            return true;
+        }
+
+        if (u === 'WITH') {
+            if (stmt.isDdlView && prevWord === 'AS') return false;
+            if (prevWord === 'AS' || prevWord === 'REVOKE' || prevWord === 'GRANT' || prevWord === 'DENY') return false;
+            return isCteWithAt(tokens, idx);
+        }
+
+        if (u === 'INSERT' || u === 'UPDATE' || u === 'DELETE' || u === 'MERGE') {
+            if (stmt.awaitingCteMain) return false;
+            if (stmt.activeDmlKind === 'MERGE' && prevWord === 'THEN') return false;
+            if (mergeOrDdlAfterWords.has(prevWord)) return false;
+            return true;
+        }
+
+        if (u === 'SET') {
+            if ((stmt.activeDmlKind === 'UPDATE' || stmt.activeDmlKind === 'MERGE') && !stmt.sawUpdateSet) return false;
+            if (stmt.activeDmlKind === 'MERGE' && prevWord === 'UPDATE') return false;
+            if (prevWord === 'DELETE' || prevWord === 'UPDATE') return false;
+            return true;
+        }
+
+        if (u === 'EXEC' || u === 'EXECUTE') {
+            if (stmt.expectingInsertSource) return false;
+            if (prevWord === 'WITH') return false;
+            return true;
+        }
+
+        if (u === 'ALTER' && stmt.root === 'CREATE' && prevWord === 'OR') {
+            return false;
+        }
+
+        if (u === 'DROP' && stmt.root === 'ALTER') {
+            if (alterDropClauseWords.has(nextUpper)) return false;
+        }
+
+        if (u === 'IF' && (stmt.root === 'DROP' || stmt.root === 'CREATE' || stmt.root === 'ALTER')) {
+            if (ddlIfTargetWords.has(prevWord) || (prevWord === 'NOT' && nextUpper === 'EXISTS')) return false;
+        }
+
+        if (u === 'RETURN' && stmt.root === 'CREATE' && prevWord === 'AS') {
+            return false;
+        }
+
+        if (u === 'BEGIN' && (nextUpper === 'TRY' || nextUpper === 'CATCH')) {
+            return true;
+        }
+
+        return true;
+    }
+
+    function parseSqlStatementsForExecution(model) {
+        var tokens = tokenizeSqlModelForExecution(model);
+        var statements = [];
+        var currentStmt = null;
+        var parenDepth = 0;
+        var controlStack = [];
+        var prevWord = '';
+        var prevPrevWord = '';
+        var prevPunct = '';
+
+        function pushStatement() {
+            if (currentStmt) {
+                statements.push({
+                    startLineNumber: currentStmt.startLineNumber,
+                    startColumn: currentStmt.startColumn,
+                    endLineNumber: currentStmt.endLineNumber,
+                    endColumn: currentStmt.endColumn
+                });
+                currentStmt = null;
+            }
+        }
+
+        function beginStatementFromToken(tok, idx) {
+            var u = tok.kind === 'word' ? tok.upper : '';
+            var nextTok = tokens[idx + 1];
+            var nextUpper = nextTok ? nextTok.upper : '';
+            var next2 = tokens[idx + 2];
+            var next3 = tokens[idx + 3];
+
+            var isDdlModule = false;
+            var isDdlView = false;
+            if (u === 'CREATE' || u === 'ALTER') {
+                var targetTok = (nextUpper === 'OR' && next2 && next2.upper === 'ALTER') ? next3 : nextTok;
+                if (targetTok && targetTok.kind === 'word') {
+                    if (ddlModuleTargets.has(targetTok.upper)) isDdlModule = true;
+                    else if (targetTok.upper === 'VIEW') isDdlView = true;
+                }
+            }
+
+            currentStmt = {
+                root: u,
+                activeDmlKind: u,
+                startLineNumber: tok.startLine,
+                startColumn: tok.startCol,
+                endLineNumber: tok.endLine,
+                endColumn: tok.endCol,
+                awaitingCteMain: (u === 'WITH'),
+                expectingInsertSource: (u === 'INSERT'),
+                isDdlModule: isDdlModule,
+                isDdlView: isDdlView,
+                seenViewSelect: false,
+                sawUpdateSet: false,
+                isIfOrWhile: (u === 'IF' || u === 'WHILE'),
+                awaitingBody: (u === 'IF' || u === 'WHILE')
+            };
+        }
+
+        for (var idx = 0; idx < tokens.length; idx++) {
+            var tok = tokens[idx];
+
+            if (tok.kind === 'go') {
+                pushStatement();
+                parenDepth = 0;
+                controlStack.length = 0;
+                prevWord = '';
+                prevPrevWord = '';
+                prevPunct = '';
+                continue;
+            }
+
+            if (tok.kind === 'semi') {
+                if (currentStmt) {
+                    currentStmt.endLineNumber = tok.endLine;
+                    currentStmt.endColumn = tok.endCol;
+                    if (parenDepth === 0 && controlStack.length === 0 && !currentStmt.isDdlModule) {
+                        pushStatement();
+                        prevWord = '';
+                        prevPrevWord = '';
+                        prevPunct = ';';
+                        continue;
+                    }
+                }
+                prevPunct = ';';
+                continue;
+            }
+
+            if (tok.kind === 'word' && tok.upper === 'ELSE' && currentStmt && currentStmt.root === 'IF' && parenDepth === 0 && controlStack.length === 0 && !currentStmt.awaitingBody) {
+                currentStmt.endLineNumber = tok.endLine;
+                currentStmt.endColumn = tok.endCol;
+                currentStmt.awaitingBody = true;
+                prevPrevWord = prevWord;
+                prevWord = 'ELSE';
+                prevPunct = '';
+                continue;
+            }
+
+            if (parenDepth === 0 && controlStack.length === 0 && currentStmt &&
+                shouldStartNewSqlStatement(currentStmt, tokens, idx, prevWord, prevPrevWord, prevPunct)) {
+                pushStatement();
+            }
+
+            if (!currentStmt) {
+                beginStatementFromToken(tok, idx);
+            } else {
+                currentStmt.endLineNumber = tok.endLine;
+                currentStmt.endColumn = tok.endCol;
+            }
+
+            if (tok.kind === 'punct') {
+                if (tok.upper === '(') parenDepth++;
+                else if (tok.upper === ')' && parenDepth > 0) parenDepth--;
+                prevPunct = tok.upper;
+            } else if (tok.kind === 'word') {
+                var w = tok.upper;
+                var nextW = tokens[idx + 1] ? tokens[idx + 1].upper : '';
+
+                if (w === 'CASE') {
+                    controlStack.push('CASE');
+                } else if (w === 'BEGIN') {
+                    var isBeginTran = (nextW === 'TRAN' || nextW === 'TRANSACTION' || nextW === 'DISTRIBUTED' || nextW === 'DIALOG' || nextW === 'CONVERSATION');
+                    if (!isBeginTran) {
+                        controlStack.push('BEGIN');
+                    }
+                    if (currentStmt.isIfOrWhile && currentStmt.awaitingBody && parenDepth === 0) {
+                        currentStmt.awaitingBody = false;
+                    }
+                } else if (w === 'END') {
+                    if (controlStack.length > 0) {
+                        controlStack.pop();
+                    }
+                } else if (parenDepth === 0 && controlStack.length === 0) {
+                    if (currentStmt.isIfOrWhile && currentStmt.awaitingBody && topLevelStarters.has(w) && w !== currentStmt.root) {
+                        currentStmt.awaitingBody = false;
+                        currentStmt.activeDmlKind = w;
+                        if (w === 'INSERT') currentStmt.expectingInsertSource = true;
+                        if (w === 'UPDATE' || w === 'MERGE') currentStmt.sawUpdateSet = false;
+                    }
+                    if (currentStmt.awaitingCteMain && (w === 'SELECT' || w === 'INSERT' || w === 'UPDATE' || w === 'DELETE' || w === 'MERGE')) {
+                        currentStmt.awaitingCteMain = false;
+                        currentStmt.activeDmlKind = w;
+                        if (w === 'INSERT') currentStmt.expectingInsertSource = true;
+                        if (w === 'UPDATE' || w === 'MERGE') currentStmt.sawUpdateSet = false;
+                    }
+                    if (currentStmt.expectingInsertSource && (w === 'VALUES' || w === 'SELECT' || w === 'EXEC' || w === 'EXECUTE' || w === 'DEFAULT')) {
+                        currentStmt.expectingInsertSource = false;
+                    }
+                    if ((currentStmt.activeDmlKind === 'UPDATE' || currentStmt.activeDmlKind === 'MERGE') && w === 'SET') {
+                        currentStmt.sawUpdateSet = true;
+                    }
+                }
+
+                prevPrevWord = prevWord;
+                prevWord = w;
+                prevPunct = '';
+            } else {
+                prevPrevWord = prevWord;
+                prevWord = '';
+                prevPunct = '';
+            }
+        }
+
+        pushStatement();
+        return statements;
+    }
+
+    function comparePositions(aLine, aCol, bLine, bCol) {
+        if (aLine !== bLine) return aLine - bLine;
+        return aCol - bCol;
+    }
+
+    function findStatementAtCursor(statements, cursorLine, cursorCol) {
+        if (!statements || statements.length === 0) return null;
+
+        for (var i = 0; i < statements.length; i++) {
+            var s = statements[i];
+            if (comparePositions(cursorLine, cursorCol, s.startLineNumber, s.startColumn) >= 0 &&
+                comparePositions(cursorLine, cursorCol, s.endLineNumber, s.endColumn) <= 0) {
+                return s;
+            }
+        }
+
+        var lineCandidates = [];
+        for (var j = 0; j < statements.length; j++) {
+            var st = statements[j];
+            if (st.startLineNumber <= cursorLine && st.endLineNumber >= cursorLine) {
+                lineCandidates.push({ index: j, stmt: st });
+            }
+        }
+        if (lineCandidates.length === 0) return null;
+
+        for (var k = lineCandidates.length - 1; k >= 0; k--) {
+            var cand = lineCandidates[k].stmt;
+            if (cand.startLineNumber === cursorLine && cursorCol < cand.startColumn) {
+                var prevCand = k > 0 ? lineCandidates[k - 1].stmt : null;
+                if (!prevCand || comparePositions(cursorLine, cursorCol, prevCand.endLineNumber, prevCand.endColumn) > 0) {
+                    return cand;
+                }
+            }
+        }
+
+        for (var m = lineCandidates.length - 1; m >= 0; m--) {
+            var tailStmt = lineCandidates[m].stmt;
+            if (tailStmt.endLineNumber === cursorLine && cursorCol >= tailStmt.endColumn) {
+                var nextCand = (m + 1 < lineCandidates.length) ? lineCandidates[m + 1].stmt : null;
+                if (!nextCand || comparePositions(cursorLine, cursorCol, nextCand.startLineNumber, nextCand.startColumn) < 0) {
+                    return tailStmt;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    function statementSharesLineWithAnother(statements, target) {
+        for (var i = 0; i < statements.length; i++) {
+            var s = statements[i];
+            if (s === target) continue;
+            if (s.endLineNumber === target.startLineNumber || s.startLineNumber === target.endLineNumber) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    window.parseSqlStatementsForExecution = parseSqlStatementsForExecution;
+
+    window.getQueryBlockExecutionInput = function (editorOrId) {
+        try {
+            var editor = resolveQueryEditor(editorOrId);
+            if (!editor) return null;
+
+            var model = editor.getModel();
+            if (!model) return null;
+
+            var fullText = model.getValue() || '';
+            var selection = editor.getSelection();
+            if (selection && !selection.isEmpty()) {
+                var selectedText = model.getValueInRange(selection) || '';
+                if (!selectedText.trim()) {
+                    return { shouldExecute: false };
+                }
+                var selSingleLinePartial = selection.startLineNumber === selection.endLineNumber &&
+                    selection.startColumn > 1;
+                return {
+                    shouldExecute: true,
+                    isSelection: true,
+                    isWholeLine: !selSingleLinePartial,
+                    fullText: fullText,
+                    queryText: selectedText,
+                    startLineNumber: selection.startLineNumber,
+                    startColumn: selection.startColumn,
+                    endLineNumber: selection.endLineNumber,
+                    endColumn: selection.endColumn
+                };
+            }
+
+            var position = editor.getPosition();
+            if (!position) return { shouldExecute: false };
+
+            var curLineText = model.getLineContent(position.lineNumber) || '';
+            if (!curLineText.trim()) {
+                return { shouldExecute: false };
+            }
+
+            var statements = parseSqlStatementsForExecution(model);
+            var matched = findStatementAtCursor(statements, position.lineNumber, position.column);
+            if (!matched) {
+                return { shouldExecute: false };
+            }
+
+            var blockText = model.getValueInRange(matched) || '';
+            if (!blockText.trim()) {
+                return { shouldExecute: false };
+            }
+
+            var sharesLine = statementSharesLineWithAnother(statements, matched);
+            return {
+                shouldExecute: true,
+                isSelection: false,
+                isWholeLine: !sharesLine,
+                fullText: fullText,
+                queryText: blockText,
+                startLineNumber: matched.startLineNumber,
+                startColumn: matched.startColumn,
+                endLineNumber: matched.endLineNumber,
+                endColumn: matched.endColumn
+            };
+        } catch (e) {
+            return null;
+        }
+    };
+
+    window.flashExecutedQueryBlock = function (editorOrId, rangeInfo) {
+        try {
+            var editor = resolveQueryEditor(editorOrId);
+            if (!editor || !rangeInfo || typeof monaco === 'undefined') return;
+
+            if (editor.__queryBlockFlashTimer) {
+                clearTimeout(editor.__queryBlockFlashTimer);
+                editor.__queryBlockFlashTimer = null;
+            }
+
+            var prevIds = editor.__queryBlockFlashDecorations || [];
+            var range = new monaco.Range(
+                rangeInfo.startLineNumber,
+                rangeInfo.startColumn || 1,
+                rangeInfo.endLineNumber,
+                rangeInfo.endColumn || 1
+            );
+
+            editor.__queryBlockFlashDecorations = editor.deltaDecorations(prevIds, [{
+                range: range,
+                options: {
+                    isWholeLine: rangeInfo.isWholeLine !== false,
+                    className: 'executed-query-block-flash',
+                    stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+                }
+            }]);
+
+            editor.__queryBlockFlashTimer = setTimeout(function () {
+                try {
+                    if (editor.__queryBlockFlashDecorations) {
+                        editor.__queryBlockFlashDecorations = editor.deltaDecorations(editor.__queryBlockFlashDecorations, []);
+                    }
+                } catch (err) { }
+                editor.__queryBlockFlashTimer = null;
+            }, 680);
+        } catch (e) { }
+    };
+
+    window.attachQueryBlockExecutor = function (editor) {
+        if (!editor || !isQueryRunnerEditor(editor)) return;
+        if (typeof monaco === 'undefined' || !monaco.KeyMod || !monaco.KeyCode) return;
+
+        if (!editor.getAction('execute-query-block')) {
+            try {
+                editor.addAction({
+                    id: 'execute-query-block',
+                    label: 'Execute Query Block (Ctrl+Enter)',
+                    keybindings: [
+                        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter
+                    ],
+                    precondition: 'editorTextFocus',
+                    contextMenuGroupId: 'navigation',
+                    contextMenuOrder: 1,
+                    run: function (ed) {
+                        var block = window.getQueryBlockExecutionInput(ed);
+                        if (!block || !block.shouldExecute) {
+                            return;
+                        }
+                        if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+                            window.flashExecutedQueryBlock(ed, block);
+                            window.globalShortcuts.queryRunnerInstance
+                                .invokeMethodAsync(
+                                    'ExecuteQueryBlockFromShortcut',
+                                    block.queryText,
+                                    block.fullText,
+                                    Math.max(0, block.startLineNumber - 1)
+                                )
+                                .catch(function () { });
+                        }
+                    }
+                });
+            } catch (e) { }
+        }
+    };
+})();
+
 window.updateSqlAutocompleteData = (tables, views, columns, sps, functions) => {
     window.sqlTables = tables || window.sqlTables;
     window.sqlViews = views || window.sqlViews;
@@ -2036,6 +2807,10 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         window.setupEditorInstance = function(editor) {
             if (!editor) return;
 
+            if (window.attachQueryBlockExecutor) {
+                window.attachQueryBlockExecutor(editor);
+            }
+
             try {
                 editor.updateOptions({
                     quickSuggestions: {
@@ -2225,6 +3000,9 @@ window.configureQueryEditor = function(editorId) {
     }
     if (!editor && editors.length > 0) {
         editor = editors[0];
+    }
+    if (editor && window.attachQueryBlockExecutor) {
+        window.attachQueryBlockExecutor(editor);
     }
     if (editor && window.setupEditorInstance) {
         window.setupEditorInstance(editor);

@@ -1819,3 +1819,21 @@ a.card.glow-highlight:hover,
     border: 1px solid var(--app-border);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
 }
+
+/* Brief flash highlight when executing a query block via Ctrl+Enter */
+.monaco-editor .executed-query-block-flash {
+    background-color: rgba(13, 110, 253, 0.22);
+    border-left: 3px solid rgba(59, 130, 246, 0.9);
+    animation: queryBlockFlashFade 650ms ease-out forwards;
+}
+
+[data-bs-theme="light"] .monaco-editor .executed-query-block-flash {
+    background-color: rgba(13, 110, 253, 0.14);
+    border-left: 3px solid rgba(13, 110, 253, 0.85);
+}
+
+@keyframes queryBlockFlashFade {
+    0% { opacity: 1; }
+    45% { opacity: 1; }
+    100% { opacity: 0; }
+}

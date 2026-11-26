@@ -681,6 +681,29 @@
         StateHasChanged();
     }
 
+    [JSInvokable]
+    public async Task ExecuteQueryBlockFromShortcut(string queryText, string fullScript, int lineOffset)
+    {
+        try
+        {
+            var targetTab = ActiveTab;
+            if (targetTab.IsExecuting || string.IsNullOrEmpty(targetTab.ConnectionString)) return;
+
+            if (!string.IsNullOrEmpty(fullScript))
+            {
+                targetTab.Content = fullScript;
+            }
+            if (string.IsNullOrWhiteSpace(queryText)) return;
+
+            await ExecuteResolvedInputAsync(targetTab, queryText, fullScript ?? "", Math.Max(0, lineOffset));
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Block shortcut query execution error handled in PopoutRunner");
+        }
+        StateHasChanged();
+    }
+
     private async void OnSchemaLoadedHandler()
     {
         try
@@ -890,6 +913,11 @@
         var (queryText, fullScript, lineOffset) = await QueryExecutionService.ResolveEditorInputAsync(
             JS, "query-editor", fallback, targetTab);
 
+        await ExecuteResolvedInputAsync(targetTab, queryText, fullScript, lineOffset);
+    }
+
+    private async Task ExecuteResolvedInputAsync(QueryTab targetTab, string queryText, string fullScript, int lineOffset)
+    {
         await QueryExecutionService.ExecuteAsync(new QueryExecutionRequest
         {
             Tab = targetTab,

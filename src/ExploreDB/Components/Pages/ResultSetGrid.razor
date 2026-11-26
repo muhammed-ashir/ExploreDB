@@ -1,6 +1,8 @@
 @using System.Collections.Generic
+@using System.Globalization
 @using System.Linq
 @using System.IO
+@using System.Text
 @using System.Threading
 @using ClosedXML.Excel
 @using BlazorMonaco.Editor
@@ -10,6 +12,7 @@
 @inject ThemeService ThemeService
 @inject SchemaService SchemaService
 @inject UserSettingsService UserSettingsService
+@inject WindowManagerService WindowManager
 @implements IDisposable
 
 <div class="position-relative w-100 h-100 d-flex flex-column overflow-hidden" style="min-height: 0;">
@@ -400,9 +403,9 @@ else
 
 @if (!string.IsNullOrEmpty(_copyFeedbackMessage))
 {
-    <div class="position-absolute bottom-0 start-50 translate-middle-x mb-4 px-3 py-2 rounded-pill shadow-lg d-flex align-items-center gap-2 text-white" 
-         style="background-color: rgba(25, 135, 84, 0.95); z-index: 2100; font-size: 0.82rem; pointer-events: none; border: 1px solid rgba(255,255,255,0.2);">
-        <i class="bi bi-check2-circle fs-6"></i>
+    <div class="position-absolute bottom-0 start-50 translate-middle-x mb-4 px-3 py-2 rounded-pill shadow-lg d-flex align-items-center gap-2" 
+         style="@CopyFeedbackStyle">
+        <i class="bi @CopyFeedbackIcon fs-6 flex-shrink-0"></i>
         <span class="fw-medium">@_copyFeedbackMessage</span>
     </div>
 }
@@ -761,8 +764,30 @@ else
     private string ContextMenuColumn = "";
     private string _contextMenuId = "ctxMenu_" + Guid.NewGuid().ToString("N");
     private bool _shouldPositionContextMenu = false;
+    private enum CopyFeedbackKind
+    {
+        Success,
+        Warning,
+        Error
+    }
+
     private string? _copyFeedbackMessage = null;
+    private CopyFeedbackKind _copyFeedbackKind = CopyFeedbackKind.Success;
     private CancellationTokenSource? _copyFeedbackCts;
+
+    private string CopyFeedbackStyle => _copyFeedbackKind switch
+    {
+        CopyFeedbackKind.Warning => "background-color: rgba(245, 158, 11, 0.96); color: #1f1600; border: 1px solid rgba(255,255,255,0.35); z-index: 2100; font-size: 0.82rem; pointer-events: none;",
+        CopyFeedbackKind.Error => "background-color: rgba(220, 53, 69, 0.96); color: #ffffff; border: 1px solid rgba(255,255,255,0.25); z-index: 2100; font-size: 0.82rem; pointer-events: none;",
+        _ => "background-color: rgba(25, 135, 84, 0.95); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); z-index: 2100; font-size: 0.82rem; pointer-events: none;"
+    };
+
+    private string CopyFeedbackIcon => _copyFeedbackKind switch
+    {
+        CopyFeedbackKind.Warning => "bi-exclamation-triangle-fill",
+        CopyFeedbackKind.Error => "bi-x-circle-fill",
+        _ => "bi-check2-circle"
+    };
 
 
     
@@ -1177,13 +1202,16 @@ else
     }
 
     private string? FormatCellValue(object? rawVal, int colIdx = -1)
+        => FormatSnapshotCellValue(_tableStore, rawVal, colIdx);
+
+    private static string? FormatSnapshotCellValue(QueryResultTable? tableStore, object? rawVal, int colIdx = -1)
     {
         if (rawVal == null) return null;
         if (rawVal is DateTime dt)
         {
-            if (_tableStore != null && colIdx >= 0)
+            if (tableStore != null && colIdx >= 0)
             {
-                switch (_tableStore.GetColumnDisplayKind(colIdx))
+                switch (tableStore.GetColumnDisplayKind(colIdx))
                 {
                     case ColumnDisplayKind.Date: return dt.ToString("yyyy-MM-dd");
                     case ColumnDisplayKind.DateTime: return dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
@@ -1191,9 +1219,9 @@ else
                     case ColumnDisplayKind.DateTime2: return dt.ToString("yyyy-MM-dd HH:mm:ss.fffffff");
                 }
             }
-            else if (colIdx >= 0)
+            else if (colIdx >= 0 && tableStore != null)
             {
-                var typeName = GetColumnDataType(colIdx)?.ToLowerInvariant();
+                var typeName = tableStore.GetColumnType(colIdx)?.ToLowerInvariant();
                 if (typeName == "date")
                     return dt.ToString("yyyy-MM-dd");
                 if (typeName == "datetime")
@@ -1230,11 +1258,11 @@ else
 
         if (rawVal is TimeSpan ts)
         {
-            if (_tableStore != null && colIdx >= 0 && _tableStore.GetColumnDisplayKind(colIdx) == ColumnDisplayKind.Time)
+            if (tableStore != null && colIdx >= 0 && tableStore.GetColumnDisplayKind(colIdx) == ColumnDisplayKind.Time)
             {
                 return ts.ToString(@"hh\:mm\:ss\.fffffff");
             }
-            var typeName = colIdx >= 0 ? GetColumnDataType(colIdx)?.ToLowerInvariant() : null;
+            var typeName = (tableStore != null && colIdx >= 0) ? tableStore.GetColumnType(colIdx)?.ToLowerInvariant() : null;
             if (typeName == "time")
             {
                 return ts.ToString(@"hh\:mm\:ss\.fffffff");
@@ -1740,6 +1768,12 @@ else
         IsColumnContextMenu = false;
     }
 
+    private int GetDisplayRowIndex(int actualRowIndex)
+    {
+        if (_viewIndices == null) return actualRowIndex;
+        return Array.IndexOf(_viewIndices, actualRowIndex);
+    }
+
     private void HandleRowHeaderClick(MouseEventArgs e, int actualRowIndex)
     {
         HideContextMenu();
@@ -1757,12 +1791,23 @@ else
         }
         else if (e.ShiftKey && _lastSelectedCell.Row >= 0)
         {
-            int prevAnchorRow = _lastSelectedCell.Row;
+            int prevDisplay = GetDisplayRowIndex(_lastSelectedCell.Row);
+            int curDisplay = GetDisplayRowIndex(actualRowIndex);
             ClearCellSelection();
 
-            int startR = Math.Max(0, Math.Min(prevAnchorRow, actualRowIndex));
-            int endR = Math.Min(TotalDataCount - 1, Math.Max(prevAnchorRow, actualRowIndex));
-            for (int r = startR; r <= endR; r++) SelectedEntireRows.Add(r);
+            if (prevDisplay >= 0 && curDisplay >= 0)
+            {
+                int startD = Math.Max(0, Math.Min(prevDisplay, curDisplay));
+                int endD = Math.Min(ActiveRowCount - 1, Math.Max(prevDisplay, curDisplay));
+                for (int d = startD; d <= endD; d++)
+                {
+                    SelectedEntireRows.Add(GetActualRowIndex(d));
+                }
+            }
+            else
+            {
+                SelectedEntireRows.Add(actualRowIndex);
+            }
             _lastSelectedCell = (actualRowIndex, 0);
         }
         else
@@ -1792,21 +1837,30 @@ else
         }
         else if (e.ShiftKey && _lastSelectedCell.Row >= 0 && _lastSelectedCell.Col >= 0)
         {
-            int prevAnchorRow = _lastSelectedCell.Row;
+            int prevDisplay = GetDisplayRowIndex(_lastSelectedCell.Row);
+            int curDisplay = GetDisplayRowIndex(actualRowIndex);
             int prevAnchorCol = _lastSelectedCell.Col;
             ClearCellSelection();
 
-            int startR = Math.Max(0, Math.Min(prevAnchorRow, actualRowIndex));
-            int endR = Math.Min(TotalDataCount - 1, Math.Max(prevAnchorRow, actualRowIndex));
-            int startC = Math.Max(0, Math.Min(prevAnchorCol, colIndex));
-            int endC = Math.Min(Columns.Count - 1, Math.Max(prevAnchorCol, colIndex));
-
-            for (int r = startR; r <= endR; r++)
+            if (prevDisplay >= 0 && curDisplay >= 0)
             {
-                for (int c = startC; c <= endC; c++)
+                int startD = Math.Max(0, Math.Min(prevDisplay, curDisplay));
+                int endD = Math.Min(ActiveRowCount - 1, Math.Max(prevDisplay, curDisplay));
+                int startC = Math.Max(0, Math.Min(prevAnchorCol, colIndex));
+                int endC = Math.Min(Columns.Count - 1, Math.Max(prevAnchorCol, colIndex));
+
+                for (int d = startD; d <= endD; d++)
                 {
-                    SelectedCells.Add((r, c));
+                    int r = GetActualRowIndex(d);
+                    for (int c = startC; c <= endC; c++)
+                    {
+                        SelectedCells.Add((r, c));
+                    }
                 }
+            }
+            else
+            {
+                SelectedCells.Add(coord);
             }
             _lastSelectedCell = (actualRowIndex, colIndex);
         }
@@ -1822,12 +1876,27 @@ else
     private void HandleColumnHeaderClick(MouseEventArgs e, int colIndex)
     {
         HideContextMenu();
+        if (colIndex < 0 || colIndex >= Columns.Count) return;
+
         if (e.CtrlKey || e.MetaKey)
         {
             if (SelectedEntireCols.Contains(colIndex))
                 SelectedEntireCols.Remove(colIndex);
             else
+            {
                 SelectedEntireCols.Add(colIndex);
+                _lastSelectedCell = (0, colIndex);
+            }
+        }
+        else if (e.ShiftKey && _lastSelectedCell.Col >= 0 && _lastSelectedCell.Col < Columns.Count)
+        {
+            int prevCol = _lastSelectedCell.Col;
+            ClearCellSelection();
+
+            int startC = Math.Min(prevCol, colIndex);
+            int endC = Math.Max(prevCol, colIndex);
+            for (int c = startC; c <= endC; c++) SelectedEntireCols.Add(c);
+            _lastSelectedCell = (0, colIndex);
         }
         else
         {
@@ -1942,267 +2011,557 @@ else
         }
     }
 
-    private string BuildClipboardText(bool includeHeaders)
+    private const int MaxClipboardChars = 120_000_000;
+    private const int MaxJsClipboardFallbackChars = 20_000_000;
+    private const string ClipboardBusyMessage = "Copy already in progress...";
+    private const string ClipboardTooLargeMessage = "Selection too large for clipboard — use Export to CSV";
+    private const string ClipboardWriteFailedMessage = "Copy failed — selection too large or clipboard locked";
+    private volatile bool _isClipboardCopyBusy = false;
+
+    private sealed record GridDataSnapshot(
+        QueryResultTable? TableStore,
+        List<IDictionary<string, object>>? LegacyRows,
+        List<string> Columns,
+        int[]? ViewIndices,
+        int TotalDataCount,
+        int ActiveRowCount);
+
+    private sealed record ClipboardBuildResult(
+        string Text,
+        int CopiedRows,
+        int TotalTargetRows,
+        int CopiedCols,
+        bool WasCapped,
+        bool OutOfMemory);
+
+    private GridDataSnapshot CaptureGridSnapshot()
     {
-        int totalRows = TotalDataCount;
-        int colCount = Columns.Count;
-        if (totalRows == 0 || colCount == 0) return string.Empty;
-
-        if (SelectedCells.Count == 1 && !_isAllSelected && SelectedEntireRows.Count == 0 && SelectedEntireCols.Count == 0)
-        {
-            var (r, c) = SelectedCells.First();
-            if (r >= 0 && r < totalRows && c >= 0 && c < colCount)
-            {
-                var raw = GetRawCellValue(r, c, Columns[c]);
-                if (raw is byte[] bytes)
-                {
-                    var hex = BinaryDataHelper.ToHexString(bytes, prefix: true);
-                    return includeHeaders ? $"{Columns[c]}\r\n{hex}" : hex;
-                }
-                var val = FormatCellValue(raw, c) ?? "NULL";
-                return includeHeaders ? $"{Columns[c]}\r\n{val}" : val;
-            }
-        }
-
-        var targetRows = new List<int>();
-        var targetCols = new List<int>();
-
-        if (_isAllSelected)
-        {
-            int maxExport = Math.Min(totalRows, 10000);
-            for (int r = 0; r < maxExport; r++) targetRows.Add(r);
-            for (int c = 0; c < colCount; c++) targetCols.Add(c);
-        }
-        else
-        {
-            if (SelectedEntireRows.Count > 0)
-                targetRows.AddRange(SelectedEntireRows.Where(r => r >= 0 && r < totalRows).OrderBy(r => r));
-            if (SelectedEntireCols.Count > 0)
-                targetCols.AddRange(SelectedEntireCols.Where(c => c >= 0 && c < colCount).OrderBy(c => c));
-
-            foreach (var cell in SelectedCells)
-            {
-                if (cell.Row >= 0 && cell.Row < totalRows && !targetRows.Contains(cell.Row)) targetRows.Add(cell.Row);
-                if (cell.Col >= 0 && cell.Col < colCount && !targetCols.Contains(cell.Col)) targetCols.Add(cell.Col);
-            }
-
-            targetRows.Sort();
-            targetCols.Sort();
-        }
-
-        if (targetRows.Count == 0)
-        {
-            for (int r = 0; r < Math.Min(totalRows, 50); r++) targetRows.Add(r);
-        }
-        if (targetCols.Count == 0)
-        {
-            for (int c = 0; c < colCount; c++) targetCols.Add(c);
-        }
-
-        var sb = new System.Text.StringBuilder();
-        if (includeHeaders)
-        {
-            sb.Append(string.Join("\t", targetCols.Select(c => Columns[c])));
-            sb.Append("\r\n");
-        }
-
-        for (int rIdx = 0; rIdx < targetRows.Count; rIdx++)
-        {
-            int r = targetRows[rIdx];
-            var rowVals = new List<string>(targetCols.Count);
-            foreach (var c in targetCols)
-            {
-                var raw = GetRawCellValue(r, c, Columns[c]);
-                if (raw is byte[] b)
-                {
-                    rowVals.Add(b.Length <= BinaryDataHelper.ShortBinaryThreshold ? BinaryDataHelper.ToHexString(b, prefix: true) : BinaryDataHelper.FormatBinaryForDisplay(b));
-                }
-                else
-                {
-                    rowVals.Add(FormatCellValue(raw, c) ?? "NULL");
-                }
-            }
-            sb.Append(string.Join("\t", rowVals));
-            if (rIdx < targetRows.Count - 1) sb.Append("\r\n");
-        }
-
-        return sb.ToString();
+        var tableStore = _tableStore;
+        var legacyRows = tableStore == null ? Rows.ToList() : null;
+        int total = tableStore?.RowCount ?? legacyRows!.Count;
+        var viewIndices = _viewIndices;
+        int active = viewIndices != null ? viewIndices.Length : total;
+        return new GridDataSnapshot(tableStore, legacyRows, Columns.ToList(), viewIndices, total, active);
     }
 
-    private string GetCopySummary()
+    private static object? GetSnapshotRawCellValue(GridDataSnapshot snap, int actualRowIndex, int colIndex)
     {
-        if (SelectedCells.Count == 1) return "1 cell";
-        if (Columns.Count == 0) return $"{SelectedCells.Count} cells";
-
-        var targetRows = SelectedCells.Select(x => x.Row).Distinct().Count();
-        var targetCols = SelectedCells.Select(x => x.Col).Distinct().Count();
-
-        if (targetCols == Columns.Count && SelectedCells.Count == targetRows * Columns.Count)
+        if (snap.TableStore != null)
         {
-            return $"{targetRows} row{(targetRows > 1 ? "s" : "")}";
+            return snap.TableStore.GetValue(actualRowIndex, colIndex);
         }
-
-        return $"{SelectedCells.Count} cells";
+        if (snap.LegacyRows != null && (uint)actualRowIndex < (uint)snap.LegacyRows.Count && (uint)colIndex < (uint)snap.Columns.Count)
+        {
+            snap.LegacyRows[actualRowIndex].TryGetValue(snap.Columns[colIndex], out var v);
+            return v;
+        }
+        return null;
     }
 
-    private async Task CopySelectedAsync()
+    private static string FormatSnapshotClipboardCell(GridDataSnapshot snap, int actualRowIndex, int colIndex)
     {
-        HideContextMenu();
-        var text = BuildClipboardText(includeHeaders: false);
-        if (!string.IsNullOrEmpty(text))
+        if (snap.TableStore != null)
+        {
+            if (snap.TableStore.IsNull(actualRowIndex, colIndex))
+            {
+                return "NULL";
+            }
+            if (snap.TableStore.IsBinaryColumn(colIndex))
+            {
+                var b = snap.TableStore.GetBinaryBytes(actualRowIndex, colIndex);
+                if (b != null)
+                {
+                    return b.Length <= BinaryDataHelper.ShortBinaryThreshold
+                        ? BinaryDataHelper.ToHexString(b, prefix: true)
+                        : BinaryDataHelper.FormatBinaryForDisplay(b);
+                }
+            }
+            return snap.TableStore.FormatCellForDisplay(actualRowIndex, colIndex) ?? "NULL";
+        }
+
+        var raw = GetSnapshotRawCellValue(snap, actualRowIndex, colIndex);
+        if (raw is byte[] bytes)
+        {
+            return bytes.Length <= BinaryDataHelper.ShortBinaryThreshold
+                ? BinaryDataHelper.ToHexString(bytes, prefix: true)
+                : BinaryDataHelper.FormatBinaryForDisplay(bytes);
+        }
+        return FormatSnapshotCellValue(null, raw, colIndex) ?? "NULL";
+    }
+
+    private static List<int> ResolveTargetColumns(
+        int colCount,
+        bool isAllSelected,
+        List<int> selectedCols,
+        List<int> selectedRows,
+        List<(int Row, int Col)> selectedCells)
+    {
+        if (isAllSelected || selectedRows.Count > 0)
+        {
+            return Enumerable.Range(0, colCount).ToList();
+        }
+
+        var colSet = new HashSet<int>();
+        foreach (var c in selectedCols)
+        {
+            if ((uint)c < (uint)colCount) colSet.Add(c);
+        }
+        foreach (var cell in selectedCells)
+        {
+            if ((uint)cell.Col < (uint)colCount) colSet.Add(cell.Col);
+        }
+
+        var cols = colSet.ToList();
+        cols.Sort();
+        return cols;
+    }
+
+    private static List<int> ResolveExplicitRowsInDisplayOrder(
+        GridDataSnapshot snap,
+        IEnumerable<int>? entireRows,
+        IEnumerable<(int Row, int Col)>? cells)
+    {
+        var rowSet = new HashSet<int>();
+        if (entireRows != null)
+        {
+            foreach (var r in entireRows)
+            {
+                if ((uint)r < (uint)snap.TotalDataCount) rowSet.Add(r);
+            }
+        }
+        if (cells != null)
+        {
+            foreach (var cell in cells)
+            {
+                if ((uint)cell.Row < (uint)snap.TotalDataCount) rowSet.Add(cell.Row);
+            }
+        }
+        if (rowSet.Count == 0) return new List<int>();
+
+        if (snap.ViewIndices == null)
+        {
+            var sorted = rowSet.ToList();
+            sorted.Sort();
+            return sorted;
+        }
+
+        var ordered = new List<int>(rowSet.Count);
+        if (rowSet.Count <= 4)
+        {
+            var keyed = new List<(int DisplayIdx, int ActualIdx)>(rowSet.Count);
+            foreach (var r in rowSet)
+            {
+                int d = Array.IndexOf(snap.ViewIndices, r);
+                keyed.Add((d >= 0 ? d : int.MaxValue, r));
+            }
+            keyed.Sort((a, b) =>
+            {
+                int cmp = a.DisplayIdx.CompareTo(b.DisplayIdx);
+                return cmp != 0 ? cmp : a.ActualIdx.CompareTo(b.ActualIdx);
+            });
+            foreach (var item in keyed) ordered.Add(item.ActualIdx);
+            return ordered;
+        }
+
+        for (int i = 0; i < snap.ViewIndices.Length; i++)
+        {
+            int actual = snap.ViewIndices[i];
+            if (rowSet.Remove(actual))
+            {
+                ordered.Add(actual);
+                if (rowSet.Count == 0) break;
+            }
+        }
+        if (rowSet.Count > 0)
+        {
+            var remaining = rowSet.ToList();
+            remaining.Sort();
+            ordered.AddRange(remaining);
+        }
+        return ordered;
+    }
+
+    private async Task<bool> TryWriteClipboardAsync(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+
+        if (await WindowManager.TrySetClipboardTextAsync(text))
+        {
+            return true;
+        }
+
+        if (text.Length <= MaxJsClipboardFallbackChars)
         {
             try
             {
                 await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
-                ShowCopyFeedback($"{GetCopySummary()} copied");
+                return true;
             }
             catch { }
+        }
+        return false;
+    }
+
+    private static ClipboardBuildResult BuildClipboardTextFromSnapshot(
+        GridDataSnapshot snap,
+        bool includeHeaders,
+        bool allDisplayRows,
+        List<int> targetCols,
+        List<int> selectedRows,
+        List<(int Row, int Col)> selectedCells)
+    {
+        List<int>? explicitRows = allDisplayRows
+            ? null
+            : ResolveExplicitRowsInDisplayOrder(snap, selectedRows, selectedCells);
+
+        int totalTargetRows = allDisplayRows ? snap.ActiveRowCount : explicitRows!.Count;
+        if (totalTargetRows == 0 || targetCols.Count == 0)
+        {
+            return new ClipboardBuildResult(string.Empty, 0, 0, 0, false, false);
+        }
+
+        int estimatedCap = (int)Math.Min(16_777_216L, Math.Max(256L, (long)totalTargetRows * targetCols.Count * 12L));
+        var sb = new StringBuilder(estimatedCap);
+        int copiedRows = 0;
+        bool wasCapped = false;
+
+        try
+        {
+            if (includeHeaders)
+            {
+                for (int cIdx = 0; cIdx < targetCols.Count; cIdx++)
+                {
+                    if (cIdx > 0) sb.Append('\t');
+                    sb.Append(snap.Columns[targetCols[cIdx]]);
+                }
+            }
+
+            for (int i = 0; i < totalTargetRows; i++)
+            {
+                if (copiedRows > 0 && sb.Length >= MaxClipboardChars)
+                {
+                    wasCapped = true;
+                    break;
+                }
+
+                if (includeHeaders || copiedRows > 0)
+                {
+                    sb.Append("\r\n");
+                }
+
+                int actualRow = allDisplayRows
+                    ? (snap.ViewIndices != null ? snap.ViewIndices[i] : i)
+                    : explicitRows![i];
+
+                for (int cIdx = 0; cIdx < targetCols.Count; cIdx++)
+                {
+                    if (cIdx > 0) sb.Append('\t');
+                    sb.Append(FormatSnapshotClipboardCell(snap, actualRow, targetCols[cIdx]));
+                }
+                copiedRows++;
+            }
+
+            return new ClipboardBuildResult(sb.ToString(), copiedRows, totalTargetRows, targetCols.Count, wasCapped, false);
+        }
+        catch (OutOfMemoryException)
+        {
+            return new ClipboardBuildResult(string.Empty, 0, totalTargetRows, targetCols.Count, false, true);
         }
     }
 
-    private async Task CopySelectedWithHeadersAsync()
+    private Task CopySelectedAsync() => CopySelectedCoreAsync(includeHeaders: false);
+
+    private Task CopySelectedWithHeadersAsync() => CopySelectedCoreAsync(includeHeaders: true);
+
+    private async Task CopySelectedCoreAsync(bool includeHeaders)
     {
         HideContextMenu();
-        var text = BuildClipboardText(includeHeaders: true);
-        if (!string.IsNullOrEmpty(text))
+        if (_isClipboardCopyBusy)
         {
-            try
-            {
-                await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
-                ShowCopyFeedback($"{GetCopySummary()} copied with headers");
-            }
-            catch { }
+            ShowCopyFeedback(ClipboardBusyMessage, 2000, CopyFeedbackKind.Warning);
+            return;
         }
+
+        var snap = CaptureGridSnapshot();
+        if (snap.TotalDataCount == 0 || snap.Columns.Count == 0) return;
+
+        bool isAll = _isAllSelected;
+        var colsSelected = SelectedEntireCols.ToList();
+        var rowsSelected = SelectedEntireRows.ToList();
+        var cellsSelected = SelectedCells.ToList();
+
+        if (!isAll && colsSelected.Count == 0 && rowsSelected.Count == 0 && cellsSelected.Count == 0)
+        {
+            return;
+        }
+
+        if (cellsSelected.Count == 1 && !isAll && rowsSelected.Count == 0 && colsSelected.Count == 0)
+        {
+            var (r, c) = cellsSelected[0];
+            if ((uint)r < (uint)snap.TotalDataCount && (uint)c < (uint)snap.Columns.Count)
+            {
+                var raw = GetSnapshotRawCellValue(snap, r, c);
+                string cellText = raw is byte[] bytes
+                    ? BinaryDataHelper.ToHexString(bytes, prefix: true)
+                    : (FormatSnapshotCellValue(snap.TableStore, raw, c) ?? "NULL");
+                string payload = includeHeaders ? $"{snap.Columns[c]}\r\n{cellText}" : cellText;
+                bool singleOk = await TryWriteClipboardAsync(payload);
+                if (_disposed) return;
+                ShowCopyFeedback(
+                    singleOk
+                        ? (includeHeaders ? "Copied 1 cell (with headers)" : "Copied 1 cell")
+                        : "Copy failed — clipboard unavailable",
+                    singleOk ? 3500 : 6000,
+                    singleOk ? CopyFeedbackKind.Success : CopyFeedbackKind.Error);
+            }
+            return;
+        }
+
+        var targetCols = ResolveTargetColumns(snap.Columns.Count, isAll, colsSelected, rowsSelected, cellsSelected);
+        if (targetCols.Count == 0) return;
+
+        bool allDisplayRows = isAll || colsSelected.Count > 0;
+        if (allDisplayRows && snap.ActiveRowCount == 0) return;
+
+        _isClipboardCopyBusy = true;
+        try
+        {
+            var result = await Task.Run(() =>
+                BuildClipboardTextFromSnapshot(snap, includeHeaders, allDisplayRows, targetCols, rowsSelected, cellsSelected));
+
+            if (_disposed) return;
+
+            if (result.OutOfMemory)
+            {
+                ShowCopyFeedback(ClipboardTooLargeMessage, 7000, CopyFeedbackKind.Error);
+                return;
+            }
+            if (string.IsNullOrEmpty(result.Text) || result.CopiedRows == 0) return;
+
+            bool ok = await TryWriteClipboardAsync(result.Text);
+            if (_disposed) return;
+            if (!ok)
+            {
+                ShowCopyFeedback(ClipboardWriteFailedMessage, 7000, CopyFeedbackKind.Error);
+                return;
+            }
+
+            string summary = FormatCopySummary(result, snap.Columns.Count, colsSelected.Count > 0, includeHeaders);
+            ShowCopyFeedback(
+                summary,
+                result.WasCapped ? 7000 : 4000,
+                result.WasCapped ? CopyFeedbackKind.Warning : CopyFeedbackKind.Success);
+        }
+        finally
+        {
+            _isClipboardCopyBusy = false;
+        }
+    }
+
+    private static string FormatCopySummary(
+        ClipboardBuildResult result,
+        int totalColumns,
+        bool hasColumnSelection,
+        bool includeHeaders)
+    {
+        string rowWord = result.CopiedRows == 1 ? "row" : "rows";
+        string colWord = result.CopiedCols == 1 ? "col" : "cols";
+
+        if (result.WasCapped)
+        {
+            if (result.CopiedCols == totalColumns)
+            {
+                return $"Copied {result.CopiedRows:N0} of {result.TotalTargetRows:N0} rows"
+                    + (includeHeaders ? " (with headers)" : "")
+                    + " — limit reached, use Export to CSV";
+            }
+            if (hasColumnSelection)
+            {
+                return $"Copied {result.CopiedRows:N0} of {result.TotalTargetRows:N0} rows ({result.CopiedCols} {colWord}"
+                    + (includeHeaders ? ", with headers" : "")
+                    + ") — limit reached, use Export to CSV";
+            }
+            long cappedCells = (long)result.CopiedRows * result.CopiedCols;
+            string cappedCellWord = cappedCells == 1 ? "cell" : "cells";
+            return $"Copied {cappedCells:N0} {cappedCellWord} ({result.CopiedRows:N0} of {result.TotalTargetRows:N0} rows"
+                + (includeHeaders ? ", with headers" : "")
+                + ") — limit reached, use Export to CSV";
+        }
+
+        if (result.CopiedCols == totalColumns)
+        {
+            return $"Copied {result.CopiedRows:N0} {rowWord}" + (includeHeaders ? " (with headers)" : "");
+        }
+        if (hasColumnSelection)
+        {
+            return $"Copied {result.CopiedRows:N0} {rowWord} ({result.CopiedCols} {colWord}"
+                + (includeHeaders ? ", with headers" : "")
+                + ")";
+        }
+
+        long totalCells = (long)result.CopiedRows * result.CopiedCols;
+        string cellWord = totalCells == 1 ? "cell" : "cells";
+        return $"Copied {totalCells:N0} {cellWord}" + (includeHeaders ? " (with headers)" : "");
+    }
+
+    private string ResolveTargetTableName()
+    {
+        string rawTable = !string.IsNullOrWhiteSpace(_tableStore?.TableName)
+            ? _tableStore.TableName.Trim()
+            : "";
+
+        if (string.IsNullOrEmpty(rawTable)) return "[TargetTable]";
+
+        if (rawTable.Contains('.'))
+        {
+            var parts = rawTable.Split('.');
+            var s = parts[0].Trim('[', ']');
+            var t = parts[1].Trim('[', ']');
+            return $"[{s}].[{t}]";
+        }
+
+        var cleanName = rawTable.Trim('[', ']');
+        var matched = SchemaService.Tables?.FirstOrDefault(t =>
+            t.Name.Equals(cleanName, StringComparison.OrdinalIgnoreCase));
+        return matched != null ? matched.FullName : $"[{cleanName}]";
     }
 
     private async Task CopyAsInsertAsync()
     {
         HideContextMenu();
-        var (script, count) = BuildInsertScript();
-        if (!string.IsNullOrEmpty(script))
+        if (_isClipboardCopyBusy)
         {
-            try
-            {
-                await JS.InvokeVoidAsync("navigator.clipboard.writeText", script);
-                ShowCopyFeedback($"{count} row{(count > 1 ? "s" : "")} copied as INSERT");
-            }
-            catch { }
-        }
-    }
-
-    private (string Script, int Count) BuildInsertScript()
-    {
-        int totalRows = TotalDataCount;
-        int colCount = Columns.Count;
-        if (totalRows == 0 || colCount == 0) return (string.Empty, 0);
-
-        var targetRows = new List<int>();
-        var targetCols = new List<int>();
-
-        if (_isAllSelected)
-        {
-            int maxExport = Math.Min(totalRows, 10000);
-            for (int r = 0; r < maxExport; r++) targetRows.Add(r);
-            for (int c = 0; c < colCount; c++) targetCols.Add(c);
-        }
-        else
-        {
-            if (SelectedEntireRows.Count > 0)
-            {
-                targetRows.AddRange(SelectedEntireRows.Where(r => r >= 0 && r < totalRows).OrderBy(r => r));
-                for (int c = 0; c < colCount; c++) targetCols.Add(c);
-            }
-
-            foreach (var cell in SelectedCells)
-            {
-                if (cell.Row >= 0 && cell.Row < totalRows && !targetRows.Contains(cell.Row))
-                    targetRows.Add(cell.Row);
-
-                if (cell.Col >= 0 && cell.Col < colCount && !targetCols.Contains(cell.Col) && SelectedEntireRows.Count == 0)
-                    targetCols.Add(cell.Col);
-            }
-
-            targetRows.Sort();
-            targetCols.Sort();
+            ShowCopyFeedback(ClipboardBusyMessage, 2000, CopyFeedbackKind.Warning);
+            return;
         }
 
-        if (targetRows.Count == 0 && _lastSelectedCell.Row >= 0 && _lastSelectedCell.Row < totalRows)
-        {
-            targetRows.Add(_lastSelectedCell.Row);
-        }
-        if (targetRows.Count == 0)
-        {
-            targetRows.Add(0);
-        }
+        var snap = CaptureGridSnapshot();
+        if (snap.TotalDataCount == 0 || snap.Columns.Count == 0) return;
+
+        bool isAll = _isAllSelected;
+        var colsSelected = SelectedEntireCols.ToList();
+        var rowsSelected = SelectedEntireRows.ToList();
+        var cellsSelected = SelectedCells.ToList();
+        int anchorRow = _lastSelectedCell.Row;
+        string tableName = ResolveTargetTableName();
+
+        var targetCols = ResolveTargetColumns(snap.Columns.Count, isAll, colsSelected, rowsSelected, cellsSelected);
         if (targetCols.Count == 0)
         {
-            for (int c = 0; c < colCount; c++) targetCols.Add(c);
+            targetCols = Enumerable.Range(0, snap.Columns.Count).ToList();
         }
 
-        string rawTable = !string.IsNullOrWhiteSpace(_tableStore?.TableName)
-            ? _tableStore.TableName.Trim()
-            : "";
+        bool allDisplayRows = isAll || colsSelected.Count > 0;
+        if (allDisplayRows && snap.ActiveRowCount == 0) return;
 
-        string tableName = "[TargetTable]";
-        if (!string.IsNullOrEmpty(rawTable))
+        _isClipboardCopyBusy = true;
+        try
         {
-            if (rawTable.Contains('.'))
+            var result = await Task.Run(() =>
             {
-                var parts = rawTable.Split('.');
-                var s = parts[0].Trim('[', ']');
-                var t = parts[1].Trim('[', ']');
-                tableName = $"[{s}].[{t}]";
-            }
-            else
+                List<int>? explicitRows = null;
+                if (!allDisplayRows)
+                {
+                    explicitRows = ResolveExplicitRowsInDisplayOrder(snap, rowsSelected, cellsSelected);
+                    if (explicitRows.Count == 0)
+                    {
+                        int fallbackRow = (anchorRow >= 0 && anchorRow < snap.TotalDataCount)
+                            ? anchorRow
+                            : (snap.ViewIndices != null && snap.ActiveRowCount > 0 ? snap.ViewIndices[0] : 0);
+                        explicitRows.Add(fallbackRow);
+                    }
+                }
+
+                int totalTargetRows = allDisplayRows ? snap.ActiveRowCount : explicitRows!.Count;
+                if (totalTargetRows == 0)
+                {
+                    return new ClipboardBuildResult(string.Empty, 0, 0, targetCols.Count, false, false);
+                }
+
+                var colNames = string.Join(", ", targetCols.Select(c =>
+                {
+                    var cleanCol = snap.Columns[c].Replace("[", "").Replace("]", "");
+                    return "[" + cleanCol + "]";
+                }));
+                var sb = new StringBuilder(Math.Min(16_777_216, Math.Max(512, totalTargetRows * 64)));
+                sb.AppendLine($"INSERT INTO {tableName} ({colNames})");
+                sb.AppendLine("VALUES");
+
+                int copiedRows = 0;
+                bool wasCapped = false;
+
+                try
+                {
+                    for (int i = 0; i < totalTargetRows; i++)
+                    {
+                        if (copiedRows > 0 && sb.Length >= MaxClipboardChars)
+                        {
+                            wasCapped = true;
+                            break;
+                        }
+
+                        if (copiedRows > 0)
+                        {
+                            sb.AppendLine(",");
+                        }
+
+                        int actualRow = allDisplayRows
+                            ? (snap.ViewIndices != null ? snap.ViewIndices[i] : i)
+                            : explicitRows![i];
+
+                        sb.Append("    (");
+                        for (int cIdx = 0; cIdx < targetCols.Count; cIdx++)
+                        {
+                            if (cIdx > 0) sb.Append(", ");
+                            int c = targetCols[cIdx];
+                            var raw = GetSnapshotRawCellValue(snap, actualRow, c);
+                            sb.Append(FormatSnapshotSqlLiteral(snap.TableStore, raw, c));
+                        }
+                        sb.Append(")");
+                        copiedRows++;
+                    }
+                    sb.AppendLine(";");
+
+                    return new ClipboardBuildResult(sb.ToString(), copiedRows, totalTargetRows, targetCols.Count, wasCapped, false);
+                }
+                catch (OutOfMemoryException)
+                {
+                    return new ClipboardBuildResult(string.Empty, 0, totalTargetRows, targetCols.Count, false, true);
+                }
+            });
+
+            if (_disposed) return;
+
+            if (result.OutOfMemory)
             {
-                var cleanName = rawTable.Trim('[', ']');
-                var matched = SchemaService.Tables?.FirstOrDefault(t => 
-                    t.Name.Equals(cleanName, StringComparison.OrdinalIgnoreCase));
-                if (matched != null)
-                {
-                    tableName = matched.FullName;
-                }
-                else
-                {
-                    tableName = $"[{cleanName}]";
-                }
+                ShowCopyFeedback(ClipboardTooLargeMessage, 7000, CopyFeedbackKind.Error);
+                return;
             }
+            if (string.IsNullOrEmpty(result.Text) || result.CopiedRows == 0) return;
+
+            bool ok = await TryWriteClipboardAsync(result.Text);
+            if (_disposed) return;
+            if (!ok)
+            {
+                ShowCopyFeedback(ClipboardWriteFailedMessage, 7000, CopyFeedbackKind.Error);
+                return;
+            }
+
+            string msg = result.WasCapped
+                ? $"Copied {result.CopiedRows:N0} of {result.TotalTargetRows:N0} rows as INSERT — limit reached, use Export to CSV"
+                : $"Copied {result.CopiedRows:N0} {(result.CopiedRows == 1 ? "row" : "rows")} as INSERT";
+            ShowCopyFeedback(msg, result.WasCapped ? 7000 : 4000, result.WasCapped ? CopyFeedbackKind.Warning : CopyFeedbackKind.Success);
         }
-
-        var colNames = string.Join(", ", targetCols.Select(c => $"[{Columns[c].Replace("[", "").Replace("]", "")}]"));
-
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"INSERT INTO {tableName} ({colNames})");
-        sb.AppendLine("VALUES");
-
-        for (int i = 0; i < targetRows.Count; i++)
+        finally
         {
-            int r = targetRows[i];
-            var valList = new List<string>(targetCols.Count);
-            foreach (var c in targetCols)
-            {
-                var raw = GetRawCellValue(r, c, Columns[c]);
-                valList.Add(FormatSqlLiteral(raw, c));
-            }
-
-            sb.Append("    (");
-            sb.Append(string.Join(", ", valList));
-            sb.Append(")");
-
-            if (i < targetRows.Count - 1)
-            {
-                sb.AppendLine(",");
-            }
-            else
-            {
-                sb.AppendLine(";");
-            }
+            _isClipboardCopyBusy = false;
         }
-
-        return (sb.ToString(), targetRows.Count);
     }
 
     private string FormatSqlLiteral(object? val, int colIndex)
+        => FormatSnapshotSqlLiteral(_tableStore, val, colIndex);
+
+    private static string FormatSnapshotSqlLiteral(QueryResultTable? tableStore, object? val, int colIndex)
     {
         if (val == null || val is DBNull)
         {
@@ -2221,22 +2580,22 @@ else
 
         if (val is sbyte or byte or short or ushort or int or uint or long or ulong)
         {
-            return val.ToString()!;
+            return Convert.ToString(val, CultureInfo.InvariantCulture)!;
         }
 
         if (val is float f)
         {
-            return f.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return f.ToString(CultureInfo.InvariantCulture);
         }
 
         if (val is double d)
         {
-            return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return d.ToString(CultureInfo.InvariantCulture);
         }
 
         if (val is decimal dec)
         {
-            return dec.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return dec.ToString(CultureInfo.InvariantCulture);
         }
 
         if (val is DateTime dt)
@@ -2263,18 +2622,18 @@ else
             return $"'{g}'";
         }
 
-        string colType = _tableStore?.GetColumnType(colIndex)?.ToLowerInvariant() ?? "";
+        string colType = tableStore?.GetColumnType(colIndex)?.ToLowerInvariant() ?? "";
         if (colType is "int" or "bigint" or "smallint" or "tinyint" or "bit")
         {
             var str = val.ToString()?.Trim();
-            if (long.TryParse(str, out var num)) return num.ToString();
+            if (long.TryParse(str, out var num)) return num.ToString(CultureInfo.InvariantCulture);
             if (bool.TryParse(str, out var bVal)) return bVal ? "1" : "0";
         }
         if (colType is "decimal" or "numeric" or "money" or "smallmoney" or "float" or "real")
         {
             var str = val.ToString()?.Trim();
-            if (decimal.TryParse(str, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var num))
-                return num.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (decimal.TryParse(str, NumberStyles.Any, CultureInfo.InvariantCulture, out var num))
+                return num.ToString(CultureInfo.InvariantCulture);
         }
 
         var text = val.ToString() ?? "";
@@ -2322,18 +2681,25 @@ else
         }
     }
 
-    private void ShowCopyFeedback(string message)
+    private void ShowCopyFeedback(string message, int durationMs = 3500, CopyFeedbackKind kind = CopyFeedbackKind.Success)
     {
-        _copyFeedbackCts?.Cancel();
-        _copyFeedbackCts = new CancellationTokenSource();
-        var token = _copyFeedbackCts.Token;
+        var prevCts = _copyFeedbackCts;
+        var cts = new CancellationTokenSource();
+        _copyFeedbackCts = cts;
+        if (prevCts != null)
+        {
+            try { prevCts.Cancel(); } catch { }
+            try { prevCts.Dispose(); } catch { }
+        }
+        var token = cts.Token;
 
         _copyFeedbackMessage = message;
+        _copyFeedbackKind = kind;
         StateHasChanged();
 
-        _ = Task.Delay(2000, token).ContinueWith(t =>
+        _ = Task.Delay(durationMs, token).ContinueWith(t =>
         {
-            if (!t.IsCanceled)
+            if (!t.IsCanceled && !_disposed)
             {
                 _copyFeedbackMessage = null;
                 InvokeAsync(StateHasChanged);
@@ -2395,110 +2761,265 @@ else
         }
     }
 
-    private async Task CopyColumnAsInClause()
+    private sealed record InClauseBuildResult(
+        string Text,
+        int UniqueCount,
+        int ScannedRows,
+        bool WasCapped,
+        bool OutOfMemory);
+
+    private static string QuoteSqlUnicodeLiteral(string text)
+        => "N'" + text.Replace("'", "''") + "'";
+
+    private static string? FormatSnapshotInClauseLiteral(GridDataSnapshot snap, int actualRowIndex, int colIndex, string colType, bool asciiNegativeSign)
     {
-        HideContextMenu();
-        if (!CanCopyAsInClause) return;
-        List<string?> rawList;
-
-        if (IsColumnContextMenu || SelectedEntireCols.Count > 0 || (SelectedCells.Count == 0 && SelectedEntireRows.Count == 0 && !_isAllSelected && !string.IsNullOrEmpty(ContextMenuColumn)))
+        if (snap.TableStore != null && !string.IsNullOrEmpty(colType))
         {
-            int colIdx = _tableStore != null ? _tableStore.GetColumnIndex(ContextMenuColumn) : Columns.IndexOf(ContextMenuColumn);
-            int rowCount = ActiveRowCount;
-            var targetCols = new List<int>();
-            if (SelectedEntireCols.Count > 0)
+            if (snap.TableStore.IsNull(actualRowIndex, colIndex))
             {
-                targetCols.AddRange(SelectedEntireCols.Where(c => c >= 0 && c < Columns.Count).OrderBy(c => c));
+                return null;
             }
-            else if (colIdx >= 0)
-            {
-                targetCols.Add(colIdx);
-            }
-            if (targetCols.Count == 0) return;
 
-            int limit = Math.Min(rowCount, 10000);
-            rawList = new List<string?>(limit * Math.Max(1, targetCols.Count));
-            for (int i = 0; i < limit; i++)
+            if (asciiNegativeSign && colType is "int" or "bigint" or "smallint" or "tinyint")
             {
-                int actualIdx = GetActualRowIndex(i);
-                foreach (var c in targetCols)
-                {
-                    var val = FormatCellValue(GetRawCellValue(actualIdx, c, Columns[c]), c);
-                    if (val != null) rawList.Add(val);
-                }
+                var intText = snap.TableStore.FormatCellForDisplay(actualRowIndex, colIndex);
+                return string.IsNullOrEmpty(intText) ? null : intText;
+            }
+
+            if (colType is "varchar" or "nvarchar" or "char" or "nchar" or "text" or "ntext" or "xml" or "uniqueidentifier" or "date" or "datetime" or "datetime2" or "smalldatetime" or "time" or "datetimeoffset")
+            {
+                var strText = snap.TableStore.FormatCellForDisplay(actualRowIndex, colIndex);
+                return string.IsNullOrEmpty(strText) ? null : QuoteSqlUnicodeLiteral(strText);
             }
         }
-        else if (SelectedCells.Count > 0 || SelectedEntireRows.Count > 0 || _isAllSelected)
-        {
-            rawList = new List<string?>();
-            int colIdx = !string.IsNullOrEmpty(ContextMenuColumn) ? (_tableStore != null ? _tableStore.GetColumnIndex(ContextMenuColumn) : Columns.IndexOf(ContextMenuColumn)) : 0;
-            if (colIdx < 0) colIdx = 0;
 
-            if (_isAllSelected)
-            {
-                int rowCount = Math.Min(ActiveRowCount, 5000);
-                for (int i = 0; i < rowCount; i++)
-                {
-                    int actualIdx = GetActualRowIndex(i);
-                    var val = FormatCellValue(GetRawCellValue(actualIdx, colIdx, Columns[colIdx]), colIdx);
-                    if (val != null) rawList.Add(val);
-                }
-            }
-            else if (SelectedEntireRows.Count > 0)
-            {
-                foreach (var r in SelectedEntireRows.OrderBy(x => x).Take(5000))
-                {
-                    var val = FormatCellValue(GetRawCellValue(r, colIdx, Columns[colIdx]), colIdx);
-                    if (val != null) rawList.Add(val);
-                }
-            }
-            else
-            {
-                foreach (var coord in SelectedCells.OrderBy(x => x.Row).Take(5000))
-                {
-                    if (coord.Col >= 0 && coord.Col < Columns.Count)
-                    {
-                        var val = FormatCellValue(GetRawCellValue(coord.Row, coord.Col, Columns[coord.Col]), coord.Col);
-                        if (val != null) rawList.Add(val);
-                    }
-                }
-            }
+        var raw = GetSnapshotRawCellValue(snap, actualRowIndex, colIndex);
+        if (raw == null || raw is DBNull) return null;
+
+        if (raw is byte[] bytes)
+        {
+            return BinaryDataHelper.ToHexString(bytes, prefix: true);
+        }
+
+        if (raw is bool b)
+        {
+            return b ? "1" : "0";
+        }
+
+        if (raw is sbyte or byte or short or ushort or int or uint or long or ulong)
+        {
+            return Convert.ToString(raw, CultureInfo.InvariantCulture);
+        }
+
+        if (raw is float f)
+        {
+            return f.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (raw is double d)
+        {
+            return d.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (raw is decimal dec)
+        {
+            return dec.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (raw is string str)
+        {
+            return string.IsNullOrEmpty(str) ? null : QuoteSqlUnicodeLiteral(str);
+        }
+
+        var formatted = FormatSnapshotCellValue(snap.TableStore, raw, colIndex);
+        if (string.IsNullOrEmpty(formatted)) return null;
+        if (formatted.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) return formatted;
+        return QuoteSqlUnicodeLiteral(formatted);
+    }
+
+    private async Task CopyColumnAsInClause()
+    {
+        bool canCopy = CanCopyAsInClause;
+        bool isColumnMenu = IsColumnContextMenu;
+        string contextCol = ContextMenuColumn;
+        HideContextMenu();
+        if (!canCopy) return;
+
+        if (_isClipboardCopyBusy)
+        {
+            ShowCopyFeedback(ClipboardBusyMessage, 2000, CopyFeedbackKind.Warning);
+            return;
+        }
+
+        var snap = CaptureGridSnapshot();
+        if (snap.TotalDataCount == 0 || snap.Columns.Count == 0) return;
+
+        var colsSelected = SelectedEntireCols.ToList();
+        var rowsSelected = SelectedEntireRows.ToList();
+        var cellsSelected = SelectedCells.ToList();
+        bool isAll = _isAllSelected;
+
+        int resolvedContextColIdx = !string.IsNullOrEmpty(contextCol)
+            ? (snap.TableStore != null ? snap.TableStore.GetColumnIndex(contextCol) : snap.Columns.IndexOf(contextCol))
+            : -1;
+
+        List<int> targetCols;
+        bool allDisplayRows;
+        bool fromCellsOnly = false;
+
+        if (isColumnMenu || colsSelected.Count > 0 || (cellsSelected.Count == 0 && rowsSelected.Count == 0 && !isAll && !string.IsNullOrEmpty(contextCol)))
+        {
+            targetCols = colsSelected.Count > 0
+                ? colsSelected.Where(c => (uint)c < (uint)snap.Columns.Count).Distinct().OrderBy(c => c).ToList()
+                : (resolvedContextColIdx >= 0 ? new List<int> { resolvedContextColIdx } : new List<int>());
+            allDisplayRows = true;
+        }
+        else if (cellsSelected.Count > 0)
+        {
+            targetCols = cellsSelected
+                .Select(x => x.Col)
+                .Where(c => (uint)c < (uint)snap.Columns.Count)
+                .Distinct()
+                .OrderBy(c => c)
+                .ToList();
+            allDisplayRows = false;
+            fromCellsOnly = true;
+        }
+        else if (rowsSelected.Count > 0 || isAll)
+        {
+            int fallbackCol = resolvedContextColIdx >= 0 ? resolvedContextColIdx : 0;
+            targetCols = new List<int> { fallbackCol };
+            allDisplayRows = isAll;
         }
         else
         {
             return;
         }
 
-        var values = rawList
-            .Select(v => v?.ToString())
-            .Where(v => !string.IsNullOrEmpty(v))
-            .Distinct()
-            .ToList();
+        if (targetCols.Count == 0) return;
+        if (allDisplayRows && snap.ActiveRowCount == 0) return;
 
-        if (values.Count > 0)
+        bool asciiNegativeSign = string.Equals(CultureInfo.CurrentCulture.NumberFormat.NegativeSign, "-", StringComparison.Ordinal);
+
+        _isClipboardCopyBusy = true;
+        try
         {
-            var formattedValues = values.Select(v => {
-                if (v!.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            var result = await Task.Run(() =>
+            {
+                List<int>? explicitRows = null;
+                if (!allDisplayRows)
                 {
-                    return v!;
+                    explicitRows = ResolveExplicitRowsInDisplayOrder(
+                        snap,
+                        fromCellsOnly ? null : rowsSelected,
+                        fromCellsOnly ? cellsSelected : null);
                 }
-                if (decimal.TryParse(v, out _))
-                {
-                    return v!;
-                }
-                string escaped = v!.Replace("'", "''");
-                return string.Format("N'{0}'", escaped);
-            });
-            var inClause = $"IN ({string.Join(", ", formattedValues)})";
 
-            try
+                int totalTargetRows = allDisplayRows ? snap.ActiveRowCount : explicitRows!.Count;
+                if (totalTargetRows == 0)
+                {
+                    return new InClauseBuildResult(string.Empty, 0, 0, false, false);
+                }
+
+                var colTypes = new string[targetCols.Count];
+                for (int i = 0; i < targetCols.Count; i++)
+                {
+                    colTypes[i] = snap.TableStore?.GetColumnType(targetCols[i])?.ToLowerInvariant() ?? "";
+                }
+
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                var sb = new StringBuilder(Math.Min(4_194_304, Math.Max(256, totalTargetRows * 8)));
+                sb.Append("IN (");
+
+                int scannedRows = 0;
+                int uniqueCount = 0;
+                bool wasCapped = false;
+
+                try
+                {
+                    for (int i = 0; i < totalTargetRows; i++)
+                    {
+                        int actualRow = allDisplayRows
+                            ? (snap.ViewIndices != null ? snap.ViewIndices[i] : i)
+                            : explicitRows![i];
+
+                        for (int cIdx = 0; cIdx < targetCols.Count; cIdx++)
+                        {
+                            var literal = FormatSnapshotInClauseLiteral(snap, actualRow, targetCols[cIdx], colTypes[cIdx], asciiNegativeSign);
+                            if (literal != null && seen.Add(literal))
+                            {
+                                int extraLen = (uniqueCount > 0 ? 2 : 0) + literal.Length + 1;
+                                if (uniqueCount > 0 && sb.Length + extraLen > MaxClipboardChars)
+                                {
+                                    wasCapped = true;
+                                    break;
+                                }
+                                if (uniqueCount > 0) sb.Append(", ");
+                                sb.Append(literal);
+                                uniqueCount++;
+                            }
+                        }
+
+                        if (wasCapped) break;
+                        scannedRows++;
+                    }
+
+                    if (uniqueCount == 0)
+                    {
+                        return new InClauseBuildResult(string.Empty, 0, scannedRows, false, false);
+                    }
+
+                    sb.Append(')');
+                    seen.Clear();
+                    return new InClauseBuildResult(sb.ToString(), uniqueCount, scannedRows, wasCapped, false);
+                }
+                catch (OutOfMemoryException)
+                {
+                    return new InClauseBuildResult(string.Empty, 0, scannedRows, false, true);
+                }
+            });
+
+            if (_disposed) return;
+
+            if (result.OutOfMemory)
             {
-                await JS.InvokeVoidAsync("navigator.clipboard.writeText", inClause);
-                ShowCopyFeedback("IN clause copied");
+                ShowCopyFeedback("Too many unique values — filter rows or use Export", 7000, CopyFeedbackKind.Error);
+                return;
             }
-            catch
+            if (result.UniqueCount == 0 || string.IsNullOrEmpty(result.Text))
             {
+                ShowCopyFeedback("No non-empty values for IN clause", 4000, CopyFeedbackKind.Warning);
+                return;
             }
+
+            bool ok = await TryWriteClipboardAsync(result.Text);
+            if (_disposed) return;
+            if (!ok)
+            {
+                ShowCopyFeedback(ClipboardWriteFailedMessage, 7000, CopyFeedbackKind.Error);
+                return;
+            }
+
+            string valueWord = result.UniqueCount == 1 ? "value" : "values";
+            string rowWord = result.ScannedRows == 1 ? "row" : "rows";
+            string msg = $"Copied {result.UniqueCount:N0} unique {valueWord} (from {result.ScannedRows:N0} {rowWord})";
+            CopyFeedbackKind kind = CopyFeedbackKind.Success;
+            if (result.WasCapped)
+            {
+                msg += " — limit reached";
+                kind = CopyFeedbackKind.Warning;
+            }
+            else if (result.UniqueCount > 25_000)
+            {
+                msg += " — large IN() may hit SQL limit";
+                kind = CopyFeedbackKind.Warning;
+            }
+
+            ShowCopyFeedback(msg, kind == CopyFeedbackKind.Warning ? 7000 : 4500, kind);
+        }
+        finally
+        {
+            _isClipboardCopyBusy = false;
         }
     }
 
@@ -2951,7 +3472,7 @@ else
             var hex = BinaryDataHelper.ToHexString(bytes, prefix: true);
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", hex);
             _isBinaryHexCopied = true;
-            ShowCopyFeedback("Hex copied");
+            ShowCopyFeedback("Copied Hex");
             StateHasChanged();
             _ = Task.Delay(2000).ContinueWith(_ =>
             {
@@ -2970,7 +3491,7 @@ else
             var b64 = $"data:{_activeBinaryMimeType};base64,{_activeBinaryBase64}";
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", b64);
             _isBinaryBase64Copied = true;
-            ShowCopyFeedback("Base64 copied");
+            ShowCopyFeedback("Copied Base64");
             StateHasChanged();
             _ = Task.Delay(2000).ContinueWith(_ =>
             {

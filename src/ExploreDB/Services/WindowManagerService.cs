@@ -217,9 +217,40 @@ public class WindowManagerService
         }, DispatcherPriority.Background);
     }
 
+    public async Task<bool> TrySetClipboardTextAsync(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return false;
+
+        bool SetCore()
+        {
+            try
+            {
+                Clipboard.SetDataObject(text, true);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        if (dispatcher.CheckAccess())
+        {
+            return SetCore();
+        }
+
+        return await dispatcher.InvokeAsync(SetCore).Task;
+    }
+
     public void SetClipboardText(string text)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        if (string.IsNullOrEmpty(text)) return;
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        dispatcher.Invoke(() =>
         {
             try
             {
