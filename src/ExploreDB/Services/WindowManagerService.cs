@@ -1,23 +1,52 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Microsoft.Extensions.Configuration;
+using WinDataTransfer = Windows.ApplicationModel.DataTransfer;
+using Windows.Storage;
 
 namespace ExploreDB.Services;
 
+public enum FileShareOutcome
+{
+    NativeShareOpened,
+    FallbackClipboardAndExplorer,
+    Failed
+}
+
 public class WindowManagerService
 {
+    [ComImport]
+    [Guid("3A3DCD6C-3EAB-43DC-BCDE-45671CE800C8")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IDataTransferManagerInterop
+    {
+        IntPtr GetForWindow([In] IntPtr appWindow, [In] ref Guid riid);
+        void ShowShareUIForWindow(IntPtr appWindow);
+    }
+
+    private static readonly Guid IidDataTransferManager = new("a5caee9b-8708-49d1-8d36-67d25a8da00c");
+
     private readonly IServiceProvider _serviceProvider;
     private readonly QueryStateService _queryStateService;
     private readonly IConfiguration _configuration;
     private readonly Dictionary<Guid, Window> _openQueryPopouts = new();
     private readonly List<Window> _openSchemaPopouts = new();
     private readonly Dictionary<string, Window> _openToolPopouts = new(StringComparer.OrdinalIgnoreCase);
+
+    private IntPtr _shareHookedHwnd = IntPtr.Zero;
+    private WinDataTransfer.DataTransferManager? _shareTransferManager;
+    private string? _pendingShareFilePath;
+    private string _pendingShareTitle = string.Empty;
+    private string _pendingShareDescription = string.Empty;
 
     public event Action<string>? OnNavigateMainWindowRequested;
 
@@ -267,5 +296,110 @@ public class WindowManagerService
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
         catch { }
+    }
+
+    public async Task<(FileShareOutcome Outcome, string? ErrorMessage)> ShareFileAsync(string filePath, string title, string description)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return (FileShareOutcome.Failed, "Log file does not exist.");
+        }
+
+        await Task.Yield();
+        return await Application.Current.Dispatcher.InvokeAsync<(FileShareOutcome Outcome, string? ErrorMessage)>(() =>
+        {
+            var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                        ?? Application.Current.MainWindow;
+
+            if (owner != null)
+            {
+                try
+                {
+                    IntPtr hwnd = new WindowInteropHelper(owner).Handle;
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        var interop = WinDataTransfer.DataTransferManager.As<IDataTransferManagerInterop>();
+                        if (_shareTransferManager == null || _shareHookedHwnd != hwnd)
+                        {
+                            if (_shareTransferManager != null)
+                            {
+                                _shareTransferManager.DataRequested -= OnShareDataRequested;
+                            }
+
+                            Guid iid = IidDataTransferManager;
+                            IntPtr dtmPtr = interop.GetForWindow(hwnd, ref iid);
+                            if (dtmPtr != IntPtr.Zero)
+                            {
+                                try
+                                {
+                                    _shareTransferManager = WinDataTransfer.DataTransferManager.FromAbi(dtmPtr);
+                                }
+                                finally
+                                {
+                                    Marshal.Release(dtmPtr);
+                                }
+
+                                _shareTransferManager.DataRequested += OnShareDataRequested;
+                                _shareHookedHwnd = hwnd;
+                            }
+                        }
+
+                        if (_shareTransferManager != null)
+                        {
+                            _pendingShareFilePath = filePath;
+                            _pendingShareTitle = title;
+                            _pendingShareDescription = description;
+                            interop.ShowShareUIForWindow(hwnd);
+                            return (FileShareOutcome.NativeShareOpened, null);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Native Share sheet may be unavailable in unpackaged/elevated sessions; fall back cleanly below.
+                }
+            }
+
+            try
+            {
+                var files = new StringCollection { filePath };
+                Clipboard.SetFileDropList(files);
+            }
+            catch { }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{filePath}\"")
+                {
+                    UseShellExecute = true
+                });
+                return (FileShareOutcome.FallbackClipboardAndExplorer, null);
+            }
+            catch (Exception ex)
+            {
+                return (FileShareOutcome.Failed, ex.Message);
+            }
+        }, DispatcherPriority.Background);
+    }
+
+    private async void OnShareDataRequested(WinDataTransfer.DataTransferManager sender, WinDataTransfer.DataRequestedEventArgs args)
+    {
+        var deferral = args.Request.GetDeferral();
+        try
+        {
+            string? path = _pendingShareFilePath;
+            if (!string.IsNullOrEmpty(path) && File.Exists(path))
+            {
+                var storageFile = await StorageFile.GetFileFromPathAsync(path);
+                args.Request.Data.Properties.Title = _pendingShareTitle;
+                args.Request.Data.Properties.Description = _pendingShareDescription;
+                args.Request.Data.SetStorageItems(new IStorageItem[] { storageFile });
+            }
+        }
+        catch { }
+        finally
+        {
+            deferral.Complete();
+        }
     }
 }

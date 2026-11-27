@@ -70,7 +70,7 @@
                     <button type="button" 
                             class="list-group-item list-group-item-action d-flex align-items-center gap-3 border-0 py-2.5 px-3 rounded-2 @(ActiveTab == "about" ? "active" : "")"
                             style="@(ActiveTab == "about" ? "background-color: var(--app-surface-secondary); color: var(--app-text); font-weight: 600; border-left: 3px solid #0d6efd !important;" : "background: transparent; color: var(--app-text);")"
-                            @onclick='() => ActiveTab = "about"'>
+                            @onclick="SelectAboutTab">
                         <i class="bi bi-info-circle text-success fs-5"></i>
                         <span class="fw-semibold">About</span>
                     </button>
@@ -677,6 +677,85 @@
                             </button>
                         </div>
 
+                        <!-- Diagnostics & Logs -->
+                        <div class="p-3 rounded-3 mb-4 border" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
+                            <div class="mb-3">
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    <i class="bi bi-journal-text text-info"></i>
+                                    <h6 class="fw-bold mb-0">Diagnostics &amp; Logs</h6>
+                                </div>
+                                <small class="text-muted d-block">Download or share daily application logs.</small>
+                            </div>
+
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <input type="date"
+                                       aria-label="Log date"
+                                       class="form-control form-control-sm"
+                                       style="width: auto; min-width: 150px; background-color: var(--app-input-bg); color: var(--app-text); border-color: var(--app-border); color-scheme: @(ThemeService.IsDark ? "dark" : "light");"
+                                       max="@DateTime.Today.ToString("yyyy-MM-dd")"
+                                       value="@_logDateInputValue"
+                                       @onchange="OnLogDateChanged" />
+
+                                <button type="button"
+                                        class="btn btn-primary btn-sm px-3 fw-medium d-inline-flex align-items-center gap-1"
+                                        disabled="@(!_hasValidLogDate || !_selectedLogSummary.Exists || _isLogActionBusy)"
+                                        @onclick="DownloadSelectedLogAsync">
+                                    @if (_isLogDownloading)
+                                    {
+                                        <span class="spinner-border spinner-border-sm"></span>
+                                        <span>Saving...</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-download"></i>
+                                        <span>Download</span>
+                                    }
+                                </button>
+
+                                <button type="button"
+                                        class="btn btn-outline-info btn-sm px-3 fw-medium d-inline-flex align-items-center gap-1"
+                                        disabled="@(!_hasValidLogDate || !_selectedLogSummary.Exists || _isLogActionBusy)"
+                                        @onclick="ShareSelectedLogAsync">
+                                    @if (_isLogSharing)
+                                    {
+                                        <span class="spinner-border spinner-border-sm"></span>
+                                        <span>Sharing...</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-share"></i>
+                                        <span>Share</span>
+                                    }
+                                </button>
+                            </div>
+
+                            @if (!_hasValidLogDate)
+                            {
+                                <div class="small text-warning mt-2 d-flex align-items-center gap-2">
+                                    <i class="bi bi-exclamation-circle"></i>
+                                    <span>Please select a valid date to inspect available logs.</span>
+                                </div>
+                            }
+                            else if (!_selectedLogSummary.Exists)
+                            {
+                                <div class="small text-warning mt-2 d-flex align-items-center gap-2">
+                                    <i class="bi bi-info-circle"></i>
+                                    <span>No log file found for @_selectedLogDate.ToString("MMM dd, yyyy").</span>
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrEmpty(_logErrorMessage))
+                            {
+                                <div class="alert alert-danger mt-3 mb-0 py-2 px-3 small d-flex align-items-start justify-content-between gap-2" style="border-radius: 8px;">
+                                    <div class="d-flex align-items-start gap-2 flex-grow-1 overflow-hidden" style="word-break: break-word;">
+                                        <i class="bi bi-exclamation-octagon-fill text-danger flex-shrink-0 mt-1"></i>
+                                        <span class="text-break">@_logErrorMessage</span>
+                                    </div>
+                                    <button type="button" class="btn-close btn-close-sm flex-shrink-0 mt-1" @onclick="() => _logErrorMessage = null"></button>
+                                </div>
+                            }
+                        </div>
+
                         <!-- Legal Collapsibles -->
                         <div class="accordion mb-4" id="legalAccordion">
                             <div class="accordion-item border mb-2 rounded" style="background-color: var(--app-surface-secondary); border-color: var(--app-border) !important;">
@@ -812,6 +891,16 @@
     private string? ImportSuccessMessage;
     private string? ImportErrorMessage;
     private bool IsProcessingFile = false;
+
+    // Diagnostics & Logs State
+    private DateTime _selectedLogDate = DateTime.Today;
+    private string _logDateInputValue = DateTime.Today.ToString("yyyy-MM-dd");
+    private bool _hasValidLogDate = true;
+    private AppEnvironmentService.LogDateSummary _selectedLogSummary = new(false, 0, 0, "0 B", string.Empty, Array.Empty<string>());
+    private bool _isLogDownloading = false;
+    private bool _isLogSharing = false;
+    private bool _isLogActionBusy => _isLogDownloading || _isLogSharing;
+    private string? _logErrorMessage;
 
     private IEnumerable<ConnectionService.SavedConnection> FilteredConnectionsForExport
     {
@@ -1001,6 +1090,7 @@
         ConnectionService.OnSavedConnectionsChanged += HandleConnectionChanged;
         ConnectionService.OnConnectionChanged += HandleConnectionChanged;
         InitializeConnectionSelection();
+        RefreshSelectedLogStatus();
         ProfileName = !string.IsNullOrWhiteSpace(UserSettingsService.Settings.DisplayName)
             ? UserSettingsService.Settings.DisplayName
             : Environment.UserName;
@@ -1315,6 +1405,112 @@
         finally
         {
             IsDownloadingUpdate = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void SelectAboutTab()
+    {
+        ActiveTab = "about";
+        RefreshSelectedLogStatus();
+    }
+
+    private void OnLogDateChanged(ChangeEventArgs e)
+    {
+        _logErrorMessage = null;
+        string raw = e.Value?.ToString()?.Trim() ?? string.Empty;
+        _logDateInputValue = raw;
+
+        if (DateTime.TryParseExact(raw, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed))
+        {
+            _selectedLogDate = parsed.Date;
+            _hasValidLogDate = true;
+            RefreshSelectedLogStatus();
+        }
+        else
+        {
+            _hasValidLogDate = false;
+            _selectedLogSummary = new AppEnvironmentService.LogDateSummary(false, 0, 0, "0 B", string.Empty, Array.Empty<string>());
+        }
+    }
+
+    private void RefreshSelectedLogStatus()
+    {
+        if (!_hasValidLogDate) return;
+        _selectedLogSummary = AppEnvironmentService.GetLogSummaryForDate(_selectedLogDate);
+    }
+
+    private async Task DownloadSelectedLogAsync()
+    {
+        if (!_hasValidLogDate || _isLogActionBusy) return;
+        _logErrorMessage = null;
+        RefreshSelectedLogStatus();
+
+        if (!_selectedLogSummary.Exists)
+        {
+            _logErrorMessage = $"No log file found for {_selectedLogDate:MMM dd, yyyy}.";
+            return;
+        }
+
+        _isLogDownloading = true;
+        try
+        {
+            string defaultFileName = $"ExploreDB-log-{_selectedLogDate:yyyy-MM-dd}.txt";
+            string filter = "Log Files (*.txt)|*.txt|All Files (*.*)|*.*";
+            string? destPath = await WindowManager.ShowSaveFileDialogAsync(defaultFileName, filter, ".txt");
+            if (string.IsNullOrEmpty(destPath))
+            {
+                return;
+            }
+
+            await AppEnvironmentService.ExportLogSnapshotAsync(_selectedLogDate, destPath);
+        }
+        catch (Exception ex)
+        {
+            _logErrorMessage = $"Failed to download log: {ex.Message}";
+            Logger.LogError(ex, "AppCenter: Failed to download log for {LogDate}", _selectedLogDate.ToString("yyyy-MM-dd"));
+        }
+        finally
+        {
+            _isLogDownloading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ShareSelectedLogAsync()
+    {
+        if (!_hasValidLogDate || _isLogActionBusy) return;
+        _logErrorMessage = null;
+        RefreshSelectedLogStatus();
+
+        if (!_selectedLogSummary.Exists)
+        {
+            _logErrorMessage = $"No log file found for {_selectedLogDate:MMM dd, yyyy}.";
+            return;
+        }
+
+        _isLogSharing = true;
+        try
+        {
+            string snapshotPath = await AppEnvironmentService.CreateTempLogSnapshotAsync(_selectedLogDate);
+            var (outcome, error) = await WindowManager.ShareFileAsync(
+                snapshotPath,
+                $"ExploreDB Log ({_selectedLogDate:yyyy-MM-dd})",
+                $"ExploreDB diagnostic log for {_selectedLogDate:yyyy-MM-dd}");
+
+            if (outcome == FileShareOutcome.Failed)
+            {
+                _logErrorMessage = $"Unable to share log: {error ?? "Unknown error."}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logErrorMessage = $"Failed to share log: {ex.Message}";
+            Logger.LogError(ex, "AppCenter: Failed to share log for {LogDate}", _selectedLogDate.ToString("yyyy-MM-dd"));
+        }
+        finally
+        {
+            _isLogSharing = false;
             await InvokeAsync(StateHasChanged);
         }
     }
