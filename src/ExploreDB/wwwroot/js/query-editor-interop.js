@@ -1947,7 +1947,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             filterText: f.fullName + " " + f.name + " " + unbracketed,
                             sortText: String(f.name.length).padStart(4, '0') + '_' + f.name,
                             range: ctx.replaceRange,
-                            detail: f.functionType ? ('Function (' + f.functionType + ')') : 'Function'
+                            detail: 'Function'
                         });
                     });
                 }
@@ -2022,7 +2022,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             label: s.shortcut,
                             kind: monaco.languages.CompletionItemKind.Snippet,
                             insertText: s.code,
-                            detail: s.shortcut + ' \u2192 ' + (s.description || 'Snippet'),
                             documentation: s.code,
                             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                             sortText: '0000_0_' + s.shortcut
@@ -2184,7 +2183,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     } else if (autoAlias) {
                         alias = window.generateTableAlias(t.name || t.fullName, existingAliases);
                         insText = t.fullName + (useAs ? " AS " : " ") + alias;
-                        detailText = 'Table (' + (useAs ? 'AS ' : '') + alias + ')';
+                        detailText = 'Table';
                     }
 
                     var filterStr = t.name + " [" + t.name + "] " + t.fullName + (t.schema ? (" " + t.schema + "." + t.name) : "") + (autoAlias && alias ? (" " + alias) : "");
@@ -2227,7 +2226,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     } else if (autoAlias) {
                         alias = window.generateTableAlias(v.name || v.fullName, existingAliases);
                         insText = v.fullName + (useAs ? " AS " : " ") + alias;
-                        detailText = 'View (' + (useAs ? 'AS ' : '') + alias + ')';
+                        detailText = 'View';
                     }
 
                     var vFilterStr = v.name + " [" + v.name + "] " + v.fullName + (autoAlias && alias ? (" " + alias) : "");
@@ -2375,7 +2374,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 insertText: insText,
                                 filterText: rawPrefix + "." + c + " " + c,
                                 range: replaceRange,
-                                detail: 'Column of ' + explicitTableName,
+                                detail: 'Column',
                                 sortText: '0001_' + c
                             });
                         });
@@ -2416,11 +2415,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                     ? (shouldQualify && qual ? (qual + ".[" + cleanCol + "]") : ("[" + cleanCol + "]"))
                                     : qualifiedName;
 
-                                var detailText = 'Column of ' + entry.tableName + (entry.alias ? ' (' + entry.alias + ')' : '');
-                                if (false) {
-                                    detailText += ' \u2022 Ambiguous';
-                                }
-
                                 var filterStr = col + " " + qualifiedName + " [" + col + "]" + (entry.alias ? (" " + entry.alias + "." + col) : "");
 
                                 suggestions.push({
@@ -2429,7 +2423,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                     insertText: insertColText,
                                     filterText: filterStr,
                                     range: replaceRange,
-                                    detail: detailText,
+                                    detail: 'Column',
                                     sortText: (isAmbiguous ? '0000_' : '0001_') + col + '_' + (entry.alias || '')
                                 });
                             });
@@ -2470,15 +2464,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     if (explicitTableName) {
                         columnsToSuggest = Array.from(activeColumns);
                         if (columnsToSuggest.length === 0) {
-                            // Debug fallback:
-                            var availableTables = window.sqlTables ? window.sqlTables.map(x => x.fullName).join(',') : 'none';
-                            suggestions.push({
-                                label: 'DEBUG_' + explicitTableName,
-                                kind: monaco.languages.CompletionItemKind.Text,
-                                insertText: 'DEBUG',
-                                detail: 'Tables: ' + availableTables.substring(0, 50)
-                            });
-                            // Fallback to all columns just in case
                             columnsToSuggest = window.sqlColumns || [];
                         }
                     } else {
@@ -2492,7 +2477,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             insertText: rawPrefix ? (rawPrefix + "." + c) : c,
                             filterText: rawPrefix ? (rawPrefix + "." + c) : c,
                             range: replaceRange,
-                            detail: explicitTableName ? ('Column of ' + explicitTableName) : 'Column'
+                            detail: 'Column'
                         });
                     });
 
@@ -2507,7 +2492,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 insertText: alias,
                                 filterText: alias,
                                 range: replaceRange,
-                                detail: 'Alias for ' + aliasMap[alias],
+                                detail: 'Alias',
                                 sortText: '0010_' + alias
                             });
                         });
@@ -2569,7 +2554,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                         rightDisplayName = revAlias || targetEntry.rawTable;
                                     }
 
-                                    // 1. Direct relations on matchedTable
+                                    // 1. Direct relations on matchedTable (newly joined table first)
                                     if (matchedTable.relations && Array.isArray(matchedTable.relations)) {
                                         matchedTable.relations.forEach(r => {
                                             if (tablesMatch(targetEntry.rawTable, r.toTable)) {
@@ -2583,28 +2568,14 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                                         filterText: typedRel ? (typedRel + " " + cond1 + " " + r.fromCol) : (cond1 + " " + r.fromCol),
                                                         sortText: '0000_00_0_' + cond1,
                                                         range: relReplaceRange,
-                                                        detail: 'Relationship (' + (matchedTable.name || matchedTable.fullName) + ' -> ' + targetEntry.rawTable + ')'
-                                                    });
-                                                }
-
-                                                var cond2 = rightDisplayName + "." + r.toCol + " = " + leftDisplayName + "." + r.fromCol;
-                                                if (!seenConds.has(cond2)) {
-                                                    seenConds.add(cond2);
-                                                    suggestions.push({
-                                                        label: cond2,
-                                                        kind: monaco.languages.CompletionItemKind.Snippet,
-                                                        insertText: cond2,
-                                                        filterText: typedRel ? (typedRel + " " + cond2 + " " + r.toCol) : (cond2 + " " + r.toCol),
-                                                        sortText: '0000_00_1_' + cond2,
-                                                        range: relReplaceRange,
-                                                        detail: 'Relationship (' + targetEntry.rawTable + ' -> ' + (matchedTable.name || matchedTable.fullName) + ')'
+                                                        detail: 'Relation'
                                                     });
                                                 }
                                             }
                                         });
                                     }
 
-                                    // 2. Bidirectional check: relations on targetEntry
+                                    // 2. Bidirectional check: relations on targetEntry (still keep newly joined table first)
                                     if (targetEntry.targetObj && targetEntry.targetObj.relations && Array.isArray(targetEntry.targetObj.relations)) {
                                         targetEntry.targetObj.relations.forEach(r => {
                                             if (tablesMatch(matchedTable.fullName, r.toTable) || tablesMatch(matchedTable.name, r.toTable)) {
@@ -2618,21 +2589,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                                         filterText: typedRel ? (typedRel + " " + cond1 + " " + r.toCol) : (cond1 + " " + r.toCol),
                                                         sortText: '0000_00_0_' + cond1,
                                                         range: relReplaceRange,
-                                                        detail: 'Relationship (' + (matchedTable.name || matchedTable.fullName) + ' -> ' + targetEntry.rawTable + ')'
-                                                    });
-                                                }
-
-                                                var cond2 = rightDisplayName + "." + r.fromCol + " = " + leftDisplayName + "." + r.toCol;
-                                                if (!seenConds.has(cond2)) {
-                                                    seenConds.add(cond2);
-                                                    suggestions.push({
-                                                        label: cond2,
-                                                        kind: monaco.languages.CompletionItemKind.Snippet,
-                                                        insertText: cond2,
-                                                        filterText: typedRel ? (typedRel + " " + cond2 + " " + r.fromCol) : (cond2 + " " + r.fromCol),
-                                                        sortText: '0000_00_1_' + cond2,
-                                                        range: relReplaceRange,
-                                                        detail: 'Relationship (' + targetEntry.rawTable + ' -> ' + (matchedTable.name || matchedTable.fullName) + ')'
+                                                        detail: 'Relation'
                                                     });
                                                 }
                                             }

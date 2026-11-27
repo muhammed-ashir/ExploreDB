@@ -2074,3 +2074,27 @@ a.card.glow-highlight:hover,
     color: var(--app-text-muted);
     font-size: 0.8rem;
 }
+
+/* Clean SQL Autocomplete (Monaco Suggest Widget) Polish */
+html .monaco-editor .suggest-widget {
+    width: min(520px, 88vw);
+    max-width: 90vw;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+}
+
+html[data-bs-theme="light"] .monaco-editor .suggest-widget {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+html .monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents > .main > .right {
+    max-width: 42%;
+    flex-shrink: 2;
+}
+
+html .monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents > .main > .right > .details-label {
+    font-size: 0.78em;
+    opacity: 0.72;
+    margin-left: 14px;
+    letter-spacing: 0.01em;
+}
