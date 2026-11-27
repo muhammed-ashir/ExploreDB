@@ -1782,7 +1782,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             ? clean.substring(lastOpenParenIdx + 1)
             : clean;
 
-        var clauseRegex = /\b(SELECT|FROM|JOIN|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+JOIN|FULL\s+OUTER\s+JOIN|CROSS\s+JOIN|ON|WHERE|HAVING|GROUP\s+BY|ORDER\s+BY|SET|VALUES|INTO)\b/gi;
+        var clauseRegex = /\b(SELECT|FROM|JOIN|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+JOIN|FULL\s+OUTER\s+JOIN|CROSS\s+JOIN|ON|WHERE|HAVING|GROUP\s+BY|ORDER\s+BY|SET|VALUES|INTO|UPDATE|DELETE)\b/gi;
         var matches = [];
         var cm;
         while ((cm = clauseRegex.exec(textToScan)) !== null) {
@@ -1868,7 +1868,16 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 setKws.push.apply(setKws, exprKeywords);
                 return setKws;
 
+            case 'UPDATE':
+                return ['SET', 'WHERE'];
+
+            case 'DELETE':
+                return ['WHERE', 'FROM', 'TOP'];
+
             case 'FROM':
+                if (clauseInfo.isCompletedSingleTableDelete) {
+                    return ['WHERE'];
+                }
             case 'JOIN':
                 return [
                     'AS', 'ON', 'WHERE', 'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN',
@@ -2003,11 +2012,19 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             var isSpaceTrigger = context && context.triggerCharacter === ' ';
             var isOnContext = /\bon\s*$/i.test(fullTextUntilPosition) || /\bon\s+[a-zA-Z0-9_\[\]\.]*$/i.test(fullTextUntilPosition);
             if (isSpaceTrigger) {
-                var isTriggerKeywordBeforeSpace = /\b(?:on|join|from|into|update|where|having|set|by|select)\s*$/i.test(fullTextUntilPosition);
+                var isTriggerKeywordBeforeSpace = /\b(?:on|join|from|into|update|delete|where|having|set|by|select)\s*$/i.test(fullTextUntilPosition);
                 if (!isTriggerKeywordBeforeSpace) {
                     return { suggestions: [] };
                 }
             }
+
+            var cleanStmtUntilCursor = (fullTextUntilPosition || "")
+                .replace(/'(?:''|[^'])*'/g, "''")
+                .replace(/--.*$/gm, " ")
+                .replace(/\/\*[\s\S]*?\*\//g, " ");
+            var isSingleTableDeleteTarget = /^\s*DELETE(?:\s+TOP\s*\(\s*[^)]*\s*\))?(?:\s+FROM)?\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]*\]?$/i.test(cleanStmtUntilCursor);
+            var isCompletedSingleTableDelete = /^\s*DELETE(?:\s+TOP\s*\(\s*[^)]*\s*\))?\s+(?:FROM\s+)?(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:WITH\s*\(\s*[^)]*\s*\)\s+)?[a-zA-Z0-9_]*$/i.test(cleanStmtUntilCursor);
+            clauseInfo.isCompletedSingleTableDelete = isCompletedSingleTableDelete;
 
             var isInsertContext = /(?:^|[\s;])INSERT(?:\s+INTO)?\s+[a-zA-Z0-9_\[\]\.]*$/i.test(fullTextUntilPosition)
                 && fullTextUntilPosition.indexOf('(') === -1
@@ -2042,6 +2059,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             // PRIORITY CHECK: Suppress suggestions when typing a table alias on the same line.
             // Must run BEFORE the keyword scan because an alias like 'or', 'and', 'on', 'as' etc.
             // would be misidentified as an SQL keyword in the backward token scan below.
+            // Never suppress for single-table DELETE FROM <table>, where T-SQL forbids aliases and WHERE follows.
             var currentLineUntilCursor = model.getValueInRange({
                 startLineNumber: position.lineNumber,
                 startColumn: 1,
@@ -2049,7 +2067,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 endColumn: position.column
             });
             var hasDotOnCurrentLine = /\.[a-zA-Z0-9_]*$/.test(currentLineUntilCursor);
-            var isTypingAlias = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(currentLineUntilCursor);
+            var isTypingAlias = !isCompletedSingleTableDelete && /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(currentLineUntilCursor);
             if (isTypingAlias && !hasDotOnCurrentLine) {
                 return { suggestions: [] };
             }
@@ -2062,7 +2080,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
             var lastTableKeyword = null;
             if (matches && matches.length > 0) {
-                var tableKeywords = new Set(['from', 'join', 'into', 'insert', 'update', 'table']);
+                var tableKeywords = new Set(['from', 'join', 'into', 'insert', 'update', 'delete', 'table']);
                 var columnKeywords = new Set(['select', 'where', 'on', 'by', 'having', 'set', 'and', 'or']);
                 var spKeywords = new Set(['exec', 'execute']);
                 
@@ -2080,8 +2098,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         var lastTableKwIndex = fullTextUntilPosition.toLowerCase().lastIndexOf(token);
                         var textAfterTableKw = lastTableKwIndex >= 0 ? fullTextUntilPosition.substring(lastTableKwIndex) : fullTextUntilPosition;
 
-                        // A table is only considered completed if followed by whitespace (e.g. "FROM [Orders] ")
-                        var completedTableRegex = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+/i;
+                        // A table is only considered completed if followed by whitespace (e.g. "FROM [Orders] ", "UPDATE [Orders] ")
+                        var completedTableRegex = /(?:from|join|update|delete|into|table)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+/i;
                         var tableCompletedMatch = textAfterTableKw.match(completedTableRegex);
                         var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_]*)$/i.test(textAfterTableKw);
 
@@ -2089,15 +2107,14 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             // Table is already provided and finished! Do NOT suggest tables.
                             suggestTables = false;
                             
-                            // Check if user is on the SAME line actively typing the alias name:
-                            // e.g. "FROM [tenant].[Orders] s" or "JOIN [tenant].[OrderItems] oiy"
+                            // Check if user is on the SAME line actively typing an alias (only valid in SELECT/JOIN FROM/JOIN sources)
                             var lineUntilCursor = model.getValueInRange({
                                 startLineNumber: position.lineNumber,
                                 startColumn: 1,
                                 endLineNumber: position.lineNumber,
                                 endColumn: position.column
                             });
-                            var isTypingAliasOnSameLine = /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(lineUntilCursor);
+                            var isTypingAliasOnSameLine = !isCompletedSingleTableDelete && /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(lineUntilCursor);
                             var hasDot = textBeforeCursor.match(/\.[a-zA-Z0-9_]*$/);
 
                             if (isTypingAliasOnSameLine && !hasDot) {
@@ -2105,16 +2122,16 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 return { suggestions: [] };
                             }
 
-                            // If on next line or after alias, suggest clause keywords (ON, WHERE, JOIN, etc.)
+                            // Suggest next clause keywords (ON, WHERE, SET, JOIN, etc.)
                             suggestColumns = false;
                             suggestSps = false;
                             suggestKeywords = true;
                         } else {
-                            // User is actively typing the table name (e.g. "FROM or"), or after comma in FROM:
+                            // User is actively typing the table name (e.g. "FROM or", "UPDATE or"), or after comma in FROM:
                             suggestTables = true;
                             suggestColumns = false;
                             suggestSps = false;
-                            if (i >= matches.length - 2) suggestKeywords = false;
+                            if (i >= matches.length - 2 && token !== 'delete') suggestKeywords = false;
                         }
                         break;
                     } else if (columnKeywords.has(token)) {
@@ -2141,7 +2158,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             }
 
             var autoAlias = (window.userSettings ? window.userSettings.autoGenerateAliases !== false : true) &&
-                            (lastTableKeyword === 'from' || lastTableKeyword === 'join' || lastTableKeyword === 'update');
+                            (lastTableKeyword === 'join' || (lastTableKeyword === 'from' && !isSingleTableDeleteTarget));
             var useAs = window.userSettings ? window.userSettings.useAsKeyword !== false : true;
 
             var existingAliases = new Set();
@@ -2287,32 +2304,53 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 var seenRefKeys = new Set();
                 var tMatch;
 
-                while ((tMatch = tableClauseRegex.exec(fromAndAfter)) !== null) {
-                    var rawTableName = (tMatch[1] || "").trim();
-                    var rawAlias = (tMatch[2] || "").trim();
-                    var cleanAlias = rawAlias.replace(/[\[\]]/g, '');
-                    var isRealAlias = cleanAlias && !nonAliasKw.has(cleanAlias.toLowerCase());
-                    var alias = isRealAlias ? cleanAlias : "";
+                if (fromIndex >= 0) {
+                    while ((tMatch = tableClauseRegex.exec(fromAndAfter)) !== null) {
+                        var rawTableName = (tMatch[1] || "").trim();
+                        var rawAlias = (tMatch[2] || "").trim();
+                        var cleanAlias = rawAlias.replace(/[\[\]]/g, '');
+                        var isRealAlias = cleanAlias && !nonAliasKw.has(cleanAlias.toLowerCase());
+                        var alias = isRealAlias ? cleanAlias : "";
 
-                    var matchedTable = null;
-                    if (window.sqlTables) matchedTable = window.sqlTables.find(t => tablesMatch(t.fullName, rawTableName));
-                    if (!matchedTable && window.sqlViews) matchedTable = window.sqlViews.find(v => tablesMatch(v.fullName, rawTableName));
+                        var matchedTable = null;
+                        if (window.sqlTables) matchedTable = window.sqlTables.find(t => tablesMatch(t.fullName, rawTableName));
+                        if (!matchedTable && window.sqlViews) matchedTable = window.sqlViews.find(v => tablesMatch(v.fullName, rawTableName));
 
-                    if (matchedTable) {
-                        if (alias) {
-                            aliasMap[alias] = matchedTable.fullName;
+                        if (matchedTable) {
+                            if (alias) {
+                                aliasMap[alias] = matchedTable.fullName;
+                            }
+                            var refKey = (matchedTable.fullName || rawTableName).toLowerCase() + '::' + alias.toLowerCase();
+                            if (!seenRefKeys.has(refKey)) {
+                                seenRefKeys.add(refKey);
+                                activeTableRefs.push({
+                                    tableObj: matchedTable,
+                                    alias: alias,
+                                    qualifier: alias || matchedTable.name || matchedTable.fullName
+                                });
+                            }
+                        } else if (alias) {
+                            aliasMap[alias] = rawTableName;
                         }
-                        var refKey = (matchedTable.fullName || rawTableName).toLowerCase() + '::' + alias.toLowerCase();
-                        if (!seenRefKeys.has(refKey)) {
-                            seenRefKeys.add(refKey);
-                            activeTableRefs.push({
-                                tableObj: matchedTable,
-                                alias: alias,
-                                qualifier: alias || matchedTable.name || matchedTable.fullName
-                            });
+                    }
+                } else {
+                    var dmlTableRegex = /(?:update|delete(?:\s+top\s*\(\s*[^)]*\s*\))?)\s+([a-zA-Z0-9_\[\]\.]+)/gi;
+                    while ((tMatch = dmlTableRegex.exec(cleanText)) !== null) {
+                        var dmlTableName = (tMatch[1] || "").trim();
+                        var matchedDmlTable = null;
+                        if (window.sqlTables) matchedDmlTable = window.sqlTables.find(t => tablesMatch(t.fullName, dmlTableName));
+                        if (!matchedDmlTable && window.sqlViews) matchedDmlTable = window.sqlViews.find(v => tablesMatch(v.fullName, dmlTableName));
+                        if (matchedDmlTable) {
+                            var dmlKey = (matchedDmlTable.fullName || dmlTableName).toLowerCase() + '::';
+                            if (!seenRefKeys.has(dmlKey)) {
+                                seenRefKeys.add(dmlKey);
+                                activeTableRefs.push({
+                                    tableObj: matchedDmlTable,
+                                    alias: "",
+                                    qualifier: matchedDmlTable.name || matchedDmlTable.fullName
+                                });
+                            }
                         }
-                    } else if (alias) {
-                        aliasMap[alias] = rawTableName;
                     }
                 }
                 var sqlKw = new Set(['where', 'on', 'join', 'inner', 'left', 'right', 'outer', 'group', 'order', 'having', 'select', 'as', 'cross', 'apply', 'from', 'set']);
