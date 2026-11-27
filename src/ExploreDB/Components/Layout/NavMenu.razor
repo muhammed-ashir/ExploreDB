@@ -41,7 +41,7 @@
                                                 <span class="text-truncate flex-grow-1" data-bs-tooltip="true" data-bs-placement="right" data-bs-html="true" data-bs-title="@GetConnectionTooltipHtml(c)">
                                                     @displayName
                                                 </span>
-                                                <button class="btn p-0 text-danger ms-2 shadow-none bg-transparent border-0 flex-shrink-0" title="Disconnect this server" @onclick="() => OnDisconnectClick(c.ConnectionString)" @onclick:stopPropagation>
+                                                <button class="btn p-0 text-danger ms-2 shadow-none bg-transparent border-0 flex-shrink-0" title="Disconnect this server" @onclick="() => OnDisconnectClick(c)" @onclick:stopPropagation>
                                                     <i class="bi bi-power" style="font-size: 0.95rem;"></i>
                                                 </button>
                                             </div>
@@ -208,6 +208,8 @@
     private List<string> ServerDatabases = new();
     private bool IsLoadingDBs = false;
     private bool IsExplorersExpanded = false;
+
+    [Parameter] public EventCallback<ConnectionService.SavedConnection> OnRequestDisconnect { get; set; }
 
     private readonly Dictionary<string, CachedServerDbList> _dbListCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan DbListCacheTtl = TimeSpan.FromSeconds(60);
@@ -561,15 +563,23 @@
         SyncActiveConnectionDisplayFromService();
     }
 
-    private void OnDisconnectClick(string connString)
+    private async Task OnDisconnectClick(ConnectionService.SavedConnection conn)
     {
-        string key = ConnectionService.GetConnectionIdentityKey(connString);
+        IsConnectionDropdownOpen = false;
+        ConnectionSearch = GetActiveConnectionDisplayName();
+
+        if (OnRequestDisconnect.HasDelegate)
+        {
+            await OnRequestDisconnect.InvokeAsync(conn);
+            return;
+        }
+
+        string key = ConnectionService.GetConnectionIdentityKey(conn.ConnectionString);
         if (!string.IsNullOrEmpty(key))
         {
             _dbListCache.Remove(key);
         }
-        ConnectionService.DisconnectConnection(connString);
-        IsConnectionDropdownOpen = false;
+        ConnectionService.DisconnectConnection(conn.ConnectionString);
         StateHasChanged();
     }
 

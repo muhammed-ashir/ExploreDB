@@ -142,7 +142,7 @@
     }
     <div class="app-shell">
         <aside class="sidebar app-shell-sidebar @(SidebarCollapsed ? "collapsed" : "")">
-            <NavMenu />
+            <NavMenu OnRequestDisconnect="DisconnectSpecificServer" />
         </aside>
 
         @{
@@ -522,7 +522,7 @@
     @if (ShowDisconnectPrompt)
     {
         bool isDisconnectingActive = string.IsNullOrEmpty(TargetDisconnectConnString) || 
-            string.Equals(GetServerFromConnString(TargetDisconnectConnString), GetServerFromConnString(ConnectionService.ConnectionString), StringComparison.OrdinalIgnoreCase);
+            string.Equals(ConnectionService.GetConnectionIdentityKey(TargetDisconnectConnString), ConnectionService.GetConnectionIdentityKey(ConnectionService.ConnectionString), StringComparison.OrdinalIgnoreCase);
 
         <div class="modal fade show d-block" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1070;">
             <div class="modal-dialog modal-dialog-centered" style="max-width: 440px; width: 92%;">
@@ -1285,6 +1285,12 @@
         if (string.IsNullOrEmpty(ConnectionService.ConnectionString)) return 0;
         try
         {
+            string currentKey = ConnectionService.GetConnectionIdentityKey(ConnectionService.ConnectionString);
+            if (!string.IsNullOrEmpty(currentKey))
+            {
+                return ConnectionService.ActiveSessionConnections.Count(c =>
+                    !string.Equals(ConnectionService.GetConnectionIdentityKey(c), currentKey, StringComparison.OrdinalIgnoreCase));
+            }
             var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(ConnectionService.ConnectionString);
             return ConnectionService.ActiveSessionConnections.Count(c => !string.Equals(c.Server, b.DataSource, StringComparison.OrdinalIgnoreCase));
         }
