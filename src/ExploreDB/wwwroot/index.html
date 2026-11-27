@@ -281,6 +281,9 @@
             // Intercept Ctrl+A when focused inside result set table or container
             // Intercept Escape key to restore editor full screen
             if (e.key === 'Escape') {
+                if (e.target && e.target.closest && e.target.closest('.schema-hover-expanded-modal .find-widget')) {
+                    return;
+                }
                 if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
                     window.globalShortcuts.queryRunnerInstance.invokeMethodAsync('RestoreEditorFullScreenIfActive');
                 }

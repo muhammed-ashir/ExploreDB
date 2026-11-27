@@ -205,6 +205,15 @@ public class TypeInfo
     public override string ToString() => FullName;
 }
 
+public sealed record SchemaHoverColumn(string Name, string DataType);
+
+public sealed record SchemaHoverInfo(
+    string Kind,
+    string FullName,
+    List<SchemaHoverColumn> Columns,
+    bool IsDefinitionLoaded,
+    string? Definition);
+
 public class SchemaCacheEntry
 {
     public string ConnectionString { get; set; } = string.Empty;
@@ -1597,13 +1606,16 @@ public class SchemaService
         }
     }
 
-    public async Task<string> GenerateTableDdlAsync(string fullName)
+    public Task<string> GenerateTableDdlAsync(string fullName)
+        => GenerateTableDdlInternalAsync(fullName, _connectionService.ConnectionString);
+
+    private async Task<string> GenerateTableDdlInternalAsync(string fullName, string connectionString)
     {
-        if (string.IsNullOrEmpty(_connectionService.ConnectionString)) return string.Empty;
+        if (string.IsNullOrEmpty(connectionString)) return string.Empty;
 
         try
         {
-            using var conn = new SqlConnection(_connectionService.ConnectionString);
+            using var conn = new SqlConnection(connectionString);
             await conn.OpenAsync();
 
             using var cmd = conn.CreateCommand();
@@ -1966,19 +1978,178 @@ ORDER BY i.name, ic.is_included_column, ic.key_ordinal;
             var result = await cmd.ExecuteScalarAsync() as string;
 
             // Try to match against view, sp, or function
-            var view = Views.FirstOrDefault(v => v.FullName == fullName);
+            var view = Views.FirstOrDefault(v => v.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
             if (view != null) { view.Definition = result; view.IsDefinitionLoaded = true; return; }
 
-            var sp = StoredProcedures.FirstOrDefault(s => s.FullName == fullName);
+            var sp = StoredProcedures.FirstOrDefault(s => s.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
             if (sp != null) { sp.Definition = result; sp.IsDefinitionLoaded = true; return; }
 
-            var fn = Functions.FirstOrDefault(f => f.FullName == fullName);
+            var fn = Functions.FirstOrDefault(f => f.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
             if (fn != null) { fn.Definition = result; fn.IsDefinitionLoaded = true; }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching definition for {FullName}", fullName);
             OnError?.Invoke($"Error fetching definition for {fullName}: {ex.Message}");
+        }
+    }
+
+    private (List<TableInfo> Tables, List<ViewInfo> Views, List<SpInfo> Sps, List<FunctionInfo> Functions) GetHoverListsForConnection(string? connectionString)
+    {
+        if (!string.IsNullOrEmpty(connectionString))
+        {
+            lock (_schemaCache)
+            {
+                if (_schemaCache.TryGetValue(connectionString, out var entry))
+                {
+                    return (entry.Tables, entry.Views, entry.StoredProcedures, entry.Functions);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(_connectionService.ConnectionString) &&
+                !string.Equals(connectionString, _connectionService.ConnectionString, StringComparison.OrdinalIgnoreCase))
+            {
+                return (new(), new(), new(), new());
+            }
+        }
+
+        return (Tables, Views, StoredProcedures, Functions);
+    }
+
+    public SchemaHoverInfo? ResolveHoverObject(string objectName, string? connectionString = null)
+    {
+        if (string.IsNullOrWhiteSpace(objectName)) return null;
+        string unbracketed = objectName.Replace("[", "").Replace("]", "").Trim('.');
+        if (string.IsNullOrWhiteSpace(unbracketed)) return null;
+
+        var parts = unbracketed.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return null;
+
+        string? schema = parts.Length >= 2 ? parts[^2] : null;
+        string name = parts[^1];
+
+        var (tables, views, sps, functions) = GetHoverListsForConnection(connectionString);
+
+        var table = tables
+            .Where(t =>
+                (schema == null || string.Equals(t.Schema, schema, StringComparison.OrdinalIgnoreCase)) &&
+                string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(t => string.Equals(t.Schema, "dbo", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .FirstOrDefault();
+
+        if (table != null)
+        {
+            var cols = table.Columns
+                .Select(c => new SchemaHoverColumn(c.Name, c.DataType))
+                .ToList();
+            return new SchemaHoverInfo("Table", table.FullName, cols, table.IsDefinitionLoaded, table.IsDefinitionLoaded ? table.Definition : null);
+        }
+
+        var view = views
+            .Where(v =>
+                (schema == null || string.Equals(v.Schema, schema, StringComparison.OrdinalIgnoreCase)) &&
+                string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(v => string.Equals(v.Schema, "dbo", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .FirstOrDefault();
+
+        if (view != null)
+        {
+            var cols = view.Columns
+                .Select(c => new SchemaHoverColumn(c.Name, c.DataType))
+                .ToList();
+            return new SchemaHoverInfo("View", view.FullName, cols, view.IsDefinitionLoaded, view.IsDefinitionLoaded ? view.Definition : null);
+        }
+
+        var sp = sps
+            .Where(s =>
+                (schema == null || string.Equals(s.Schema, schema, StringComparison.OrdinalIgnoreCase)) &&
+                string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(s => string.Equals(s.Schema, "dbo", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .FirstOrDefault();
+
+        if (sp != null)
+        {
+            return new SchemaHoverInfo("Procedure", sp.FullName, new List<SchemaHoverColumn>(), sp.IsDefinitionLoaded, sp.IsDefinitionLoaded ? sp.Definition : null);
+        }
+
+        var fn = functions
+            .Where(f =>
+                (schema == null || string.Equals(f.Schema, schema, StringComparison.OrdinalIgnoreCase)) &&
+                string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => string.Equals(f.Schema, "dbo", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .FirstOrDefault();
+
+        if (fn != null)
+        {
+            return new SchemaHoverInfo("Function", fn.FullName, new List<SchemaHoverColumn>(), fn.IsDefinitionLoaded, fn.IsDefinitionLoaded ? fn.Definition : null);
+        }
+
+        return null;
+    }
+
+    public async Task<string?> GetOrLoadHoverDefinitionAsync(string fullName, string? connectionString = null)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return null;
+
+        string effectiveConn = !string.IsNullOrEmpty(connectionString) ? connectionString : _connectionService.ConnectionString;
+        if (string.IsNullOrEmpty(effectiveConn)) return null;
+
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(effectiveConn);
+            if (string.IsNullOrEmpty(builder.InitialCatalog)) return null;
+        }
+        catch
+        {
+            return null;
+        }
+
+        var (tables, views, sps, functions) = GetHoverListsForConnection(effectiveConn);
+
+        var table = tables.FirstOrDefault(t => t.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
+        if (table != null)
+        {
+            if (table.IsDefinitionLoaded && table.Definition != null)
+            {
+                return table.Definition;
+            }
+            var ddl = await GenerateTableDdlInternalAsync(table.FullName, effectiveConn);
+            if (!string.IsNullOrWhiteSpace(ddl) && !ddl.StartsWith("-- Error generating Table DDL:", StringComparison.Ordinal))
+            {
+                table.Definition = ddl;
+                table.IsDefinitionLoaded = true;
+            }
+            return ddl;
+        }
+
+        var view = views.FirstOrDefault(v => v.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
+        if (view != null && view.IsDefinitionLoaded) return view.Definition;
+
+        var sp = sps.FirstOrDefault(s => s.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
+        if (sp != null && sp.IsDefinitionLoaded) return sp.Definition;
+
+        var fn = functions.FirstOrDefault(f => f.FullName.Equals(fullName, StringComparison.OrdinalIgnoreCase));
+        if (fn != null && fn.IsDefinitionLoaded) return fn.Definition;
+
+        try
+        {
+            using var conn = new SqlConnection(effectiveConn);
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT OBJECT_DEFINITION(OBJECT_ID(@FullName)) AS Def";
+            cmd.Parameters.AddWithValue("@FullName", fullName);
+            var result = await cmd.ExecuteScalarAsync() as string;
+
+            if (view != null) { view.Definition = result; view.IsDefinitionLoaded = true; }
+            else if (sp != null) { sp.Definition = result; sp.IsDefinitionLoaded = true; }
+            else if (fn != null) { fn.Definition = result; fn.IsDefinitionLoaded = true; }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching hover definition for {FullName}", fullName);
+            return null;
         }
     }
 }

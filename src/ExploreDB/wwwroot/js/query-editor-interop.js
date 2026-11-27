@@ -2745,6 +2745,14 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 };
             }
 
+            if (window.isModelOwnedByQueryRunner && window.isModelOwnedByQueryRunner(model)) {
+                return null;
+            }
+
+            if (!window.sqlDotNetHelper) {
+                return null;
+            }
+
             try {
                 let doc = await window.sqlDotNetHelper.invokeMethodAsync('GetSchemaDocumentation', objectName);
                 if (doc) {
@@ -2809,6 +2817,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
             if (window.attachQueryBlockExecutor) {
                 window.attachQueryBlockExecutor(editor);
+            }
+            if (window.attachSchemaHoverPopup) {
+                window.attachSchemaHoverPopup(editor);
             }
 
             try {
@@ -3004,10 +3015,696 @@ window.configureQueryEditor = function(editorId) {
     if (editor && window.attachQueryBlockExecutor) {
         window.attachQueryBlockExecutor(editor);
     }
+    if (editor && window.attachSchemaHoverPopup) {
+        window.attachSchemaHoverPopup(editor);
+    }
     if (editor && window.setupEditorInstance) {
         window.setupEditorInstance(editor);
     }
 };
+
+(function initSchemaHoverPopup() {
+    var skippedHoverWords = new Set([
+        'select', 'from', 'where', 'join', 'inner', 'left', 'right', 'full', 'outer', 'cross',
+        'on', 'and', 'or', 'not', 'in', 'exists', 'between', 'like', 'is', 'null', 'as',
+        'by', 'group', 'order', 'having', 'asc', 'desc', 'top', 'distinct', 'union', 'all',
+        'insert', 'into', 'values', 'update', 'set', 'delete', 'merge', 'using', 'when',
+        'matched', 'then', 'else', 'case', 'end', 'begin', 'declare', 'exec', 'execute',
+        'create', 'alter', 'drop', 'table', 'view', 'procedure', 'proc', 'function', 'trigger',
+        'with', 'nolock', 'if', 'while', 'return', 'print', 'go', 'dbo', 'sp_helptext'
+    ]);
+
+    var hoverState = {
+        cardEl: null,
+        headerBadgeEl: null,
+        headerNameEl: null,
+        copyBtnEl: null,
+        tabsEl: null,
+        colTabBtnEl: null,
+        scriptTabBtnEl: null,
+        bodyEl: null,
+        dwellTimer: null,
+        hideTimer: null,
+        copyResetTimer: null,
+        requestSeq: 0,
+        isVisible: false,
+        activeKey: null,
+        pendingKey: null,
+        currentEditor: null,
+        currentAnchor: null,
+        currentData: null,
+        activeTab: 'columns',
+        globalEscAttached: false
+    };
+
+    function isMainQueryEditor(editor) {
+        try {
+            if (!editor || typeof editor.getContainerDomNode !== 'function') return false;
+            var container = editor.getContainerDomNode();
+            return !!(container && (
+                container.id === 'query-editor' ||
+                (container.parentElement && container.parentElement.id === 'query-editor') ||
+                (container.closest && container.closest('#query-editor'))
+            ));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    window.isModelOwnedByQueryRunner = function (model) {
+        try {
+            if (!model || typeof monaco === 'undefined' || !monaco.editor) return false;
+            var editors = monaco.editor.getEditors();
+            for (var i = 0; i < editors.length; i++) {
+                if (isMainQueryEditor(editors[i]) && editors[i].getModel() === model) {
+                    return true;
+                }
+            }
+        } catch (e) { }
+        return false;
+    };
+
+    function getSchemaHoverDotNetHelper() {
+        if (window.globalShortcuts && window.globalShortcuts.queryRunnerInstance) {
+            return window.globalShortcuts.queryRunnerInstance;
+        }
+        return window.sqlDotNetHelper || null;
+    }
+
+    function escapeHoverHtml(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function cancelDwellTimer() {
+        if (hoverState.dwellTimer) {
+            clearTimeout(hoverState.dwellTimer);
+            hoverState.dwellTimer = null;
+        }
+        hoverState.pendingKey = null;
+    }
+
+    function cancelHideTimer() {
+        if (hoverState.hideTimer) {
+            clearTimeout(hoverState.hideTimer);
+            hoverState.hideTimer = null;
+        }
+    }
+
+    function hideHoverCardImmediate() {
+        cancelDwellTimer();
+        cancelHideTimer();
+        hoverState.requestSeq++;
+        hoverState.isVisible = false;
+        hoverState.activeKey = null;
+        hoverState.currentEditor = null;
+        hoverState.currentAnchor = null;
+        hoverState.currentData = null;
+        if (hoverState.cardEl) {
+            hoverState.cardEl.style.display = 'none';
+        }
+    }
+
+    function scheduleHideHoverCard(delayMs) {
+        cancelHideTimer();
+        hoverState.hideTimer = setTimeout(function () {
+            hideHoverCardImmediate();
+        }, delayMs || 220);
+    }
+
+    function ensureHoverCardDom() {
+        if (hoverState.cardEl) return hoverState.cardEl;
+        if (typeof document === 'undefined' || !document.body) return null;
+
+        var card = document.createElement('div');
+        card.id = 'exploredb-schema-hover-card';
+        card.className = 'schema-hover-card';
+        card.style.display = 'none';
+
+        var header = document.createElement('div');
+        header.className = 'schema-hover-header';
+
+        var titleWrap = document.createElement('div');
+        titleWrap.className = 'schema-hover-title-wrap';
+
+        var badge = document.createElement('span');
+        badge.className = 'schema-hover-badge';
+
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'schema-hover-name';
+
+        titleWrap.appendChild(badge);
+        titleWrap.appendChild(nameSpan);
+
+        var actionsWrap = document.createElement('div');
+        actionsWrap.className = 'schema-hover-actions';
+
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'schema-hover-copy-btn';
+        copyBtn.innerHTML = '<i class="bi bi-copy"></i><span>Copy</span>';
+
+        var expandBtn = document.createElement('button');
+        expandBtn.type = 'button';
+        expandBtn.className = 'schema-hover-copy-btn schema-hover-expand-btn';
+        expandBtn.title = 'Expand to full popup';
+        expandBtn.innerHTML = '<i class="bi bi-arrows-fullscreen"></i>';
+
+        actionsWrap.appendChild(copyBtn);
+        actionsWrap.appendChild(expandBtn);
+
+        header.appendChild(titleWrap);
+        header.appendChild(actionsWrap);
+
+        var tabs = document.createElement('div');
+        tabs.className = 'schema-hover-tabs';
+
+        var colTabBtn = document.createElement('button');
+        colTabBtn.type = 'button';
+        colTabBtn.className = 'schema-hover-tab-btn';
+        colTabBtn.textContent = 'Columns';
+
+        var scriptTabBtn = document.createElement('button');
+        scriptTabBtn.type = 'button';
+        scriptTabBtn.className = 'schema-hover-tab-btn';
+        scriptTabBtn.textContent = 'Definition';
+
+        tabs.appendChild(colTabBtn);
+        tabs.appendChild(scriptTabBtn);
+
+        var body = document.createElement('div');
+        body.className = 'schema-hover-body custom-scrollbar-light';
+
+        card.appendChild(header);
+        card.appendChild(tabs);
+        card.appendChild(body);
+        document.body.appendChild(card);
+
+        card.addEventListener('mouseenter', function () {
+            cancelHideTimer();
+            cancelDwellTimer();
+        });
+        card.addEventListener('mouseleave', function () {
+            scheduleHideHoverCard(220);
+        });
+        card.addEventListener('mousedown', function (e) {
+            e.stopPropagation();
+        });
+
+        colTabBtn.addEventListener('click', function () {
+            if (!hoverState.currentData) return;
+            hoverState.activeTab = 'columns';
+            renderHoverCardContent();
+        });
+
+        scriptTabBtn.addEventListener('click', function () {
+            if (!hoverState.currentData) return;
+            hoverState.activeTab = 'script';
+            renderHoverCardContent();
+        });
+
+        copyBtn.addEventListener('click', function () {
+            copyCurrentHoverDefinition();
+        });
+
+        expandBtn.addEventListener('click', function () {
+            var data = hoverState.currentData;
+            if (!data || !data.fullName) return;
+            var fullName = data.fullName;
+            var tab = hoverState.activeTab || 'columns';
+            var helper = getSchemaHoverDotNetHelper();
+            hideHoverCardImmediate();
+            if (helper) {
+                helper.invokeMethodAsync('OpenExpandedSchemaHoverAsync', fullName, tab)
+                    .catch(function () { });
+            }
+        });
+
+        if (!hoverState.globalEscAttached && document.addEventListener) {
+            hoverState.globalEscAttached = true;
+            document.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Escape' && hoverState.isVisible) {
+                    hideHoverCardImmediate();
+                }
+            });
+        }
+
+        hoverState.cardEl = card;
+        hoverState.headerBadgeEl = badge;
+        hoverState.headerNameEl = nameSpan;
+        hoverState.copyBtnEl = copyBtn;
+        hoverState.tabsEl = tabs;
+        hoverState.colTabBtnEl = colTabBtn;
+        hoverState.scriptTabBtnEl = scriptTabBtn;
+        hoverState.bodyEl = body;
+        return card;
+    }
+
+    function setCopyButtonFeedback(state) {
+        var btn = hoverState.copyBtnEl;
+        if (!btn) return;
+        if (hoverState.copyResetTimer) {
+            clearTimeout(hoverState.copyResetTimer);
+            hoverState.copyResetTimer = null;
+        }
+        if (state === 'copying') {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:11px;height:11px;"></span><span>Loading...</span>';
+        } else if (state === 'copied') {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2 text-success"></i><span>Copied</span>';
+            hoverState.copyResetTimer = setTimeout(function () {
+                if (hoverState.copyBtnEl) {
+                    hoverState.copyBtnEl.innerHTML = '<i class="bi bi-copy"></i><span>Copy</span>';
+                }
+                hoverState.copyResetTimer = null;
+            }, 1600);
+        } else if (state === 'failed') {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-x-circle text-danger"></i><span>Unavailable</span>';
+            hoverState.copyResetTimer = setTimeout(function () {
+                if (hoverState.copyBtnEl) {
+                    hoverState.copyBtnEl.innerHTML = '<i class="bi bi-copy"></i><span>Copy</span>';
+                }
+                hoverState.copyResetTimer = null;
+            }, 1800);
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-copy"></i><span>Copy</span>';
+        }
+    }
+
+    async function writeTextToClipboardSafe(text) {
+        var helper = getSchemaHoverDotNetHelper();
+        if (helper) {
+            try {
+                var ok = await helper.invokeMethodAsync('SetClipboardTextAsync', text);
+                if (ok) return true;
+            } catch (e) { }
+        }
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+        } catch (e) { }
+        return false;
+    }
+
+    async function copyCurrentHoverDefinition() {
+        var data = hoverState.currentData;
+        if (!data) return;
+
+        var defText = data.definition;
+        if (!data.isDefinitionLoaded) {
+            setCopyButtonFeedback('copying');
+            var helper = getSchemaHoverDotNetHelper();
+            if (helper) {
+                try {
+                    defText = await helper.invokeMethodAsync('GetSchemaHoverDefinitionAsync', data.fullName);
+                    if (hoverState.currentData === data) {
+                        data.definition = defText;
+                        data.isDefinitionLoaded = true;
+                        if (hoverState.activeTab === 'script') {
+                            renderHoverCardContent();
+                        }
+                    }
+                } catch (e) {
+                    defText = null;
+                }
+            }
+        }
+
+        if (!defText || !defText.trim()) {
+            setCopyButtonFeedback('failed');
+            return;
+        }
+
+        var copied = await writeTextToClipboardSafe(defText);
+        setCopyButtonFeedback(copied ? 'copied' : 'failed');
+    }
+
+    function renderScriptElement(defText) {
+        var body = hoverState.bodyEl;
+        if (!body) return;
+
+        if (!defText || !defText.trim()) {
+            body.innerHTML = '<div class="schema-hover-status"><i class="bi bi-lock"></i><span>Definition unavailable (object may be encrypted or lack VIEW DEFINITION permission).</span></div>';
+            return;
+        }
+
+        var isLight = typeof document !== 'undefined' && document.documentElement && document.documentElement.getAttribute('data-bs-theme') === 'light';
+        var themeClass = isLight ? 'vs' : 'vs-dark';
+
+        var pre = document.createElement('pre');
+        pre.className = 'schema-hover-code monaco-editor ' + themeClass;
+        pre.textContent = defText;
+        body.innerHTML = '';
+        body.appendChild(pre);
+
+        if (defText.length <= 25000 && typeof monaco !== 'undefined' && monaco.editor && typeof monaco.editor.colorize === 'function') {
+            var expectedData = hoverState.currentData;
+            var expectedSeq = hoverState.requestSeq;
+            monaco.editor.colorize(defText, 'sql', { tabSize: 4 }).then(function (html) {
+                if (!hoverState.isVisible || hoverState.currentData !== expectedData || hoverState.activeTab !== 'script' || hoverState.requestSeq !== expectedSeq) {
+                    return;
+                }
+                if (body.contains(pre)) {
+                    pre.innerHTML = html;
+                }
+            }).catch(function () { });
+        }
+    }
+
+    function loadDefinitionForActiveCard() {
+        var data = hoverState.currentData;
+        var body = hoverState.bodyEl;
+        if (!data || !body) return;
+
+        if (data.isDefinitionLoaded) {
+            renderScriptElement(data.definition);
+            return;
+        }
+
+        var label = (data.kind === 'Table') ? 'Generating DDL script...' : 'Loading definition...';
+        body.innerHTML = '<div class="schema-hover-status"><span class="spinner-border spinner-border-sm text-primary"></span><span>' + escapeHoverHtml(label) + '</span></div>';
+
+        var helper = getSchemaHoverDotNetHelper();
+        if (!helper) {
+            body.innerHTML = '<div class="schema-hover-status"><span>Unable to reach schema service.</span></div>';
+            return;
+        }
+
+        var expectedData = data;
+        var expectedSeq = hoverState.requestSeq;
+        helper.invokeMethodAsync('GetSchemaHoverDefinitionAsync', data.fullName)
+            .then(function (def) {
+                expectedData.definition = def;
+                expectedData.isDefinitionLoaded = true;
+                if (!hoverState.isVisible || hoverState.currentData !== expectedData || hoverState.activeTab !== 'script' || hoverState.requestSeq !== expectedSeq) {
+                    return;
+                }
+                updateCopyButtonVisibility();
+                renderScriptElement(def);
+                repositionHoverCard();
+            })
+            .catch(function () {
+                if (!hoverState.isVisible || hoverState.currentData !== expectedData || hoverState.activeTab !== 'script') {
+                    return;
+                }
+                updateCopyButtonVisibility();
+                body.innerHTML = '<div class="schema-hover-status"><i class="bi bi-exclamation-triangle text-warning"></i><span>Error loading script.</span></div>';
+            });
+    }
+
+    function updateCopyButtonVisibility() {
+        var btn = hoverState.copyBtnEl;
+        var data = hoverState.currentData;
+        if (!btn || !data) return;
+
+        var isTableOrView = (data.kind === 'Table' || data.kind === 'View');
+        var isViewingDefinition = !isTableOrView || hoverState.activeTab === 'script';
+        var hasDefinition = !!(data.isDefinitionLoaded && data.definition && data.definition.trim());
+        btn.style.display = (isViewingDefinition && hasDefinition) ? 'inline-flex' : 'none';
+    }
+
+    function renderHoverCardContent() {
+        var data = hoverState.currentData;
+        var body = hoverState.bodyEl;
+        if (!data || !body) return;
+
+        var isTableOrView = (data.kind === 'Table' || data.kind === 'View');
+        hoverState.tabsEl.style.display = isTableOrView ? 'flex' : 'none';
+
+        if (isTableOrView) {
+            hoverState.colTabBtnEl.className = 'schema-hover-tab-btn' + (hoverState.activeTab === 'columns' ? ' active' : '');
+            hoverState.scriptTabBtnEl.className = 'schema-hover-tab-btn' + (hoverState.activeTab === 'script' ? ' active' : '');
+            hoverState.colTabBtnEl.textContent = 'Columns (' + (data.columns ? data.columns.length : 0) + ')';
+            hoverState.scriptTabBtnEl.textContent = 'Definition';
+        } else {
+            hoverState.activeTab = 'script';
+        }
+        hoverState.copyBtnEl.title = 'Copy Definition';
+        updateCopyButtonVisibility();
+
+        if (isTableOrView && hoverState.activeTab === 'columns') {
+            var cols = data.columns || [];
+            if (cols.length === 0) {
+                body.innerHTML = '<div class="schema-hover-status"><span>No column metadata loaded.</span></div>';
+            } else {
+                var rowsHtml = '';
+                for (var i = 0; i < cols.length; i++) {
+                    var c = cols[i];
+                    var cName = c.name !== undefined ? c.name : c.Name;
+                    var cType = c.dataType !== undefined ? c.dataType : c.DataType;
+                    rowsHtml += '<tr><td>' + escapeHoverHtml(cName) + '</td><td>' + escapeHoverHtml(cType) + '</td></tr>';
+                }
+                body.innerHTML = '<table class="schema-hover-table"><thead><tr><th>Column</th><th>Data Type</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+            }
+            repositionHoverCard();
+            return;
+        }
+
+        loadDefinitionForActiveCard();
+        repositionHoverCard();
+    }
+
+    function repositionHoverCard() {
+        var card = hoverState.cardEl;
+        var editor = hoverState.currentEditor;
+        var anchor = hoverState.currentAnchor;
+        if (!card || !editor || !anchor || !hoverState.isVisible) return;
+
+        try {
+            var editorDom = editor.getDomNode();
+            if (!editorDom) return;
+
+            var vis = editor.getScrolledVisiblePosition({
+                lineNumber: anchor.lineNumber,
+                column: anchor.startColumn
+            });
+            if (!vis) return;
+
+            var editorRect = editorDom.getBoundingClientRect();
+            var anchorX = editorRect.left + vis.left;
+            var anchorBottom = editorRect.top + vis.top + vis.height;
+            var anchorTop = editorRect.top + vis.top;
+
+            card.style.display = 'flex';
+            var rect = card.getBoundingClientRect();
+            var vw = window.innerWidth;
+            var vh = window.innerHeight;
+            var margin = 12;
+
+            var left = Math.max(margin, Math.min(anchorX, vw - rect.width - margin));
+            var top = anchorBottom + 3;
+            if (top + rect.height > vh - margin) {
+                var aboveTop = anchorTop - rect.height - 3;
+                if (aboveTop >= margin) {
+                    top = aboveTop;
+                } else {
+                    top = Math.max(margin, vh - rect.height - margin);
+                }
+            }
+
+            card.style.left = Math.round(left) + 'px';
+            card.style.top = Math.round(top) + 'px';
+        } catch (e) { }
+    }
+
+    function normalizeHoverPayload(raw) {
+        if (!raw) return null;
+        return {
+            kind: raw.kind || raw.Kind || '',
+            fullName: raw.fullName || raw.FullName || '',
+            columns: raw.columns || raw.Columns || [],
+            isDefinitionLoaded: !!(raw.isDefinitionLoaded !== undefined ? raw.isDefinitionLoaded : raw.IsDefinitionLoaded),
+            definition: raw.definition !== undefined ? raw.definition : raw.Definition
+        };
+    }
+
+    function showHoverCardForToken(editor, anchor, data, key) {
+        var card = ensureHoverCardDom();
+        if (!card) return;
+
+        cancelHideTimer();
+        hoverState.isVisible = true;
+        hoverState.activeKey = key;
+        hoverState.currentEditor = editor;
+        hoverState.currentAnchor = anchor;
+        hoverState.currentData = data;
+        hoverState.activeTab = (data.kind === 'Table' || data.kind === 'View') ? 'columns' : 'script';
+
+        var badgeText = data.kind === 'Procedure' ? 'SP' : (data.kind === 'Function' ? 'FUNC' : data.kind.toUpperCase());
+        hoverState.headerBadgeEl.textContent = badgeText;
+        hoverState.headerBadgeEl.className = 'schema-hover-badge kind-' + data.kind.toLowerCase();
+        hoverState.headerNameEl.textContent = data.fullName;
+        hoverState.headerNameEl.title = data.fullName;
+        setCopyButtonFeedback('reset');
+
+        renderHoverCardContent();
+    }
+
+    function extractObjectTokenAtPosition(model, position) {
+        if (!model || !position) return null;
+        var lineNum = position.lineNumber;
+        var col = position.column;
+        if (col > 10000) return null;
+
+        var winStartCol = Math.max(1, col - 200);
+        var slice = model.getValueInRange({
+            startLineNumber: lineNum,
+            startColumn: winStartCol,
+            endLineNumber: lineNum,
+            endColumn: col + 200
+        });
+        if (!slice) return null;
+
+        var rel = col - winStartCol;
+        if (rel < 0 || rel > slice.length) return null;
+
+        var isObjChar = function (ch) {
+            return (ch >= 'a' && ch <= 'z') ||
+                (ch >= 'A' && ch <= 'Z') ||
+                (ch >= '0' && ch <= '9') ||
+                ch === '_' || ch === '.' || ch === '[' || ch === ']';
+        };
+
+        if (rel === slice.length || !isObjChar(slice[rel])) {
+            if (rel > 0 && isObjChar(slice[rel - 1])) {
+                rel--;
+            } else {
+                return null;
+            }
+        }
+
+        var s = rel;
+        while (s > 0 && isObjChar(slice[s - 1])) s--;
+        var e = rel + 1;
+        while (e < slice.length && isObjChar(slice[e])) e++;
+
+        while (s < e && slice[s] === '.') s++;
+        while (e > s && slice[e - 1] === '.') e--;
+        if (e <= s) return null;
+
+        var objectName = slice.substring(s, e);
+        if (!objectName || /^\d+$/.test(objectName)) return null;
+
+        var lowerClean = objectName.replace(/[\[\]]/g, '').toLowerCase();
+        if (skippedHoverWords.has(lowerClean)) return null;
+
+        return {
+            objectName: objectName,
+            lineNumber: lineNum,
+            startColumn: winStartCol + s,
+            endColumn: winStartCol + e
+        };
+    }
+
+    window.attachSchemaHoverPopup = function (editor) {
+        if (!editor || !isMainQueryEditor(editor)) return;
+        if (editor.__schemaHoverAttached) return;
+        editor.__schemaHoverAttached = true;
+
+        editor.onMouseMove(function (e) {
+            try {
+                if (!e || !e.target || e.target.type !== 6 || !e.target.position) {
+                    cancelDwellTimer();
+                    if (hoverState.isVisible && hoverState.currentEditor === editor) {
+                        scheduleHideHoverCard(220);
+                    }
+                    return;
+                }
+
+                var domNode = editor.getDomNode();
+                if (domNode && domNode.querySelector('.suggest-widget.visible')) {
+                    cancelDwellTimer();
+                    if (hoverState.isVisible) hideHoverCardImmediate();
+                    return;
+                }
+
+                var model = editor.getModel();
+                if (!model || model.getLanguageId() !== 'sql') return;
+
+                var tok = extractObjectTokenAtPosition(model, e.target.position);
+                if (!tok) {
+                    cancelDwellTimer();
+                    if (hoverState.isVisible && hoverState.currentEditor === editor) {
+                        scheduleHideHoverCard(220);
+                    }
+                    return;
+                }
+
+                var key = editor.getId() + '::' + tok.lineNumber + '::' + tok.startColumn + '::' + tok.endColumn + '::' + tok.objectName;
+                if (hoverState.isVisible && hoverState.activeKey === key) {
+                    cancelHideTimer();
+                    cancelDwellTimer();
+                    return;
+                }
+
+                if (hoverState.dwellTimer && hoverState.pendingKey === key) {
+                    cancelHideTimer();
+                    return;
+                }
+
+                cancelHideTimer();
+                cancelDwellTimer();
+                hoverState.pendingKey = key;
+                hoverState.dwellTimer = setTimeout(function () {
+                    hoverState.dwellTimer = null;
+                    hoverState.pendingKey = null;
+                    var helper = getSchemaHoverDotNetHelper();
+                    if (!helper) return;
+
+                    var mySeq = ++hoverState.requestSeq;
+                    helper.invokeMethodAsync('GetSchemaHoverObject', tok.objectName)
+                        .then(function (raw) {
+                            if (mySeq !== hoverState.requestSeq) return;
+                            var data = normalizeHoverPayload(raw);
+                            if (!data || !data.kind) {
+                                if (hoverState.isVisible) hideHoverCardImmediate();
+                                return;
+                            }
+                            showHoverCardForToken(editor, tok, data, key);
+                        })
+                        .catch(function () { });
+                }, 380);
+            } catch (err) { }
+        });
+
+        editor.onMouseLeave(function () {
+            cancelDwellTimer();
+            if (hoverState.isVisible && hoverState.currentEditor === editor) {
+                scheduleHideHoverCard(220);
+            }
+        });
+
+        editor.onMouseDown(function () {
+            hideHoverCardImmediate();
+        });
+
+        editor.onDidScrollChange(function () {
+            if (hoverState.isVisible && hoverState.currentEditor === editor) {
+                hideHoverCardImmediate();
+            }
+        });
+
+        editor.onDidChangeModelContent(function () {
+            if (hoverState.isVisible && hoverState.currentEditor === editor) {
+                hideHoverCardImmediate();
+            }
+        });
+
+        editor.onDidDispose(function () {
+            if (hoverState.currentEditor === editor) {
+                hideHoverCardImmediate();
+            }
+        });
+    };
+})();
 
 
 

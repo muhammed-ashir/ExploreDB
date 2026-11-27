@@ -1,0 +1,327 @@
+@using BlazorMonaco.Editor
+@using ExploreDB.Services
+@inject SchemaService SchemaService
+@inject ThemeService ThemeService
+@inject WindowManagerService WindowManager
+@inject UserSettingsService UserSettingsService
+@inject IJSRuntime JS
+
+@if (IsOpen && HoverInfo != null)
+{
+    <div class="modal fade show d-block schema-hover-expanded-modal"
+         tabindex="-1"
+         style="background-color: rgba(0, 0, 0, 0.72); z-index: 10050;"
+         @onclick="CloseAsync">
+        <div class="modal-dialog modal-fullscreen"
+             style="max-width: 100vw; width: 100vw; height: 100vh; margin: 0;"
+             @onclick:stopPropagation="true">
+            <div class="modal-content shadow-lg h-100 d-flex flex-column overflow-hidden"
+                 style="background-color: var(--app-surface); color: var(--app-text); border: none; border-radius: 0;">
+
+                <!-- Header -->
+                <div class="d-flex align-items-center justify-content-between px-3 py-2 flex-shrink-0"
+                     style="background-color: var(--app-surface-secondary); border-bottom: 1px solid var(--app-border);">
+                    <div class="d-flex align-items-center gap-2 min-width-0" style="min-width: 0;">
+                        <span class="schema-hover-badge kind-@HoverInfo.Kind.ToLowerInvariant()">@BadgeText</span>
+                        <span class="fw-semibold text-truncate"
+                              style="font-family: 'Cascadia Mono', 'Consolas', monospace; font-size: 0.92rem;"
+                              title="@HoverInfo.FullName">
+                            @HoverInfo.FullName
+                        </span>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                        @if ((!IsTableOrView || _currentTab == "script") && !_isLoadingDefinition && !string.IsNullOrWhiteSpace(_definitionText))
+                        {
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                                    style="color: var(--app-text); border-color: var(--app-border); font-size: 0.78rem;"
+                                    disabled="@_isCopyBusy"
+                                    title="Copy Definition"
+                                    @onclick="CopyScriptAsync">
+                                @if (_isCopyBusy)
+                                {
+                                    <span class="spinner-border spinner-border-sm" style="width: 12px; height: 12px;"></span>
+                                    <span>Loading...</span>
+                                }
+                                else if (_isCopied)
+                                {
+                                    <i class="bi bi-check2 text-success"></i>
+                                    <span>Copied</span>
+                                }
+                                else if (_copyFailed)
+                                {
+                                    <i class="bi bi-x-circle text-danger"></i>
+                                    <span>Unavailable</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-copy"></i>
+                                    <span>Copy</span>
+                                }
+                            </button>
+                        }
+
+                        <button type="button"
+                                class="btn-close @(ThemeService.IsDark ? "btn-close-white" : "") m-0 ms-1"
+                                aria-label="Close"
+                                title="Close (Esc)"
+                                @onclick="CloseAsync">
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabs (Tables & Views only) -->
+                @if (IsTableOrView)
+                {
+                    <div class="schema-hover-tabs flex-shrink-0">
+                        <button type="button"
+                                class="schema-hover-tab-btn @(_currentTab == "columns" ? "active" : "")"
+                                @onclick="SelectColumnsTab">
+                            Columns (@HoverInfo.Columns.Count)
+                        </button>
+                        <button type="button"
+                                class="schema-hover-tab-btn @(_currentTab == "script" ? "active" : "")"
+                                @onclick="SelectScriptTabAsync">
+                            Definition
+                        </button>
+                    </div>
+                }
+
+                <!-- Body -->
+                <div class="flex-grow-1 position-relative overflow-auto custom-scrollbar-light" style="min-height: 0;">
+                    @if (IsTableOrView && _currentTab == "columns")
+                    {
+                        @if (HoverInfo.Columns.Count == 0)
+                        {
+                            <div class="d-flex justify-content-center align-items-center h-100 text-muted p-4">
+                                No column metadata loaded.
+                            </div>
+                        }
+                        else
+                        {
+                            <table class="schema-hover-table">
+                                <thead>
+                                    <tr>
+                                        <th>Column</th>
+                                        <th>Data Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var col in HoverInfo.Columns)
+                                    {
+                                        <tr>
+                                            <td>@col.Name</td>
+                                            <td>@col.DataType</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    }
+                    else if (_isLoadingDefinition)
+                    {
+                        <div class="d-flex justify-content-center align-items-center h-100 text-muted gap-2 p-4">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            <span>@(HoverInfo.Kind == "Table" ? "Generating DDL script..." : "Loading definition...")</span>
+                        </div>
+                    }
+                    else if (string.IsNullOrWhiteSpace(_definitionText))
+                    {
+                        <div class="d-flex justify-content-center align-items-center h-100 text-muted gap-2 p-4">
+                            <i class="bi bi-lock"></i>
+                            <span>Definition unavailable (object may be encrypted or lack VIEW DEFINITION permission).</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="w-100 h-100" style="min-height: 240px;">
+                            <StandaloneCodeEditor @key="_editorId"
+                                                  Id="@_editorId"
+                                                  ConstructionOptions="DefinitionEditorOptions"
+                                                  CssClass="w-100 h-100" />
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public SchemaHoverInfo? HoverInfo { get; set; }
+    [Parameter] public string ActiveTab { get; set; } = "columns";
+    [Parameter] public string? ConnectionString { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string _editorId = "schema-hover-modal-editor-0";
+    private int _editorMountCounter = 0;
+    private int _sessionSeq = 0;
+
+    private bool _wasOpen = false;
+    private string? _lastFullName;
+    private string _currentTab = "columns";
+    private bool _isLoadingDefinition = false;
+    private bool _isDefinitionLoaded = false;
+    private string? _definitionText = null;
+    private bool _isCopyBusy = false;
+    private bool _isCopied = false;
+    private bool _copyFailed = false;
+
+    private bool IsTableOrView => HoverInfo?.Kind is "Table" or "View";
+
+    private string BadgeText => HoverInfo?.Kind switch
+    {
+        "Procedure" => "SP",
+        "Function" => "FUNC",
+        _ => (HoverInfo?.Kind ?? "").ToUpperInvariant()
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!IsOpen || HoverInfo == null)
+        {
+            if (_wasOpen)
+            {
+                _wasOpen = false;
+                _sessionSeq++;
+                _isLoadingDefinition = false;
+                _isCopied = false;
+                _copyFailed = false;
+                _isCopyBusy = false;
+            }
+            return;
+        }
+
+        bool isNewOpen = !_wasOpen || !string.Equals(_lastFullName, HoverInfo.FullName, StringComparison.OrdinalIgnoreCase);
+        if (isNewOpen)
+        {
+            _wasOpen = true;
+            _lastFullName = HoverInfo.FullName;
+            _sessionSeq++;
+            _editorMountCounter++;
+            _editorId = $"schema-hover-modal-editor-{_editorMountCounter}";
+            _isCopied = false;
+            _copyFailed = false;
+            _isCopyBusy = false;
+
+            _currentTab = IsTableOrView
+                ? (string.Equals(ActiveTab, "script", StringComparison.OrdinalIgnoreCase) ? "script" : "columns")
+                : "script";
+
+            _isDefinitionLoaded = HoverInfo.IsDefinitionLoaded;
+            _definitionText = HoverInfo.IsDefinitionLoaded ? HoverInfo.Definition : null;
+
+            if (_currentTab == "script" && !_isDefinitionLoaded)
+            {
+                await EnsureDefinitionLoadedAsync();
+            }
+        }
+    }
+
+    private StandaloneEditorConstructionOptions DefinitionEditorOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "sql",
+            Value = _definitionText ?? string.Empty,
+            Theme = ThemeService.IsDark ? "vs-dark" : "vs",
+            ReadOnly = true,
+            AutomaticLayout = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            ScrollBeyondLastLine = false,
+            WordWrap = "off",
+            LineNumbers = "on",
+            FontSize = UserSettingsService.Settings.EditorFontSize > 0 ? UserSettingsService.Settings.EditorFontSize : 14,
+            Scrollbar = new EditorScrollbarOptions { UseShadows = false }
+        };
+    }
+
+    private void SelectColumnsTab()
+    {
+        _currentTab = "columns";
+    }
+
+    private async Task SelectScriptTabAsync()
+    {
+        _currentTab = "script";
+        if (!_isDefinitionLoaded && !_isLoadingDefinition)
+        {
+            await EnsureDefinitionLoadedAsync();
+        }
+    }
+
+    private async Task EnsureDefinitionLoadedAsync()
+    {
+        if (HoverInfo == null || _isDefinitionLoaded) return;
+
+        int seq = _sessionSeq;
+        string fullName = HoverInfo.FullName;
+        _isLoadingDefinition = true;
+        StateHasChanged();
+
+        var loaded = await SchemaService.GetOrLoadHoverDefinitionAsync(fullName, ConnectionString);
+        if (seq != _sessionSeq || !IsOpen) return;
+
+        _definitionText = loaded;
+        _isDefinitionLoaded = true;
+        _isLoadingDefinition = false;
+        StateHasChanged();
+    }
+
+    private async Task CopyScriptAsync()
+    {
+        if (HoverInfo == null || _isCopyBusy) return;
+
+        if (!_isDefinitionLoaded)
+        {
+            _isCopyBusy = true;
+            StateHasChanged();
+            await EnsureDefinitionLoadedAsync();
+            _isCopyBusy = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_definitionText))
+        {
+            _copyFailed = true;
+            _isCopied = false;
+            StateHasChanged();
+            _ = ResetCopyStateAfterDelayAsync(_sessionSeq);
+            return;
+        }
+
+        bool copied = await WindowManager.TrySetClipboardTextAsync(_definitionText);
+        if (!copied)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("navigator.clipboard.writeText", _definitionText);
+                copied = true;
+            }
+            catch { }
+        }
+
+        _isCopied = copied;
+        _copyFailed = !copied;
+        StateHasChanged();
+        _ = ResetCopyStateAfterDelayAsync(_sessionSeq);
+    }
+
+    private async Task ResetCopyStateAfterDelayAsync(int seq)
+    {
+        await Task.Delay(1600);
+        if (seq != _sessionSeq) return;
+        _isCopied = false;
+        _copyFailed = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CloseAsync()
+    {
+        if (OnClose.HasDelegate)
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+}

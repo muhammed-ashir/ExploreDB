@@ -875,6 +875,12 @@
     </div>
 }
 
+<SchemaHoverExpandedModal IsOpen="_isSchemaHoverExpandedOpen"
+                          HoverInfo="_expandedHoverInfo"
+                          ActiveTab="@_expandedHoverTab"
+                          ConnectionString="@GetEffectiveHoverConnectionString()"
+                          OnClose="CloseExpandedSchemaHover" />
+
 @code {
     [SupplyParameterFromQuery(Name = "type")]
     public string? ObjectType { get; set; }
@@ -1102,6 +1108,12 @@
     [JSInvokable]
     public async Task RestoreEditorFullScreenIfActive()
     {
+        if (_isSchemaHoverExpandedOpen)
+        {
+            _isSchemaHoverExpandedOpen = false;
+            StateHasChanged();
+            return;
+        }
         if (IsEditorFullScreen && !_isSearchOpen)
         {
             await ToggleEditorFullScreen();
@@ -2410,6 +2422,44 @@
 
         return null;
     }
+
+    private bool _isSchemaHoverExpandedOpen = false;
+    private SchemaHoverInfo? _expandedHoverInfo = null;
+    private string _expandedHoverTab = "columns";
+
+    private string GetEffectiveHoverConnectionString()
+        => ActiveTab != _fallbackTab && !string.IsNullOrEmpty(ActiveTab.ConnectionString)
+            ? ActiveTab.ConnectionString
+            : ConnectionService.ConnectionString;
+
+    private void CloseExpandedSchemaHover()
+    {
+        _isSchemaHoverExpandedOpen = false;
+    }
+
+    [JSInvokable]
+    public SchemaHoverInfo? GetSchemaHoverObject(string objectName)
+        => SchemaService.ResolveHoverObject(objectName, GetEffectiveHoverConnectionString());
+
+    [JSInvokable]
+    public Task<string?> GetSchemaHoverDefinitionAsync(string fullName)
+        => SchemaService.GetOrLoadHoverDefinitionAsync(fullName, GetEffectiveHoverConnectionString());
+
+    [JSInvokable]
+    public void OpenExpandedSchemaHoverAsync(string fullName, string activeTab)
+    {
+        var info = SchemaService.ResolveHoverObject(fullName, GetEffectiveHoverConnectionString());
+        if (info == null) return;
+
+        _expandedHoverInfo = info;
+        _expandedHoverTab = string.IsNullOrEmpty(activeTab) ? "columns" : activeTab;
+        _isSchemaHoverExpandedOpen = true;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public Task<bool> SetClipboardTextAsync(string text)
+        => WindowManager.TrySetClipboardTextAsync(text ?? string.Empty);
 
     protected override async Task OnParametersSetAsync()
     {
