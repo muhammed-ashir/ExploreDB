@@ -1591,22 +1591,35 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         var curLineText = model.getLineContent(curLine) || "";
 
         // If current line is completely blank and next non-empty line starts a new statement,
-        // this blank line is an independent statement insertion point
+        // treat as independent insertion point ONLY when the line above isn't mid-clause (e.g. after WHERE / AND / ON / comma / open '(').
         if (!curLineText.trim()) {
-            var nextNonEmptyIdx = -1;
-            for (var n = curLine + 1; n <= lineCount; n++) {
-                var nText = stripCommentsAndStrings(model.getLineContent(n)).trim();
-                if (nText) { nextNonEmptyIdx = n; break; }
+            var prevNonEmptyIdx = -1;
+            for (var pIdx = curLine - 1; pIdx >= 1; pIdx--) {
+                var pText = stripCommentsAndStrings(model.getLineContent(pIdx)).trim();
+                if (pText) { prevNonEmptyIdx = pIdx; break; }
             }
-            if (nextNonEmptyIdx > 0 && stmtStarters.test(stripCommentsAndStrings(model.getLineContent(nextNonEmptyIdx)))) {
-                return {
-                    startLineNumber: curLine,
-                    startColumn: 1,
-                    endLineNumber: curLine,
-                    endColumn: 1,
-                    statementText: "",
-                    textUntilCursor: ""
-                };
+            var prevCleanTrim = prevNonEmptyIdx > 0
+                ? stripCommentsAndStrings(model.getLineContent(prevNonEmptyIdx)).trim()
+                : "";
+            var openClauseEndRegex = /(?:[,(=<>+\-*/]|\b(?:SELECT|DISTINCT|TOP|FROM|JOIN|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+JOIN|FULL\s+OUTER\s+JOIN|CROSS\s+JOIN|ON|WHERE|AND|OR|NOT|IN|SET|VALUES|HAVING|ORDER\s+BY|GROUP\s+BY|INTO|UPDATE|DELETE|WHEN|THEN|ELSE|CASE|AS|UNION(?:\s+ALL)?))\s*$/i;
+            var isPrevOpenClause = prevCleanTrim.length > 0 && !/;\s*$/.test(prevCleanTrim) && openClauseEndRegex.test(prevCleanTrim);
+
+            if (!isPrevOpenClause) {
+                var nextNonEmptyIdx = -1;
+                for (var n = curLine + 1; n <= lineCount; n++) {
+                    var nText = stripCommentsAndStrings(model.getLineContent(n)).trim();
+                    if (nText) { nextNonEmptyIdx = n; break; }
+                }
+                if (nextNonEmptyIdx > 0 && stmtStarters.test(stripCommentsAndStrings(model.getLineContent(nextNonEmptyIdx)))) {
+                    return {
+                        startLineNumber: curLine,
+                        startColumn: 1,
+                        endLineNumber: curLine,
+                        endColumn: 1,
+                        statementText: "",
+                        textUntilCursor: ""
+                    };
+                }
             }
         }
 
@@ -1682,6 +1695,61 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             }
         }
 
+        // If statement starts with SELECT/INSERT/UPDATE/DELETE/MERGE right after a CTE closing ')',
+        // extend startLine upward to include the enclosing WITH ... AS (...) block.
+        while (startLine > 1 && startCol === 1) {
+            var starterClean = stripCommentsAndStrings(model.getLineContent(startLine)).trim();
+            if (!/^(?:SELECT|INSERT|UPDATE|DELETE|MERGE)\b/i.test(starterClean)) break;
+
+            var aboveIdx = startLine - 1;
+            while (aboveIdx >= 1 && !stripCommentsAndStrings(model.getLineContent(aboveIdx)).trim()) {
+                aboveIdx--;
+            }
+            if (aboveIdx < 1) break;
+            var aboveClean = stripCommentsAndStrings(model.getLineContent(aboveIdx)).trim();
+            if (!/\)\s*$/.test(aboveClean)) break;
+
+            var cDepth = 0;
+            var foundWithStart = -1;
+            var foundWithCol = 1;
+            for (var k = aboveIdx; k >= 1; k--) {
+                var kcRaw = model.getLineContent(k);
+                var kc = stripCommentsAndStrings(kcRaw);
+                if (k < aboveIdx && batchSep.test(kc)) break;
+
+                if (k < aboveIdx) {
+                    var kSemi = kc.lastIndexOf(';');
+                    if (kSemi >= 0) {
+                        var afterSemiCte = kc.substring(kSemi + 1);
+                        if (/^\s*WITH\b/i.test(afterSemiCte)) {
+                            foundWithStart = k;
+                            foundWithCol = kSemi + 2;
+                        }
+                        break;
+                    }
+                }
+
+                var kp = countParens(kcRaw);
+                cDepth += (kp.close - kp.open);
+                if (cDepth <= 0 && /^\s*;?\s*WITH\b/i.test(kc)) {
+                    var semiInWith = kc.lastIndexOf(';');
+                    foundWithStart = k;
+                    foundWithCol = semiInWith >= 0 ? (semiInWith + 2) : 1;
+                    break;
+                }
+                // Stop if balanced parens close back to 0 inside a non-CTE statement (e.g., WHERE x IN (1, 2))
+                if (cDepth <= 0 && !/^\s*(?:,?\s*[a-zA-Z0-9_\[\]]+(?:\s*\([^)]*\))?\s+AS\s*\(|\))/i.test(kc)) {
+                    break;
+                }
+            }
+            if (foundWithStart > 0) {
+                startLine = foundWithStart;
+                startCol = foundWithCol;
+            } else {
+                break;
+            }
+        }
+
         // 2. Scan downwards to find end
         var endLine = lineCount;
         var lastLineText = model.getLineContent(lineCount) || "";
@@ -1708,8 +1776,12 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         break;
                     }
 
-                    if (downParenDepth <= 0 && stmtStarters.test(clean)) {
-                        var prevLineClean = stripCommentsAndStrings(model.getLineContent(j - 1) || "").trim();
+                    var prevLineRaw = model.getLineContent(j - 1) || "";
+                    var isBlankSeparatedTopLevelStarter =
+                        !prevLineRaw.trim() &&
+                        /^(?:SELECT|WITH|INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|EXEC|EXECUTE)\b/i.test(clean);
+                    if ((downParenDepth <= 0 || isBlankSeparatedTopLevelStarter) && stmtStarters.test(clean)) {
+                        var prevLineClean = stripCommentsAndStrings(prevLineRaw).trim();
                         if (!setOps.test(clean) && !setOps.test(prevLineClean)) {
                             var actualEndLine = j - 1;
                             while (actualEndLine > curLine && !stripCommentsAndStrings(model.getLineContent(actualEndLine) || "").trim()) {
@@ -1843,7 +1915,11 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             case 'ON':
                 var onKws = [];
                 if (hasExpression) {
-                    onKws.push('AND', 'OR');
+                    onKws.push(
+                        'WHERE', 'AND', 'OR',
+                        'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'FULL OUTER JOIN', 'CROSS JOIN',
+                        'GROUP BY', 'ORDER BY', 'UNION', 'UNION ALL'
+                    );
                 }
                 onKws.push('NOT', 'IN', 'BETWEEN', 'LIKE', 'IS NULL', 'IS NOT NULL');
                 onKws.push.apply(onKws, exprKeywords);
@@ -1853,7 +1929,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 return ['ASC', 'DESC'];
 
             case 'GROUP BY':
-                return ['HAVING'];
+                return ['HAVING', 'ORDER BY', 'UNION', 'UNION ALL'];
 
             case 'SELECT':
                 var selectKws = ['DISTINCT', 'TOP', 'AS', 'FROM'];
@@ -1864,7 +1940,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 return selectKws;
 
             case 'SET':
-                var setKws = ['WHERE', 'NULL'];
+                var setKws = ['WHERE', 'FROM', 'NULL'];
                 setKws.push.apply(setKws, exprKeywords);
                 return setKws;
 
@@ -1894,6 +1970,525 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     'EXEC', 'DECLARE', 'CAST', 'CONVERT', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END'
                 ];
         }
+    }
+
+    var sqlScopeKeywords = new Set([
+        'select', 'distinct', 'top', 'from', 'where', 'and', 'or', 'not', 'in', 'is', 'null',
+        'like', 'between', 'exists', 'case', 'when', 'then', 'else', 'end', 'as', 'join',
+        'inner', 'left', 'right', 'full', 'outer', 'cross', 'on', 'group', 'order', 'by',
+        'having', 'asc', 'desc', 'union', 'all', 'set', 'values', 'into', 'update', 'delete',
+        'cast', 'convert', 'over', 'partition'
+    ]);
+
+    function stripCommentsAndStringsSql(text) {
+        return (text || "")
+            .replace(/'(?:''|[^'])*'/g, "''")
+            .replace(/--.*$/gm, " ")
+            .replace(/\/\*[\s\S]*?\*\//g, " ");
+    }
+
+    function normalizeTableName(tbl) {
+        if (!tbl) return "";
+        return tbl.toLowerCase().replace(/[\[\]]/g, "").trim();
+    }
+
+    function tablesMatch(t1, t2) {
+        var n1 = normalizeTableName(t1);
+        var n2 = normalizeTableName(t2);
+        if (!n1 || !n2) return false;
+        if (n1 === n2) return true;
+        var parts1 = n1.split('.');
+        var parts2 = n2.split('.');
+        var name1 = parts1[parts1.length - 1];
+        var name2 = parts2[parts2.length - 1];
+        if (name1 === name2) {
+            if (parts1.length === 1 || parts2.length === 1) return true;
+            if (parts1[0] === parts2[0]) return true;
+        }
+        return false;
+    }
+
+    function maskInnerParens(text, startIdx, endIdx) {
+        var out = "";
+        var depth = 0;
+        var limit = Math.min(text.length, endIdx);
+        for (var i = Math.max(0, startIdx); i < limit; i++) {
+            var ch = text[i];
+            if (ch === '(') {
+                if (depth === 0) out += '(';
+                depth++;
+            } else if (ch === ')') {
+                if (depth > 0) depth--;
+                if (depth === 0) out += ')';
+            } else if (depth === 0) {
+                out += ch;
+            }
+        }
+        return out;
+    }
+
+    function splitTopLevelCommaItems(text) {
+        var items = [];
+        var current = "";
+        var depth = 0;
+        for (var i = 0; i < text.length; i++) {
+            var ch = text[i];
+            if (ch === '(') depth++;
+            else if (ch === ')' && depth > 0) depth--;
+            if (ch === ',' && depth === 0) {
+                if (current.trim()) items.push(current.trim());
+                current = "";
+            } else {
+                current += ch;
+            }
+        }
+        if (current.trim()) items.push(current.trim());
+        return items;
+    }
+
+    function findMatchingParenIndex(text, openIdx) {
+        var depth = 0;
+        for (var i = openIdx; i < text.length; i++) {
+            if (text[i] === '(') depth++;
+            else if (text[i] === ')') {
+                depth--;
+                if (depth === 0) return i;
+            }
+        }
+        return -1;
+    }
+
+    function resolveTableOrView(rawName, cteMap) {
+        if (!rawName) return null;
+        if (cteMap) {
+            var cleanKey = normalizeTableName(rawName);
+            if (cteMap[cleanKey]) return cteMap[cleanKey];
+        }
+        if (window.sqlTables) {
+            var tbl = window.sqlTables.find(function(t) { return tablesMatch(t.fullName, rawName); });
+            if (tbl) return tbl;
+        }
+        if (window.sqlViews) {
+            var vw = window.sqlViews.find(function(v) { return tablesMatch(v.fullName, rawName); });
+            if (vw) return vw;
+        }
+        return null;
+    }
+
+    function extractTableRefsFromScope(scopeMasked, nonAliasKw, cteMap) {
+        var refs = [];
+        var aliasMap = {};
+        var seenKeys = new Set();
+
+        var fromMatch = scopeMasked.match(/\bfrom\b/i);
+        if (fromMatch && fromMatch.index >= 0) {
+            var afterFrom = scopeMasked.substring(fromMatch.index);
+            var endClauseMatch = afterFrom.match(/\b(?:where|group\s+by|order\s+by|having|set|values|output|union|except|intersect|option|for)\b/i);
+            var fromClauseOnly = endClauseMatch ? afterFrom.substring(0, endClauseMatch.index) : afterFrom;
+
+            var tableClauseRegex = /(?:from|join|,)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+(?:as\s+)?([a-zA-Z0-9_\[\]]+))?/gi;
+            var tMatch;
+            while ((tMatch = tableClauseRegex.exec(fromClauseOnly)) !== null) {
+                var rawTableName = (tMatch[1] || "").trim();
+                var rawAlias = (tMatch[2] || "").trim();
+                var cleanAlias = rawAlias.replace(/[\[\]]/g, '');
+                var isRealAlias = cleanAlias && !nonAliasKw.has(cleanAlias.toLowerCase());
+                var alias = isRealAlias ? cleanAlias : "";
+
+                var matchedObj = resolveTableOrView(rawTableName, cteMap);
+                if (matchedObj) {
+                    if (alias) {
+                        aliasMap[alias] = matchedObj.fullName;
+                    }
+                    var refKey = (matchedObj.fullName || rawTableName).toLowerCase() + '::' + alias.toLowerCase();
+                    if (!seenKeys.has(refKey)) {
+                        seenKeys.add(refKey);
+                        refs.push({
+                            tableObj: matchedObj,
+                            alias: alias,
+                            qualifier: alias || matchedObj.name || matchedObj.fullName
+                        });
+                    }
+                } else if (alias) {
+                    aliasMap[alias] = rawTableName;
+                }
+            }
+        } else {
+            var dmlTableRegex = /(?:update|delete(?:\s+top\s*\(\s*[^)]*\s*\))?)\s+([a-zA-Z0-9_\[\]\.]+)/gi;
+            var dMatch;
+            while ((dMatch = dmlTableRegex.exec(scopeMasked)) !== null) {
+                var dmlTableName = (dMatch[1] || "").trim();
+                var matchedDml = resolveTableOrView(dmlTableName, cteMap);
+                if (matchedDml) {
+                    var dmlKey = (matchedDml.fullName || dmlTableName).toLowerCase() + '::';
+                    if (!seenKeys.has(dmlKey)) {
+                        seenKeys.add(dmlKey);
+                        refs.push({
+                            tableObj: matchedDml,
+                            alias: "",
+                            qualifier: matchedDml.name || matchedDml.fullName
+                        });
+                    }
+                }
+            }
+        }
+
+        return { refs: refs, aliasMap: aliasMap };
+    }
+
+    function extractCteColumns(cteBody, explicitCols, nonAliasKw, cteMap) {
+        if (explicitCols && explicitCols.length > 0) return explicitCols;
+
+        var masked = maskInnerParens(cteBody, 0, cteBody.length);
+        var selectMatch = masked.match(/^\s*SELECT\b(?:\s+(?:ALL|DISTINCT))?(?:\s+TOP\s*\(\s*\)\s*(?:PERCENT\s*)?(?:WITH\s+TIES\s*)?|\s+TOP\s+\d+\s*(?:PERCENT\s*)?(?:WITH\s+TIES\s*)?)?/i);
+        if (!selectMatch) return [];
+
+        var bodyAfterSelect = masked.substring(selectMatch[0].length);
+        var fromInCte = bodyAfterSelect.search(/\bfrom\b/i);
+        var selectListText = fromInCte >= 0 ? bodyAfterSelect.substring(0, fromInCte) : bodyAfterSelect;
+
+        var cteRefs = null;
+        var cols = [];
+        var seenCols = new Set();
+        var items = splitTopLevelCommaItems(selectListText);
+
+        items.forEach(function(item) {
+            var trimmed = item.trim();
+            if (!trimmed) return;
+
+            if (trimmed === '*' || /^[a-zA-Z0-9_\[\]]+\.\*$/.test(trimmed)) {
+                if (!cteRefs) cteRefs = extractTableRefsFromScope(masked, nonAliasKw, cteMap).refs;
+                var wildQualifier = trimmed.indexOf('.') > 0 ? trimmed.split('.')[0].replace(/[\[\]]/g, '').toLowerCase() : null;
+                cteRefs.forEach(function(r) {
+                    if (wildQualifier && (r.alias || '').toLowerCase() !== wildQualifier && (r.tableObj.name || '').toLowerCase() !== wildQualifier) {
+                        return;
+                    }
+                    (r.tableObj.columns || []).forEach(function(c) {
+                        if (!seenCols.has(c.toLowerCase())) {
+                            seenCols.add(c.toLowerCase());
+                            cols.push(c);
+                        }
+                    });
+                });
+                return;
+            }
+
+            var colName = null;
+            var asMatch = trimmed.match(/\bAS\s+\[?([a-zA-Z0-9_]+)\]?\s*$/i);
+            if (asMatch) {
+                colName = asMatch[1];
+            } else if (/^(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?([a-zA-Z0-9_]+)\]?$/.test(trimmed)) {
+                colName = trimmed.match(/\[?([a-zA-Z0-9_]+)\]?$/)[1];
+            } else {
+                var trailingAlias = trimmed.match(/[\s\)]\[?([a-zA-Z0-9_]+)\]?\s*$/);
+                if (trailingAlias && !sqlScopeKeywords.has(trailingAlias[1].toLowerCase())) {
+                    colName = trailingAlias[1];
+                }
+            }
+
+            if (colName && !seenCols.has(colName.toLowerCase())) {
+                seenCols.add(colName.toLowerCase());
+                cols.push(colName);
+            }
+        });
+
+        return cols;
+    }
+
+    function parseCtesFromStatement(cleanStatement, nonAliasKw) {
+        var cteMap = {};
+        var cteList = [];
+        var withMatch = cleanStatement.match(/^\s*;?\s*WITH\b/i);
+        if (!withMatch) {
+            return { cteMap: cteMap, cteList: cteList, afterCtesOffset: 0 };
+        }
+
+        var pos = withMatch[0].length;
+        var afterCtesOffset = 0;
+
+        while (pos < cleanStatement.length) {
+            var rest = cleanStatement.substring(pos);
+            var cteHeaderMatch = rest.match(/^\s*\[?([a-zA-Z_][a-zA-Z0-9_]*)\]?\s*(?:\(([^)]*)\)\s*)?AS\s*\(/i);
+            if (!cteHeaderMatch) break;
+
+            var cteName = cteHeaderMatch[1];
+            var explicitCols = null;
+            if (cteHeaderMatch[2]) {
+                explicitCols = cteHeaderMatch[2]
+                    .split(',')
+                    .map(function(c) { return c.replace(/[\[\]]/g, '').trim(); })
+                    .filter(Boolean);
+            }
+
+            var openParenIdx = pos + cteHeaderMatch[0].length - 1;
+            var closeParenIdx = findMatchingParenIndex(cleanStatement, openParenIdx);
+            if (closeParenIdx < 0) break;
+
+            var cteBody = cleanStatement.substring(openParenIdx + 1, closeParenIdx);
+            var cteCols = extractCteColumns(cteBody, explicitCols, nonAliasKw, cteMap);
+            var cteObj = {
+                name: cteName,
+                schema: '',
+                fullName: cteName,
+                columns: cteCols,
+                primaryKeys: [],
+                relations: [],
+                isCte: true,
+                bodyStart: openParenIdx + 1,
+                bodyEnd: closeParenIdx
+            };
+            cteMap[cteName.toLowerCase()] = cteObj;
+            cteList.push(cteObj);
+
+            pos = closeParenIdx + 1;
+            afterCtesOffset = pos;
+
+            var commaCheck = cleanStatement.substring(pos).match(/^\s*,/);
+            if (commaCheck) {
+                pos += commaCheck[0].length;
+            } else {
+                break;
+            }
+        }
+
+        return { cteMap: cteMap, cteList: cteList, afterCtesOffset: afterCtesOffset };
+    }
+
+    function extractReferencedColumns(scopeMasked) {
+        var qualified = new Set();
+        var names = new Set();
+        var selectQualified = new Set();
+        var selectNames = new Set();
+
+        var fromMatch = scopeMasked.match(/\bfrom\b/i);
+        var selectEnd = fromMatch ? fromMatch.index : -1;
+        var selectPart = selectEnd > 0 ? scopeMasked.substring(0, selectEnd) : "";
+
+        // Exclude FROM...JOIN... table & alias declarations from referenced column tokens
+        var scanPart = scopeMasked;
+        if (fromMatch && fromMatch.index >= 0) {
+            var afterFrom = scopeMasked.substring(fromMatch.index);
+            var nextClause = afterFrom.match(/\b(?:where|group\s+by|order\s+by|having|set|values|output|on)\b/i);
+            var beforeFrom = scopeMasked.substring(0, fromMatch.index);
+            var afterTableList = nextClause ? afterFrom.substring(nextClause.index) : "";
+            scanPart = beforeFrom + " " + afterTableList;
+        }
+
+        function collectFromSlice(slice, qSet, nSet) {
+            var identRegex = /(?:\[?([a-zA-Z_][a-zA-Z0-9_]*)\]?\.)?\[?([a-zA-Z_][a-zA-Z0-9_]*)\]?/g;
+            var m;
+            while ((m = identRegex.exec(slice)) !== null) {
+                var colLower = m[2].toLowerCase();
+                if (sqlScopeKeywords.has(colLower)) continue;
+                if (m[1]) {
+                    qSet.add(m[1].toLowerCase() + '.' + colLower);
+                } else {
+                    nSet.add(colLower);
+                }
+            }
+        }
+
+        if (selectPart) collectFromSlice(selectPart, selectQualified, selectNames);
+        collectFromSlice(scanPart, qualified, names);
+
+        return {
+            qualified: qualified,
+            names: names,
+            selectQualified: selectQualified,
+            selectNames: selectNames
+        };
+    }
+
+    function buildKeyColumnSet(tableObj) {
+        var keySet = new Set();
+        if (!tableObj) return keySet;
+        if (Array.isArray(tableObj.primaryKeys)) {
+            tableObj.primaryKeys.forEach(function(pk) {
+                if (pk) keySet.add(pk.toLowerCase());
+            });
+        }
+        if (Array.isArray(tableObj.relations)) {
+            tableObj.relations.forEach(function(r) {
+                if (r && r.fromCol) keySet.add(r.fromCol.toLowerCase());
+            });
+        }
+        if (window.sqlTables) {
+            window.sqlTables.forEach(function(other) {
+                if (Array.isArray(other.relations)) {
+                    other.relations.forEach(function(r) {
+                        if (r && r.toCol && (tablesMatch(tableObj.fullName, r.toTable) || tablesMatch(tableObj.name, r.toTable))) {
+                            keySet.add(r.toCol.toLowerCase());
+                        }
+                    });
+                }
+            });
+        }
+        return keySet;
+    }
+
+    function buildFkRelatedTableSet(refs) {
+        var relatedSet = new Set();
+        if (!refs || refs.length === 0) return relatedSet;
+
+        refs.forEach(function(r) {
+            var tbl = r.tableObj;
+            if (!tbl) return;
+            if (Array.isArray(tbl.relations)) {
+                tbl.relations.forEach(function(rel) {
+                    if (rel && rel.toTable) relatedSet.add(normalizeTableName(rel.toTable));
+                });
+            }
+            if (window.sqlTables) {
+                window.sqlTables.forEach(function(other) {
+                    if (Array.isArray(other.relations)) {
+                        other.relations.forEach(function(rel) {
+                            if (rel && (tablesMatch(tbl.fullName, rel.toTable) || tablesMatch(tbl.name, rel.toTable))) {
+                                relatedSet.add(normalizeTableName(other.fullName));
+                                if (other.name) relatedSet.add(normalizeTableName(other.name));
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        return relatedSet;
+    }
+
+    var sqlNonAliasKw = new Set([
+        'where', 'on', 'join', 'inner', 'left', 'right', 'full', 'outer', 'cross',
+        'group', 'order', 'having', 'select', 'as', 'apply', 'from', 'set',
+        'union', 'with', 'limit', 'offset', 'top', 'into', 'values', 'table', 'and', 'or', 'not'
+    ]);
+
+    function resolveStatementScope(statementText, textUntilCursor, nonAliasKw) {
+        var kwSet = nonAliasKw || sqlNonAliasKw;
+        var untilRaw = textUntilCursor || "";
+        var afterRaw = (statementText || "").substring(untilRaw.length);
+        var cleanUntilCursor = stripCommentsAndStringsSql(untilRaw);
+        var cleanAfterCursor = stripCommentsAndStringsSql(afterRaw);
+        var cleanFullStmt = cleanUntilCursor + cleanAfterCursor;
+        var cursorOffset = cleanUntilCursor.length;
+
+        var cteInfo = parseCtesFromStatement(cleanFullStmt, kwSet);
+
+        var parenStack = [];
+        for (var i = 0; i < cursorOffset; i++) {
+            if (cleanFullStmt[i] === '(') parenStack.push(i);
+            else if (cleanFullStmt[i] === ')' && parenStack.length > 0) parenStack.pop();
+        }
+
+        var topScopeStart = (cteInfo.afterCtesOffset > 0 && cursorOffset >= cteInfo.afterCtesOffset)
+            ? cteInfo.afterCtesOffset
+            : 0;
+
+        function buildVisibleCteMap(offset) {
+            var visible = {};
+            cteInfo.cteList.forEach(function(cte) {
+                if (cte.bodyEnd <= offset || offset >= cteInfo.afterCtesOffset) {
+                    visible[cte.name.toLowerCase()] = cte;
+                }
+            });
+            return visible;
+        }
+
+        var activeScopeStart = topScopeStart;
+        var activeScopeEnd = cleanFullStmt.length;
+        var outerScopes = [];
+        var foundInnerQueryScope = false;
+
+        for (var p = parenStack.length - 1; p >= 0; p--) {
+            var openIdx = parenStack[p];
+            var closeIdx = findMatchingParenIndex(cleanFullStmt, openIdx);
+            var spanEnd = closeIdx > openIdx ? closeIdx : cleanFullStmt.length;
+            var spanMasked = maskInnerParens(cleanFullStmt, openIdx + 1, spanEnd);
+            if (/^\s*(?:SELECT|WITH|UPDATE|DELETE|INSERT|MERGE)\b/i.test(spanMasked)) {
+                if (!foundInnerQueryScope) {
+                    activeScopeStart = openIdx + 1;
+                    activeScopeEnd = spanEnd;
+                    foundInnerQueryScope = true;
+                } else {
+                    outerScopes.push({
+                        start: openIdx + 1,
+                        end: spanEnd,
+                        cteMap: buildVisibleCteMap(openIdx + 1)
+                    });
+                }
+            }
+        }
+
+        if (foundInnerQueryScope && cursorOffset >= cteInfo.afterCtesOffset && topScopeStart < activeScopeStart) {
+            outerScopes.push({
+                start: topScopeStart,
+                end: cleanFullStmt.length,
+                cteMap: cteInfo.cteMap
+            });
+        }
+
+        var activeCteMap = buildVisibleCteMap(activeScopeStart);
+        var scopeMasked = maskInnerParens(cleanFullStmt, activeScopeStart, activeScopeEnd);
+        var scopeUntilCursorMasked = maskInnerParens(cleanFullStmt, activeScopeStart, cursorOffset);
+        var primaryParsed = extractTableRefsFromScope(scopeMasked, kwSet, activeCteMap);
+        var referencedCols = extractReferencedColumns(scopeMasked);
+
+        var outerAliasMap = {};
+        outerScopes.forEach(function(os) {
+            var oMasked = maskInnerParens(cleanFullStmt, os.start, os.end);
+            var oParsed = extractTableRefsFromScope(oMasked, kwSet, os.cteMap);
+            Object.keys(oParsed.aliasMap).forEach(function(k) {
+                if (!outerAliasMap[k]) outerAliasMap[k] = oParsed.aliasMap[k];
+            });
+        });
+
+        return {
+            cleanFullStmt: cleanFullStmt,
+            cleanUntilCursor: cleanUntilCursor,
+            cursorOffset: cursorOffset,
+            cteMap: activeCteMap,
+            cteList: cteInfo.cteList,
+            afterCtesOffset: cteInfo.afterCtesOffset,
+            scopeStart: activeScopeStart,
+            scopeEnd: activeScopeEnd,
+            scopeMasked: scopeMasked,
+            scopeUntilCursorMasked: scopeUntilCursorMasked,
+            activeTableRefs: primaryParsed.refs,
+            aliasMap: primaryParsed.aliasMap,
+            outerAliasMap: outerAliasMap,
+            referencedCols: referencedCols
+        };
+    }
+
+    function isColumnReferenced(qSet, nSet, qual, alias, colLower) {
+        if (qual && qSet && qSet.has(qual.toLowerCase() + '.' + colLower)) return true;
+        if (alias && qSet && qSet.has(alias.toLowerCase() + '.' + colLower)) return true;
+        if (nSet && nSet.has(colLower)) return true;
+        return false;
+    }
+
+    function computeColumnSortText(opts) {
+        var colLower = (opts.colName || "").toLowerCase();
+        var refPad = String(opts.refPriorityIdx || 0).padStart(2, '0');
+        var colPad = String(opts.colIdx || 0).padStart(4, '0');
+        var tail = refPad + '_' + colPad + '_' + opts.colName;
+        var refs = opts.referencedCols;
+
+        var isSelectRef = refs && isColumnReferenced(refs.selectQualified, refs.selectNames, opts.qual, opts.alias, colLower);
+        var isScopeRef = refs && isColumnReferenced(refs.qualified, refs.names, opts.qual, opts.alias, colLower);
+
+        if (opts.isOnContext) {
+            return (opts.isKeyCol ? '0001_0_' : '0002_') + tail;
+        }
+        if (opts.clause === 'GROUP BY' || opts.clause === 'ORDER BY') {
+            if (isSelectRef) return '0001_0_' + tail;
+            if (isScopeRef || opts.isKeyCol) return '0001_1_' + tail;
+            return '0002_' + tail;
+        }
+        if (opts.clause === 'WHERE' || opts.clause === 'HAVING' || opts.clause === 'SET') {
+            if (isScopeRef) return '0001_0_' + tail;
+            if (opts.isKeyCol) return '0001_1_' + tail;
+            return '0002_' + tail;
+        }
+        if (opts.isKeyCol) return '0001_0_' + tail;
+        return '0002_' + tail;
     }
 
     monaco.languages.registerCompletionItemProvider('sql', {
@@ -2018,10 +2613,10 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
             }
 
-            var cleanStmtUntilCursor = (fullTextUntilPosition || "")
-                .replace(/'(?:''|[^'])*'/g, "''")
-                .replace(/--.*$/gm, " ")
-                .replace(/\/\*[\s\S]*?\*\//g, " ");
+            var scopeInfo = resolveStatementScope(stmtContext.statementText, fullTextUntilPosition, sqlNonAliasKw);
+            var cleanStmtUntilCursor = scopeInfo.cleanUntilCursor;
+            var hasBlockTableRefs = scopeInfo.activeTableRefs.length > 0;
+            var hasExplicitDotOnLine = /\.[a-zA-Z0-9_]*$/.test(textBeforeCursor);
             var isSingleTableDeleteTarget = /^\s*DELETE(?:\s+TOP\s*\(\s*[^)]*\s*\))?(?:\s+FROM)?\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]*\]?$/i.test(cleanStmtUntilCursor);
             var isCompletedSingleTableDelete = /^\s*DELETE(?:\s+TOP\s*\(\s*[^)]*\s*\))?\s+(?:FROM\s+)?(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:WITH\s*\(\s*[^)]*\s*\)\s+)?[a-zA-Z0-9_]*$/i.test(cleanStmtUntilCursor);
             clauseInfo.isCompletedSingleTableDelete = isCompletedSingleTableDelete;
@@ -2031,8 +2626,10 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 && !/\b(?:VALUES|SELECT)\b/i.test(fullTextUntilPosition);
 
             var suggestions = [];
-            
-            if (!isInsertContext && !isOnContext) {
+
+            var isMidQueryClause = clauseInfo.clause !== 'SELECT' || hasBlockTableRefs || clauseInfo.inParens;
+            var hasStartedSelect = /^\s*SELECT\b/i.test(scopeInfo.scopeUntilCursorMasked);
+            if (!isInsertContext && !isOnContext && !hasExplicitDotOnLine && !isMidQueryClause && !hasStartedSelect) {
                 if (window.sqlSnippets && window.sqlSnippets.length > 0) {
                     window.sqlSnippets.forEach(function(s) {
                         suggestions.push({
@@ -2060,14 +2657,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             // Must run BEFORE the keyword scan because an alias like 'or', 'and', 'on', 'as' etc.
             // would be misidentified as an SQL keyword in the backward token scan below.
             // Never suppress for single-table DELETE FROM <table>, where T-SQL forbids aliases and WHERE follows.
-            var currentLineUntilCursor = model.getValueInRange({
-                startLineNumber: position.lineNumber,
-                startColumn: 1,
-                endLineNumber: position.lineNumber,
-                endColumn: position.column
-            });
-            var hasDotOnCurrentLine = /\.[a-zA-Z0-9_]*$/.test(currentLineUntilCursor);
-            var isTypingAlias = !isCompletedSingleTableDelete && /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(currentLineUntilCursor);
+            var hasDotOnCurrentLine = /\.[a-zA-Z0-9_]*$/.test(textBeforeCursor);
+            var isTypingAlias = !isCompletedSingleTableDelete && /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(textBeforeCursor);
             if (isTypingAlias && !hasDotOnCurrentLine) {
                 return { suggestions: [] };
             }
@@ -2083,7 +2674,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 var tableKeywords = new Set(['from', 'join', 'into', 'insert', 'update', 'delete', 'table']);
                 var columnKeywords = new Set(['select', 'where', 'on', 'by', 'having', 'set', 'and', 'or']);
                 var spKeywords = new Set(['exec', 'execute']);
-                
+
                 for (var i = matches.length - 1; i >= 0; i--) {
                     var token = matches[i].toLowerCase();
                     if (spKeywords.has(token)) {
@@ -2094,40 +2685,26 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         break;
                     } else if (tableKeywords.has(token)) {
                         lastTableKeyword = token;
-                        // Find the text from this table keyword up to the cursor
                         var lastTableKwIndex = fullTextUntilPosition.toLowerCase().lastIndexOf(token);
                         var textAfterTableKw = lastTableKwIndex >= 0 ? fullTextUntilPosition.substring(lastTableKwIndex) : fullTextUntilPosition;
 
-                        // A table is only considered completed if followed by whitespace (e.g. "FROM [Orders] ", "UPDATE [Orders] ")
                         var completedTableRegex = /(?:from|join|update|delete|into|table)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+/i;
                         var tableCompletedMatch = textAfterTableKw.match(completedTableRegex);
                         var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_]*)$/i.test(textAfterTableKw);
 
                         if (tableCompletedMatch && !hasCommaAfter) {
-                            // Table is already provided and finished! Do NOT suggest tables.
                             suggestTables = false;
-                            
-                            // Check if user is on the SAME line actively typing an alias (only valid in SELECT/JOIN FROM/JOIN sources)
-                            var lineUntilCursor = model.getValueInRange({
-                                startLineNumber: position.lineNumber,
-                                startColumn: 1,
-                                endLineNumber: position.lineNumber,
-                                endColumn: position.column
-                            });
-                            var isTypingAliasOnSameLine = !isCompletedSingleTableDelete && /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(lineUntilCursor);
+                            var isTypingAliasOnSameLine = !isCompletedSingleTableDelete && /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(textBeforeCursor);
                             var hasDot = textBeforeCursor.match(/\.[a-zA-Z0-9_]*$/);
 
                             if (isTypingAliasOnSameLine && !hasDot) {
-                                // Suppress suggestions while typing the alias name on the table line
                                 return { suggestions: [] };
                             }
 
-                            // Suggest next clause keywords (ON, WHERE, SET, JOIN, etc.)
                             suggestColumns = false;
                             suggestSps = false;
                             suggestKeywords = true;
                         } else {
-                            // User is actively typing the table name (e.g. "FROM or", "UPDATE or"), or after comma in FROM:
                             suggestTables = true;
                             suggestColumns = false;
                             suggestSps = false;
@@ -2163,18 +2740,45 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
             var existingAliases = new Set();
             if (autoAlias) {
-                var allDocText = stmtContext.statementText;
+                Object.keys(scopeInfo.aliasMap || {}).forEach(function(al) {
+                    if (al) existingAliases.add(al.toUpperCase());
+                });
                 var aliasRegex = /(?:from|join|update)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?([a-zA-Z0-9_]+)/gi;
                 var aMatch;
-                var reservedKw = new Set(['WHERE', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'OUTER', 'ON', 'GROUP', 'ORDER', 'HAVING', 'SET', 'AS']);
-                while ((aMatch = aliasRegex.exec(allDocText)) !== null) {
+                while ((aMatch = aliasRegex.exec(scopeInfo.scopeMasked)) !== null) {
                     if (aMatch[1]) {
                         var u = aMatch[1].trim().toUpperCase();
-                        if (!reservedKw.has(u)) {
+                        if (!sqlNonAliasKw.has(u.toLowerCase())) {
                             existingAliases.add(u);
                         }
                     }
                 }
+            }
+
+            var fkRelatedTables = (suggestTables && lastTableKeyword === 'join')
+                ? buildFkRelatedTableSet(scopeInfo.activeTableRefs)
+                : new Set();
+
+            if (suggestTables && !isInsertContext && scopeInfo.cteMap) {
+                Object.keys(scopeInfo.cteMap).forEach(function(cteKey) {
+                    var cte = scopeInfo.cteMap[cteKey];
+                    var cteInsText = cte.fullName;
+                    var cteAlias = null;
+                    if (autoAlias) {
+                        cteAlias = window.generateTableAlias(cte.name, existingAliases);
+                        cteInsText = cte.fullName + (useAs ? " AS " : " ") + cteAlias;
+                    }
+                    var cteFilterStr = cte.name + " [" + cte.name + "]" + (autoAlias && cteAlias ? (" " + cteAlias) : "");
+                    suggestions.push({
+                        label: cte.fullName,
+                        kind: monaco.languages.CompletionItemKind.Class,
+                        insertText: cteInsText,
+                        filterText: cteFilterStr,
+                        sortText: '0000_1_' + String(cte.name.length).padStart(4, '0') + '_' + cte.name,
+                        range: replaceRange,
+                        detail: 'CTE'
+                    });
+                });
             }
 
             if (suggestTables && window.sqlTables) {
@@ -2204,13 +2808,15 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     }
 
                     var filterStr = t.name + " [" + t.name + "] " + t.fullName + (t.schema ? (" " + t.schema + "." + t.name) : "") + (autoAlias && alias ? (" " + alias) : "");
+                    var isFkMatch = lastTableKeyword === 'join' && (fkRelatedTables.has(normalizeTableName(t.fullName)) || fkRelatedTables.has(normalizeTableName(t.name)));
+                    var tblSortPrefix = isFkMatch ? '0000_0_' : '0001_';
 
                     suggestions.push({
                         label: t.fullName,
                         kind: monaco.languages.CompletionItemKind.Class,
                         insertText: insText,
                         filterText: filterStr,
-                        sortText: isInsertContext ? ('0001_' + t.name + '_' + t.fullName) : (String(t.name.length).padStart(4, '0') + '_' + t.name + '_' + t.fullName),
+                        sortText: isInsertContext ? ('0001_' + t.name + '_' + t.fullName) : (tblSortPrefix + String(t.name.length).padStart(4, '0') + '_' + t.name + '_' + t.fullName),
                         range: replaceRange,
                         detail: detailText,
                         documentation: isInsertContext ? {
@@ -2253,7 +2859,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         kind: monaco.languages.CompletionItemKind.Class,
                         insertText: insText,
                         filterText: vFilterStr,
-                        sortText: isInsertContext ? ('0001_' + v.name + '_' + v.fullName) : (String(v.name.length).padStart(4, '0') + '_' + v.name + '_' + v.fullName),
+                        sortText: isInsertContext ? ('0001_' + v.name + '_' + v.fullName) : ('0001_' + String(v.name.length).padStart(4, '0') + '_' + v.name + '_' + v.fullName),
                         range: replaceRange,
                         detail: detailText,
                         documentation: isInsertContext ? {
@@ -2264,146 +2870,81 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             }
 
             if (suggestColumns || suggestTables) {
-                var allText = stmtContext.statementText;
+                var aliasMap = scopeInfo.aliasMap;
+                var outerAliasMap = scopeInfo.outerAliasMap || {};
+                var activeTableRefs = scopeInfo.activeTableRefs;
 
-                function normalizeTableName(tbl) {
-                    if (!tbl) return "";
-                    return tbl.toLowerCase().replace(/[\[\]]/g, "").trim();
-                }
-
-                function tablesMatch(t1, t2) {
-                    var n1 = normalizeTableName(t1);
-                    var n2 = normalizeTableName(t2);
-                    if (!n1 || !n2) return false;
-                    if (n1 === n2) return true;
-                    var parts1 = n1.split('.');
-                    var parts2 = n2.split('.');
-                    var name1 = parts1[parts1.length - 1];
-                    var name2 = parts2[parts2.length - 1];
-                    if (name1 === name2) {
-                        if (parts1.length === 1 || parts2.length === 1) return true;
-                        if (parts1[0] === parts2[0]) return true;
-                    }
-                    return false;
-                }
-                
-                // Parse Aliases (e.g., FROM [hr].[Settings] s)
-                // Parse Tables and Aliases in statement
-                var aliasMap = {};
-                var nonAliasKw = new Set([
-                    'where', 'on', 'join', 'inner', 'left', 'right', 'full', 'outer', 'cross',
-                    'group', 'order', 'having', 'select', 'as', 'apply', 'from', 'set',
-                    'union', 'with', 'limit', 'offset', 'top', 'into', 'values', 'table', 'and', 'or', 'not'
-                ]);
-
-                var cleanText = allText.replace(/\/\*[\s\S]*?\*\/|--.*$/gm, ' ');
-                var fromIndex = cleanText.search(/\bfrom\b/i);
-                var fromAndAfter = fromIndex >= 0 ? cleanText.substring(fromIndex) : cleanText;
-                var tableClauseRegex = /(?:from|join|,)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+(?:as\s+)?([a-zA-Z0-9_\[\]]+))?/gi;
-                var activeTableRefs = [];
-                var seenRefKeys = new Set();
-                var tMatch;
-
-                if (fromIndex >= 0) {
-                    while ((tMatch = tableClauseRegex.exec(fromAndAfter)) !== null) {
-                        var rawTableName = (tMatch[1] || "").trim();
-                        var rawAlias = (tMatch[2] || "").trim();
-                        var cleanAlias = rawAlias.replace(/[\[\]]/g, '');
-                        var isRealAlias = cleanAlias && !nonAliasKw.has(cleanAlias.toLowerCase());
-                        var alias = isRealAlias ? cleanAlias : "";
-
-                        var matchedTable = null;
-                        if (window.sqlTables) matchedTable = window.sqlTables.find(t => tablesMatch(t.fullName, rawTableName));
-                        if (!matchedTable && window.sqlViews) matchedTable = window.sqlViews.find(v => tablesMatch(v.fullName, rawTableName));
-
-                        if (matchedTable) {
-                            if (alias) {
-                                aliasMap[alias] = matchedTable.fullName;
-                            }
-                            var refKey = (matchedTable.fullName || rawTableName).toLowerCase() + '::' + alias.toLowerCase();
-                            if (!seenRefKeys.has(refKey)) {
-                                seenRefKeys.add(refKey);
-                                activeTableRefs.push({
-                                    tableObj: matchedTable,
-                                    alias: alias,
-                                    qualifier: alias || matchedTable.name || matchedTable.fullName
-                                });
-                            }
-                        } else if (alias) {
-                            aliasMap[alias] = rawTableName;
-                        }
-                    }
-                } else {
-                    var dmlTableRegex = /(?:update|delete(?:\s+top\s*\(\s*[^)]*\s*\))?)\s+([a-zA-Z0-9_\[\]\.]+)/gi;
-                    while ((tMatch = dmlTableRegex.exec(cleanText)) !== null) {
-                        var dmlTableName = (tMatch[1] || "").trim();
-                        var matchedDmlTable = null;
-                        if (window.sqlTables) matchedDmlTable = window.sqlTables.find(t => tablesMatch(t.fullName, dmlTableName));
-                        if (!matchedDmlTable && window.sqlViews) matchedDmlTable = window.sqlViews.find(v => tablesMatch(v.fullName, dmlTableName));
-                        if (matchedDmlTable) {
-                            var dmlKey = (matchedDmlTable.fullName || dmlTableName).toLowerCase() + '::';
-                            if (!seenRefKeys.has(dmlKey)) {
-                                seenRefKeys.add(dmlKey);
-                                activeTableRefs.push({
-                                    tableObj: matchedDmlTable,
-                                    alias: "",
-                                    qualifier: matchedDmlTable.name || matchedDmlTable.fullName
-                                });
-                            }
-                        }
-                    }
-                }
-                var sqlKw = new Set(['where', 'on', 'join', 'inner', 'left', 'right', 'outer', 'group', 'order', 'having', 'select', 'as', 'cross', 'apply', 'from', 'set']);
-                var tableRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+as\s+|\s+)([a-zA-Z0-9_]+)/gi;
-                var match;
-                if (false) while ((match = tableRegex.exec(allText)) !== null) {
-                    var tableName = match[1].trim();
-                    var rawAlias = match[2].trim();
-                    if (!sqlKw.has(rawAlias.toLowerCase())) {
-                        aliasMap[rawAlias] = tableName;
-                    }
-                }
-                
-                // Check if user is typing an alias dot (e.g., "ou.")
-                var lineUntilCursor = model.getValueInRange({
-                    startLineNumber: position.lineNumber,
-                    startColumn: 1,
-                    endLineNumber: position.lineNumber,
-                    endColumn: position.column
-                });
-                var dotMatch = lineUntilCursor.match(/([a-zA-Z0-9_]+)\.[a-zA-Z0-9_]*$/);
+                // Check if user is typing an alias or table dot (e.g., "o.")
+                var dotMatch = textBeforeCursor.match(/([a-zA-Z0-9_]+)\.[a-zA-Z0-9_]*$/);
                 var explicitTableName = null;
                 var rawPrefix = "";
                 if (dotMatch) {
                     rawPrefix = dotMatch[1];
                     var prefixLower = rawPrefix.toLowerCase();
                     var foundAliasKey = Object.keys(aliasMap).find(k => k.toLowerCase() === prefixLower);
-                    explicitTableName = foundAliasKey ? aliasMap[foundAliasKey] : rawPrefix;
+                    if (foundAliasKey) {
+                        explicitTableName = aliasMap[foundAliasKey];
+                    } else {
+                        var foundOuterKey = Object.keys(outerAliasMap).find(k => k.toLowerCase() === prefixLower);
+                        explicitTableName = foundOuterKey ? outerAliasMap[foundOuterKey] : rawPrefix;
+                    }
                     suggestKeywords = false;
                 }
 
                 if (suggestColumns) {
                     if (explicitTableName) {
-                        // User explicitly typed "o." -> suggest only columns of that table
-                        var activeCols = [];
-                        var checkTableMatch = (t) => {
-                            var tLower = t.fullName.toLowerCase();
-                            var nameLower = t.name.toLowerCase();
-                            var bracketName = "[" + nameLower + "]";
-                            if (tablesMatch(t.fullName, explicitTableName) || tLower === explicitTableName || nameLower === explicitTableName || bracketName === explicitTableName) {
-                                if (t.columns && Array.isArray(t.columns)) {
-                                    t.columns.forEach(c => activeCols.push(c));
-                                }
+                        // User explicitly typed "o." -> suggest only columns of that table/view/CTE
+                        var matchedObjs = [];
+                        var cteTarget = scopeInfo.cteMap ? scopeInfo.cteMap[normalizeTableName(explicitTableName)] : null;
+                        if (cteTarget) {
+                            matchedObjs.push(cteTarget);
+                        }
+                        var collectDotTarget = function(t) {
+                            if (tablesMatch(t.fullName, explicitTableName) || tablesMatch(t.name, explicitTableName)) {
+                                matchedObjs.push(t);
                             }
                         };
-                        if (window.sqlTables) window.sqlTables.forEach(checkTableMatch);
-                        if (window.sqlViews) window.sqlViews.forEach(checkTableMatch);
-
-                        if (activeCols.length === 0) {
-                            activeCols = window.sqlColumns || [];
+                        if (matchedObjs.length === 0) {
+                            if (window.sqlTables) window.sqlTables.forEach(collectDotTarget);
+                            if (window.sqlViews) window.sqlViews.forEach(collectDotTarget);
                         }
 
-                        activeCols.forEach(c => {
+                        var dotColItems = [];
+                        var seenDotCols = new Set();
+                        matchedObjs.forEach(function(tblObj) {
+                            var keyColSet = buildKeyColumnSet(tblObj);
+                            (tblObj.columns || []).forEach(function(c, colIdx) {
+                                var cLower = c.toLowerCase();
+                                if (seenDotCols.has(cLower)) return;
+                                seenDotCols.add(cLower);
+                                dotColItems.push({
+                                    col: c,
+                                    sortText: computeColumnSortText({
+                                        clause: clauseInfo.clause,
+                                        isOnContext: isOnContext,
+                                        refPriorityIdx: 0,
+                                        colIdx: colIdx,
+                                        colName: c,
+                                        qual: rawPrefix,
+                                        alias: rawPrefix,
+                                        isKeyCol: keyColSet.has(cLower),
+                                        referencedCols: scopeInfo.referencedCols
+                                    })
+                                });
+                            });
+                        });
+
+                        if (dotColItems.length === 0 && window.sqlColumns) {
+                            window.sqlColumns.forEach(function(c, colIdx) {
+                                dotColItems.push({
+                                    col: c,
+                                    sortText: '0050_' + String(colIdx).padStart(4, '0') + '_' + c
+                                });
+                            });
+                        }
+
+                        dotColItems.forEach(function(item) {
+                            var c = item.col;
                             var cleanCol = c.replace(/[\[\]]/g, '');
                             var insText = matchBracketed ? (rawPrefix + ".[" + cleanCol + "]") : (rawPrefix + "." + c);
                             suggestions.push({
@@ -2413,47 +2954,35 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 filterText: rawPrefix + "." + c + " " + c,
                                 range: replaceRange,
                                 detail: 'Column',
-                                sortText: '0001_' + c
+                                sortText: item.sortText
                             });
                         });
                     } else if (activeTableRefs.length > 0) {
-                        // Approach 2: Smart Disambiguation & Alias Insertion for Joined Tables
+                        // Smart Tiered Ranking & Alias Disambiguation for Block Tables
                         var hasMultipleTables = activeTableRefs.length > 1;
-                        var colOccurrences = new Map();
-                        var colOrder = [];
+                        var seenQualifiedCols = new Set();
 
-                        activeTableRefs.forEach(ref => {
+                        activeTableRefs.forEach(function(ref, refIdx) {
+                            var refPriorityIdx = (isOnContext && hasMultipleTables)
+                                ? (refIdx === activeTableRefs.length - 1 ? 0 : refIdx + 1)
+                                : refIdx;
+                            var keyColSet = buildKeyColumnSet(ref.tableObj);
                             var cols = ref.tableObj.columns || [];
-                            cols.forEach(c => {
-                                var key = c.toLowerCase();
-                                if (!colOccurrences.has(key)) {
-                                    colOccurrences.set(key, []);
-                                    colOrder.push(key);
-                                }
-                                colOccurrences.get(key).push({
-                                    colName: c,
-                                    qualifier: ref.qualifier,
-                                    alias: ref.alias,
-                                    tableName: ref.tableObj.name || ref.tableObj.fullName
-                                });
-                            });
-                        });
 
-                        colOrder.forEach(key => {
-                            var entries = colOccurrences.get(key);
-                            var isAmbiguous = entries.length > 1;
-
-                            entries.forEach(entry => {
-                                var qual = entry.qualifier;
-                                var col = entry.colName;
-                                var shouldQualify = hasMultipleTables || !!entry.alias;
+                            cols.forEach(function(col, colIdx) {
+                                var qual = ref.qualifier;
+                                var shouldQualify = hasMultipleTables || !!ref.alias;
                                 var qualifiedName = shouldQualify && qual ? (qual + "." + col) : col;
+                                var dedupeKey = qualifiedName.toLowerCase();
+                                if (seenQualifiedCols.has(dedupeKey)) return;
+                                seenQualifiedCols.add(dedupeKey);
+
                                 var cleanCol = col.replace(/[\[\]]/g, '');
                                 var insertColText = matchBracketed
                                     ? (shouldQualify && qual ? (qual + ".[" + cleanCol + "]") : ("[" + cleanCol + "]"))
                                     : qualifiedName;
 
-                                var filterStr = col + " " + qualifiedName + " [" + col + "]" + (entry.alias ? (" " + entry.alias + "." + col) : "");
+                                var filterStr = col + " " + qualifiedName + " [" + col + "]" + (ref.alias ? (" " + ref.alias + "." + col) : "");
 
                                 suggestions.push({
                                     label: qualifiedName,
@@ -2462,63 +2991,58 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                     filterText: filterStr,
                                     range: replaceRange,
                                     detail: 'Column',
-                                    sortText: (isAmbiguous ? '0000_' : '0001_') + col + '_' + (entry.alias || '')
+                                    sortText: computeColumnSortText({
+                                        clause: clauseInfo.clause,
+                                        isOnContext: isOnContext,
+                                        refPriorityIdx: refPriorityIdx,
+                                        colIdx: colIdx,
+                                        colName: col,
+                                        qual: qual,
+                                        alias: ref.alias,
+                                        isKeyCol: keyColSet.has(col.toLowerCase()),
+                                        referencedCols: scopeInfo.referencedCols
+                                    })
                                 });
                             });
                         });
                     } else {
-                        var allTokens = allText.match(/[a-zA-Z0-9_\[\]\.]+/g) || [];
-                    var tokenSet = new Set(allTokens.map(x => x.toLowerCase()));
-                    
-                    var activeColumns = new Set();
-                    var hasMatchedTables = false;
-                    
-                    var checkTableMatch = (t) => {
-                        var tLower = t.fullName.toLowerCase();
-                        var nameLower = t.name.toLowerCase();
-                        var bracketName = "[" + nameLower + "]";
-                        
-                        if (explicitTableName) {
-                            if (tablesMatch(t.fullName, explicitTableName) || tLower === explicitTableName || nameLower === explicitTableName || bracketName === explicitTableName) {
-                                hasMatchedTables = true;
-                                if (t.columns && Array.isArray(t.columns)) {
-                                    t.columns.forEach(c => activeColumns.add(c));
-                                }
-                            }
-                        } else {
+                        var allTokens = scopeInfo.scopeMasked.match(/[a-zA-Z0-9_\[\]\.]+/g) || [];
+                        var tokenSet = new Set(allTokens.map(x => x.toLowerCase()));
+
+                        var activeColumns = new Set();
+                        var hasMatchedTables = false;
+
+                        var checkTableMatch = (t) => {
+                            var tLower = t.fullName.toLowerCase();
+                            var nameLower = t.name.toLowerCase();
+                            var bracketName = "[" + nameLower + "]";
+
                             if (tokenSet.has(tLower) || tokenSet.has(nameLower) || tokenSet.has(bracketName)) {
                                 hasMatchedTables = true;
                                 if (t.columns && Array.isArray(t.columns)) {
                                     t.columns.forEach(c => activeColumns.add(c));
                                 }
                             }
-                        }
-                    };
-                    
-                    if (window.sqlTables) window.sqlTables.forEach(checkTableMatch);
-                    if (window.sqlViews) window.sqlViews.forEach(checkTableMatch);
-                    
-                    var columnsToSuggest = [];
-                    if (explicitTableName) {
-                        columnsToSuggest = Array.from(activeColumns);
-                        if (columnsToSuggest.length === 0) {
-                            columnsToSuggest = window.sqlColumns || [];
-                        }
-                    } else {
-                        columnsToSuggest = (hasMatchedTables && activeColumns.size > 0) ? Array.from(activeColumns) : (window.sqlColumns || []);
-                    }
-                        
-                    columnsToSuggest.forEach(c => {
-                        suggestions.push({
-                            label: c,
-                            kind: monaco.languages.CompletionItemKind.Field,
-                            insertText: rawPrefix ? (rawPrefix + "." + c) : c,
-                            filterText: rawPrefix ? (rawPrefix + "." + c) : c,
-                            range: replaceRange,
-                            detail: 'Column'
-                        });
-                    });
+                        };
 
+                        if (window.sqlTables) window.sqlTables.forEach(checkTableMatch);
+                        if (window.sqlViews) window.sqlViews.forEach(checkTableMatch);
+
+                        var columnsToSuggest = (hasMatchedTables && activeColumns.size > 0)
+                            ? Array.from(activeColumns)
+                            : (window.sqlColumns || []);
+
+                        columnsToSuggest.forEach((c, colIdx) => {
+                            suggestions.push({
+                                label: c,
+                                kind: monaco.languages.CompletionItemKind.Field,
+                                insertText: rawPrefix ? (rawPrefix + "." + c) : c,
+                                filterText: rawPrefix ? (rawPrefix + "." + c) : c,
+                                range: replaceRange,
+                                detail: 'Column',
+                                sortText: '0050_' + String(colIdx).padStart(4, '0') + '_' + c
+                            });
+                        });
                     }
 
                     // Suggest aliases if not after a dot
@@ -2536,33 +3060,36 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         });
                     }
 
-                    // Provide JOIN ON Relationship Snippets
-                    var lastJoinIndex = fullTextUntilPosition.toLowerCase().lastIndexOf('join');
-                    if (lastJoinIndex >= 0 && (window.sqlTables || window.sqlViews)) {
-                        var joinSegment = fullTextUntilPosition.substring(lastJoinIndex);
+                    // Provide JOIN ON Relationship Snippets (kept at very top with 0000_00_0_)
+                    var scopeJoinText = scopeInfo.scopeUntilCursorMasked || "";
+                    var joinWordMatches = [];
+                    var joinWordRegex = /\bjoin\b/gi;
+                    var jwm;
+                    while ((jwm = joinWordRegex.exec(scopeJoinText)) !== null) {
+                        joinWordMatches.push(jwm.index);
+                    }
+                    var lastJoinIndex = joinWordMatches.length > 0 ? joinWordMatches[joinWordMatches.length - 1] : -1;
+                    if (lastJoinIndex >= 0 && (window.sqlTables || window.sqlViews || scopeInfo.cteList.length > 0)) {
+                        var joinSegment = scopeJoinText.substring(lastJoinIndex);
                         var onMatch = joinSegment.match(/^join\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+(?:as\s+)?([a-zA-Z0-9_\[\]]+))?(?:\s+with\s*\([^)]*\))?\s+on\s*([a-zA-Z0-9_\[\]\.]*)$/i);
                         if (onMatch) {
                             var joinTableRaw = onMatch[1];
                             var rawJoinAlias = (onMatch[2] || "").trim();
                             var cleanJoinAlias = rawJoinAlias.replace(/[\[\]]/g, '');
-                            var joinAlias = (cleanJoinAlias && !nonAliasKw.has(cleanJoinAlias.toLowerCase())) ? cleanJoinAlias : "";
+                            var joinAlias = (cleanJoinAlias && !sqlNonAliasKw.has(cleanJoinAlias.toLowerCase())) ? cleanJoinAlias : "";
                             var typedRel = onMatch[3] || "";
 
-                            var matchedTable = null;
-                            if (window.sqlTables) matchedTable = window.sqlTables.find(x => tablesMatch(x.fullName, joinTableRaw));
-                            if (!matchedTable && window.sqlViews) matchedTable = window.sqlViews.find(x => tablesMatch(x.fullName, joinTableRaw));
+                            var matchedTable = resolveTableOrView(joinTableRaw, scopeInfo.cteMap);
                             if (matchedTable && matchedTable.relations && Array.isArray(matchedTable.relations)) {
-                                var textPriorToJoin = fullTextUntilPosition.substring(0, lastJoinIndex);
+                                var textPriorToJoin = scopeJoinText.substring(0, lastJoinIndex);
                                 var queryTables = [];
                                 var tableDefRegex = /(?:from|join)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+(?:as\s+)?([a-zA-Z0-9_\[\]]+))?/gi;
                                 var tMatch;
                                 while ((tMatch = tableDefRegex.exec(textPriorToJoin)) !== null) {
                                     var rawTbl = tMatch[1];
                                     var rawAl = (tMatch[2] || "").trim().replace(/[\[\]]/g, '');
-                                    var alias = (rawAl && !nonAliasKw.has(rawAl.toLowerCase())) ? rawAl : null;
-                                    var targetObj = null;
-                                    if (window.sqlTables) targetObj = window.sqlTables.find(x => tablesMatch(x.fullName, rawTbl));
-                                    if (!targetObj && window.sqlViews) targetObj = window.sqlViews.find(x => tablesMatch(x.fullName, rawTbl));
+                                    var alias = (rawAl && !sqlNonAliasKw.has(rawAl.toLowerCase())) ? rawAl : null;
+                                    var targetObj = resolveTableOrView(rawTbl, scopeInfo.cteMap);
                                     queryTables.push({
                                         rawTable: rawTbl,
                                         alias: alias,
@@ -2578,7 +3105,6 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 };
 
                                 var leftDisplayName = joinAlias || (matchedTable.name || matchedTable.fullName);
-                                // Also try aliasMap reverse lookup for joinTable in case joinAlias wasn't captured
                                 if (!joinAlias) {
                                     var joinRevAlias = Object.keys(aliasMap).find(k => tablesMatch(aliasMap[k], joinTableRaw));
                                     if (joinRevAlias) leftDisplayName = joinRevAlias;
@@ -2684,7 +3210,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
             if (suggestKeywords) {
                 var sqlKeywordsList = getContextualKeywords(clauseInfo);
-                sqlKeywordsList.forEach(kw => {
+                sqlKeywordsList.forEach(function(kw, kwIdx) {
                     suggestions.push({
                         label: kw,
                         kind: monaco.languages.CompletionItemKind.Keyword,
@@ -2692,7 +3218,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         filterText: kw,
                         range: replaceRange,
                         detail: 'Keyword',
-                        sortText: '0100_' + kw
+                        sortText: '0100_' + String(kwIdx).padStart(3, '0') + '_' + kw
                     });
                 });
             }

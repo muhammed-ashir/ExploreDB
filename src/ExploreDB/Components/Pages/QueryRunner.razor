@@ -2151,6 +2151,7 @@
                 schema = t.Schema,
                 fullName = t.FullName, 
                 columns = t.Columns.Select(c => c.Name).ToList(),
+                primaryKeys = t.Columns.Where(c => c.IsPrimaryKey).Select(c => c.Name).ToList(),
                 insertColumns = t.Columns.Where(c => !c.IsIdentity && !c.IsComputed).Select(c => c.Name).ToList(),
                 relations = t.OutgoingKeys.Select(k => new { fromCol = k.FromColumn, toTable = k.ToTable.ToLower(), toCol = k.ToColumn })
                              .Concat(t.IncomingKeys.Select(k => new { fromCol = k.ToColumn, toTable = k.FromTable.ToLower(), toCol = k.FromColumn }))
