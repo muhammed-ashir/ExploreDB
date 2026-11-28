@@ -2109,7 +2109,51 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         return null;
     }
 
-    function extractTableRefsFromScope(scopeMasked, nonAliasKw, cteMap) {
+    function extractDerivedTables(rawScopeSpan, nonAliasKw, cteMap) {
+        var derivedMap = {};
+        if (!rawScopeSpan || rawScopeSpan.indexOf('(') === -1) return derivedMap;
+
+        var regex = /\b(?:from|join|apply)\s*\(/gi;
+        var m;
+        while ((m = regex.exec(rawScopeSpan)) !== null) {
+            var openIdx = rawScopeSpan.indexOf('(', m.index);
+            if (openIdx < 0) continue;
+
+            var depthBefore = 0;
+            for (var d = 0; d < m.index; d++) {
+                if (rawScopeSpan[d] === '(') depthBefore++;
+                else if (rawScopeSpan[d] === ')' && depthBefore > 0) depthBefore--;
+            }
+            if (depthBefore !== 0) continue;
+
+            var closeIdx = findMatchingParenIndex(rawScopeSpan, openIdx);
+            if (closeIdx < 0) continue;
+
+            var innerSql = rawScopeSpan.substring(openIdx + 1, closeIdx);
+            var innerMasked = maskInnerParens(innerSql, 0, innerSql.length);
+            if (!/^\s*SELECT\b/i.test(innerMasked)) continue;
+
+            var afterClose = rawScopeSpan.substring(closeIdx + 1);
+            var aliasMatch = afterClose.match(/^\s*(?:as\s+)?\[?([a-zA-Z_][a-zA-Z0-9_]*)\]?/i);
+            if (!aliasMatch) continue;
+            var alias = aliasMatch[1];
+            if (!alias || nonAliasKw.has(alias.toLowerCase())) continue;
+
+            var cols = extractCteColumns(innerSql, null, nonAliasKw, cteMap);
+            derivedMap[alias.toLowerCase()] = {
+                name: alias,
+                schema: '',
+                fullName: alias,
+                columns: cols,
+                primaryKeys: [],
+                relations: [],
+                isDerived: true
+            };
+        }
+        return derivedMap;
+    }
+
+    function extractTableRefsFromScope(scopeMasked, nonAliasKw, cteMap, derivedMap) {
         var refs = [];
         var aliasMap = {};
         var seenKeys = new Set();
@@ -2120,21 +2164,30 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             var endClauseMatch = afterFrom.match(/\b(?:where|group\s+by|order\s+by|having|set|values|output|union|except|intersect|option|for)\b/i);
             var fromClauseOnly = endClauseMatch ? afterFrom.substring(0, endClauseMatch.index) : afterFrom;
 
-            var tableClauseRegex = /(?:from|join|,)\s+([a-zA-Z0-9_\[\]\.]+)(?:\s+(?:as\s+)?([a-zA-Z0-9_\[\]]+))?/gi;
+            var tableClauseRegex = /(?:from|join|apply|,)\s+(?:(\(\s*\))|([a-zA-Z0-9_\[\]\.]+))(?:\s+(?:as\s+)?([a-zA-Z0-9_\[\]]+))?/gi;
             var tMatch;
             while ((tMatch = tableClauseRegex.exec(fromClauseOnly)) !== null) {
-                var rawTableName = (tMatch[1] || "").trim();
-                var rawAlias = (tMatch[2] || "").trim();
+                var isDerivedSource = !!tMatch[1];
+                var rawTableName = (tMatch[2] || "").trim();
+                var rawAlias = (tMatch[3] || "").trim();
                 var cleanAlias = rawAlias.replace(/[\[\]]/g, '');
                 var isRealAlias = cleanAlias && !nonAliasKw.has(cleanAlias.toLowerCase());
                 var alias = isRealAlias ? cleanAlias : "";
 
-                var matchedObj = resolveTableOrView(rawTableName, cteMap);
+                var matchedObj = null;
+                if (isDerivedSource) {
+                    if (alias && derivedMap && derivedMap[alias.toLowerCase()]) {
+                        matchedObj = derivedMap[alias.toLowerCase()];
+                    }
+                } else {
+                    matchedObj = resolveTableOrView(rawTableName, cteMap);
+                }
+
                 if (matchedObj) {
                     if (alias) {
                         aliasMap[alias] = matchedObj.fullName;
                     }
-                    var refKey = (matchedObj.fullName || rawTableName).toLowerCase() + '::' + alias.toLowerCase();
+                    var refKey = (matchedObj.fullName || rawTableName || alias).toLowerCase() + '::' + alias.toLowerCase();
                     if (!seenKeys.has(refKey)) {
                         seenKeys.add(refKey);
                         refs.push({
@@ -2143,7 +2196,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                             qualifier: alias || matchedObj.name || matchedObj.fullName
                         });
                     }
-                } else if (alias) {
+                } else if (alias && rawTableName) {
                     aliasMap[alias] = rawTableName;
                 }
             }
@@ -2191,7 +2244,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             if (!trimmed) return;
 
             if (trimmed === '*' || /^[a-zA-Z0-9_\[\]]+\.\*$/.test(trimmed)) {
-                if (!cteRefs) cteRefs = extractTableRefsFromScope(masked, nonAliasKw, cteMap).refs;
+                if (!cteRefs) cteRefs = extractTableRefsFromScope(masked, nonAliasKw, cteMap, extractDerivedTables(cteBody, nonAliasKw, cteMap)).refs;
                 var wildQualifier = trimmed.indexOf('.') > 0 ? trimmed.split('.')[0].replace(/[\[\]]/g, '').toLowerCase() : null;
                 cteRefs.forEach(function(r) {
                     if (wildQualifier && (r.alias || '').toLowerCase() !== wildQualifier && (r.tableObj.name || '').toLowerCase() !== wildQualifier) {
@@ -2459,15 +2512,23 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         }
 
         var activeCteMap = buildVisibleCteMap(activeScopeStart);
+        var rawScopeSpan = cleanFullStmt.substring(activeScopeStart, activeScopeEnd);
+        var derivedMap = extractDerivedTables(rawScopeSpan, kwSet, activeCteMap);
         var scopeMasked = maskInnerParens(cleanFullStmt, activeScopeStart, activeScopeEnd);
         var scopeUntilCursorMasked = maskInnerParens(cleanFullStmt, activeScopeStart, cursorOffset);
-        var primaryParsed = extractTableRefsFromScope(scopeMasked, kwSet, activeCteMap);
+        var primaryParsed = extractTableRefsFromScope(scopeMasked, kwSet, activeCteMap, derivedMap);
         var referencedCols = extractReferencedColumns(scopeMasked);
 
         var outerAliasMap = {};
+        var outerDerivedMap = {};
         outerScopes.forEach(function(os) {
+            var oRawSpan = cleanFullStmt.substring(os.start, os.end);
+            var oDerived = extractDerivedTables(oRawSpan, kwSet, os.cteMap);
+            Object.keys(oDerived).forEach(function(dk) {
+                if (!outerDerivedMap[dk]) outerDerivedMap[dk] = oDerived[dk];
+            });
             var oMasked = maskInnerParens(cleanFullStmt, os.start, os.end);
-            var oParsed = extractTableRefsFromScope(oMasked, kwSet, os.cteMap);
+            var oParsed = extractTableRefsFromScope(oMasked, kwSet, os.cteMap, oDerived);
             Object.keys(oParsed.aliasMap).forEach(function(k) {
                 if (!outerAliasMap[k]) outerAliasMap[k] = oParsed.aliasMap[k];
             });
@@ -2479,6 +2540,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             cursorOffset: cursorOffset,
             cteMap: activeCteMap,
             cteList: cteInfo.cteList,
+            derivedMap: derivedMap,
+            outerDerivedMap: outerDerivedMap,
             afterCtesOffset: cteInfo.afterCtesOffset,
             scopeStart: activeScopeStart,
             scopeEnd: activeScopeEnd,
@@ -2542,6 +2605,72 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             return false;
         }
         return true;
+    }
+
+    var sqlBuiltinFunctions = [
+        { name: 'COUNT', snippet: 'COUNT($0)', detail: 'Built-in Function' },
+        { name: 'SUM', snippet: 'SUM($0)', detail: 'Built-in Function' },
+        { name: 'AVG', snippet: 'AVG($0)', detail: 'Built-in Function' },
+        { name: 'MIN', snippet: 'MIN($0)', detail: 'Built-in Function' },
+        { name: 'MAX', snippet: 'MAX($0)', detail: 'Built-in Function' },
+        { name: 'COUNT_BIG', snippet: 'COUNT_BIG($0)', detail: 'Built-in Function' },
+        { name: 'ROW_NUMBER', snippet: 'ROW_NUMBER() OVER ($0)', detail: 'Built-in Function' },
+        { name: 'RANK', snippet: 'RANK() OVER ($0)', detail: 'Built-in Function' },
+        { name: 'DENSE_RANK', snippet: 'DENSE_RANK() OVER ($0)', detail: 'Built-in Function' },
+        { name: 'ISNULL', snippet: 'ISNULL($1, $0)', detail: 'Built-in Function' },
+        { name: 'COALESCE', snippet: 'COALESCE($0)', detail: 'Built-in Function' },
+        { name: 'NULLIF', snippet: 'NULLIF($1, $0)', detail: 'Built-in Function' },
+        { name: 'IIF', snippet: 'IIF($1, $2, $0)', detail: 'Built-in Function' },
+        { name: 'TRY_CAST', snippet: 'TRY_CAST($1 AS $0)', detail: 'Built-in Function' },
+        { name: 'TRY_CONVERT', snippet: 'TRY_CONVERT($1, $0)', detail: 'Built-in Function' },
+        { name: 'GETDATE', snippet: 'GETDATE()', detail: 'Built-in Function' },
+        { name: 'GETUTCDATE', snippet: 'GETUTCDATE()', detail: 'Built-in Function' },
+        { name: 'SYSDATETIME', snippet: 'SYSDATETIME()', detail: 'Built-in Function' },
+        { name: 'DATEADD', snippet: 'DATEADD($1, $2, $0)', detail: 'Built-in Function' },
+        { name: 'DATEDIFF', snippet: 'DATEDIFF($1, $2, $0)', detail: 'Built-in Function' },
+        { name: 'DATETRUNC', snippet: 'DATETRUNC($1, $0)', detail: 'Built-in Function' },
+        { name: 'YEAR', snippet: 'YEAR($0)', detail: 'Built-in Function' },
+        { name: 'MONTH', snippet: 'MONTH($0)', detail: 'Built-in Function' },
+        { name: 'DAY', snippet: 'DAY($0)', detail: 'Built-in Function' },
+        { name: 'EOMONTH', snippet: 'EOMONTH($0)', detail: 'Built-in Function' },
+        { name: 'LEN', snippet: 'LEN($0)', detail: 'Built-in Function' },
+        { name: 'TRIM', snippet: 'TRIM($0)', detail: 'Built-in Function' },
+        { name: 'LTRIM', snippet: 'LTRIM($0)', detail: 'Built-in Function' },
+        { name: 'RTRIM', snippet: 'RTRIM($0)', detail: 'Built-in Function' },
+        { name: 'LOWER', snippet: 'LOWER($0)', detail: 'Built-in Function' },
+        { name: 'UPPER', snippet: 'UPPER($0)', detail: 'Built-in Function' },
+        { name: 'SUBSTRING', snippet: 'SUBSTRING($1, $2, $0)', detail: 'Built-in Function' },
+        { name: 'REPLACE', snippet: 'REPLACE($1, $2, $0)', detail: 'Built-in Function' },
+        { name: 'CHARINDEX', snippet: 'CHARINDEX($1, $0)', detail: 'Built-in Function' },
+        { name: 'CONCAT', snippet: 'CONCAT($0)', detail: 'Built-in Function' },
+        { name: 'STRING_AGG', snippet: 'STRING_AGG($1, $0)', detail: 'Built-in Function' },
+        { name: 'FORMAT', snippet: 'FORMAT($1, $0)', detail: 'Built-in Function' },
+        { name: 'ROUND', snippet: 'ROUND($1, $0)', detail: 'Built-in Function' },
+        { name: 'ABS', snippet: 'ABS($0)', detail: 'Built-in Function' },
+        { name: 'CEILING', snippet: 'CEILING($0)', detail: 'Built-in Function' },
+        { name: 'FLOOR', snippet: 'FLOOR($0)', detail: 'Built-in Function' },
+        { name: 'NEWID', snippet: 'NEWID()', detail: 'Built-in Function' },
+        { name: 'SCOPE_IDENTITY', snippet: 'SCOPE_IDENTITY()', detail: 'Built-in Function' }
+    ];
+
+    function findActiveExecProcedure(scanText) {
+        if (!scanText) return null;
+        var execRegex = /\b(?:exec|execute)\s+(?:@?[a-zA-Z0-9_]+\s*=\s*)?((?:\[?[a-zA-Z_][a-zA-Z0-9_]*\]?\.)*\[?[a-zA-Z_][a-zA-Z0-9_]*\]?)\s+([^;]*)$/i;
+        var m = scanText.match(execRegex);
+        if (!m) return null;
+        var rawProc = m[1];
+        var afterProc = m[2] || "";
+        var matchedSp = null;
+        if (window.sqlSps) {
+            matchedSp = window.sqlSps.find(function(sp) {
+                return tablesMatch(sp.fullName, rawProc) || tablesMatch(sp.name, rawProc);
+            });
+        }
+        return {
+            rawProc: rawProc,
+            matchedSp: matchedSp,
+            afterProc: afterProc
+        };
     }
 
     monaco.languages.registerCompletionItemProvider('sql', {
@@ -2661,7 +2790,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             var isSpaceTrigger = context && context.triggerCharacter === ' ';
             var isOnContext = /\bon\s*$/i.test(cleanTriggerText) || /\bon\s+[a-zA-Z0-9_\[\]\.]*$/i.test(cleanTriggerText);
             if (isSpaceTrigger) {
-                var isTriggerKeywordBeforeSpace = /(?:\b(?:on|join|from|into|update|delete|where|having|set|by|select|and|or|values)\b|[,(]|insert(?:\s+into)?\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s*\([^)]*\))\s*$/i.test(cleanTriggerText);
+                var isTriggerKeywordBeforeSpace = /(?:\b(?:on|join|from|into|update|delete|where|having|set|by|select|and|or|values|exec|execute)\b|[,(]|insert(?:\s+into)?\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s*\([^)]*\))\s*$/i.test(cleanTriggerText)
+                    || !!findActiveExecProcedure(cleanTriggerText);
                 if (!isTriggerKeywordBeforeSpace) {
                     return { suggestions: [] };
                 }
@@ -2723,7 +2853,16 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             var suggestKeywords = true;
 
             var lastTableKeyword = null;
-            if (clauseInfo.clause === 'INSERT_COLUMNS') {
+            var activeExecProc = (clauseInfo.clause !== 'INSERT_COLUMNS' && clauseInfo.clause !== 'VALUES')
+                ? findActiveExecProcedure(scanText)
+                : null;
+
+            if (activeExecProc) {
+                suggestTables = false;
+                suggestColumns = false;
+                suggestSps = false;
+                suggestKeywords = false;
+            } else if (clauseInfo.clause === 'INSERT_COLUMNS') {
                 suggestTables = false;
                 suggestColumns = true;
                 suggestSps = false;
@@ -2756,7 +2895,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         }
                         var textAfterTableKw = lastTableKwMatch ? scanText.substring(lastTableKwMatch.index) : scanText;
 
-                        var completedTableRegex = /(?:from|join|update|delete|into|table)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?(?:\s+|\s*\([^)]*\)\s+)/i;
+                        var completedTableRegex = /(?:from|join|update|delete|into|table)\s+(?:(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?|\(\s*\))(?:\s+|\s*\([^)]*\)\s+)/i;
                         var tableCompletedMatch = textAfterTableKw.match(completedTableRegex);
                         var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_\[\]\.]*)$/i.test(textAfterTableKw);
 
@@ -2930,6 +3069,24 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 });
             }
 
+            if (suggestTables && !isInsertContext && window.sqlFunctions) {
+                window.sqlFunctions.forEach(function(f) {
+                    var fType = (f.functionType || "").toLowerCase();
+                    if (fType.indexOf('table') >= 0) {
+                        suggestions.push({
+                            label: f.fullName,
+                            kind: monaco.languages.CompletionItemKind.Function,
+                            insertText: f.fullName + '($0)',
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            filterText: f.name + " " + f.fullName,
+                            sortText: '0002_' + String(f.name.length).padStart(4, '0') + '_' + f.name,
+                            range: replaceRange,
+                            detail: f.functionType ? ('Function (' + f.functionType + ')') : 'Function'
+                        });
+                    }
+                });
+            }
+
             if (suggestColumns || suggestTables) {
                 var aliasMap = scopeInfo.aliasMap;
                 var outerAliasMap = scopeInfo.outerAliasMap || {};
@@ -2954,10 +3111,15 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
                 if (suggestColumns) {
                     if (explicitTableName) {
-                        // User explicitly typed "o." -> suggest only columns of that table/view/CTE
+                        // User explicitly typed "o." -> suggest only columns of that table/view/CTE/derived table
                         var matchedObjs = [];
-                        var cteTarget = scopeInfo.cteMap ? scopeInfo.cteMap[normalizeTableName(explicitTableName)] : null;
-                        if (cteTarget) {
+                        var explicitNorm = normalizeTableName(explicitTableName);
+                        var derivedTarget = (scopeInfo.derivedMap && scopeInfo.derivedMap[explicitNorm])
+                            || (scopeInfo.outerDerivedMap && scopeInfo.outerDerivedMap[explicitNorm]);
+                        var cteTarget = scopeInfo.cteMap ? scopeInfo.cteMap[explicitNorm] : null;
+                        if (derivedTarget) {
+                            matchedObjs.push(derivedTarget);
+                        } else if (cteTarget) {
                             matchedObjs.push(cteTarget);
                         }
                         var collectDotTarget = function(t) {
@@ -3229,6 +3391,40 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
             }
 
+            if (activeExecProc && activeExecProc.matchedSp && Array.isArray(activeExecProc.matchedSp.parameters)) {
+                var afterCommaSeg = activeExecProc.afterProc.split(',').pop() || "";
+                var awaitingParamValue = /=/.test(afterCommaSeg);
+                if (!awaitingParamValue) {
+                    var usedParamSet = new Set();
+                    var usedRegex = /(@[a-zA-Z0-9_]+)\s*=/gi;
+                    var upm;
+                    while ((upm = usedRegex.exec(activeExecProc.afterProc)) !== null) {
+                        usedParamSet.add(upm[1].toLowerCase());
+                    }
+
+                    var paramMatch = textBeforeCursor.match(/@[a-zA-Z0-9_]*$/);
+                    var paramReplaceRange = paramMatch ? {
+                        startLineNumber: position.lineNumber,
+                        endLineNumber: position.lineNumber,
+                        startColumn: position.column - paramMatch[0].length,
+                        endColumn: position.column
+                    } : replaceRange;
+
+                    activeExecProc.matchedSp.parameters.forEach(function(p, pIdx) {
+                        if (!p || !p.name || usedParamSet.has(p.name.toLowerCase())) return;
+                        suggestions.push({
+                            label: p.name,
+                            kind: monaco.languages.CompletionItemKind.Property,
+                            insertText: p.name + ' = ',
+                            filterText: p.name + ' ' + p.name.replace(/^@/, ''),
+                            sortText: '0001_' + String(pIdx).padStart(3, '0') + '_' + p.name,
+                            range: paramReplaceRange,
+                            detail: p.type ? ('Parameter (' + p.type + ')') : 'Parameter'
+                        });
+                    });
+                }
+            }
+
             if (suggestSps && window.sqlSps) {
                 window.sqlSps.forEach(sp => {
                     var paramsText = '';
@@ -3247,7 +3443,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 });
             }
 
-            var isExplicitSpPrefix = fullTypedWord.toLowerCase().startsWith('sp_') || fullTypedWord.toLowerCase() === 'sp';
+            var isExplicitSpPrefix = !activeExecProc && (fullTypedWord.toLowerCase().startsWith('sp_') || fullTypedWord.toLowerCase() === 'sp');
             if (suggestSps || isExplicitSpPrefix) {
                 systemProcedures.forEach(sp => {
                     var item = {
@@ -3268,6 +3464,46 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         };
                     }
                     suggestions.push(item);
+                });
+            }
+
+            var isFunctionExprContext = !activeExecProc
+                && !isInsertContext
+                && !isOnContext
+                && !hasExplicitDotOnLine
+                && clauseInfo.clause !== 'INSERT_COLUMNS'
+                && clauseInfo.clause !== 'GROUP BY'
+                && (suggestColumns || clauseInfo.clause === 'VALUES');
+
+            if (isFunctionExprContext) {
+                if (window.sqlFunctions) {
+                    window.sqlFunctions.forEach(function(f) {
+                        var fType = (f.functionType || "").toLowerCase();
+                        if (fType.indexOf('table') >= 0) return;
+                        suggestions.push({
+                            label: f.fullName,
+                            kind: monaco.languages.CompletionItemKind.Function,
+                            insertText: f.fullName + '($0)',
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            filterText: f.name + " " + f.fullName,
+                            sortText: '0080_' + String(f.name.length).padStart(4, '0') + '_' + f.name,
+                            range: replaceRange,
+                            detail: f.functionType ? ('Function (' + f.functionType + ')') : 'Function'
+                        });
+                    });
+                }
+
+                sqlBuiltinFunctions.forEach(function(fn) {
+                    suggestions.push({
+                        label: fn.name,
+                        kind: monaco.languages.CompletionItemKind.Function,
+                        insertText: fn.snippet,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        filterText: fn.name,
+                        sortText: '0085_' + fn.name,
+                        range: replaceRange,
+                        detail: fn.detail
+                    });
                 });
             }
 

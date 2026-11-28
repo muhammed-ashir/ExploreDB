@@ -913,8 +913,23 @@
         await JS.InvokeVoidAsync("updateSqlAutocompleteData", null, null, columns, null);
         await Task.Delay(1);
 
-        var sps = schema.Sps.Select(s => new { name = s.Split('.').Last().Trim('[', ']'), fullName = s, parameters = new List<object>() }).ToList();
-        var functions = schema.Functions.Select(f => new { name = f.Split('.').Last().Trim('[', ']'), fullName = f, functionType = "", parameters = new List<object>() }).ToList();
+        object sps = (SchemaService.StoredProcedures != null && SchemaService.StoredProcedures.Count > 0)
+            ? (object)SchemaService.StoredProcedures.Select(s => new {
+                name = s.Name,
+                fullName = s.FullName,
+                parameters = s.Parameters.Select(p => new { name = p.Name, type = p.DisplayType }).ToList()
+              }).ToList()
+            : schema.Sps.Select(s => new { name = s.Split('.').Last().Trim('[', ']'), fullName = s, parameters = new List<object>() }).ToList();
+
+        object functions = (SchemaService.Functions != null && SchemaService.Functions.Count > 0)
+            ? (object)SchemaService.Functions.Select(f => new {
+                name = f.Name,
+                fullName = f.FullName,
+                functionType = f.FunctionType,
+                parameters = f.Parameters.Select(p => new { name = p.Name, type = p.DisplayType }).ToList()
+              }).ToList()
+            : schema.Functions.Select(f => new { name = f.Split('.').Last().Trim('[', ']'), fullName = f, functionType = "", parameters = new List<object>() }).ToList();
+
         await JS.InvokeVoidAsync("registerSqlAutocomplete", null, null, null, sps, functions, null);
     }
 
