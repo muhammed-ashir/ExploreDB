@@ -72,18 +72,20 @@
                             }
                         </div>
                     </th>
-                    @for (int cIdx = 0; cIdx < Columns.Count; cIdx++)
+                    @for (int dIdx = 0; dIdx < _columnOrder.Count; dIdx++)
                     {
-                        var col = Columns[cIdx];
-                        int localCol = cIdx;
+                        int actualCol = _columnOrder[dIdx];
+                        var col = Columns[actualCol];
+                        int localCol = actualCol;
                         bool isColSelected = IsColumnFullySelected(localCol);
-                        <th class="p-0 align-middle @(isColSelected ? "selected-col-header" : "") col-resizable position-relative" 
+                        <th @key="localCol"
+                            class="p-0 align-middle @(isColSelected ? "selected-col-header" : "") col-resizable col-reorderable position-relative" 
                             data-col-index="@localCol" 
                             data-col-name="@col"
                             style="@GetColumnWidthStyle(col)">
                             <div class="d-flex justify-content-between align-items-center overflow-hidden px-2 py-1 gap-2" 
                                  style="cursor: pointer; user-select: none;" 
-                                 title="Click to select column (Ctrl+Click to toggle, Shift+Click for range)"
+                                 title="Click to select column (Ctrl/Shift), drag header to reorder"
                                  @onclick="e => OnColumnHeaderClick(e, localCol)" 
                                  @oncontextmenu="e => ShowColumnHeaderContextMenu(e, localCol, col)" 
                                  @oncontextmenu:preventDefault="true">
@@ -159,10 +161,11 @@
                                 @(displayIndex + 1)
                             }
                         </td>
-                        @for (int colIdx = 0; colIdx < Columns.Count; colIdx++)
+                        @for (int dIdx = 0; dIdx < _columnOrder.Count; dIdx++)
                         {
-                            var col = Columns[colIdx];
-                            int localCol = colIdx;
+                            int actualCol = _columnOrder[dIdx];
+                            var col = Columns[actualCol];
+                            int localCol = actualCol;
                             string? val;
                             byte[]? binaryBadgeBytes = null;
                             bool isJsonOrXml = false;
@@ -210,7 +213,8 @@
                             }
 
                             bool isCellSelected = IsCellSelected(actualIndex, localCol);
-                            <td class="@(isCellSelected ? "selected-cell" : "")"
+                            <td @key="localCol"
+                                class="@(isCellSelected ? "selected-cell" : "")"
                                 style="white-space: nowrap; max-width: 1px; overflow: hidden; text-overflow: ellipsis; padding: 2px 8px; font-size: 0.78rem; line-height: 1.25; height: @(RowHeight)px;" 
                                 title="@val"
                                 @onclick="e => OnCellClick(e, actualIndex, localCol)"
@@ -272,6 +276,7 @@
             </tbody>
         </table>
         <div class="grid-col-guide" style="display: none;"></div>
+        <div class="grid-col-drop-indicator" style="display: none;"></div>
     </div>
 
     @if (!string.IsNullOrEmpty(ActiveAggregateColumn))
@@ -386,6 +391,14 @@ else
                 </button>
             }
             <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
+            @if (IsColumnContextMenu && IsColumnOrderModified)
+            {
+                <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
+                <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="ResetColumnOrder">
+                    <i class="bi bi-arrow-counterclockwise text-muted"></i>
+                    <span>Reset Column Order</span>
+                </button>
+            }
             @if (_tableStore == null || _tableStore.IsComplete)
             {
                 <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="async () => { HideContextMenu(); await ExportToExcelAsync(); }">
@@ -800,6 +813,73 @@ else
     private object? AggMin = null;
     private object? AggMax = null;
     private List<string> Columns = new();
+    private List<int> _columnOrder = new();
+
+    private void EnsureColumnOrderInitialized()
+    {
+        if (Columns.Count == 0)
+        {
+            _columnOrder.Clear();
+            return;
+        }
+        if (_columnOrder.Count != Columns.Count)
+        {
+            var seen = new HashSet<int>();
+            var next = new List<int>(Columns.Count);
+            foreach (var c in _columnOrder)
+            {
+                if ((uint)c < (uint)Columns.Count && seen.Add(c))
+                {
+                    next.Add(c);
+                }
+            }
+            for (int c = 0; c < Columns.Count; c++)
+            {
+                if (seen.Add(c)) next.Add(c);
+            }
+            _columnOrder = next;
+        }
+    }
+
+    private bool IsColumnOrderModified
+    {
+        get
+        {
+            if (_columnOrder.Count != Columns.Count) return false;
+            for (int i = 0; i < _columnOrder.Count; i++)
+            {
+                if (_columnOrder[i] != i) return true;
+            }
+            return false;
+        }
+    }
+
+    private int GetVisualColumnIndex(int rawColIndex)
+    {
+        int vis = _columnOrder.IndexOf(rawColIndex);
+        return vis >= 0 ? vis : rawColIndex;
+    }
+
+    [JSInvokable]
+    public void MoveColumnToSlot(int fromVisualIndex, int dropSlot)
+    {
+        if ((uint)fromVisualIndex >= (uint)_columnOrder.Count) return;
+        dropSlot = Math.Clamp(dropSlot, 0, _columnOrder.Count);
+        if (dropSlot == fromVisualIndex || dropSlot == fromVisualIndex + 1) return;
+
+        int movingCol = _columnOrder[fromVisualIndex];
+        _columnOrder.RemoveAt(fromVisualIndex);
+        int insertIdx = Math.Clamp(dropSlot > fromVisualIndex ? dropSlot - 1 : dropSlot, 0, _columnOrder.Count);
+        _columnOrder.Insert(insertIdx, movingCol);
+        StateHasChanged();
+    }
+
+    private void ResetColumnOrder()
+    {
+        HideContextMenu();
+        _columnOrder = Enumerable.Range(0, Columns.Count).ToList();
+        StateHasChanged();
+    }
 
     [Parameter]
     public int ResultSetIndex { get; set; } = 1;
@@ -940,6 +1020,7 @@ else
             _lastComputedCount = -1;
             _shouldResetScroll = true;
             _columnWidths.Clear();
+            _columnOrder.Clear();
             _sortedIndices = null;
             _filteredIndices = null;
             SortColumn = null;
@@ -984,7 +1065,10 @@ else
             Columns.Clear();
             Rows.Clear();
             _columnWidths.Clear();
+            _columnOrder.Clear();
         }
+
+        EnsureColumnOrderInitialized();
 
         if (isNewData && Columns.Count > 0)
         {
@@ -1846,15 +1930,17 @@ else
             {
                 int startD = Math.Max(0, Math.Min(prevDisplay, curDisplay));
                 int endD = Math.Min(ActiveRowCount - 1, Math.Max(prevDisplay, curDisplay));
-                int startC = Math.Max(0, Math.Min(prevAnchorCol, colIndex));
-                int endC = Math.Min(Columns.Count - 1, Math.Max(prevAnchorCol, colIndex));
+                int prevVisCol = GetVisualColumnIndex(prevAnchorCol);
+                int curVisCol = GetVisualColumnIndex(colIndex);
+                int startVisC = Math.Max(0, Math.Min(prevVisCol, curVisCol));
+                int endVisC = Math.Min(_columnOrder.Count - 1, Math.Max(prevVisCol, curVisCol));
 
                 for (int d = startD; d <= endD; d++)
                 {
                     int r = GetActualRowIndex(d);
-                    for (int c = startC; c <= endC; c++)
+                    for (int vc = startVisC; vc <= endVisC; vc++)
                     {
-                        SelectedCells.Add((r, c));
+                        SelectedCells.Add((r, _columnOrder[vc]));
                     }
                 }
             }
@@ -1893,9 +1979,11 @@ else
             int prevCol = _lastSelectedCell.Col;
             ClearCellSelection();
 
-            int startC = Math.Min(prevCol, colIndex);
-            int endC = Math.Max(prevCol, colIndex);
-            for (int c = startC; c <= endC; c++) SelectedEntireCols.Add(c);
+            int prevVisCol = GetVisualColumnIndex(prevCol);
+            int curVisCol = GetVisualColumnIndex(colIndex);
+            int startVisC = Math.Max(0, Math.Min(prevVisCol, curVisCol));
+            int endVisC = Math.Min(_columnOrder.Count - 1, Math.Max(prevVisCol, curVisCol));
+            for (int vc = startVisC; vc <= endVisC; vc++) SelectedEntireCols.Add(_columnOrder[vc]);
             _lastSelectedCell = (0, colIndex);
         }
         else
@@ -2022,6 +2110,7 @@ else
         QueryResultTable? TableStore,
         List<IDictionary<string, object>>? LegacyRows,
         List<string> Columns,
+        List<int> ColumnOrder,
         int[]? ViewIndices,
         int TotalDataCount,
         int ActiveRowCount);
@@ -2041,7 +2130,10 @@ else
         int total = tableStore?.RowCount ?? legacyRows!.Count;
         var viewIndices = _viewIndices;
         int active = viewIndices != null ? viewIndices.Length : total;
-        return new GridDataSnapshot(tableStore, legacyRows, Columns.ToList(), viewIndices, total, active);
+        var colOrder = _columnOrder.Count == Columns.Count
+            ? _columnOrder.ToList()
+            : Enumerable.Range(0, Columns.Count).ToList();
+        return new GridDataSnapshot(tableStore, legacyRows, Columns.ToList(), colOrder, viewIndices, total, active);
     }
 
     private static object? GetSnapshotRawCellValue(GridDataSnapshot snap, int actualRowIndex, int colIndex)
@@ -2091,14 +2183,19 @@ else
 
     private static List<int> ResolveTargetColumns(
         int colCount,
+        List<int>? columnOrder,
         bool isAllSelected,
         List<int> selectedCols,
         List<int> selectedRows,
         List<(int Row, int Col)> selectedCells)
     {
+        var orderedCols = (columnOrder != null && columnOrder.Count == colCount)
+            ? columnOrder
+            : Enumerable.Range(0, colCount).ToList();
+
         if (isAllSelected || selectedRows.Count > 0)
         {
-            return Enumerable.Range(0, colCount).ToList();
+            return orderedCols.ToList();
         }
 
         var colSet = new HashSet<int>();
@@ -2111,9 +2208,7 @@ else
             if ((uint)cell.Col < (uint)colCount) colSet.Add(cell.Col);
         }
 
-        var cols = colSet.ToList();
-        cols.Sort();
-        return cols;
+        return orderedCols.Where(colSet.Contains).ToList();
     }
 
     private static List<int> ResolveExplicitRowsInDisplayOrder(
@@ -2317,7 +2412,7 @@ else
             return;
         }
 
-        var targetCols = ResolveTargetColumns(snap.Columns.Count, isAll, colsSelected, rowsSelected, cellsSelected);
+        var targetCols = ResolveTargetColumns(snap.Columns.Count, snap.ColumnOrder, isAll, colsSelected, rowsSelected, cellsSelected);
         if (targetCols.Count == 0) return;
 
         bool allDisplayRows = isAll || colsSelected.Count > 0;
@@ -2445,10 +2540,12 @@ else
         int anchorRow = _lastSelectedCell.Row;
         string tableName = ResolveTargetTableName();
 
-        var targetCols = ResolveTargetColumns(snap.Columns.Count, isAll, colsSelected, rowsSelected, cellsSelected);
+        var targetCols = ResolveTargetColumns(snap.Columns.Count, snap.ColumnOrder, isAll, colsSelected, rowsSelected, cellsSelected);
         if (targetCols.Count == 0)
         {
-            targetCols = Enumerable.Range(0, snap.Columns.Count).ToList();
+            targetCols = snap.ColumnOrder.Count == snap.Columns.Count
+                ? snap.ColumnOrder.ToList()
+                : Enumerable.Range(0, snap.Columns.Count).ToList();
         }
 
         bool allDisplayRows = isAll || colsSelected.Count > 0;
@@ -3102,6 +3199,9 @@ else
         if (rowCount == 0 || Columns.Count == 0) return;
 
         var colsSnapshot = Columns.ToList();
+        var colOrderSnapshot = _columnOrder.Count == colsSnapshot.Count
+            ? _columnOrder.ToList()
+            : Enumerable.Range(0, colsSnapshot.Count).ToList();
 
         IsExporting = true;
         _exportCts = new CancellationTokenSource();
@@ -3120,10 +3220,11 @@ else
                 using var workbook = new XLWorkbook();
                 var worksheet = workbook.Worksheets.Add("Result Set");
 
-                for (int i = 0; i < colsSnapshot.Count; i++)
+                for (int dIdx = 0; dIdx < colOrderSnapshot.Count; dIdx++)
                 {
-                    worksheet.Cell(1, i + 1).Value = colsSnapshot[i];
-                    worksheet.Cell(1, i + 1).Style.Font.Bold = true;
+                    int actualCol = colOrderSnapshot[dIdx];
+                    worksheet.Cell(1, dIdx + 1).Value = colsSnapshot[actualCol];
+                    worksheet.Cell(1, dIdx + 1).Style.Font.Bold = true;
                 }
 
                 int maxRows = Math.Min(rowCount, 1048500);
@@ -3132,29 +3233,30 @@ else
                     if (token.IsCancellationRequested) return Array.Empty<byte>();
                     int actualIndex = GetActualRowIndex(rowIdx);
 
-                    for (int colIdx = 0; colIdx < colsSnapshot.Count; colIdx++)
+                    for (int dIdx = 0; dIdx < colOrderSnapshot.Count; dIdx++)
                     {
-                        var val = GetRawCellValue(actualIndex, colIdx, colsSnapshot[colIdx]);
+                        int actualCol = colOrderSnapshot[dIdx];
+                        var val = GetRawCellValue(actualIndex, actualCol, colsSnapshot[actualCol]);
                         if (val != null)
                         {
-                            if (val is string s) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = s;
-                            else if (val is int iv) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = iv;
-                            else if (val is long lv) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = lv;
-                            else if (val is short sv) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = sv;
-                            else if (val is decimal dv) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = dv;
-                            else if (val is double dub) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = dub;
-                            else if (val is float f) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = f;
-                            else if (val is bool b) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = b;
-                            else if (val is DateTime dt) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = dt;
-                            else if (val is TimeSpan ts) worksheet.Cell(rowIdx + 2, colIdx + 1).Value = ts;
+                            if (val is string s) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = s;
+                            else if (val is int iv) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = iv;
+                            else if (val is long lv) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = lv;
+                            else if (val is short sv) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = sv;
+                            else if (val is decimal dv) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = dv;
+                            else if (val is double dub) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = dub;
+                            else if (val is float f) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = f;
+                            else if (val is bool b) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = b;
+                            else if (val is DateTime dt) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = dt;
+                            else if (val is TimeSpan ts) worksheet.Cell(rowIdx + 2, dIdx + 1).Value = ts;
                             else if (val is byte[] bytes)
                             {
                                 if (bytes.Length <= 16000)
-                                    worksheet.Cell(rowIdx + 2, colIdx + 1).Value = BinaryDataHelper.ToHexString(bytes, prefix: true);
+                                    worksheet.Cell(rowIdx + 2, dIdx + 1).Value = BinaryDataHelper.ToHexString(bytes, prefix: true);
                                 else
-                                    worksheet.Cell(rowIdx + 2, colIdx + 1).Value = BinaryDataHelper.FormatBinaryForDisplay(bytes);
+                                    worksheet.Cell(rowIdx + 2, dIdx + 1).Value = BinaryDataHelper.FormatBinaryForDisplay(bytes);
                             }
-                            else worksheet.Cell(rowIdx + 2, colIdx + 1).Value = val.ToString();
+                            else worksheet.Cell(rowIdx + 2, dIdx + 1).Value = val.ToString();
                         }
                     }
                 }
@@ -3212,6 +3314,9 @@ else
         if (rowCount == 0 || Columns.Count == 0) return;
 
         var colsSnapshot = Columns.ToList();
+        var colOrderSnapshot = _columnOrder.Count == colsSnapshot.Count
+            ? _columnOrder.ToList()
+            : Enumerable.Range(0, colsSnapshot.Count).ToList();
 
         IsExporting = true;
         _exportCts = new CancellationTokenSource();
@@ -3230,10 +3335,10 @@ else
                 using var memoryStream = new MemoryStream();
                 using (var writer = new StreamWriter(memoryStream, new System.Text.UTF8Encoding(true)))
                 {
-                    for (int i = 0; i < colsSnapshot.Count; i++)
+                    for (int dIdx = 0; dIdx < colOrderSnapshot.Count; dIdx++)
                     {
-                        if (i > 0) writer.Write(",");
-                        writer.Write(EscapeCsvCell(colsSnapshot[i]));
+                        if (dIdx > 0) writer.Write(",");
+                        writer.Write(EscapeCsvCell(colsSnapshot[colOrderSnapshot[dIdx]]));
                     }
                     writer.Write("\r\n");
 
@@ -3242,11 +3347,12 @@ else
                         if (token.IsCancellationRequested) return Array.Empty<byte>();
                         int actualIndex = GetActualRowIndex(rowIdx);
 
-                        for (int colIdx = 0; colIdx < colsSnapshot.Count; colIdx++)
+                        for (int dIdx = 0; dIdx < colOrderSnapshot.Count; dIdx++)
                         {
-                            if (colIdx > 0) writer.Write(",");
+                            if (dIdx > 0) writer.Write(",");
 
-                            var val = GetRawCellValue(actualIndex, colIdx, colsSnapshot[colIdx]);
+                            int actualCol = colOrderSnapshot[dIdx];
+                            var val = GetRawCellValue(actualIndex, actualCol, colsSnapshot[actualCol]);
                             if (val != null)
                             {
                                 if (val is byte[] bytes)
@@ -3256,11 +3362,11 @@ else
                                 }
                                 else if (val is DateTime dt)
                                 {
-                                    writer.Write(EscapeCsvCell(FormatCellValue(dt, colIdx)));
+                                    writer.Write(EscapeCsvCell(FormatCellValue(dt, actualCol)));
                                 }
                                 else if (val is DateTimeOffset dto)
                                 {
-                                    writer.Write(EscapeCsvCell(FormatCellValue(dto, colIdx)));
+                                    writer.Write(EscapeCsvCell(FormatCellValue(dto, actualCol)));
                                 }
                                 else if (val is bool b)
                                 {

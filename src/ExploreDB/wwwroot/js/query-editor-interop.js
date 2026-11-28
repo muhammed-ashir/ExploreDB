@@ -4938,6 +4938,7 @@ window.initGridColumnResizers = function (containerId, dotNetRef) {
 
     var table = container.querySelector('.result-set-table');
     var guide = container.querySelector('.grid-col-guide');
+    var dropIndicator = container.querySelector('.grid-col-drop-indicator');
     if (!table) return false;
 
     var isDragging = false;
@@ -4947,6 +4948,29 @@ window.initGridColumnResizers = function (containerId, dotNetRef) {
     var currentTh = null;
     var currentColName = null;
     var currentPointerId = null;
+
+    var isReorderCandidate = false;
+    var isReordering = false;
+    var reorderStartX = 0;
+    var reorderTh = null;
+    var reorderFromVisualIdx = -1;
+    var reorderDropSlot = -1;
+
+    function getReorderableThs() {
+        return Array.prototype.slice.call(table.querySelectorAll('thead th.col-reorderable'));
+    }
+
+    function suppressNextClick() {
+        var blockClick = function (evt) {
+            evt.stopPropagation();
+            evt.preventDefault();
+            window.removeEventListener('click', blockClick, true);
+        };
+        window.addEventListener('click', blockClick, true);
+        setTimeout(function () {
+            window.removeEventListener('click', blockClick, true);
+        }, 120);
+    }
 
     function getColumnFromEvent(e) {
         // 1. Direct handle in <th>
@@ -4994,7 +5018,58 @@ window.initGridColumnResizers = function (containerId, dotNetRef) {
         };
     }
 
+    function updateReorderDropIndicator(clientX) {
+        var dataThs = getReorderableThs();
+        if (dataThs.length === 0) return;
+
+        var cRect = container.getBoundingClientRect();
+        if (clientX > cRect.right - 35) {
+            container.scrollLeft += 10;
+        } else if (clientX < cRect.left + 35) {
+            container.scrollLeft -= 10;
+        }
+
+        var slot = dataThs.length;
+        var indicatorClientX = 0;
+        for (var i = 0; i < dataThs.length; i++) {
+            var r = dataThs[i].getBoundingClientRect();
+            var mid = r.left + r.width / 2;
+            if (clientX < mid) {
+                slot = i;
+                indicatorClientX = r.left;
+                break;
+            }
+        }
+        if (slot === dataThs.length) {
+            indicatorClientX = dataThs[dataThs.length - 1].getBoundingClientRect().right;
+        }
+        reorderDropSlot = slot;
+
+        if (dropIndicator) {
+            var dropX = indicatorClientX - cRect.left + container.scrollLeft;
+            var scrollTop = container.scrollTop || 0;
+            var visibleHeight = Math.max(28, Math.min(table.offsetHeight - scrollTop, container.clientHeight || table.offsetHeight));
+            dropIndicator.style.left = Math.max(0, Math.round(dropX) - 1) + 'px';
+            dropIndicator.style.top = Math.round(scrollTop) + 'px';
+            dropIndicator.style.height = Math.round(visibleHeight) + 'px';
+            dropIndicator.style.display = 'block';
+        }
+    }
+
     function onPointerMove(e) {
+        if (isReorderCandidate) {
+            if (!isReordering) {
+                if (Math.abs(e.clientX - reorderStartX) <= 5) return;
+                isReordering = true;
+                container.classList.remove('grid-col-hover');
+                document.body.classList.add('grid-col-reordering');
+                if (reorderTh) reorderTh.classList.add('dragging-col-header');
+                try { container.setPointerCapture(e.pointerId); } catch (err) {}
+            }
+            updateReorderDropIndicator(e.clientX);
+            return;
+        }
+
         if (!isDragging) {
             var colInfo = getColumnFromEvent(e);
             if (colInfo) {
@@ -5037,35 +5112,81 @@ window.initGridColumnResizers = function (containerId, dotNetRef) {
         if (e.button !== 0) return; // Left mouse button only
 
         var colInfo = getColumnFromEvent(e);
-        if (!colInfo || !colInfo.th) return;
+        if (colInfo && colInfo.th) {
+            e.preventDefault();
+            e.stopPropagation();
 
-        e.preventDefault();
-        e.stopPropagation();
+            isDragging = true;
+            hasMoved = false;
+            startX = e.clientX;
+            currentTh = colInfo.th;
+            currentColName = colInfo.colName;
+            startWidth = currentTh.getBoundingClientRect().width;
+            currentPointerId = e.pointerId;
 
-        isDragging = true;
-        hasMoved = false;
-        startX = e.clientX;
-        currentTh = colInfo.th;
-        currentColName = colInfo.colName;
-        startWidth = currentTh.getBoundingClientRect().width;
-        currentPointerId = e.pointerId;
+            try { container.setPointerCapture(e.pointerId); } catch (err) {}
 
-        try { container.setPointerCapture(e.pointerId); } catch (err) {}
+            document.body.classList.add('grid-col-resizing');
 
-        document.body.classList.add('grid-col-resizing');
+            if (guide) {
+                var cRect = container.getBoundingClientRect();
+                var thRect = currentTh.getBoundingClientRect();
+                var guideX = thRect.right - cRect.left + container.scrollLeft;
+                guide.style.left = Math.round(guideX) + 'px';
+                guide.style.top = '0px';
+                guide.style.height = table.offsetHeight + 'px';
+                guide.style.display = 'block';
+            }
+            return;
+        }
 
-        if (guide) {
-            var cRect = container.getBoundingClientRect();
-            var thRect = currentTh.getBoundingClientRect();
-            var guideX = thRect.right - cRect.left + container.scrollLeft;
-            guide.style.left = Math.round(guideX) + 'px';
-            guide.style.top = '0px';
-            guide.style.height = table.offsetHeight + 'px';
-            guide.style.display = 'block';
+        var headerTh = e.target && e.target.closest ? e.target.closest('thead th.col-reorderable') : null;
+        if (headerTh && !e.target.closest('.sort-btn, button, i[title]')) {
+            var dataThs = getReorderableThs();
+            var fromVis = dataThs.indexOf(headerTh);
+            if (fromVis >= 0 && dataThs.length > 1) {
+                isReorderCandidate = true;
+                isReordering = false;
+                reorderStartX = e.clientX;
+                reorderTh = headerTh;
+                reorderFromVisualIdx = fromVis;
+                reorderDropSlot = fromVis;
+            }
         }
     }
 
     function onPointerUp(e) {
+        if (isReorderCandidate) {
+            var wasReordering = isReordering;
+            var fromIdx = reorderFromVisualIdx;
+            var dropSlot = reorderDropSlot;
+
+            isReorderCandidate = false;
+            isReordering = false;
+            reorderTh = null;
+            reorderFromVisualIdx = -1;
+            reorderDropSlot = -1;
+
+            if (wasReordering) {
+                try { container.releasePointerCapture(e.pointerId); } catch (err) {}
+                if (dropIndicator) dropIndicator.style.display = 'none';
+                document.body.classList.remove('grid-col-reordering');
+                var draggingHeaders = table.querySelectorAll('thead th.dragging-col-header');
+                for (var dh = 0; dh < draggingHeaders.length; dh++) {
+                    draggingHeaders[dh].classList.remove('dragging-col-header');
+                }
+                suppressNextClick();
+
+                if (e.type !== 'pointercancel' && dropSlot >= 0 && dropSlot !== fromIdx && dropSlot !== fromIdx + 1) {
+                    var refReorder = container._dotNetRef;
+                    if (refReorder && typeof refReorder.invokeMethodAsync === 'function') {
+                        refReorder.invokeMethodAsync('MoveColumnToSlot', fromIdx, dropSlot);
+                    }
+                }
+            }
+            return;
+        }
+
         if (!isDragging) return;
 
         try { container.releasePointerCapture(e.pointerId); } catch (err) {}
@@ -5079,16 +5200,7 @@ window.initGridColumnResizers = function (containerId, dotNetRef) {
         isDragging = false;
 
         if (hasMoved) {
-            // Block any click that might be fired by the browser on the cell/header
-            var blockClick = function (evt) {
-                evt.stopPropagation();
-                evt.preventDefault();
-                window.removeEventListener('click', blockClick, true);
-            };
-            window.addEventListener('click', blockClick, true);
-            setTimeout(function () {
-                window.removeEventListener('click', blockClick, true);
-            }, 120);
+            suppressNextClick();
 
             var finalWidth = Math.round(currentTh.getBoundingClientRect().width);
             var ref = container._dotNetRef;
@@ -5139,7 +5251,7 @@ window.initGridColumnResizers = function (containerId, dotNetRef) {
     }
 
     function onPointerLeave() {
-        if (!isDragging) {
+        if (!isDragging && !isReordering) {
             container.classList.remove('grid-col-hover');
         }
     }
