@@ -1866,6 +1866,23 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         }
 
         if (matches.length === 0) {
+            if (parenDepth > 0 && lastOpenParenIdx >= 0) {
+                var beforeOpenParen = clean.substring(0, lastOpenParenIdx);
+                if (/insert(?:\s+into)?\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s*$/i.test(beforeOpenParen)) {
+                    return {
+                        clause: 'INSERT_COLUMNS',
+                        inParens: true,
+                        hasExpression: false
+                    };
+                }
+                if (/\bvalues\s*$/i.test(beforeOpenParen)) {
+                    return {
+                        clause: 'VALUES',
+                        inParens: true,
+                        hasExpression: false
+                    };
+                }
+            }
             return {
                 clause: 'SELECT',
                 inParens: parenDepth > 0,
@@ -1877,8 +1894,8 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         var clauseName = lastMatch.kw;
         if (clauseName.indexOf('JOIN') >= 0) clauseName = 'JOIN';
 
-        var textAfterClauseKw = textToScan.substring(lastMatch.index + lastMatch.length).trim();
-        var withoutLastToken = textAfterClauseKw.replace(/[a-zA-Z0-9_\[\]\.]+$/, '').trim();
+        var rawAfterClauseKw = textToScan.substring(lastMatch.index + lastMatch.length);
+        var withoutLastToken = rawAfterClauseKw.replace(/[a-zA-Z0-9_\[\]\.]+$/, '').trim();
 
         // An expression exists if there's text between the clause keyword and the active token,
         // UNLESS that text ends with an operator/connector (AND, OR, NOT, comma, =, <, >, etc.)
@@ -1900,10 +1917,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
 
         switch (clause) {
             case 'WHERE':
-            case 'HAVING':
                 var whereKws = [];
                 if (hasExpression) {
-                    whereKws.push('AND', 'OR', 'ORDER BY', 'GROUP BY');
+                    whereKws.push('AND', 'OR', 'ORDER BY', 'GROUP BY', 'HAVING', 'UNION', 'UNION ALL');
                 }
                 whereKws.push('NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE', 'IS NULL', 'IS NOT NULL');
                 whereKws.push.apply(whereKws, exprKeywords);
@@ -1911,6 +1927,24 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                     whereKws.push('SELECT', 'DISTINCT', 'TOP');
                 }
                 return whereKws;
+
+            case 'HAVING':
+                var havingKws = [];
+                if (hasExpression) {
+                    havingKws.push('AND', 'OR', 'ORDER BY', 'UNION', 'UNION ALL');
+                }
+                havingKws.push('NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE', 'IS NULL', 'IS NOT NULL');
+                havingKws.push.apply(havingKws, exprKeywords);
+                return havingKws;
+
+            case 'INSERT_COLUMNS':
+                return [];
+
+            case 'INTO':
+                return inParens ? [] : ['VALUES', 'SELECT', 'OUTPUT'];
+
+            case 'VALUES':
+                return ['NULL', 'DEFAULT', 'CAST', 'CONVERT', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END'];
 
             case 'ON':
                 var onKws = [];
@@ -2114,7 +2148,7 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
             }
         } else {
-            var dmlTableRegex = /(?:update|delete(?:\s+top\s*\(\s*[^)]*\s*\))?)\s+([a-zA-Z0-9_\[\]\.]+)/gi;
+            var dmlTableRegex = /(?:update|delete(?:\s+top\s*\(\s*[^)]*\s*\))?|insert(?:\s+into)?)\s+([a-zA-Z0-9_\[\]\.]+)/gi;
             var dMatch;
             while ((dMatch = dmlTableRegex.exec(scopeMasked)) !== null) {
                 var dmlTableName = (dMatch[1] || "").trim();
@@ -2491,6 +2525,25 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
         return '0002_' + tail;
     }
 
+    var postTableClauseKeywords = [
+        'where', 'on', 'join', 'inner', 'left', 'right', 'full', 'outer', 'cross',
+        'group', 'order', 'having', 'union', 'except', 'intersect', 'option', 'for', 'set'
+    ];
+
+    function isTypingTableAlias(textBeforeCursor, isCompletedSingleTableDelete) {
+        if (isCompletedSingleTableDelete) return false;
+        var m = (textBeforeCursor || "").match(/(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:(as)\s+)?([a-zA-Z0-9_]*)$/i);
+        if (!m) return false;
+        if (m[1]) return true;
+        var typedToken = (m[2] || "").toLowerCase();
+        if (!typedToken) return true;
+        if (typedToken === 'on' || typedToken === 'as') return false;
+        if (typedToken.length >= 3 && postTableClauseKeywords.some(function(kw) { return kw.indexOf(typedToken) === 0; })) {
+            return false;
+        }
+        return true;
+    }
+
     monaco.languages.registerCompletionItemProvider('sql', {
         triggerCharacters: ['.', "'", '[', ']', ' '],
         provideCompletionItems: function(model, position, context) {
@@ -2602,12 +2655,13 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             // Intelligent context detection scoped to active statement
             var stmtContext = getActiveStatementContext(model, position);
             var fullTextUntilPosition = stmtContext.textUntilCursor;
+            var cleanTriggerText = stripCommentsAndStringsSql(fullTextUntilPosition);
             var clauseInfo = analyzeClauseContext(fullTextUntilPosition);
 
             var isSpaceTrigger = context && context.triggerCharacter === ' ';
-            var isOnContext = /\bon\s*$/i.test(fullTextUntilPosition) || /\bon\s+[a-zA-Z0-9_\[\]\.]*$/i.test(fullTextUntilPosition);
+            var isOnContext = /\bon\s*$/i.test(cleanTriggerText) || /\bon\s+[a-zA-Z0-9_\[\]\.]*$/i.test(cleanTriggerText);
             if (isSpaceTrigger) {
-                var isTriggerKeywordBeforeSpace = /\b(?:on|join|from|into|update|delete|where|having|set|by|select)\s*$/i.test(fullTextUntilPosition);
+                var isTriggerKeywordBeforeSpace = /(?:\b(?:on|join|from|into|update|delete|where|having|set|by|select|and|or|values)\b|[,(]|insert(?:\s+into)?\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s*\([^)]*\))\s*$/i.test(cleanTriggerText);
                 if (!isTriggerKeywordBeforeSpace) {
                     return { suggestions: [] };
                 }
@@ -2621,9 +2675,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
             var isCompletedSingleTableDelete = /^\s*DELETE(?:\s+TOP\s*\(\s*[^)]*\s*\))?\s+(?:FROM\s+)?(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:WITH\s*\(\s*[^)]*\s*\)\s+)?[a-zA-Z0-9_]*$/i.test(cleanStmtUntilCursor);
             clauseInfo.isCompletedSingleTableDelete = isCompletedSingleTableDelete;
 
-            var isInsertContext = /(?:^|[\s;])INSERT(?:\s+INTO)?\s+[a-zA-Z0-9_\[\]\.]*$/i.test(fullTextUntilPosition)
-                && fullTextUntilPosition.indexOf('(') === -1
-                && !/\b(?:VALUES|SELECT)\b/i.test(fullTextUntilPosition);
+            var isInsertContext = /(?:^|[\s;])INSERT(?:\s+INTO)?\s+[a-zA-Z0-9_\[\]\.]*$/i.test(cleanStmtUntilCursor)
+                && cleanStmtUntilCursor.indexOf('(') === -1
+                && !/\b(?:VALUES|SELECT)\b/i.test(cleanStmtUntilCursor);
 
             var suggestions = [];
 
@@ -2653,24 +2707,33 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                 }
             }
 
-            // PRIORITY CHECK: Suppress suggestions when typing a table alias on the same line.
-            // Must run BEFORE the keyword scan because an alias like 'or', 'and', 'on', 'as' etc.
-            // would be misidentified as an SQL keyword in the backward token scan below.
+            // PRIORITY CHECK: Suppress suggestions when typing a short/explicit table alias on the same line,
+            // while allowing 3+ char clause prefixes (e.g., FROM Orders WHE -> WHERE).
             // Never suppress for single-table DELETE FROM <table>, where T-SQL forbids aliases and WHERE follows.
             var hasDotOnCurrentLine = /\.[a-zA-Z0-9_]*$/.test(textBeforeCursor);
-            var isTypingAlias = !isCompletedSingleTableDelete && /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(textBeforeCursor);
-            if (isTypingAlias && !hasDotOnCurrentLine) {
+            if (!hasDotOnCurrentLine && isTypingTableAlias(textBeforeCursor, isCompletedSingleTableDelete)) {
                 return { suggestions: [] };
             }
 
-            var matches = fullTextUntilPosition.match(/\b[a-z_][a-z0-9_]*\b/ig);
+            var scanText = scopeInfo.scopeUntilCursorMasked || "";
+            var matches = scanText.match(/\b[a-z_][a-z0-9_]*\b/ig);
             var suggestTables = true;
             var suggestColumns = true;
             var suggestSps = false;
             var suggestKeywords = true;
 
             var lastTableKeyword = null;
-            if (matches && matches.length > 0) {
+            if (clauseInfo.clause === 'INSERT_COLUMNS') {
+                suggestTables = false;
+                suggestColumns = true;
+                suggestSps = false;
+                suggestKeywords = false;
+            } else if (clauseInfo.clause === 'VALUES') {
+                suggestTables = false;
+                suggestColumns = false;
+                suggestSps = false;
+                suggestKeywords = true;
+            } else if (matches && matches.length > 0) {
                 var tableKeywords = new Set(['from', 'join', 'into', 'insert', 'update', 'delete', 'table']);
                 var columnKeywords = new Set(['select', 'where', 'on', 'by', 'having', 'set', 'and', 'or']);
                 var spKeywords = new Set(['exec', 'execute']);
@@ -2685,22 +2748,20 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                         break;
                     } else if (tableKeywords.has(token)) {
                         lastTableKeyword = token;
-                        var lastTableKwIndex = fullTextUntilPosition.toLowerCase().lastIndexOf(token);
-                        var textAfterTableKw = lastTableKwIndex >= 0 ? fullTextUntilPosition.substring(lastTableKwIndex) : fullTextUntilPosition;
+                        var lastTableKwMatch = null;
+                        var tableKwRegex = new RegExp('\\b' + token + '\\b', 'gi');
+                        var tkwm;
+                        while ((tkwm = tableKwRegex.exec(scanText)) !== null) {
+                            lastTableKwMatch = tkwm;
+                        }
+                        var textAfterTableKw = lastTableKwMatch ? scanText.substring(lastTableKwMatch.index) : scanText;
 
-                        var completedTableRegex = /(?:from|join|update|delete|into|table)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+/i;
+                        var completedTableRegex = /(?:from|join|update|delete|into|table)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?(?:\s+|\s*\([^)]*\)\s+)/i;
                         var tableCompletedMatch = textAfterTableKw.match(completedTableRegex);
-                        var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_]*)$/i.test(textAfterTableKw);
+                        var hasCommaAfter = /(?:from|join)\s+[^;]*,\s*([a-zA-Z0-9_\[\]\.]*)$/i.test(textAfterTableKw);
 
                         if (tableCompletedMatch && !hasCommaAfter) {
                             suggestTables = false;
-                            var isTypingAliasOnSameLine = !isCompletedSingleTableDelete && /(?:from|join)\s+(?:\[?[a-zA-Z0-9_]+\]?\.)*\[?[a-zA-Z0-9_]+\]?\s+(?:as\s+)?[a-zA-Z0-9_]*$/i.test(textBeforeCursor);
-                            var hasDot = textBeforeCursor.match(/\.[a-zA-Z0-9_]*$/);
-
-                            if (isTypingAliasOnSameLine && !hasDot) {
-                                return { suggestions: [] };
-                            }
-
                             suggestColumns = false;
                             suggestSps = false;
                             suggestKeywords = true;
@@ -2967,7 +3028,9 @@ window.registerSqlAutocomplete = (tables, views, columns, sps, functions, dotNet
                                 ? (refIdx === activeTableRefs.length - 1 ? 0 : refIdx + 1)
                                 : refIdx;
                             var keyColSet = buildKeyColumnSet(ref.tableObj);
-                            var cols = ref.tableObj.columns || [];
+                            var cols = (clauseInfo.clause === 'INSERT_COLUMNS' && ref.tableObj.insertColumns && ref.tableObj.insertColumns.length > 0)
+                                ? ref.tableObj.insertColumns
+                                : (ref.tableObj.columns || []);
 
                             cols.forEach(function(col, colIdx) {
                                 var qual = ref.qualifier;
