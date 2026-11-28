@@ -328,21 +328,27 @@ public class QueryResultTable : IEnumerable<object>
         bool caseSensitive,
         bool matchWholeWord,
         bool exactMatch,
+        int? targetColIndex = null,
         CancellationToken cancellationToken = default)
     {
         int total = Volatile.Read(ref _committedRowCount);
         if (total == 0) return Array.Empty<int>();
 
-        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         int colCount = _columnStorages.Length;
+        if (targetColIndex.HasValue && (uint)targetColIndex.Value >= (uint)colCount)
+            return Array.Empty<int>();
+
+        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         var matches = new List<int>();
+        int startCol = targetColIndex ?? 0;
+        int endCol = targetColIndex.HasValue ? targetColIndex.Value + 1 : colCount;
 
         for (int r = 0; r < total; r++)
         {
             if ((r & 4095) == 0 && cancellationToken.IsCancellationRequested)
                 cancellationToken.ThrowIfCancellationRequested();
 
-            for (int c = 0; c < colCount; c++)
+            for (int c = startCol; c < endCol; c++)
             {
                 if (_columnStorages[c].MatchesFilter(r, _displayKinds[c], searchTerm, comparison, exactMatch, matchWholeWord))
                 {

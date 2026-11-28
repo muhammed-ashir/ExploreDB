@@ -379,15 +379,16 @@ else
             @if (CanCopyAsInClause)
             {
                 <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CopyColumnAsInClause">
-                <i class="bi bi-clipboard text-muted"></i>
-                <span>Copy as IN clause</span>
-            </button>
-            }
-            @if (CanCopyAsInClause)
-            {
+                    <i class="bi bi-clipboard text-muted"></i>
+                    <span>Copy as IN clause</span>
+                </button>
                 <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="CalculateAggregates">
                     <i class="bi bi-calculator text-muted"></i>
                     <span>Show aggregate result</span>
+                </button>
+                <button class="dropdown-item px-3 py-1 d-flex align-items-center gap-2 grid-ctx-btn" type="button" @onclick="SearchInContextColumnAsync">
+                    <i class="bi bi-search text-muted"></i>
+                    <span>Search in this column</span>
                 </button>
             }
             <div class="dropdown-divider my-1" style="border-top-color: var(--app-border);"></div>
@@ -680,6 +681,9 @@ else
     [Parameter]
     public EventCallback OnToggleSearch { get; set; }
 
+    [Parameter]
+    public EventCallback<(int ResultSetIndex, int ColumnIndex, string ColumnName)> OnSearchColumnRequested { get; set; }
+
     private bool IsTextDefinition =>
         Columns.Count == 1 &&
         Columns[0].Equals("Text", StringComparison.OrdinalIgnoreCase) &&
@@ -899,9 +903,16 @@ else
     [Parameter]
     public bool SearchExactMatch { get; set; } = false;
 
+    [Parameter]
+    public int? SearchResultSetIndex { get; set; } = null;
+
+    [Parameter]
+    public int? SearchColumnIndex { get; set; } = null;
+
     private string _tableContainerId = "gridTable_" + Guid.NewGuid().ToString("N");
     private Dictionary<string, double> _columnWidths = new();
     private DotNetObjectReference<ResultSetGrid>? _dotNetRef;
+    private int? _contextMenuColumnIndex = null;
 
     private string GetColumnWidthStyle(string col)
     {
@@ -928,6 +939,8 @@ else
     private bool _lastSearchCaseSensitive = false;
     private bool _lastSearchMatchWholeWord = false;
     private bool _lastSearchExactMatch = false;
+    private int? _lastSearchResultSetIndex = null;
+    private int? _lastSearchColumnIndex = null;
     private string? _resizersInitContainerId;
     private object? _resizersInitDataRef;
     private string? _virtualScrollInitContainerId;
@@ -1083,7 +1096,9 @@ else
             !string.Equals(_lastSearchTerm, SearchTerm, StringComparison.Ordinal) ||
             _lastSearchCaseSensitive != SearchCaseSensitive ||
             _lastSearchMatchWholeWord != SearchMatchWholeWord ||
-            _lastSearchExactMatch != SearchExactMatch;
+            _lastSearchExactMatch != SearchExactMatch ||
+            _lastSearchResultSetIndex != SearchResultSetIndex ||
+            _lastSearchColumnIndex != SearchColumnIndex;
 
         if (isNewData || searchChanged || becameComplete)
         {
@@ -1091,6 +1106,8 @@ else
             _lastSearchCaseSensitive = SearchCaseSensitive;
             _lastSearchMatchWholeWord = SearchMatchWholeWord;
             _lastSearchExactMatch = SearchExactMatch;
+            _lastSearchResultSetIndex = SearchResultSetIndex;
+            _lastSearchColumnIndex = SearchColumnIndex;
             ApplyFilter();
         }
 
@@ -1549,7 +1566,8 @@ else
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(SearchTerm))
+        if (string.IsNullOrWhiteSpace(SearchTerm) ||
+            (SearchResultSetIndex.HasValue && SearchResultSetIndex.Value != ResultSetIndex))
         {
             _filteredIndices = null;
             UpdateViewIndices();
@@ -1558,6 +1576,14 @@ else
 
         int total = TotalDataCount;
         if (total == 0)
+        {
+            _filteredIndices = Array.Empty<int>();
+            UpdateViewIndices();
+            return;
+        }
+
+        int? targetCol = SearchColumnIndex;
+        if (targetCol.HasValue && (uint)targetCol.Value >= (uint)Columns.Count)
         {
             _filteredIndices = Array.Empty<int>();
             UpdateViewIndices();
@@ -1576,12 +1602,13 @@ else
                 bool caseSens = SearchCaseSensitive;
                 bool wholeWord = SearchMatchWholeWord;
                 bool exact = SearchExactMatch;
+                int? scopedCol = targetCol;
 
                 _ = Task.Run(() =>
                 {
                     try
                     {
-                        var indices = table.BuildFilteredIndices(term, caseSens, wholeWord, exact, token);
+                        var indices = table.BuildFilteredIndices(term, caseSens, wholeWord, exact, scopedCol, token);
                         if (token.IsCancellationRequested) return;
                         _ = InvokeAsync(() =>
                         {
@@ -1599,7 +1626,7 @@ else
             }
 
             _filteredIndices = _tableStore.BuildFilteredIndices(
-                SearchTerm, SearchCaseSensitive, SearchMatchWholeWord, SearchExactMatch);
+                SearchTerm, SearchCaseSensitive, SearchMatchWholeWord, SearchExactMatch, targetCol);
             UpdateViewIndices();
             return;
         }
@@ -1607,11 +1634,13 @@ else
         var matches = new List<int>();
         var search = SearchCaseSensitive ? SearchTerm : SearchTerm.ToLowerInvariant();
         int colCount = Columns.Count;
+        int startCol = targetCol ?? 0;
+        int endCol = targetCol.HasValue ? targetCol.Value + 1 : colCount;
 
         for (int i = 0; i < total; i++)
         {
             bool matched = false;
-            for (int c = 0; c < colCount; c++)
+            for (int c = startCol; c < endCol; c++)
             {
                 var val = GetRawCellValue(i, c, Columns[c]);
                 if (val == null) continue;
@@ -2011,10 +2040,38 @@ else
         ToggleSelectAll();
     }
 
+    private async Task SearchInContextColumnAsync()
+    {
+        int resolvedColIdx = -1;
+        if (_contextMenuColumnIndex.HasValue && (uint)_contextMenuColumnIndex.Value < (uint)Columns.Count)
+        {
+            resolvedColIdx = _contextMenuColumnIndex.Value;
+        }
+        else if (SelectedEntireCols.Count == 1)
+        {
+            resolvedColIdx = SelectedEntireCols.First();
+        }
+        else if (SelectedCells.Count > 0)
+        {
+            resolvedColIdx = SelectedCells.First().Col;
+        }
+        else if (!string.IsNullOrEmpty(ContextMenuColumn))
+        {
+            resolvedColIdx = Columns.IndexOf(ContextMenuColumn);
+        }
+
+        HideContextMenu();
+        if ((uint)resolvedColIdx < (uint)Columns.Count && OnSearchColumnRequested.HasDelegate)
+        {
+            await OnSearchColumnRequested.InvokeAsync((ResultSetIndex, resolvedColIdx, Columns[resolvedColIdx]));
+        }
+    }
+
     private void ShowColumnHeaderContextMenu(MouseEventArgs e, int colIndex, string colName)
     {
         HideContextMenu();
         ContextMenuColumn = colName;
+        _contextMenuColumnIndex = colIndex;
         IsColumnContextMenu = true;
         if (!SelectedEntireCols.Contains(colIndex) && !_isAllSelected)
         {
@@ -2033,9 +2090,10 @@ else
     {
         HideContextMenu();
         IsColumnContextMenu = false;
-        if (colIndex >= 0 && colIndex < Columns.Count)
+        _contextMenuColumnIndex = (colIndex >= 0 && colIndex < Columns.Count) ? colIndex : null;
+        if (_contextMenuColumnIndex.HasValue)
         {
-            ContextMenuColumn = Columns[colIndex];
+            ContextMenuColumn = Columns[_contextMenuColumnIndex.Value];
         }
         var coord = (actualRowIndex, colIndex);
         if (!IsCellSelected(actualRowIndex, colIndex))
@@ -2059,6 +2117,7 @@ else
         HideContextMenu();
         IsColumnContextMenu = false;
         ContextMenuColumn = "";
+        _contextMenuColumnIndex = null;
         if (actualRowIndex >= 0 && actualRowIndex < TotalDataCount)
         {
             if (!SelectedEntireRows.Contains(actualRowIndex) && !_isAllSelected)

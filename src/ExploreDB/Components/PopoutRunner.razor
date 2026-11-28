@@ -208,6 +208,24 @@
                                     <div class="position-absolute shadow-lg rounded-pill d-flex align-items-center px-2 py-1 gap-2" 
                                          style="top: 10px; right: 20px; z-index: 1050; background: var(--app-surface); border: 1px solid var(--app-border); backdrop-filter: blur(8px); box-shadow: 0 4px 20px rgba(0,0,0,0.35);">
                                         <i class="bi bi-search text-muted small ms-1"></i>
+                                        @if (HasActiveColumnSearchScope)
+                                        {
+                                            var scopeLabel = ActiveTab.ResultSets.Count > 1
+                                                ? $"RS #{_searchTargetResultSetIndex} · {_searchTargetColumnName}"
+                                                : _searchTargetColumnName;
+                                            <span class="badge rounded-pill d-inline-flex align-items-center gap-1 px-2 py-1 flex-shrink-0"
+                                                  style="background-color: rgba(13, 110, 253, 0.22); color: #6ea8fe; border: 1px solid rgba(13, 110, 253, 0.45); font-size: 0.72rem; font-weight: 500; max-width: 170px;"
+                                                  title="Searching only in @scopeLabel — click × to search all columns">
+                                                <span class="text-truncate">@scopeLabel</span>
+                                                <button type="button"
+                                                        class="btn btn-link p-0 border-0 d-inline-flex align-items-center text-decoration-none"
+                                                        style="color: inherit; font-size: 0.7rem; line-height: 1;"
+                                                        @onclick="ClearColumnSearchScopeAndFocusAsync"
+                                                        title="Clear column scope">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </span>
+                                        }
                                         <input type="text" 
                                                class="form-control form-control-sm border-0 bg-transparent py-0 px-1 shadow-none" 
                                                placeholder="Find in results (Ctrl+F)..." 
@@ -314,7 +332,10 @@
                                                            SearchCaseSensitive="@_searchCaseSensitive" 
                                                            SearchMatchWholeWord="@_searchMatchWholeWord" 
                                                            SearchExactMatch="@_searchExactMatch" 
+                                                           SearchResultSetIndex="@(HasActiveColumnSearchScope ? _searchTargetResultSetIndex : null)"
+                                                           SearchColumnIndex="@(HasActiveColumnSearchScope ? _searchTargetColumnIndex : null)"
                                                            OnToggleSearch="ToggleSearch" 
+                                                           OnSearchColumnRequested="HandleSearchColumnRequested"
                                                            OnOpenCodeInNewTab="HandleOpenCodeInNewTab" />
                                         </div>
 
@@ -476,6 +497,65 @@
     private bool _searchCaseSensitive = false;
     private bool _searchMatchWholeWord = false;
     private bool _searchExactMatch = false;
+    private int? _searchTargetResultSetIndex = null;
+    private int? _searchTargetColumnIndex = null;
+    private string? _searchTargetColumnName = null;
+    private object? _searchTargetDataRef = null;
+
+    private bool HasActiveColumnSearchScope
+    {
+        get
+        {
+            if (!_searchTargetResultSetIndex.HasValue || !_searchTargetColumnIndex.HasValue || string.IsNullOrEmpty(_searchTargetColumnName))
+                return false;
+            int idx = _searchTargetResultSetIndex.Value - 1;
+            if (idx < 0 || idx >= ActiveTab.ResultSets.Count)
+                return false;
+            return ReferenceEquals(ActiveTab.ResultSets[idx], _searchTargetDataRef);
+        }
+    }
+
+    private async Task FocusResultsSearchInputAsync(bool selectText = false)
+    {
+        try
+        {
+            string script = selectText
+                ? "var el = document.getElementById('global-results-search-input'); if(el) { el.focus(); el.select(); }"
+                : "var el = document.getElementById('global-results-search-input'); if(el) el.focus();";
+            await JS.InvokeVoidAsync("eval", script);
+        }
+        catch { }
+    }
+
+    private void ClearColumnSearchScope()
+    {
+        _searchTargetResultSetIndex = null;
+        _searchTargetColumnIndex = null;
+        _searchTargetColumnName = null;
+        _searchTargetDataRef = null;
+    }
+
+    private async Task ClearColumnSearchScopeAndFocusAsync()
+    {
+        ClearColumnSearchScope();
+        await FocusResultsSearchInputAsync();
+    }
+
+    private async Task HandleSearchColumnRequested((int ResultSetIndex, int ColumnIndex, string ColumnName) scope)
+    {
+        int idx = scope.ResultSetIndex - 1;
+        if (idx < 0 || idx >= ActiveTab.ResultSets.Count) return;
+
+        _searchTargetResultSetIndex = scope.ResultSetIndex;
+        _searchTargetColumnIndex = scope.ColumnIndex;
+        _searchTargetColumnName = scope.ColumnName;
+        _searchTargetDataRef = ActiveTab.ResultSets[idx];
+        _isSearchOpen = true;
+        StateHasChanged();
+
+        await Task.Delay(50);
+        await FocusResultsSearchInputAsync(selectText: true);
+    }
 
     private async Task ToggleSearch()
     {
@@ -483,15 +563,12 @@
         if (!_isSearchOpen)
         {
             _globalSearchTerm = string.Empty;
+            ClearColumnSearchScope();
         }
         else
         {
             await Task.Delay(50);
-            try
-            {
-                await JS.InvokeVoidAsync("eval", "var el = document.getElementById('global-results-search-input'); if(el) el.focus();");
-            }
-            catch { }
+            await FocusResultsSearchInputAsync();
         }
     }
 
@@ -500,11 +577,7 @@
         if (!string.IsNullOrEmpty(_globalSearchTerm))
         {
             _globalSearchTerm = string.Empty;
-            try
-            {
-                await JS.InvokeVoidAsync("eval", "var el = document.getElementById('global-results-search-input'); if(el) el.focus();");
-            }
-            catch { }
+            await FocusResultsSearchInputAsync();
         }
         else
         {
