@@ -157,10 +157,13 @@
                     <div class="d-flex align-items-center pe-2 gap-1">
                         @if (ResultTab == "Results" && ActiveTab.ResultSets != null && ActiveTab.ResultSets.Count > 0 && !ActiveTab.IsExecuting)
                         {
-                            <button class="btn btn-sm d-flex align-items-center gap-1 me-1 @(_isSearchOpen ? "btn-primary text-white border-0 shadow-sm" : "btn-outline-secondary border-0")" 
-                                    style="@(_isSearchOpen ? "" : "color: var(--app-text);") height: 22px; font-size: 0.75rem; padding: 1px 7px;" 
+                            bool hasSearchFilter = !string.IsNullOrEmpty(_globalSearchTerm);
+                            bool isHighlighted = _isSearchOpen || hasSearchFilter;
+                            bool isHiddenActive = !_isSearchOpen && hasSearchFilter;
+                            <button class="btn btn-sm d-flex align-items-center gap-1 me-1 @(isHighlighted ? "btn-primary text-white border-0" : "btn-outline-secondary border-0") @(isHiddenActive ? "search-filter-active-pulse" : (isHighlighted ? "shadow-sm" : ""))" 
+                                    style="@(isHighlighted ? "" : "color: var(--app-text);") height: 22px; font-size: 0.75rem; padding: 1px 7px;" 
                                     @onclick="ToggleSearch" 
-                                    title="Find in results (Ctrl+F)">
+                                    title="@(isHiddenActive ? "Filter active — click to show search box" : "Find in results (Ctrl+F)")">
                                 <i class="bi bi-search" style="font-size: 0.72rem;"></i>
                                 <span>Search</span>
                             </button>
@@ -562,13 +565,15 @@
         _isSearchOpen = !_isSearchOpen;
         if (!_isSearchOpen)
         {
-            _globalSearchTerm = string.Empty;
-            ClearColumnSearchScope();
+            if (string.IsNullOrEmpty(_globalSearchTerm))
+            {
+                ClearColumnSearchScope();
+            }
         }
         else
         {
             await Task.Delay(50);
-            await FocusResultsSearchInputAsync();
+            await FocusResultsSearchInputAsync(selectText: !string.IsNullOrEmpty(_globalSearchTerm));
         }
     }
 
@@ -1073,6 +1078,11 @@
             {
                 if (targetTab == ActiveTab)
                 {
+                    if (targetTab.IsExecuting && !_isSearchOpen && !string.IsNullOrEmpty(_globalSearchTerm))
+                    {
+                        _globalSearchTerm = string.Empty;
+                        ClearColumnSearchScope();
+                    }
                     ResultTab = tabName;
                 }
             },

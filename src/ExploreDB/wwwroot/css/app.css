@@ -1003,6 +1003,37 @@ body.grid-col-reordering * {
     user-select: none !important;
 }
 
+@keyframes searchFilterActivePulse {
+    0%, 100% {
+        background-color: #0d6efd;
+        box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.55);
+    }
+    50% {
+        background-color: #2563eb;
+        box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.95);
+    }
+}
+
+@keyframes searchFilterIconPulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 0.9;
+    }
+    50% {
+        transform: scale(1.18);
+        opacity: 1;
+    }
+}
+
+.search-filter-active-pulse {
+    animation: searchFilterActivePulse 1.5s ease-in-out infinite !important;
+}
+
+.search-filter-active-pulse > i {
+    display: inline-block;
+    animation: searchFilterIconPulse 1.5s ease-in-out infinite !important;
+}
+
 .table-responsive.grid-col-hover,
 .table-responsive.grid-col-hover * {
     cursor: col-resize !important;
